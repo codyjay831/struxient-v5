@@ -10,10 +10,52 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { AlertTriangle, FileText, History, Inbox, UserPlus } from "lucide-react";
+import { SignalCard } from "@/components/ui/signal-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  AlertTriangle,
+  ClipboardList,
+  FileText,
+  Inbox,
+  MessageSquare,
+  UserRound,
+} from "lucide-react";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+/** Suggested capture order — copy only, no workflow engine. */
+function LeadIntakeOrderStrip() {
+  const steps = [
+    "Record source / channel",
+    "Identify or match contact",
+    "Qualify scope, timing, fit",
+    "Move to a quote when context is enough",
+  ];
+  return (
+    <WorkspacePanel padding="compact" className="mb-6 border-border-strong">
+      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+        Suggested order (new lead)
+      </p>
+      <ol className="mt-3 flex list-none flex-col gap-2 text-sm text-foreground-muted sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-2">
+        {steps.map((label, i) => (
+          <li key={label} className="flex items-center gap-1">
+            <span className="tabular-nums text-foreground-subtle">{i + 1}.</span>
+            <span>{label}</span>
+            {i < steps.length - 1 ? (
+              <span
+                className="mx-1 hidden text-foreground-subtle sm:inline"
+                aria-hidden
+              >
+                →
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </WorkspacePanel>
+  );
+}
 
 export function LeadWorkspaceShell({
   mode,
@@ -40,8 +82,8 @@ export function LeadWorkspaceShell({
         title={isNew ? "New lead" : "Lead"}
         description={
           isNew
-            ? "Lightweight intake shell—capture source, basic qualification, and watch for duplicates before anyone builds a quote. No rows are written to a database here."
-            : "Detail shell for a future stored lead. The id is from the URL only; there is no API fetch and no workflow engine."
+            ? "Capture intake and enough qualification to decide if a quote is worth doing. Nothing saves here yet."
+            : "Shell for a future stored lead. The id is from the URL only—no API, no scoring, no task engine."
         }
         actions={
           <>
@@ -59,146 +101,164 @@ export function LeadWorkspaceShell({
             Placeholder identifier (from URL)
           </p>
           <p className="mt-1 break-all font-mono text-sm text-foreground">{leadId}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusBadge label="Open" tone="neutral" />
+            <span className="text-xs text-foreground-muted">
+              Label is visual only—not loaded from a database
+            </span>
+          </div>
         </WorkspacePanel>
       ) : null}
 
-      {!isNew ? (
-        <WorkspacePanel className="mb-6">
-          <SectionHeading
-            title="Intake summary"
-            description="Stage, owner, and key facts will summarize here when a lead record exists."
-          />
-          <p className="text-sm text-foreground-muted">
-            No stored fields—this shell only mirrors the route you opened.
-          </p>
-        </WorkspacePanel>
-      ) : null}
+      {isNew ? <LeadIntakeOrderStrip /> : null}
 
       <div className="space-y-6">
+        {/* Source / intake */}
         <WorkspacePanel>
           <SectionHeading
-            title="Source / channel"
-            description="Phone, walk-in, partner referral, web form—channels will normalize here; integrations come later."
+            title="Source / intake"
+            description="Phone, text, email, website form, walk-in, referral, or manual entry—channels normalize here when integrations and imports exist."
           />
           <EmptyState
             icon={Inbox}
-            title="No source selected"
-            description="Pick how this lead arrived once picklists exist. For now this is layout only."
+            title="No source recorded"
+            description="Pick how this inquiry arrived once picklists and webhooks ship. This panel is layout and copy only."
           >
-            <PlaceholderButton>Mark source</PlaceholderButton>
+            <PlaceholderButton title="No channel store in this build">
+              Mark source
+            </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
 
+        {/* Contact / customer match */}
         <WorkspacePanel>
           <SectionHeading
-            title="Contact & customer match"
-            description="See whether this intake maps to an existing Relationships customer or stays a net-new party before quoting."
+            title="Contact / customer match"
+            description="Future flow: tie this intake to an existing Relationships customer or spin up a new relationship record—search and merge rules are persistence work."
           />
-          <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-8 text-center text-sm text-foreground-muted">
-            No matching run—linking to{" "}
-            <Link
-              href="/customers"
-              className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-            >
-              Customers
-            </Link>{" "}
-            will require persistence and search.
+          <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-8 text-center sm:py-10">
+            <UserRound
+              className="mx-auto mb-3 size-9 text-foreground-subtle opacity-70"
+              strokeWidth={1.25}
+              aria-hidden
+            />
+            <p className="text-sm text-foreground-muted">
+              No contact linked and no duplicate check run.
+            </p>
+            <p className="mt-2 text-xs text-foreground-subtle">
+              Matching and soft-merge warnings replace this placeholder when data exists.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Link href="/customers" className={listLinkClass}>
+                Customers
+              </Link>
+            </div>
           </div>
-        </WorkspacePanel>
-
-        <WorkspacePanel>
-          <SectionHeading
-            title="Qualification & context"
-            description="Job type, timing, budget band, and notes—enough to decide if a quote is worth the effort."
-          />
-          <div className="space-y-3">
-            {["Job type / trade", "Timing", "Location / service area", "Notes"].map(
-              (label) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-2.5 text-xs text-foreground-subtle"
-                >
-                  {label} — field placeholder (not editable yet)
-                </div>
-              ),
-            )}
-          </div>
-        </WorkspacePanel>
-
-        <WorkspacePanel padding="compact">
-          <div className="flex gap-2">
+          <div className="mt-4 flex gap-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
             <AlertTriangle
               className="mt-0.5 size-4 shrink-0 text-foreground-subtle"
               strokeWidth={1.5}
               aria-hidden
             />
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Possible duplicate (concept)
-              </p>
-              <p className="mt-2 text-sm text-foreground-muted">
-                When data exists, similar phones or addresses can flash a warning
-                before you save—nothing evaluates in this shell.
-              </p>
-            </div>
+            <p className="text-xs leading-relaxed text-foreground-muted">
+              <span className="font-medium text-foreground">Possible duplicate</span> will
+              be a warn-only hint (similar phones or addresses)—nothing evaluates in this
+              shell.
+            </p>
           </div>
         </WorkspacePanel>
 
-        <WorkspacePanel>
+        {/* Qualification + scope — primary */}
+        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
           <SectionHeading
-            title="Next: quote"
-            description="When intake is enough, Sales continues in the quote workspace—still no automatic handoff without persistence."
+            title="Qualification & scope signals"
+            description="Job type, timing, location or service area, budget band, and fit—enough to know if quoting is worth the effort. Not a score, not a required schema."
             actions={
-              <Link
-                href="/quotes/new"
-                className="inline-flex items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
-              >
-                Open new quote
-              </Link>
+              <PlaceholderButton title="No qualification store in this build">
+                Add signal
+              </PlaceholderButton>
             }
           />
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            <SignalCard
+              label="Scope clarity"
+              value="—"
+              hint="Summarizes what work is on the table when fields exist."
+            />
+            <SignalCard
+              label="Timing / urgency"
+              value="—"
+              hint="Start date, deadline, or “ASAP” class signals later."
+            />
+          </div>
           <EmptyState
-            icon={UserPlus}
-            title="No quote started from this lead"
-            description="The link above is navigation only—it does not copy lead fields until models exist."
-          />
+            icon={ClipboardList}
+            title="No qualification captured"
+            description="Keep this lightweight: rough notes beat an empty record. Execution planning stays on quotes and jobs—not the lead inbox."
+          >
+            <PlaceholderButton title="No qualification store in this build">
+              Add signal
+            </PlaceholderButton>
+          </EmptyState>
         </WorkspacePanel>
 
-        {!isNew ? (
-          <WorkspacePanel>
-            <SectionHeading
-              title="Quotes linked to this lead"
-              description="After persistence, approved or draft quotes created from this intake will list here."
-            />
-            <EmptyState
-              icon={FileText}
-              title="No linked quotes"
-              description="Nothing is fabricated—open a quote workspace manually if you are exploring layout."
-            />
-          </WorkspacePanel>
-        ) : null}
+        {/* Quote readiness / next step */}
+        <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
+          <SectionHeading
+            title="Quote readiness"
+            description="When customer, scope, and timing context are solid enough, continue in Quotes—line items and payment plan become the commercial anchor there. No automatic conversion or field copy until models exist."
+            actions={
+              <>
+                <PlaceholderButton title="Needs persisted lead and quote wiring">
+                  Create quote from lead
+                </PlaceholderButton>
+                <Link href="/quotes/new" className={handoffPrimaryLinkClass}>
+                  Open new quote
+                </Link>
+              </>
+            }
+          />
+          <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+            Workstation will eventually surface leads that need follow-up; this page is
+            for intake and qualification, not your daily action queue.
+          </p>
+          <EmptyState
+            icon={FileText}
+            title="Quote handoff not wired"
+            description={
+              isNew
+                ? "Opening “New quote” is navigation only—it does not carry this lead. Linked quotes will appear here after persistence."
+                : "Quotes created from this lead will list here. Until then, use Quotes manually—nothing is fabricated."
+            }
+          >
+            <Link href="/quotes" className={listLinkClass}>
+              Browse quotes
+            </Link>
+          </EmptyState>
+        </WorkspacePanel>
 
-        <WorkspacePanel>
+        {/* Notes & activity */}
+        <WorkspacePanel padding="compact">
           <SectionHeading
             title="Notes & activity"
-            description="Calls, emails, and stage changes will append here when events are stored."
+            description="Calls, texts, and stage changes append here when events are stored—internal timeline only."
           />
           <EmptyState
-            icon={History}
+            icon={MessageSquare}
             title="No activity yet"
-            description="Timeline is empty—no fabricated events."
+            description="No fabricated events—timeline shows real history once logging ships."
           />
         </WorkspacePanel>
 
         <HandoffPanel
-          title="Intake → quote"
-          description="Capture enough context to qualify or hand off; the quote workspace picks up scope, line items, and payment terms. Routes do not auto-sync until data models exist."
+          title="Intake → Quotes"
+          description="Leads collect context; the quote workspace carries sold scope and money. List and shell links do not sync data yet."
         >
           <Link href="/leads" className={handoffMutedLinkClass}>
             Leads list
           </Link>
           <Link href="/quotes" className={handoffPrimaryLinkClass}>
-            View Quotes
+            View quotes
           </Link>
         </HandoffPanel>
       </div>

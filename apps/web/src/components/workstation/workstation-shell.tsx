@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SignalCard } from "@/components/ui/signal-card";
 import {
   CalendarDays,
   ClipboardList,
@@ -38,37 +37,18 @@ export function WorkstationShell() {
           What needs your attention?
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
-          Role-aware action discovery across jobs, tasks, quotes, schedule, and
-          payments—lenses below filter the same operational picture. Counts stay
-          empty until persistence and org-scoped queries exist.
+          Role-aware action discovery across jobs, tasks, quotes, schedule, payments,
+          and follow-ups—this is the cockpit, not the record catalog. Lenses below slice
+          the same operational picture by kind of attention.
         </p>
         <p className="mt-2 text-sm text-foreground-subtle">
-          Preview role: <span className="font-medium text-foreground">Office</span>{" "}
-          (field and owner views will narrow automatically when RBAC is wired).
+          Browse and maintain records under{" "}
+          <span className="font-medium text-foreground">Sales</span>,{" "}
+          <span className="font-medium text-foreground">Relationships</span>, and{" "}
+          <span className="font-medium text-foreground">Work</span> in the sidebar—nothing
+          here persists until data and queries ship.
         </p>
       </header>
-
-      <section aria-label="Cross-record signals (preview)">
-        <h2 className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
-          Signals (placeholder)
-        </h2>
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { k: "Ready", v: "—", hint: "Work you can start now" },
-            { k: "Blocked", v: "—", hint: "Waiting on customer, parts, or permit" },
-            { k: "Assigned to you", v: "—", hint: "Tasks with your name on them" },
-            { k: "Needs review", v: "—", hint: "Quotes, COs, photos, completions" },
-            { k: "Payment holds", v: "—", hint: "Money gating execution" },
-            { k: "Schedule risk", v: "—", hint: "Conflicts, slips, missing crew" },
-            { k: "Quote / customer", v: "—", hint: "Follow-ups and approvals" },
-            { k: "Stale work", v: "—", hint: "No touch in N days" },
-          ].map((row) => (
-            <li key={row.k}>
-              <SignalCard label={row.k} value={row.v} hint={row.hint} />
-            </li>
-          ))}
-        </ul>
-      </section>
 
       <nav aria-label="Workstation lenses">
         <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">

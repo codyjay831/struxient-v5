@@ -1,17 +1,123 @@
+import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+  handoffPrimaryLinkClass,
+} from "@/components/ui/handoff-panel";
 import { SectionHeader } from "@/components/shell/section-header";
+import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PlaceholderButton } from "@/components/ui/placeholder-button";
+import { SignalCard } from "@/components/ui/signal-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { FolderKanban } from "lucide-react";
+
+const listLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default function WorkstationJobsLensPage() {
   return (
-    <div>
+    <div className="space-y-6">
       <SectionHeader
-        eyebrow="Jobs lens"
+        eyebrow="Workstation · Jobs lens"
         title="Jobs"
-        description="Job-centric attention into executable state: scheduled, active, on hold, complete. For the full job record directory, use Work → Jobs in the sidebar (/jobs)."
+        description="Job-related attention: readiness, slips, and issues that need a decision—not the full job catalog. For every row and detail shell, use Work → Jobs."
       />
-      <div className="rounded-xl border border-dashed border-border bg-surface/50 px-8 py-16 text-center text-sm text-foreground-muted">
-        Attention-scoped job list and drill-down will appear here after persistence
-        exists—counts and filters differ from the /jobs directory view.
-      </div>
+
+      <WorkspacePanel padding="compact">
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          Jobs lens vs job records
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+          <span className="font-medium text-foreground">/workstation/jobs</span> surfaces
+          what needs eyes on work in motion.{" "}
+          <span className="font-medium text-foreground">/jobs</span> stays the browse and
+          record directory; <span className="font-medium text-foreground">/jobs/[id]</span>{" "}
+          is the job workspace shell.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <StatusBadge label="Attention slice" tone="neutral" />
+          <span className="text-xs text-foreground-muted">
+            No job signals loaded in this build
+          </span>
+        </div>
+      </WorkspacePanel>
+
+      <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+        <SectionHeading
+          title="Job attention signals"
+          description="When wired, this lens highlights activation reviews, schedule blockers, change or issue noise, and jobs that are simply ready for the next step—without replacing the job record."
+          actions={
+            <PlaceholderButton title="No signal query in this build">
+              Tune lens (soon)
+            </PlaceholderButton>
+          }
+        />
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SignalCard
+            label="Activation reviews"
+            value="—"
+            hint="Jobs waiting on a deliberate start check."
+          />
+          <SignalCard
+            label="Schedule blockers"
+            value="—"
+            hint="Conflicts, slips, or missing windows."
+          />
+          <SignalCard
+            label="Issues / changes"
+            value="—"
+            hint="Field interruptions and CO noise later."
+          />
+          <SignalCard
+            label="Ready for next step"
+            value="—"
+            hint="Green-light work that still needs assignment."
+          />
+        </div>
+        <EmptyState
+          icon={FolderKanban}
+          title="No job attention signals"
+          description="Counts stay at —; no fabricated jobs, priorities, or filters. When persistence exists, this lens queries differently than the /jobs directory."
+        />
+      </WorkspacePanel>
+
+      <WorkspacePanel padding="compact">
+        <SectionHeading
+          title="Connections"
+          description="Jump to record and planning surfaces—navigation only, no cross-route sync."
+        />
+        <div className="flex flex-wrap gap-2">
+          <Link href="/jobs" className={handoffPrimaryLinkClass}>
+            Job records (/jobs)
+          </Link>
+          <Link href="/schedule" className={listLinkClass}>
+            Schedule planning
+          </Link>
+          <Link href="/quotes" className={listLinkClass}>
+            Quotes
+          </Link>
+        </div>
+      </WorkspacePanel>
+
+      <HandoffPanel
+        title="Job lens watches work in motion"
+        description="Attention stays here; authoritative job rows and sold-scope context stay on Work → Jobs and the job detail shell. Schedule planning stays on Work → Schedule."
+      >
+        <Link href="/jobs" className={handoffMutedLinkClass}>
+          Jobs list
+        </Link>
+        <Link href="/schedule" className={handoffMutedLinkClass}>
+          Schedule
+        </Link>
+        <Link href="/quotes" className={handoffMutedLinkClass}>
+          Quotes
+        </Link>
+        <Link href="/workstation" className={handoffPrimaryLinkClass}>
+          Workstation home
+        </Link>
+      </HandoffPanel>
     </div>
   );
 }

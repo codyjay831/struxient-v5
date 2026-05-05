@@ -4,13 +4,13 @@ export default function WorkstationScheduleLensPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Schedule lens"
+        eyebrow="Workstation · Schedule lens"
         title="Schedule"
-        description="Month / week / day from tasks and appointments; drag-reschedule will update persisted records when they exist. For the full schedule record surface, use Work → Schedule (/schedule)."
+        description="Attention-first: near-term schedule risk, slips, and items that need a decision—not the planning/browse calendar. For coordination and future calendar density, use Work → Schedule (/schedule)."
       />
       <div className="rounded-xl border border-dashed border-border bg-surface/50 px-8 py-16 text-center text-sm text-foreground-muted">
-        This lens highlights schedule risk and near-term changes first; the
-        calendar-first record view lives under Work → Schedule.
+        This Workstation lens stays focused on what needs eyes soon. The Work → Schedule
+        route is the coordination and record surface as the calendar engine matures.
       </div>
     </div>
   );
