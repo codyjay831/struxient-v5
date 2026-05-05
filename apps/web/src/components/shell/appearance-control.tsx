@@ -1,8 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Monitor, Moon, Sun } from "lucide-react";
+
+/** Defer theme UI until after hydration without `useEffect` + `setState` (avoids cascading-render lint). */
+function useHasMounted() {
+  const mountedRef = useRef(false);
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      queueMicrotask(() => {
+        mountedRef.current = true;
+        onStoreChange();
+      });
+      return () => {};
+    },
+    () => mountedRef.current,
+    () => false
+  );
+}
 
 const modes = [
   { id: "light" as const, label: "Light", icon: Sun },
@@ -12,11 +28,7 @@ const modes = [
 
 export function AppearanceControl() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHasMounted();
 
   if (!mounted) {
     return (
