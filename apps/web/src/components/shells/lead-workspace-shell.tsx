@@ -90,7 +90,9 @@ export function LeadWorkspaceShell({
             <Link href="/leads" className={listLinkClass}>
               ← Leads list
             </Link>
-            <PlaceholderButton>Save lead</PlaceholderButton>
+            <PlaceholderButton title="No persistence in this build">
+              Save lead (soon)
+            </PlaceholderButton>
           </>
         }
       />

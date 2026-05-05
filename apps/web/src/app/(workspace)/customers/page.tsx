@@ -24,7 +24,9 @@ export default function CustomersPage() {
         description="The first relationship record surface in Struxient—billing parties, job history, and tags you keep across quotes and work. It is not a sales-only list; Sales stays in Leads and Quotes."
         actions={
           <>
-            <PlaceholderButton>New customer</PlaceholderButton>
+            <PlaceholderButton title="No customer store in this build">
+              New customer (soon)
+            </PlaceholderButton>
             <PlaceholderButton>Merge records (soon)</PlaceholderButton>
           </>
         }

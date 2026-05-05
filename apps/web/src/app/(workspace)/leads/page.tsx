@@ -103,8 +103,12 @@ export default function LeadsPage() {
               pipeline; integrations are out of scope for this UI pass.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <PlaceholderButton>Web form</PlaceholderButton>
-              <PlaceholderButton>CSV import</PlaceholderButton>
+              <PlaceholderButton title="No web form intake in this build">
+                Web form (soon)
+              </PlaceholderButton>
+              <PlaceholderButton title="No CSV import in this build">
+                CSV import (soon)
+              </PlaceholderButton>
             </div>
           </WorkspacePanel>
         </aside>

@@ -90,7 +90,9 @@ export function QuoteWorkspaceShell({
             <Link href="/quotes" className={listLinkClass}>
               ← Quotes list
             </Link>
-            <PlaceholderButton>Save draft</PlaceholderButton>
+            <PlaceholderButton title="No persistence in this build">
+              Save draft (soon)
+            </PlaceholderButton>
             <PlaceholderButton title="No send pipeline in this build">
               Send to customer
             </PlaceholderButton>

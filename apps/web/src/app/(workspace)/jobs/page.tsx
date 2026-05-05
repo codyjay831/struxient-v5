@@ -23,8 +23,12 @@ export default function JobsRecordPage() {
         description="Open and manage job records—filters, columns, and detail routes will attach here. This is the Work area for job records, not the Workstation attention lens."
         actions={
           <>
-            <PlaceholderButton>New job</PlaceholderButton>
-            <PlaceholderButton>Import</PlaceholderButton>
+            <PlaceholderButton title="No job store in this build">
+              New job (soon)
+            </PlaceholderButton>
+            <PlaceholderButton title="No import pipeline in this build">
+              Import (soon)
+            </PlaceholderButton>
           </>
         }
       />

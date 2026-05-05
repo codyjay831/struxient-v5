@@ -88,7 +88,9 @@ export default function QuotesPage() {
             <Link href="/quotes/new" className={primaryLinkClass}>
               Open quote workspace
             </Link>
-            <PlaceholderButton>Browse templates</PlaceholderButton>
+            <PlaceholderButton title="No template library in this build">
+              Browse templates (soon)
+            </PlaceholderButton>
           </div>
         </WorkspacePanel>
       </div>

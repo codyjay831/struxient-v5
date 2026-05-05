@@ -84,7 +84,9 @@ export default async function CustomerDetailPage({
             <Link href="/customers" className={listLinkClass}>
               ← Customers list
             </Link>
-            <PlaceholderButton>Edit record</PlaceholderButton>
+            <PlaceholderButton title="No customer store in this build">
+              Edit record (soon)
+            </PlaceholderButton>
           </>
         }
       />

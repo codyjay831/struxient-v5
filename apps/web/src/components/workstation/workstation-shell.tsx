@@ -10,9 +10,15 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-const LENSES: { href: string; label: string; icon: LucideIcon }[] = [
+const LENSES: { href: string; label: string; icon: LucideIcon; title?: string }[] = [
   { href: "/workstation", label: "Today", icon: LayoutDashboard },
-  { href: "/workstation/tasks", label: "Tasks", icon: ClipboardList },
+  {
+    href: "/workstation/tasks",
+    label: "Tasks",
+    icon: ClipboardList,
+    title:
+      "Task attention lens only—no task board, no CRUD. Standalone /tasks is a deferred stub.",
+  },
   { href: "/workstation/jobs", label: "Jobs", icon: FolderKanban },
   { href: "/workstation/schedule", label: "Schedule", icon: CalendarDays },
 ];
@@ -55,12 +61,13 @@ export function WorkstationShell() {
           Lenses
         </p>
         <ul className="flex flex-wrap gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-          {LENSES.map(({ href, label, icon: Icon }) => {
+          {LENSES.map(({ href, label, icon: Icon, title }) => {
             const active = lensActive(pathname, href);
             return (
               <li key={href}>
                 <Link
                   href={href}
+                  title={title}
                   className={[
                     "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     active
