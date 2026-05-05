@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -21,6 +26,15 @@ export function QuoteWorkspaceShell({
 
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Sales" },
+          { label: "Quotes", href: "/quotes" },
+          isNew
+            ? { label: "New" }
+            : { label: `Quote ${quoteId ?? ""}` },
+        ]}
+      />
       <PageHeader
         eyebrow="Sales"
         title={isNew ? "New quote" : "Quote"}
@@ -135,6 +149,19 @@ export function QuoteWorkspaceShell({
             </div>
           </WorkspacePanel>
         </div>
+
+        <HandoffPanel
+          title={isNew ? "How quoting fits" : "Commercial integrity"}
+          description={
+            isNew
+              ? "Line items and the payment plan carry the sold scope and money terms first. Execution notes stay optional—nothing here replaces a task engine or job activation."
+              : "Once sent or approved, customer-facing terms should stay versioned—no silent rewrite later. Turning a win into a Work job is persistence work down the road, not a control on this page."
+          }
+        >
+          <Link href="/quotes" className={handoffMutedLinkClass}>
+            Quotes list
+          </Link>
+        </HandoffPanel>
 
         <WorkspacePanel padding="compact" className="border-dashed">
           <p className="text-xs text-foreground-muted">

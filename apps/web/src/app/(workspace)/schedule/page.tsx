@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -9,6 +14,9 @@ import { CalendarDays } from "lucide-react";
 export default function ScheduleRecordPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Work" }, { label: "Schedule" }]}
+      />
       <PageHeader
         eyebrow="Work"
         title="Schedule"
@@ -20,6 +28,18 @@ export default function ScheduleRecordPage() {
           </>
         }
       />
+
+      <HandoffPanel
+        title="Work coordination"
+        description="Schedule will align job records, customer availability, crew capacity, and what Workstation flags as at-risk or overdue—calendar behavior still waits on persisted dates."
+      >
+        <Link href="/jobs" className={handoffMutedLinkClass}>
+          Go to Jobs
+        </Link>
+        <Link href="/workstation/schedule" className={handoffMutedLinkClass}>
+          Open Workstation schedule lens
+        </Link>
+      </HandoffPanel>
 
       <WorkspacePanel className="mb-8" padding="compact">
         <p className="text-sm text-foreground-muted">

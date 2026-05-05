@@ -1,3 +1,9 @@
+import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -9,6 +15,9 @@ import { UserCircle } from "lucide-react";
 export default function CustomersPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Relationships" }, { label: "Customers" }]}
+      />
       <PageHeader
         eyebrow="Relationships"
         title="Customers"
@@ -20,6 +29,18 @@ export default function CustomersPage() {
           </>
         }
       />
+
+      <HandoffPanel
+        title="Relationship context"
+        description="Customer records will tie together Sales history (leads and quotes), approved Work (jobs), contacts, and later repeat-business signals—still one route today; no extra relationship types or mock parties."
+      >
+        <Link href="/leads" className={handoffMutedLinkClass}>
+          Sales: Leads
+        </Link>
+        <Link href="/quotes" className={handoffMutedLinkClass}>
+          Sales: Quotes
+        </Link>
+      </HandoffPanel>
 
       <section className="mb-10">
         <SectionHeading

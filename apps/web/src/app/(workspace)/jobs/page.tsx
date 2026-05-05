@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -9,6 +14,9 @@ import { FolderKanban } from "lucide-react";
 export default function JobsRecordPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Work" }, { label: "Jobs" }]}
+      />
       <PageHeader
         eyebrow="Work"
         title="Jobs"
@@ -20,6 +28,18 @@ export default function JobsRecordPage() {
           </>
         }
       />
+
+      <HandoffPanel
+        title="Work connection"
+        description="Jobs are expected to come from approved quotes and later feed schedule, issues or change events, and Workstation attention. This page is the Work record catalog—not the attention lens."
+      >
+        <Link href="/schedule" className={handoffMutedLinkClass}>
+          Go to Schedule
+        </Link>
+        <Link href="/workstation/jobs" className={handoffMutedLinkClass}>
+          Open Workstation jobs lens
+        </Link>
+      </HandoffPanel>
 
       <WorkspacePanel className="mb-8" padding="compact">
         <p className="text-sm text-foreground-muted">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
@@ -10,6 +11,7 @@ const cardLinkClass =
 export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb items={[{ label: "Settings" }]} />
       <PageHeader
         eyebrow="Organization"
         title="Settings"

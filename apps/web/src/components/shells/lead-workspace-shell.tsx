@@ -1,4 +1,10 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+  handoffPrimaryLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -20,6 +26,15 @@ export function LeadWorkspaceShell({
 
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Sales" },
+          { label: "Leads", href: "/leads" },
+          isNew
+            ? { label: "New" }
+            : { label: `Lead ${leadId ?? ""}` },
+        ]}
+      />
       <PageHeader
         eyebrow="Sales"
         title={isNew ? "New lead" : "Lead"}
@@ -174,6 +189,18 @@ export function LeadWorkspaceShell({
             description="Timeline is empty—no fabricated events."
           />
         </WorkspacePanel>
+
+        <HandoffPanel
+          title="Intake → quote"
+          description="Capture enough context to qualify or hand off; the quote workspace picks up scope, line items, and payment terms. Routes do not auto-sync until data models exist."
+        >
+          <Link href="/leads" className={handoffMutedLinkClass}>
+            Leads list
+          </Link>
+          <Link href="/quotes" className={handoffPrimaryLinkClass}>
+            View Quotes
+          </Link>
+        </HandoffPanel>
       </div>
     </div>
   );

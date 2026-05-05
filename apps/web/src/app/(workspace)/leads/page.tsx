@@ -1,4 +1,10 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+  handoffPrimaryLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -12,6 +18,9 @@ const primaryLinkClass =
 export default function LeadsPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Sales" }, { label: "Leads" }]}
+      />
       <PageHeader
         eyebrow="Sales"
         title="Leads"
@@ -25,6 +34,18 @@ export default function LeadsPage() {
           </>
         }
       />
+
+      <HandoffPanel
+        title="Sales handoff"
+        description="When a lead is qualified—customer, rough scope, and timing are clear—Sales continues in Quotes. Nothing moves automatically without persistence."
+      >
+        <Link href="/quotes" className={handoffPrimaryLinkClass}>
+          Go to Quotes
+        </Link>
+        <Link href="/leads/new" className={handoffMutedLinkClass}>
+          Start new lead
+        </Link>
+      </HandoffPanel>
 
       <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,18rem)]">
         <div>

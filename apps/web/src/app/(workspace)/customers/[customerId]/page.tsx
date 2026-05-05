@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -20,6 +21,13 @@ export default async function CustomerDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Relationships" },
+          { label: "Customers", href: "/customers" },
+          { label: `Customer ${customerId}` },
+        ]}
+      />
       <PageHeader
         eyebrow="Relationships"
         title="Customer"

@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  HandoffPanel,
+  handoffMutedLinkClass,
+} from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -13,6 +18,9 @@ const primaryLinkClass =
 export default function QuotesPage() {
   return (
     <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Sales" }, { label: "Quotes" }]}
+      />
       <PageHeader
         eyebrow="Sales"
         title="Quotes"
@@ -26,6 +34,15 @@ export default function QuotesPage() {
           </>
         }
       />
+
+      <HandoffPanel
+        title="Commercial handoff"
+        description="Quotes organize line items and payment terms before approved work becomes a job under Work › Jobs. Approved quotes later feed that catalog—activation and job creation stay future persistence work, not a button in this shell."
+      >
+        <Link href="/leads" className={handoffMutedLinkClass}>
+          Go to Leads
+        </Link>
+      </HandoffPanel>
 
       <WorkspacePanel className="mb-8" padding="compact">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
