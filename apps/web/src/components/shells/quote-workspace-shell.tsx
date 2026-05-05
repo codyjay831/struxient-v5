@@ -195,6 +195,14 @@ export function QuoteWorkspaceShell({
           <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             After a quote is approved or sent to the customer, those terms should not
             be silently rewritten here—versioning and audit belong with persistence.
+            Operational payment tracking will live under{" "}
+            <Link
+              href="/payments"
+              className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+            >
+              Finance → Payments
+            </Link>{" "}
+            later.
           </p>
           <EmptyState
             icon={Wallet}

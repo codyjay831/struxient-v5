@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  CreditCard,
   FileText,
   FolderKanban,
   LayoutDashboard,
@@ -35,6 +36,11 @@ const relationshipsNav: NavItem[] = [
 const workNav: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: FolderKanban },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
+];
+
+/** Operational money tracking: payments and (later) invoices. */
+const financeNav: NavItem[] = [
+  { href: "/payments", label: "Payments", icon: CreditCard },
 ];
 
 const utilityNav: NavItem[] = [
@@ -102,6 +108,7 @@ export function SidebarNav() {
       <NavSection title="Sales" items={salesNav} pathname={pathname} />
       <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
+      <NavSection title="Finance" items={financeNav} pathname={pathname} />
       <div className="mt-auto">
         <NavSection title="" items={utilityNav} pathname={pathname} />
       </div>
