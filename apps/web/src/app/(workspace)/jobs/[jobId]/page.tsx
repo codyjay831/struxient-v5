@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Briefcase,
   CalendarDays,
+  CreditCard,
   FileText,
   ListOrdered,
   MessageSquare,
@@ -222,6 +223,23 @@ export default async function JobDetailPage({
           </EmptyState>
         </WorkspacePanel>
 
+        {/* Finance / Payments */}
+        <WorkspacePanel padding="compact">
+          <SectionHeading
+            title="Finance & Payments"
+            description="Payment holds, collection status, and money-related blockers surface here later. Real-world money movement lives under Finance."
+          />
+          <EmptyState
+            icon={CreditCard}
+            title="No payment status"
+            description="Job-level collection status and payment gates will show here once wired. Quote remains the source for agreed terms."
+          >
+            <Link href="/payments" className={listLinkClass}>
+              Open Payments
+            </Link>
+          </EmptyState>
+        </WorkspacePanel>
+
         {/* Notes & activity */}
         <WorkspacePanel padding="compact">
           <SectionHeading
@@ -248,12 +266,15 @@ export default async function JobDetailPage({
           <Link href="/customers" className={handoffMutedLinkClass}>
             Customers
           </Link>
-          <Link href="/schedule" className={handoffMutedLinkClass}>
-            Schedule
-          </Link>
-          <Link href="/workstation/jobs" className={handoffPrimaryLinkClass}>
-            Workstation jobs
-          </Link>
+        <Link href="/schedule" className={handoffMutedLinkClass}>
+          Schedule
+        </Link>
+        <Link href="/payments" className={handoffMutedLinkClass}>
+          Payments
+        </Link>
+        <Link href="/workstation/jobs" className={handoffPrimaryLinkClass}>
+          Workstation jobs
+        </Link>
         </HandoffPanel>
       </div>
     </div>

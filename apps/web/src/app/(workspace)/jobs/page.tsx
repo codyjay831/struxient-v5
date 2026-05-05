@@ -43,6 +43,9 @@ export default function JobsRecordPage() {
         <Link href="/workstation/jobs" className={handoffMutedLinkClass}>
           Open Workstation jobs lens
         </Link>
+        <Link href="/payments" className={handoffMutedLinkClass}>
+          Finance: Payments
+        </Link>
       </HandoffPanel>
 
       <WorkspacePanel className="mb-8" padding="compact">

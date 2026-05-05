@@ -50,8 +50,9 @@ export function WorkstationShell() {
         <p className="mt-2 text-sm text-foreground-subtle">
           Browse and maintain records under{" "}
           <span className="font-medium text-foreground">Sales</span>,{" "}
-          <span className="font-medium text-foreground">Relationships</span>, and{" "}
-          <span className="font-medium text-foreground">Work</span> in the sidebar—nothing
+          <span className="font-medium text-foreground">Relationships</span>,{" "}
+          <span className="font-medium text-foreground">Work</span>, and{" "}
+          <span className="font-medium text-foreground">Finance</span> in the sidebar—nothing
           here persists until data and queries ship.
         </p>
       </header>

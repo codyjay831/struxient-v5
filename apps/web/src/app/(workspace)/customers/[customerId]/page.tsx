@@ -13,9 +13,11 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import {
   Building2,
   CalendarDays,
+  CreditCard,
   FileText,
   FolderKanban,
   MessageSquare,
@@ -24,6 +26,8 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -65,6 +69,55 @@ export default async function CustomerDetailPage({
   params: Promise<{ customerId: string }>;
 }) {
   const { customerId } = await params;
+  const org = await getDevOrganizationOrThrow();
+  const customer = await db.customer.findFirst({
+    where: {
+      id: customerId,
+      organizationId: org.id,
+    },
+  });
+
+  if (!customer) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Relationships" },
+            { label: "Customers", href: "/customers" },
+            { label: "Not found" },
+          ]}
+        />
+        <PageHeader
+          eyebrow="Relationships"
+          title="Customer"
+          description="No customer exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          actions={
+            <Link href="/customers" className={listLinkClass}>
+              ← Customers list
+            </Link>
+          }
+        />
+        <WorkspacePanel padding="compact" className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            Requested id
+          </p>
+          <p className="mt-1 break-all font-mono text-sm text-foreground">{customerId}</p>
+        </WorkspacePanel>
+        <EmptyState
+          icon={UserRound}
+          title="Customer not found"
+          description="This id is not a customer record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+        >
+          <Link href="/customers" className={listLinkClass}>
+            Back to customers
+          </Link>
+        </EmptyState>
+      </div>
+    );
+  }
+
+  const createdLabel = new Date(customer.createdAt).toLocaleString();
+  const updatedLabel = new Date(customer.updatedAt).toLocaleString();
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -72,19 +125,19 @@ export default async function CustomerDetailPage({
         items={[
           { label: "Relationships" },
           { label: "Customers", href: "/customers" },
-          { label: `Customer ${customerId}` },
+          { label: customer.displayName },
         ]}
       />
       <PageHeader
         eyebrow="Relationships"
-        title="Customer"
-        description="Durable relationship record—not Sales-only. When data exists, quotes, jobs, and intake all tie back here. This route is a shell: the id is from the URL only."
+        title={customer.displayName}
+        description="Durable relationship record—not Sales-only. When connected models exist, quotes, jobs, and intake tie back here. This page is read-only; edits are not wired yet."
         actions={
           <>
             <Link href="/customers" className={listLinkClass}>
               ← Customers list
             </Link>
-            <PlaceholderButton title="No customer store in this build">
+            <PlaceholderButton title="Create flow is not wired in this build">
               Edit record (soon)
             </PlaceholderButton>
           </>
@@ -93,63 +146,102 @@ export default async function CustomerDetailPage({
 
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Placeholder identifier (from URL)
+          Record
         </p>
-        <p className="mt-1 break-all font-mono text-sm text-foreground">{customerId}</p>
+        <p className="mt-1 break-all font-mono text-xs text-foreground-muted">{customer.id}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge label="Relationship record" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            Visual only—not loaded from a database
+            Scoped to development organization ({org.name})
           </span>
         </div>
+        <dl className="mt-4 grid gap-2 text-xs text-foreground-muted sm:grid-cols-2">
+          <div>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Created</dt>
+            <dd className="mt-0.5 text-foreground">{createdLabel}</dd>
+          </div>
+          <div>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Updated</dt>
+            <dd className="mt-0.5 text-foreground">{updatedLabel}</dd>
+          </div>
+        </dl>
       </WorkspacePanel>
 
-      {/* Identity — future profile shell */}
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Customer identity"
-          description="Legal name, display name, billing entity, and service addresses will anchor here. Nothing below is populated until persistence ships."
+          description="Legal name, display name, and billing entity anchor here. Fields below are read from the database for this organization only."
         />
-        <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-10 text-center">
-          <UserRound
-            className="mx-auto mb-3 size-10 text-foreground-subtle opacity-70"
-            strokeWidth={1.25}
-            aria-hidden
-          />
-          <p className="text-sm font-medium text-foreground">Future profile shell</p>
-          <p className="mt-2 text-xs text-foreground-muted">
-            No display name, tax ID, or merge history yet—this screen only proves routing and
-            layout.
-          </p>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <PlaceholderButton title="No customer store in this build">
-              Edit profile (soon)
-            </PlaceholderButton>
-          </div>
+        <div className="rounded-lg border border-border bg-surface px-4 py-5">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                Display name
+              </dt>
+              <dd className="mt-1 text-sm font-medium text-foreground">{customer.displayName}</dd>
+            </div>
+            <div>
+              <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                Company
+              </dt>
+              <dd className="mt-1 text-sm text-foreground">{customer.companyName || "—"}</dd>
+            </div>
+          </dl>
         </div>
       </WorkspacePanel>
 
-      {/* Contact methods */}
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Contact methods"
-          description="Office phone, mobile or SMS, email, job-site contact, billing contact, and preferred channel—structured fields and portal invites come with persistence."
+          description="Office phone, mobile, email, and preferred channel—structured fields expand with persistence."
         />
-        <EmptyState
-          icon={Phone}
-          title="No contact methods on file"
-          description="Crews and CSRs need reliable numbers and addresses; this block stays empty until an address book exists."
-        >
-          <PlaceholderButton title="No contact editor in this build">
-            Add phone (soon)
-          </PlaceholderButton>
-          <PlaceholderButton title="No contact editor in this build">
-            Add email (soon)
-          </PlaceholderButton>
-        </EmptyState>
+        {customer.email || customer.phone ? (
+          <div className="rounded-lg border border-border bg-surface px-4 py-5">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                  Email
+                </dt>
+                <dd className="mt-1 text-sm text-foreground">{customer.email || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                  Phone
+                </dt>
+                <dd className="mt-1 text-sm text-foreground">{customer.phone || "—"}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : (
+          <EmptyState
+            icon={Phone}
+            title="No contact methods on file"
+            description="Add email or phone when create/edit flows exist; none are stored for this customer yet."
+          >
+            <PlaceholderButton title="No contact editor in this build">
+              Add phone (soon)
+            </PlaceholderButton>
+            <PlaceholderButton title="No contact editor in this build">
+              Add email (soon)
+            </PlaceholderButton>
+          </EmptyState>
+        )}
       </WorkspacePanel>
 
-      {/* Connected records — primary: Sales + Work */}
+      <WorkspacePanel className="mb-6">
+        <SectionHeading
+          title="Internal notes"
+          description="Free-form notes stored on the customer record—read-only in this build."
+        />
+        {customer.notes ? (
+          <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
+            {customer.notes}
+          </p>
+        ) : (
+          <p className="text-sm text-foreground-muted">No notes on this record.</p>
+        )}
+      </WorkspacePanel>
+
       <WorkspacePanel className="mb-6 border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Connected records"
@@ -206,10 +298,16 @@ export default async function CustomerDetailPage({
             href="/schedule"
             linkLabel="Open Schedule"
           />
+          <ConnectedRecordSlot
+            title="Payments"
+            description="Customer payment history, requested funds, and collection status live under Finance."
+            icon={CreditCard}
+            href="/payments"
+            linkLabel="Open Payments"
+          />
         </div>
       </WorkspacePanel>
 
-      {/* Relationship signals / tags */}
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Relationship signals & tags"
@@ -246,7 +344,6 @@ export default async function CustomerDetailPage({
         </EmptyState>
       </WorkspacePanel>
 
-      {/* Related parties — future */}
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Related parties"
@@ -259,16 +356,15 @@ export default async function CustomerDetailPage({
         />
       </WorkspacePanel>
 
-      {/* Notes & activity */}
       <WorkspacePanel padding="compact" className="mb-6">
         <SectionHeading
-          title="Notes & activity"
+          title="Activity timeline"
           description="Internal calls, visits, billing notes, and job events in one timeline—audit behavior is future work."
         />
         <EmptyState
           icon={MessageSquare}
           title="No activity yet"
-          description="No fabricated events; logging attaches when persistence exists."
+          description="No fabricated events; logging attaches when persistence exists beyond this customer row."
         />
       </WorkspacePanel>
 
@@ -290,6 +386,9 @@ export default async function CustomerDetailPage({
         </Link>
         <Link href="/schedule" className={handoffMutedLinkClass}>
           Schedule
+        </Link>
+        <Link href="/payments" className={handoffMutedLinkClass}>
+          Payments
         </Link>
         <Link href="/workstation" className={handoffPrimaryLinkClass}>
           Workstation

@@ -63,9 +63,9 @@ export default function WorkstationTodayLensPage() {
             hint="Sent, revised, or waiting on approval."
           />
           <SignalCard
-            label="Customer follow-ups"
+            label="Payment holds"
             value="—"
-            hint="Callbacks and relationship nudges."
+            hint="Failed collection or overdue funds later."
           />
         </div>
         <EmptyState
@@ -137,7 +137,7 @@ export default function WorkstationTodayLensPage() {
 
       <HandoffPanel
         title="Attention pulls from the rest of Struxient"
-        description="Quotes and leads sit under Sales. Customer relationships sit under Relationships. Jobs and the planning calendar sit under Work. Workstation watches all of it for what needs a human next."
+        description="Quotes and leads sit under Sales. Customer relationships sit under Relationships. Jobs and the planning calendar sit under Work. Payments live under Finance. Workstation watches all of it for what needs a human next."
       >
         <Link href="/quotes" className={handoffMutedLinkClass}>
           Quotes
@@ -150,6 +150,9 @@ export default function WorkstationTodayLensPage() {
         </Link>
         <Link href="/schedule" className={handoffMutedLinkClass}>
           Schedule
+        </Link>
+        <Link href="/payments" className={handoffMutedLinkClass}>
+          Payments
         </Link>
       </HandoffPanel>
     </div>

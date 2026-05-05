@@ -41,6 +41,18 @@ Then open [http://localhost:3001](http://localhost:3001) (host **3001** → cont
 
 If nothing named **struxient-v5** appears under Containers, the stack was never started from this folder—or Docker Desktop is on another machine/context.
 
+### Local database (Prisma, optional)
+
+For host-side Prisma (`apps/web/`) against the compose **db** service only:
+
+1. From the repo root: `docker compose up -d db` (starts **`struxient-v5-db`** on host **5432** per `docker-compose.yml`).
+2. In `apps/web/`: copy `.env.example` to `.env` (same `DATABASE_URL` shape as compose for local dev).
+3. From `apps/web/`: `npx prisma migrate dev` (apply pending migrations; initial migration is `20260505175844_init_org_customer`).
+4. From `apps/web/`: `npx prisma db seed` (development seed data only; safe to re-run).
+5. Validate: `npx prisma generate`, `npm run lint`, `npm run build` (from `apps/web/`, or use root `npm run lint` / `npm run build`).
+
+Do not point `DATABASE_URL` at other projects’ Postgres instances. Rebuild the **`web`** image if you need the Dockerized app on port **3001** to match the latest source.
+
 ## Repository layout
 
 | Path | Contents |
