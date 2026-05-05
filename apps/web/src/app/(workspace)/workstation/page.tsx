@@ -6,7 +6,7 @@ export default function WorkstationTodayLensPage() {
       <SectionHeader
         eyebrow="Today lens"
         title="Today"
-        description="Assigned work, blockers, overdue, and what changed—matches locked default landing §11 once data exists."
+        description="Assigned work, blockers, overdue, and what changed—this becomes the default landing once data and preferences exist."
       />
 
       <section className="rounded-xl border border-border bg-surface p-8 shadow-sm">

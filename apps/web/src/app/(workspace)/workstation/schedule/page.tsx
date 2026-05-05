@@ -6,10 +6,11 @@ export default function WorkstationScheduleLensPage() {
       <SectionHeader
         eyebrow="Schedule lens"
         title="Schedule"
-        description="Month / week / day from tasks and appointments; drag reschedule updates the server record (locked §5)."
+        description="Month / week / day from tasks and appointments; drag-reschedule will update persisted records when they exist. For the full schedule record surface, use Work → Schedule (/schedule)."
       />
       <div className="rounded-xl border border-dashed border-border bg-surface/50 px-8 py-16 text-center text-sm text-foreground-muted">
-        Calendar UI is a later slice; task date fields come first.
+        This lens highlights schedule risk and near-term changes first; the
+        calendar-first record view lives under Work → Schedule.
       </div>
     </div>
   );

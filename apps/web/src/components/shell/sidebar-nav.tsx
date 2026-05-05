@@ -20,16 +20,21 @@ const workstationEntry: NavItem[] = [
   { href: "/workstation", label: "Workstation", icon: LayoutDashboard },
 ];
 
-/** Quick entry to lenses that double as job/schedule record hubs for now. */
-const browseNav: NavItem[] = [
-  { href: "/workstation/jobs", label: "Jobs", icon: FolderKanban },
-  { href: "/workstation/schedule", label: "Schedule", icon: CalendarDays },
-];
-
-const commercialNav: NavItem[] = [
+/** Pre-work commercial pipeline: intake, quotes, approvals (record routes). */
+const salesNav: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/quotes", label: "Quotes", icon: FileText },
+];
+
+/** Durable people/company records; Customers is the first surface—more types later. */
+const relationshipsNav: NavItem[] = [
   { href: "/customers", label: "Customers", icon: UserCircle },
+];
+
+/** Post-approval operational records: jobs and schedule. */
+const workNav: NavItem[] = [
+  { href: "/jobs", label: "Jobs", icon: FolderKanban },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
 const utilityNav: NavItem[] = [
@@ -94,8 +99,9 @@ export function SidebarNav() {
   return (
     <nav className="flex flex-1 flex-col" aria-label="Main">
       <NavSection title="" items={workstationEntry} pathname={pathname} />
-      <NavSection title="Browse" items={browseNav} pathname={pathname} />
-      <NavSection title="Commercial" items={commercialNav} pathname={pathname} />
+      <NavSection title="Sales" items={salesNav} pathname={pathname} />
+      <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
+      <NavSection title="Work" items={workNav} pathname={pathname} />
       <div className="mt-auto">
         <NavSection title="" items={utilityNav} pathname={pathname} />
       </div>

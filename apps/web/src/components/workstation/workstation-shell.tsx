@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignalCard } from "@/components/ui/signal-card";
 import {
   CalendarDays,
   ClipboardList,
@@ -38,8 +39,8 @@ export function WorkstationShell() {
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
           Role-aware action discovery across jobs, tasks, quotes, schedule, and
-          payments—lenses below filter the same operational picture (data still
-          stubbed).
+          payments—lenses below filter the same operational picture. Counts stay
+          empty until persistence and org-scoped queries exist.
         </p>
         <p className="mt-2 text-sm text-foreground-subtle">
           Preview role: <span className="font-medium text-foreground">Office</span>{" "}
@@ -62,17 +63,8 @@ export function WorkstationShell() {
             { k: "Quote / customer", v: "—", hint: "Follow-ups and approvals" },
             { k: "Stale work", v: "—", hint: "No touch in N days" },
           ].map((row) => (
-            <li
-              key={row.k}
-              className="rounded-lg border border-border bg-surface px-4 py-3 shadow-sm"
-            >
-              <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-                {row.k}
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-                {row.v}
-              </p>
-              <p className="mt-1 text-xs text-foreground-muted">{row.hint}</p>
+            <li key={row.k}>
+              <SignalCard label={row.k} value={row.v} hint={row.hint} />
             </li>
           ))}
         </ul>
