@@ -1,0 +1,12 @@
+# Next.js app (`apps/web/`)
+apps/web/node_modules
+apps/web/.next
+apps/web/out
+apps/web/.env*.local
+apps/web/npm-debug.log*
+apps/web/.vercel
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

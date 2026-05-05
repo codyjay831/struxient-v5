@@ -1,0 +1,403 @@
+# Experience canon — Lead → Quote → Customer approval → Workstation
+
+> **Struxient v5 only.** This document is the **authoritative experience reference** for how the product should **feel and behave** across the lifecycle named in the title. It informs UX, product, and engineering alignment. It is **not** a sprint plan or confirmation that every capability ships in a given release.
+
+---
+
+## 1. Lead intake experience
+
+### Intent
+
+Leads enter from **many real-world channels**; the system must not assume a single front door.
+
+### Canonical channels (non-exhaustive)
+
+- Phone calls  
+- Text messages  
+- Email  
+- Website forms  
+- Customer portal actions  
+- Manual entry by office users  
+- Future integrations or imports  
+
+### Behavioral requirements
+
+- A lead may be created **automatically** from a source or **manually** by a user.
+- Intake must support **simple** workflows (minimal fields, fast capture) and **advanced** workflows ( richer qualification, routing, and follow-on tasks).
+- Intake should preserve **provenance** (where it came from) in a way that downstream tagging and reporting can use.
+
+### Architectural note
+
+Treat intake as a **capability seam**: new sources should not require redesigning the core lead model each time.
+
+---
+
+## 2. Leads and customers
+
+### Intent
+
+Separate **early intent** (lead) from **ongoing relationship** (customer) without forcing premature promotion.
+
+### Canonical behaviors
+
+- A lead may **create a new customer**, **attach to an existing customer**, or **remain a lead** until enough is known.
+- A customer may be created **directly** without a lead.
+
+### Customer understanding without rigid taxonomy
+
+Customers support **metadata, tags, or status labels** that explain history and situation. Examples (illustrative, not exhaustive):
+
+- Imported customer  
+- Website lead  
+- Phone lead  
+- Existing customer  
+- Customer with sold job  
+- Customer with unsold quote  
+- Non-sold customer  
+- Past customer  
+- Manual entry  
+
+### Requirement
+
+Tags should **reduce ambiguity** for humans (“what kind of customer is this?”) **without** forcing every customer into a single mandatory category tree unless the company configures one.
+
+### System signals vs user tags
+
+**User-created tags** remain available for **company-specific** segmentation and habits. **System-generated lifecycle signals** (when the product can infer them—e.g. **has approved job**, **has unsold quote**, **imported customer**, **website lead**) should live **separately** from manual tags where practical, so teams are not asked to duplicate state the system already holds.
+
+---
+
+## 3. Lead-to-quote experience
+
+### Intent
+
+Progress from lead to quote must scale from **lightweight** to **process-driven** per company and per job type.
+
+### Simple path
+
+For simple organizations or simple job types, the experience may be as light as a **single quote checklist page** (or equivalent minimal flow).
+
+### Structured path
+
+For more advanced organizations, lead → quote may include **assigned tasks**, e.g.:
+
+- Call customer  
+- Confirm address  
+- Gather photos  
+- Schedule site visit  
+- Complete site visit  
+- Build estimate  
+- Review quote  
+- Send quote  
+
+Tasks may be assigned **automatically** or **manually** (rules are product territory; canon requires both **modes** to be conceptually supported).
+
+### Dual requirement
+
+The system must support:
+
+1. **Simple lead → quote** with minimal ceremony.  
+2. **Structured lead → task-based quote preparation** when needed.
+
+### Anti-patterns
+
+- Forcing heavy process on trivial work.  
+- Offering “flexibility” that hides **who owns the next step** when process *is* required.
+
+---
+
+## 4. Quote authoring experience
+
+### Intent
+
+Quoting is where the company defines **what is sold** and increasingly **what will need to happen** if sold.
+
+### Line items
+
+Line items represent sold work, services, materials, labor, phases, packages, or other quoteable units per company workflow.
+
+### Line item richness (canonical fields / attachments)
+
+Line items may include (non-exhaustive):
+
+- Title, description, quantity, price  
+- Internal notes vs customer-facing description  
+- Attached tasks  
+- Crew requirements, equipment requirements  
+- Parts/materials  
+- Dependencies and scheduling considerations  
+- Payment requirements  
+- Other execution-relevant information  
+
+### Requirement
+
+The quote should be the **primary place** where users define **commercial scope** and **operational implications** together, so execution does not depend on memory or side documents.
+
+---
+
+## 5. Line item and task templates
+
+### Intent
+
+Templates accelerate repeat business while respecting **instance independence**.
+
+### Canonical template contents
+
+Templates may include:
+
+- **Line item only** (saved individually—commercial row presets without stages/tasks)  
+- **Line item + stages and/or tasks** (composite templates: same line item shape, plus phase-like **stages** and executable **tasks** and related metadata when desired)  
+- Line item + crew/equipment/parts info (with or without stages/tasks)  
+- Task-only templates  
+- Task groups  
+- Useful combinations of reusable quote and execution information  
+
+**Canon clarification:** “Line item template” and “line item + stages + tasks template” are **both** valid, common shapes—not mutually exclusive product modes.
+
+### Canonical user actions
+
+- Add templates to a quote  
+- Customize instances on the quote  
+- Save new quote content back as reusable templates (from a **single line item** up through **line item + nested execution structure**)  
+- Keep template changes **separate** unless the user **intentionally** updates the library template  
+
+### Invariant (experience-level)
+
+Templates help users move faster; once applied, **quote/job instances** must be editable **without unintentionally changing** other uses of that template.
+
+### Execution planning timing (quote vs after sign)
+
+Users must be able to:
+
+- **Plan during the quote** (tasks/stages attached while selling—often via templates), **or**  
+- **Defer execution planning** until after customer approval, **without** being penalized for choosing either path.
+
+Rich execution structure on a quote must remain **refinable after signature** as part of normal job operations. See [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+
+---
+
+## 6. Executable workflow behavior
+
+### Intent
+
+Quotes and tasks create a **clear executable path** that survives real life.
+
+### Quote-time vs job-time planning
+
+**Pre-approval:** execution structure on the quote may be **partial**, **draft**, or **rich**; the primary obligation of the quote remains **commercial clarity** and controlled customer disclosure.
+
+**Post-approval:** the job’s executable graph is the **operational home** for refinement—reorder, assign, add mobilization tasks, split work, etc.—without implying that every quote-time task was a **customer commitment**. Post-sign workflow editing is **expected**, not an edge case. Full intent: [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+
+### Questions the system should help answer
+
+- What needs to happen?  
+- Who is responsible?  
+- What comes next?  
+- What is blocked?  
+- What changed?  
+- What needs to be fixed?  
+- How do we return to the original path?  
+
+### Structure vs rigidity
+
+Support **order and dependencies**, but avoid brittleness where normal change invalidates the plan. The posture: **enough structure** for clarity, **enough flexibility** for reality.
+
+---
+
+## 7. Events, interruptions, and corrections
+
+### Intent
+
+Treat change as **normal**, not exceptional.
+
+### Example events (illustrative)
+
+Customer change requests, material issues, failed inspections, site discoveries, weather delays, missing information, payment issues, scheduling conflicts, scope changes, internal mistakes.
+
+### Canonical outcomes of an event
+
+An event may create or trigger:
+
+- New line items (e.g., change order posture)  
+- New tasks  
+- A correction path  
+- A temporary detour  
+- A defined return point to the prior path  
+
+### Transparency requirements
+
+For meaningful interruptions, users should see:
+
+- **Cause** (what happened)  
+- **Remediation work** (what must be fixed)  
+- **Ownership** (who owns the fix)  
+- **Concurrency posture** (original paused vs can continue in parallel)  
+- **Return** (how the job resumes the prior path when appropriate)  
+
+### Anti-patterns
+
+- **Too rigid:** every field edit breaks the workflow.  
+- **Too loose:** users cannot tell what must happen next after chaos.
+
+### Construction issues and events — “non-fail” handling (v5 priority)
+
+Field construction is **issue-prone by nature**. The product must offer a **primary path** that is **hard to get wrong**:
+
+- **Guided capture** — logging an issue should **not** depend on users understanding internal workflow theory. Prefer a small number of **clear choices** (what happened, severity, who is affected, does this stop work) over a blank text box as the only structure.  
+- **Always produces actionable state** — a meaningful issue should **materialize** as **visible work**: tasks, blockers, detours, or explicit “return when fixed” markers—**and** appear in the **Workstation** so the cockpit stays honest.  
+- **Ownership and causality by default** — every recorded issue should support answering: **what changed**, **who owns the next step**, **what is blocked**, without hunting through unrelated notes.  
+- **Forgiving edits** — users should be able to **correct a mis-filed issue** or **re-scope follow-up tasks** without orphaning the job or breaking sold scope; commercial changes still flow through **explicit** change paths when needed.
+
+This is the experiential counterpart to “flexible execution”: **events are first-class**, not a side channel where important work goes to die.
+
+### Construction issue — MVP lifecycle (states)
+
+Use a **small** default lifecycle so implementation stays predictable:
+
+1. **open** — recorded, not yet triaged to a clear next operational posture.  
+2. **triaged** or **in_progress** — owned next steps exist (may include spawned tasks).  
+3. **resolved** — the issue’s driving concern is handled for operational purposes (may still leave follow-up history).  
+4. **cancelled** or **misfiled** (optional) — duplicate, mistake, or withdrawn without implying the original problem was “fixed.”
+
+**Anchoring:** an issue may block a **job**, **task**, **stage**, or **line item** depending on what anchors exist. If the anchor is **unclear**, default to a **job-level** issue plus a **triage task** so ownership lands somewhere visible.
+
+**Tasks vs issue closure:** completing a **spawned task** may **suggest** resolution but must **not silently close** the construction issue unless the product **explicitly** defines auto-close rules. Otherwise humans keep explicit control over issue lifecycle.
+
+---
+
+## 8. Customer-facing quote view
+
+### Intent
+
+Same underlying quote; **controlled disclosure** to the customer.
+
+### Internal vs external
+
+Internal quotes may contain detailed operational information. Customer-facing views show **only** what the company chooses.
+
+### Customer-facing may include (when enabled)
+
+Exact line items, simplified or grouped descriptions, optional details, payment schedule, terms, approval/signature area—**as configured**.
+
+### Requirement
+
+Users control whether customers see **exact internal structure** or a **cleaner presentation**.
+
+---
+
+## 9. Customer portal access
+
+### Intent
+
+Customers interact with **safe projections** of quotes and job information.
+
+### Access patterns (canonical)
+
+- Customer login (first-party Struxient auth UX—see below)  
+- Secure email link  
+- Secure SMS link  
+- Future account-based patterns  
+
+### Customer authentication (v5 preference)
+
+**Customers** authenticate through **Struxient-native** flows: your **branding**, your **trust boundary**, and your **session / token / magic-link** model—see **I18** in [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) (**no Clerk**; staff and customers alike).
+
+- **Magic links and SMS links** remain **first-class** and compatible with this (Struxient-issued, first-party).  
+- **Optional** richer login (e.g. customer password, OTP) is allowed if it stays **first-party**.  
+- **Staff** sign-in uses the **same** first-party policy (I18); v5 may still use **different screens and flows** for staff vs customers, but **not** a different *class* of product (no Clerk for either).
+
+### Canonical customer abilities (when enabled)
+
+View quote, approve/sign, view payment schedule, pay, view selected job updates, upload/respond to requested information.
+
+### Boundary requirement
+
+Portal must not default to exposing **internal-only workflow** detail.
+
+---
+
+## 10. Signing and job activation
+
+### Intent
+
+Commitment is the **handoff** from commercial definition to operational truth.
+
+### After sign / approval
+
+Work moves into the **executable work system**. The quote remains the anchor for **what was sold** and what must be executed.
+
+### Requirement
+
+Users should **not** have to manually rebuild the job from scratch after signing; the transition should **materialize** executable structure consistent with the approved intent.
+
+### Activation — MVP product behavior (not a technical saga)
+
+- **Approved quote → job:** customer approval creates (or advances into) a **job** as the executable container.  
+- **Sold line items** become the **job scope anchors** for commercial continuity.  
+- **Quote-time stages/tasks**, when present, **copy into** the job as **editable job instances**—the job graph is the operational home for refinement; quote-time structure is **seed**, not an unchangeable diagram.  
+- If **no** stages/tasks exist at approval, activation still produces a **usable job container** with a **planning prompt** or **starter task** so execution is not a blank slate.  
+- Activation **never mutates** the **approved quote snapshot**; post-approval changes to sold terms flow through **change orders** and related canon paths.
+
+---
+
+## 11. Workstation experience (summary)
+
+Detailed rules: [workstation-canon.md](./workstation-canon.md).
+
+### Intent
+
+The Workstation is where **executable work lives** as a **cockpit**: not “just a quote page,” not “just a task list,” but the place that surfaces **what needs action** and **what should happen next**. It is the **role-aware action-discovery surface** for the org—not a generic **navigation category** only (see [workstation-canon.md](./workstation-canon.md#authoritative-positioning)). **Jobs**, **tasks**, **quotes**, **customers**, and **schedule** pages may still exist for record-based wayfinding; the Workstation **aggregates attention and next steps across** them.
+
+### Canonical surface areas (non-exhaustive)
+
+Daily dashboard, jobs, tasks, calendar, analytics, priority views, assigned/blocked/upcoming work, payment-related blockers, crew/resource needs—composed to answer operational questions quickly. **Lenses and filters** (Focus, Ready, Blocked, Needs review, etc.) are **views inside** this surface, not a substitute for treating Workstation as the **main discovery destination** ([workstation-canon.md](./workstation-canon.md)).
+
+---
+
+## 12. Payment experience
+
+### Intent
+
+Money expectations must be **legible** and able to **gate** work when appropriate.
+
+### Schedules
+
+Schedules should be easy to understand **internally** and **externally**.
+
+### Canonical tie-points (examples)
+
+Quote approval, deposits, milestones, specific line items, before-work requirements, completion stages, final payment, change orders, custom company rules.
+
+### Questions users and customers should be able to answer
+
+What is owed, when, what work depends on payment, what is paid/unpaid, and whether payment **blocks** execution.
+
+### Schedule vs gate vs task (short)
+
+The **payment schedule** is **money truth**. **Payment gates** are **readiness rules** derived from that truth. **Follow-up tasks** help people **act**; they are **not** the schedule. **Payment-block issues** explain stoppage; they **do not replace** the schedule. See [domains-and-boundaries.md](./domains-and-boundaries.md#boundary-payments-vs-scheduling-vs-tasks).
+
+---
+
+## 13. Attached operational information
+
+### Intent
+
+Execution context stays **attached** to the correct anchor (line item, task, quote, job)—not scattered.
+
+### Examples of attachments (illustrative)
+
+Crew/skill/equipment/parts/materials, photos/files/notes, safety and access instructions, scheduling constraints, inspection/permit needs, internal checklists, vendor requirements.
+
+### Requirement
+
+Avoid scattering critical execution details across unrelated areas when they belong to a **specific** sellable or doable unit.
+
+---
+
+## 14. Core product principle (restated)
+
+See [overview.md](./overview.md). This experience canon exists to keep planning aligned with that principle: **quote defines sold work; templates speed; tasks execute; events adapt; workstation directs; portal discloses appropriately.**
+
+---
+
+*Canon update (2026-05-05): System signals vs user tags (§2); construction issue MVP lifecycle (§7); activation MVP behavior (§10); payment schedule vs gate vs task (§12).*

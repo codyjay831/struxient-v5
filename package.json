@@ -1,0 +1,13 @@
+{
+  "name": "struxient-v5",
+  "private": true,
+  "description": "Repo root helpers; Next.js app lives in apps/web/",
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "lint": "npm --prefix apps/web run lint",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f web"
+  }
+}

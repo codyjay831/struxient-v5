@@ -1,0 +1,30 @@
+# Compose project name → Docker Desktop shows "struxient-v5" (not a random folder hash).
+name: struxient-v5
+
+# Dockerfile lives under docker/; path is relative to build context (./apps/web).
+services:
+  web:
+    image: struxient-v5-web:latest
+    container_name: struxient-v5-web
+    restart: unless-stopped
+    build:
+      context: ./apps/web
+      dockerfile: ../../docker/web/Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:3000/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
