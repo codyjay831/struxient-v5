@@ -32,14 +32,14 @@ export default function ScheduleRecordPage() {
       <PageHeader
         eyebrow="Work"
         title="Schedule"
-        description="Work planning and browse surface for timing—not a live calendar yet. When data exists, this coordinates jobs, customer access windows, crew capacity, and what Workstation is asking people to look at next."
+        description="Reserved planning surface for timing—not a live calendar or schedule engine. When data exists, it could coordinate job timing, customer access windows, and field capacity; Workstation remains a separate static lens."
         actions={
           <>
             <PlaceholderButton title="No schedule store in this build">
-              Add schedule item (soon)
+              Add schedule item (not wired)
             </PlaceholderButton>
             <PlaceholderButton title="No ICS feed in this build">
-              Subscribe (ICS) (soon)
+              Subscribe (ICS) (not wired)
             </PlaceholderButton>
           </>
         }
@@ -74,11 +74,11 @@ export default function ScheduleRecordPage() {
         {/* Primary: what this calendar coordinates */}
         <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
           <SectionHeading
-            title="What this calendar coordinates"
-            description="One place to line up Jobs that need time, customer availability, how much crew capacity you have, and what Workstation is surfacing as schedule attention—once persistence and engines exist."
+            title="What this calendar coordinates (reserved)"
+            description="Reserved layout for lining up job timing, customer availability, field capacity, and future Workstation timing hints—no persistence or engine in this build."
             actions={
               <PlaceholderButton title="No planner in this build">
-                Plan schedule (soon)
+                Plan schedule (not wired)
               </PlaceholderButton>
             }
           />
@@ -94,9 +94,9 @@ export default function ScheduleRecordPage() {
               hint="Access windows and preferences later."
             />
             <SignalCard
-              label="Crew capacity"
+              label="Field capacity"
               value="—"
-              hint="Rough load—not dispatch or payroll."
+              hint="Rough load placeholder—not routing or payroll."
             />
             <SignalCard
               label="Workstation attention"
@@ -105,11 +105,11 @@ export default function ScheduleRecordPage() {
             />
           </div>
           <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            Commercial terms and payment truth stay on{" "}
-            <span className="font-medium text-foreground">Quotes</span> until approval;
-            relationship and contact context stay on{" "}
-            <span className="font-medium text-foreground">Customers</span>. Schedule only
-            answers when and where work can happen.
+            Commercial terms and totals stay on{" "}
+            <span className="font-medium text-foreground">Quotes</span> as the working record;
+            relationship context stays on{" "}
+            <span className="font-medium text-foreground">Customers</span>. This schedule shell
+            only reserves how timing questions would be answered later.
           </p>
           <EmptyState
             icon={CalendarDays}
@@ -140,7 +140,7 @@ export default function ScheduleRecordPage() {
             description="No month/week/day grid, no drag-reschedule, no sync—only honest empty space until backed entities and a real calendar ship."
           >
             <PlaceholderButton title="No calendar in this build">
-              Open calendar (soon)
+              Open calendar (not wired)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
@@ -165,8 +165,8 @@ export default function ScheduleRecordPage() {
         {/* Crew capacity */}
         <WorkspacePanel>
           <SectionHeading
-            title="Crew capacity"
-            description="Future view of how much field time you have—not employee files, payroll, roles, dispatch boards, or assignments. Those stay out of this shell."
+            title="Field capacity (reserved)"
+            description="Future view of how much field time you might have—not employee files, payroll, roles, routing boards, or assignments. Those stay out of this shell."
           />
           <EmptyState
             icon={Users}
@@ -174,7 +174,7 @@ export default function ScheduleRecordPage() {
             description="Rough headcount or trade load may recommend windows later; nothing is calculated here."
           >
             <PlaceholderButton title="No capacity engine in this build">
-              Set capacity (soon)
+              Set capacity (not wired)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
@@ -198,7 +198,7 @@ export default function ScheduleRecordPage() {
 
         <HandoffPanel
           title="Schedule sits between records and the field"
-          description="Schedule coordinates Work timing around Jobs. Quotes stay under Sales until approval. Customer context lives under Relationships. Workstation shows what needs attention—including schedule risk—without replacing this planning surface."
+          description="Schedule is a reserved timing shell around Jobs. Quotes stay under Sales as the commercial record. Customers stay under Relationships. Workstation is a separate reserved attention strip—not a live coordinator with this page."
         >
           <Link href="/jobs" className={handoffMutedLinkClass}>
             Jobs

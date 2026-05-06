@@ -40,20 +40,22 @@ export function WorkstationShell() {
           Workstation
         </p>
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-          What needs your attention?
+          Reserved attention surface
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
-          Role-aware action discovery across jobs, tasks, quotes, schedule, payments,
-          and follow-ups—this is the cockpit, not the record catalog. Lenses below slice
-          the same operational picture by kind of attention.
+          Workstation is a planning shell for how cross-area signals could surface later.
+          It is not connected to quote-to-job handoffs, runtime jobs, tasks, payments, or
+          scheduling yet—browse and edit real records under Sales, Relationships, and
+          Work. Lenses below are layout-only slices for future attention.
         </p>
         <p className="mt-2 text-sm text-foreground-subtle">
-          Browse and maintain records under{" "}
+          Use{" "}
           <span className="font-medium text-foreground">Sales</span>,{" "}
           <span className="font-medium text-foreground">Relationships</span>,{" "}
           <span className="font-medium text-foreground">Work</span>, and{" "}
-          <span className="font-medium text-foreground">Finance</span> in the sidebar—nothing
-          here persists until data and queries ship.
+          <span className="font-medium text-foreground">Reserved → Payments</span> in the
+          sidebar for authoritative routes—nothing on this page loads execution or money
+          feeds today.
         </p>
       </header>
 

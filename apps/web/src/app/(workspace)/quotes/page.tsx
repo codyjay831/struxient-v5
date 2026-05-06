@@ -141,7 +141,7 @@ export default async function QuotesPage({
       <PageHeader
         eyebrow="Sales"
         title="Quotes"
-        description="Commercial quotes for this organization—list and detail reads are org-scoped. Drafts can be created and edited on quote detail; archive and restore are available. Send, approval, and payment collection stay deferred."
+        description="Working quote records for this organization—list and detail reads are org-scoped. Create drafts from New quote, edit on quote detail, and archive or restore as needed. Recorded send checkpoints and live proposal preview are internal staff tools on the quote record."
         actions={
           <>
             <Link href="/quotes/new" className={primaryLinkClass}>
@@ -154,7 +154,7 @@ export default async function QuotesPage({
 
       <HandoffPanel
         title="Commercial handoff"
-        description="Quotes carry line items before any future job activation. This list is org-scoped; nothing here implies send or approval."
+        description="Quotes are the working commercial record—line items carry scope and rollups here. This list is org-scoped and does not imply external delivery, runtime execution, or automatic handoff to jobs or payments."
       >
         <Link href="/leads" className={handoffMutedLinkClass}>
           Go to Leads
@@ -390,8 +390,8 @@ export default async function QuotesPage({
           </p>
           <ul className="mt-3 space-y-2 text-sm text-foreground-muted">
             <li>Open a quote for line items and rollups; drafts are editable, archived are read-only.</li>
-            <li>Tax, shipping, and payment milestones are deferred.</li>
-            <li>Send, PDF, e-sign, and approval stay future work.</li>
+            <li>Totals follow line items on the quote row—no separate billing or tax lines in this build.</li>
+            <li>Live proposal preview and recorded send checkpoints are staff-only views on the same working record.</li>
           </ul>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/quotes/new" className={primaryLinkClass}>

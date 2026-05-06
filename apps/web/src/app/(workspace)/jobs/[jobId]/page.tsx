@@ -45,7 +45,7 @@ export default async function JobDetailPage({
       <PageHeader
         eyebrow="Work"
         title="Job"
-        description="Post-approval work container—not a live task runner. Commercial truth stays on the quote; this shell only mirrors the route until persistence and activation exist."
+        description="Reserved execution-record shell from the URL only—not a live task runner. The working quote remains the commercial record; this page is not wired to checkpoints or quote-to-job handoffs."
         actions={
           <>
             <Link href="/jobs" className={listLinkClass}>
@@ -55,7 +55,7 @@ export default async function JobDetailPage({
               Workstation jobs lens
             </Link>
             <PlaceholderButton title="No job store in this build">
-              Save job (soon)
+              Save job (not wired)
             </PlaceholderButton>
           </>
         }
@@ -79,7 +79,7 @@ export default async function JobDetailPage({
         <WorkspacePanel>
           <SectionHeading
             title="Job identity & work status"
-            description="Display name, site address, crew assignment, and lifecycle state will live here. Nothing is evaluated yet—no activation, no schedule engine, no task graph."
+            description="Display name, site address, field assignment, and lifecycle state could live here later. Nothing is evaluated yet—no schedule engine, no task graph, no runtime execution."
           />
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-10 text-center">
             <Briefcase
@@ -95,26 +95,26 @@ export default async function JobDetailPage({
           </div>
         </WorkspacePanel>
 
-        {/* Quote origin / approval */}
+        {/* Quote origin (future link) */}
         <WorkspacePanel>
           <SectionHeading
-            title="Quote origin & approval"
-            description="Jobs are expected to come from approved or committed quotes later. Customer-facing terms and payment plan stay anchored on the quote—no silent rewrite after send or approval once that system exists."
+            title="Commercial anchor on the quote"
+            description="Future jobs should reference the working quote and recorded send checkpoints—not this placeholder. Agreed scope and money language stay on Sales until an explicit execution link exists."
           />
           <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            This shell does not fetch a quote. Line items and quote-level payment truth remain on
-            Sales until linking and snapshots are built.
+            This shell does not fetch a quote. Line items and totals remain on the quote
+            workspace; nothing here duplicates or replaces that record.
           </p>
           <EmptyState
             icon={FileText}
             title="No linked quote"
-            description="Approved quote reference, revision, and snapshot pointers will show here—nothing is invented for this route."
+            description="Future linking would show the quote id here—nothing is invented for this route."
           >
             <Link href="/quotes" className={listLinkClass}>
               Browse quotes
             </Link>
             <PlaceholderButton title="No quote linker in this build">
-              Open linked quote (soon)
+              Open linked quote (not wired)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
@@ -122,11 +122,11 @@ export default async function JobDetailPage({
         {/* Sold scope / execution bridge — primary */}
         <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
           <SectionHeading
-            title="Sold scope / execution bridge"
-            description="The job turns approved commercial scope into something the field can execute. Line items and payment terms originate on the quote; activation review and progressive execution detail confirm how work actually starts."
+            title="Sold scope / execution bridge (reserved)"
+            description="Reserved for how agreed scope on the quote could map to field execution later. Line items and totals stay on the quote today; nothing here starts work or mutates records."
             actions={
               <PlaceholderButton title="No scope viewer in this build">
-                Review sold scope
+                Review sold scope (not wired)
               </PlaceholderButton>
             }
           />
@@ -134,12 +134,12 @@ export default async function JobDetailPage({
             <SignalCard
               label="Sold scope"
               value="—"
-              hint="Rolls up from approved line items when linked."
+              hint="Would roll up from linked quote lines later."
             />
             <SignalCard
-              label="Activation readiness"
+              label="Execution readiness (reserved)"
               value="—"
-              hint="Checklist and gates—not run in this shell."
+              hint="Future checklist surface—nothing evaluated here."
             />
             <SignalCard
               label="Schedule context"
@@ -155,10 +155,10 @@ export default async function JobDetailPage({
           <EmptyState
             icon={ListOrdered}
             title="No execution bridge yet"
-            description="When wired, you will see how sold line items and quote-level payment terms feed the starting job plan. Tasks, dependencies, and runtime sequencing stay off this page until the execution engine ships."
+            description="When wired, this area would summarize how quote scope could feed a job plan. Runtime tasks, dependencies, and sequencing are out of scope for this shell."
           >
-            <PlaceholderButton title="No activation prep in this build">
-              Prepare activation review
+            <PlaceholderButton title="No execution prep in this build">
+              Prepare execution handoff (not wired)
             </PlaceholderButton>
             <Link href="/quotes" className={listLinkClass}>
               Quotes
@@ -175,16 +175,16 @@ export default async function JobDetailPage({
         {/* Activation review */}
         <WorkspacePanel>
           <SectionHeading
-            title="Activation review"
-            description="A deliberate checkpoint before crews mobilize: confirm the starting plan matches what was sold, catch missing info, and align office and field. No activation logic, approvals, or auto-spawned tasks in this build."
+            title="Execution handoff (reserved)"
+            description="Reserved for a future deliberate handoff before field work—office/field alignment, not wired here. No readiness scoring, gates, or spawned tasks in this build."
           />
           <EmptyState
             icon={ShieldCheck}
-            title="Activation not available"
-            description="Readiness scoring, gates, and materialized task graphs are persistence work—this panel is copy and layout only."
+            title="Handoff not available"
+            description="No scoring, gates, or task graphs—layout only until execution persistence exists."
           >
-            <PlaceholderButton title="No activation flow in this build">
-              Start activation review (soon)
+            <PlaceholderButton title="No handoff flow in this build">
+              Start handoff review (not wired)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
@@ -209,30 +209,30 @@ export default async function JobDetailPage({
         {/* Issues / change events */}
         <WorkspacePanel>
           <SectionHeading
-            title="Issues & change events"
-            description="Future home for interruptions, field corrections, construction issues, and change-order paths that keep sold truth honest—without replacing the approved quote snapshot except through proper CO flows."
+            title="Issues & corrections (reserved)"
+            description="Future home for interruptions and field corrections logged against the job—always anchored back to the quote record, not silent rewrites of commercial truth."
           />
           <EmptyState
             icon={AlertTriangle}
-            title="No issues or change events"
-            description="No fabricated tickets—typed issues, spawned tasks, and CO diffs ship later."
+            title="No issues or corrections"
+            description="No fabricated tickets—typed issues and follow-on activity ship with future persistence."
           >
             <PlaceholderButton title="No issue tracker in this build">
-              Log issue (soon)
+              Log issue (not wired)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
 
-        {/* Finance / Payments */}
+        {/* Money on job (reserved) */}
         <WorkspacePanel padding="compact">
           <SectionHeading
-            title="Finance & Payments"
-            description="Payment holds, collection status, and money-related blockers surface here later. Real-world money movement lives under Finance."
+            title="Money on the job (reserved)"
+            description="Reserved for collection status and money-related blockers tied to work—no ledger or processor here. Quote remains the anchor for agreed terms."
           />
           <EmptyState
             icon={CreditCard}
             title="No payment status"
-            description="Job-level collection status and payment gates will show here once wired. Quote remains the source for agreed terms."
+            description="Job-level money views are not wired. The quote record holds commercial totals and wording today."
           >
             <Link href="/payments" className={listLinkClass}>
               Open Payments
@@ -255,7 +255,7 @@ export default async function JobDetailPage({
 
         <HandoffPanel
           title="Between quote and field"
-          description="Jobs sit after approved commercial work and before day-to-day coordination. Quotes live under Sales; the customer record lives under Relationships; Schedule and Workstation jobs under Work carry timing and attention."
+          description="This route is a reserved execution shell—not live coordination. Quotes live under Sales; customers under Relationships; schedule and job placeholders under Work; Workstation is a separate reserved attention surface."
         >
           <Link href="/jobs" className={handoffMutedLinkClass}>
             Jobs list
@@ -266,15 +266,15 @@ export default async function JobDetailPage({
           <Link href="/customers" className={handoffMutedLinkClass}>
             Customers
           </Link>
-        <Link href="/schedule" className={handoffMutedLinkClass}>
-          Schedule
-        </Link>
-        <Link href="/payments" className={handoffMutedLinkClass}>
-          Payments
-        </Link>
-        <Link href="/workstation/jobs" className={handoffPrimaryLinkClass}>
-          Workstation jobs
-        </Link>
+          <Link href="/schedule" className={handoffMutedLinkClass}>
+            Schedule
+          </Link>
+          <Link href="/payments" className={handoffMutedLinkClass}>
+            Payments
+          </Link>
+          <Link href="/workstation/jobs" className={handoffPrimaryLinkClass}>
+            Workstation jobs
+          </Link>
         </HandoffPanel>
       </div>
     </div>

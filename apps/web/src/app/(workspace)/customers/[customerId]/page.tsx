@@ -449,12 +449,12 @@ export default async function CustomerDetailPage({
           <SignalCard
             label="Jobs"
             value="—"
-            hint="Approved work and delivery containers."
+            hint="Reserved execution records—none linked yet."
           />
           <SignalCard
             label="Schedule context"
             value="—"
-            hint="Holds and visits associated with this account."
+            hint="Reserved timing shell—no holds stored."
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -467,31 +467,31 @@ export default async function CustomerDetailPage({
           />
           <ConnectedRecordSlot
             title="Quotes"
-            description="Draft, sent, and approved quotes roll up here for repeat business context."
+            description="Working quotes for this customer in your org—use the quote workspace for line items and recorded send checkpoints."
             icon={FileText}
             href="/quotes"
             linkLabel="Open Quotes"
           />
           <ConnectedRecordSlot
             title="Jobs"
-            description="Active and historical jobs linked after activation and data models exist."
+            description="Reserved job directory—not linked to quotes or checkpoints yet; routes exist for planning layout only."
             icon={FolderKanban}
             href="/jobs"
-            linkLabel="Open Jobs"
+            linkLabel="Open Jobs (reserved)"
           />
           <ConnectedRecordSlot
             title="Schedule context"
-            description="Appointments and calendar holds tied to this customer—not a full schedule engine on this page."
+            description="Reserved schedule planning shell—no appointments or engine tied to this customer yet."
             icon={CalendarDays}
             href="/schedule"
-            linkLabel="Open Schedule"
+            linkLabel="Open Schedule (reserved)"
           />
           <ConnectedRecordSlot
             title="Payments"
-            description="Customer payment history, requested funds, and collection status live under Finance."
+            description="Reserved payments shell under navigation—no ledger, history, or automatic quote linkage yet."
             icon={CreditCard}
             href="/payments"
-            linkLabel="Open Payments"
+            linkLabel="Open Payments (reserved)"
           />
         </div>
       </WorkspacePanel>
@@ -499,7 +499,7 @@ export default async function CustomerDetailPage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Relationship signals & tags"
-          description="Company tags you choose (VIP, GC, referral) sit beside system-derived signals when the product already knows them—repeat customer, import source, unsold quote, approved work, service area, needs follow-up."
+          description="Company tags you choose (VIP, GC, referral) sit beside system-derived signals when the product already knows them—repeat customer, import source, in-flight quotes, linked work (future), service area, needs follow-up."
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SignalCard
@@ -513,9 +513,9 @@ export default async function CustomerDetailPage({
             hint="Unsold or in-flight commercial work."
           />
           <SignalCard
-            label="Approved work"
+            label="Linked work (reserved)"
             value="—"
-            hint="Post-commitment execution tied here."
+            hint="Future execution tie-ins—not evaluated."
           />
           <SignalCard
             label="Import / referral"
@@ -558,7 +558,7 @@ export default async function CustomerDetailPage({
 
       <HandoffPanel
         title="Sales + Work from one record"
-        description="Leads and Quotes live under Sales. Jobs and Schedule live under Work. The Workstation is where attention and next actions surface—this page is the relationship anchor, not the inbox."
+        description="Leads and Quotes live under Sales. Jobs and Schedule under Work are reserved shells. Workstation is a static attention layout—this page is the relationship anchor, not an inbox or orchestrator."
       >
         <Link href="/customers" className={handoffMutedLinkClass}>
           Customers list

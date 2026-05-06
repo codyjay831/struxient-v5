@@ -17,12 +17,12 @@ import type { LucideIcon } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
-/** Single destination for the role-aware action-discovery surface (canon). */
+/** Reserved operations / attention surface—not a quote dashboard or runtime orchestrator. */
 const workstationEntry: NavItem[] = [
   { href: "/workstation", label: "Workstation", icon: LayoutDashboard },
 ];
 
-/** Pre-work commercial pipeline: intake, quotes, approvals (record routes). */
+/** Commercial pipeline: intake and working quotes (record routes). */
 const salesNav: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/quotes", label: "Quotes", icon: FileText },
@@ -34,14 +34,14 @@ const relationshipsNav: NavItem[] = [
   { href: "/customers", label: "Customers", icon: UserCircle },
 ];
 
-/** Post-approval operational records: jobs and schedule. */
+/** Reserved shells for job records and schedule planning—not live runtime execution yet. */
 const workNav: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: FolderKanban },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
-/** Operational money tracking: payments and (later) invoices. */
-const financeNav: NavItem[] = [
+/** Money tracking shell only—no processor, ledger, or automatic quote linkage yet. */
+const reservedPlanningNav: NavItem[] = [
   { href: "/payments", label: "Payments", icon: CreditCard },
 ];
 
@@ -110,7 +110,7 @@ export function SidebarNav() {
       <NavSection title="Sales" items={salesNav} pathname={pathname} />
       <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
-      <NavSection title="Finance" items={financeNav} pathname={pathname} />
+      <NavSection title="Reserved" items={reservedPlanningNav} pathname={pathname} />
       <div className="mt-auto">
         <NavSection title="" items={utilityNav} pathname={pathname} />
       </div>

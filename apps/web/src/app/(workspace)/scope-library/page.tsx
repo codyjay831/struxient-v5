@@ -43,7 +43,7 @@ export default async function ScopeLibraryPage() {
       <PageHeader
         eyebrow="Sales"
         title="Scope Library"
-        description="Reusable quote scope, proposal wording, and future execution defaults."
+        description="Reusable line presets: internal scope defaults and optional proposal wording you copy into draft quotes."
       />
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <ScopeLibraryLinePresetsPanel templates={templates} />

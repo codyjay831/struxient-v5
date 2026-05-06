@@ -25,7 +25,7 @@ export default function TasksDeferredPage() {
       <PageHeader
         eyebrow="Work"
         title="Tasks"
-        description="Task execution and a real task graph are intentionally deferred. Quotes, customers, jobs, and schedule get firm first—then assigned work, blockers, and sequencing will ship with persistence. This route is not a database or a board."
+        description="Runtime tasks and a task graph are intentionally deferred. This route is an honest stub—not a database, board, or engine. Quotes, customers, and reserved Work shells stay authoritative until execution persistence exists."
         actions={
           <PlaceholderButton title="No task system in this build">
             New task (not available)
@@ -77,7 +77,7 @@ export default function TasksDeferredPage() {
           <SignalCard
             label="Review needed"
             value="—"
-            hint="Future evidence and approvals."
+            hint="Future evidence and sign-off flows."
           />
           <SignalCard
             label="Ready next"
@@ -94,7 +94,7 @@ export default function TasksDeferredPage() {
 
       <HandoffPanel
         title="Where to look meanwhile"
-        description="Follow quotes and jobs under Sales and Work, relationships under Customers, and schedule under Work → Schedule. Workstation aggregates attention once signals exist."
+        description="Follow quotes under Sales, customers under Relationships, and reserved job/schedule shells under Work. Workstation remains a static attention layout until real signals exist."
       >
         <Link href="/workstation/tasks" className={handoffPrimaryLinkClass}>
           Workstation Tasks lens

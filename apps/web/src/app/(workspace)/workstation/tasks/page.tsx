@@ -22,7 +22,7 @@ export default function WorkstationTasksLensPage() {
       <SectionHeader
         eyebrow="Workstation · Tasks lens"
         title="Tasks"
-        description="Cross-cutting attention for action items—not where you author tasks, run the execution engine, or browse a flat catalog. When tasks exist, this lens answers what needs doing next across quotes, jobs, and field work."
+        description="Reserved cross-cutting attention layout—not where you author tasks, run an engine, or browse a catalog. No task queries or mutations exist in this build."
       />
 
       <WorkspacePanel padding="compact">
@@ -31,10 +31,10 @@ export default function WorkstationTasksLensPage() {
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           <span className="font-medium text-foreground">/workstation/tasks</span> will
-          highlight assigned, blocked, review-needed, and ready-next items. It is{" "}
-          <span className="font-medium text-foreground">not</span> quote or job authoring,
-          not runtime sequencing, and not a replacement for record pages under Sales,
-          Relationships, or Work.
+          highlight assigned, blocked, review-needed, and ready-next items once a model
+          exists. It is <span className="font-medium text-foreground">not</span> quote or
+          job authoring, not runtime sequencing, and not a replacement for record pages
+          under Sales, Relationships, or Work.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge label="Attention slice" tone="neutral" />
@@ -51,10 +51,10 @@ export default function WorkstationTasksLensPage() {
           actions={
             <>
               <PlaceholderButton title="No lens config in this build">
-                Tune task lens (soon)
+                Tune task lens (not wired)
               </PlaceholderButton>
               <PlaceholderButton title="No feed wiring in this build">
-                Refresh signals (soon)
+                Refresh signals (not wired)
               </PlaceholderButton>
             </>
           }
@@ -68,17 +68,17 @@ export default function WorkstationTasksLensPage() {
           <SignalCard
             label="Blocked work"
             value="—"
-            hint="Waiting on customer, parts, permit, or payment."
+            hint="Future dependency stops—nothing stored."
           />
           <SignalCard
             label="Review needed"
             value="—"
-            hint="Photos, completions, quotes, or COs awaiting eyes."
+            hint="Future evidence or internal review queues."
           />
           <SignalCard
             label="Ready for next step"
             value="—"
-            hint="Unblocked work that still needs a decision or dispatch."
+            hint="Future unblocked work needing a decision."
           />
         </div>
         <EmptyState
@@ -111,7 +111,7 @@ export default function WorkstationTasksLensPage() {
 
       <HandoffPanel
         title="Tasks lens pulls attention from everywhere"
-        description="Later, quote prep, active jobs, schedule pressure, reviews, and issues will all surface actionable items here. Authoritative rows still live under Sales, Relationships, and Work—this strip only aggregates what needs a human."
+        description="Reserved for future aggregation across quotes, jobs, timing, and reviews. Authoritative rows still live under Sales, Relationships, and Work—this strip has no live feed yet."
       >
         <Link href="/workstation" className={handoffPrimaryLinkClass}>
           Workstation home

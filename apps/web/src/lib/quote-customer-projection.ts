@@ -1,5 +1,5 @@
 /**
- * Customer-facing preview: controlled projection only — never raw Prisma rows.
+ * Live proposal preview projection: controlled staff-only view — never raw Prisma rows.
  * Intentionally excludes internalNotes, template ids, and org ids.
  */
 
@@ -10,7 +10,7 @@ export type QuoteCustomerPreviewLine = {
   presentationGroup: string | null;
   /** Resolved title shown on the proposal (customerScopeTitle ?? internal description). */
   lineTitle: string;
-  /** Optional customer-facing scope detail; null when unset (no fallback to internal description). */
+  /** Optional proposal scope detail; null when unset (no fallback to internal description). */
   lineDetail: string | null;
   includedNotes: string | null;
   excludedNotes: string | null;
@@ -20,7 +20,7 @@ export type QuoteCustomerPreviewLine = {
 };
 
 /**
- * Input to {@link buildCustomerQuotePreviewDocument}: only fields safe to map into a customer preview.
+ * Input to {@link buildCustomerQuotePreviewDocument}: only fields safe to map into live proposal preview / checkpoint payloads.
  * Load with a Prisma `select` that omits `internalNotes` on the quote and on line items so staff-only text never enters this pipeline.
  */
 export type QuoteCustomerPreviewInput = {
@@ -36,7 +36,7 @@ export type QuoteCustomerPreviewInput = {
   updatedAt: Date;
 };
 
-/** Server-selected commercial + customer-facing line fields (no internalNotes). */
+/** Server-selected commercial + optional proposal line fields (no internalNotes). */
 export type QuoteCustomerPreviewLineInput = {
   id: string;
   sortOrder: number;

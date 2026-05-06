@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
-import { QuoteCustomerPreviewLineBlock } from "@/components/quotes/quote-line-item-display";
+import { QuoteLiveProposalPreviewLineBlock } from "@/components/quotes/quote-line-item-display";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -29,7 +29,7 @@ const listLinkClass =
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
 
-export default async function QuoteCustomerPreviewPage({
+export default async function QuoteLiveProposalPreviewPage({
   params,
 }: {
   params: Promise<{ quoteId: string }>;
@@ -56,8 +56,8 @@ export default async function QuoteCustomerPreviewPage({
           ]}
         />
         <PageHeader
-          eyebrow="Sales"
-          title="Customer preview"
+          eyebrow="Sales · internal only"
+          title="Live proposal preview"
           description="No quote exists for this id in the current development organization."
           actions={
             <Link href="/quotes" className={listLinkClass}>
@@ -112,14 +112,14 @@ export default async function QuoteCustomerPreviewPage({
           { label: "Sales" },
           { label: "Quotes", href: "/quotes" },
           { label: row.title, href: `/quotes/${preview.quoteId}` },
-          { label: "Customer preview" },
+          { label: "Live proposal preview" },
         ]}
       />
 
       <PageHeader
         eyebrow="Sales · internal only"
-        title="Proposal preview"
-        description="Internal preview — not sent to the customer. This page simulates how the proposal could read; it is not delivery, approval, or a public link."
+        title="Live proposal preview"
+        description="Staff-only view of optional proposal wording from the saved working quote—not delivery, not a portal, and not approval capture."
         actions={
           <>
             <Link href={`/quotes/${preview.quoteId}`} className={listLinkClass}>
@@ -136,13 +136,10 @@ export default async function QuoteCustomerPreviewPage({
         padding="compact"
         className="mb-6 border border-border border-l-[3px] border-l-accent bg-foreground/[0.02]"
       >
-        <p className="text-sm font-medium text-foreground">
-          Internal preview — not sent to the customer.
-        </p>
+        <p className="text-sm font-medium text-foreground">Staff-only — follows the saved working quote</p>
         <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-          This route always reflects the live workspace quote — it does not switch to checkpoint mode. It does not
-          email, text, or create a shareable customer link. Totals and lines reflect the stored quote as of the
-          timestamps below.
+          This route always reflects the current workspace quote; it does not switch to checkpoint view. It does not
+          email, text, or publish an external link. Totals and lines reflect the stored quote as of the timestamps below.
         </p>
         {latestSendCheckpoint ? (
           <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
@@ -158,14 +155,14 @@ export default async function QuoteCustomerPreviewPage({
         ) : null}
         {isArchived ? (
           <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
-            This quote is archived in your workspace. The layout below is still a simulation only—it
-            does not mean the customer was sent this document.
+            This quote is archived in your workspace. The layout below is still an internal preview only—it does not
+            imply this document was delivered outside your org.
           </p>
         ) : null}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <StatusBadge label={formatQuoteStatus(row.status)} tone={quoteStatusBadgeTone(row.status)} />
           <span className="text-xs text-foreground-muted">
-            Staff-only workspace status—not part of a customer-facing proposal.
+            Workspace status for staff—not part of the proposal layout unless you surface it elsewhere.
           </span>
         </div>
       </WorkspacePanel>
@@ -177,9 +174,9 @@ export default async function QuoteCustomerPreviewPage({
         >
           <p className="text-sm font-medium text-foreground">Staff-only: proposal title fallback</p>
           <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            At least one line is using your internal line description as the customer-facing line
-            title because no customer scope title is set. Set optional customer scope titles on those
-            lines if the internal wording is not appropriate for a proposal.
+            At least one line is using your internal line description as the proposal line title because no proposal
+            scope title is set. Set optional proposal scope titles on those lines if internal wording should not read as
+            the line title in preview.
           </p>
         </WorkspacePanel>
       ) : null}
@@ -201,7 +198,7 @@ export default async function QuoteCustomerPreviewPage({
           <div className="border-b border-border py-6">
             <SectionHeading
               title="Prepared for"
-              description="Display names only—no links on this simulated proposal."
+              description="Display names only—static labels on this preview (no CRM links here)."
             />
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
@@ -221,7 +218,7 @@ export default async function QuoteCustomerPreviewPage({
         <div className="py-6">
           <SectionHeading
             title="Scope"
-            description="Sellable rows with optional grouping labels for display only—not workflow stages."
+            description="Sellable rows with optional grouping labels for display only—not stages or tasks."
           />
           {preview.lineItems.length === 0 ? (
             <p className="mt-4 text-sm text-foreground-muted">
@@ -244,7 +241,7 @@ export default async function QuoteCustomerPreviewPage({
                         {line.presentationGroup}
                       </p>
                     ) : null}
-                    <QuoteCustomerPreviewLineBlock line={line} />
+                    <QuoteLiveProposalPreviewLineBlock line={line} />
                   </li>
                 );
               })}

@@ -63,16 +63,16 @@ export function CustomerProposalOptionalFields({
   const helperCopy =
     variant === "template"
       ? "Separate from internal preset description and internal notes. Defaults are copied into each new quote line when you apply this preset—lines are not live-linked back to the library."
-      : "Separate from internal description and internal notes. Shown on the internal proposal preview; customer scope title falls back to internal description for the line title when left blank.";
+      : "Separate from internal description and internal notes. Shown on the live proposal preview; proposal scope title falls back to internal description for the line title when left blank.";
   return (
     <details className={proposalOptionalDetailsClass}>
       <summary className="cursor-pointer select-none text-xs font-medium text-foreground-muted">
-        Customer proposal text (optional)
+        Proposal wording (optional)
       </summary>
       <p className="mt-2 text-xs leading-relaxed text-foreground-muted">{helperCopy}</p>
       <div className="mt-3 space-y-3 pb-1">
         <label className="block">
-          <span className={fieldLabelClass}>Customer scope title</span>
+          <span className={fieldLabelClass}>Proposal scope title</span>
           <input
             name={names.scopeTitle}
             type="text"
@@ -83,7 +83,7 @@ export function CustomerProposalOptionalFields({
           />
         </label>
         <label className="block">
-          <span className={fieldLabelClass}>Customer scope description</span>
+          <span className={fieldLabelClass}>Proposal scope description</span>
           <textarea
             name={names.scopeDescription}
             rows={3}

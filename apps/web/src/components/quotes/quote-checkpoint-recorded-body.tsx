@@ -1,4 +1,4 @@
-import { QuoteCustomerPreviewLineBlock } from "@/components/quotes/quote-line-item-display";
+import { QuoteLiveProposalPreviewLineBlock } from "@/components/quotes/quote-line-item-display";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import type { QuoteCustomerPreviewDocument } from "@/lib/quote-customer-projection";
@@ -13,7 +13,7 @@ type QuoteCheckpointRecordedBodyProps = {
 };
 
 /**
- * Renders a stored customer-safe proposal document (checkpoint payload).
+ * Renders a stored proposal projection from a SEND checkpoint payload (staff-only proof).
  * Must not be fed raw Prisma rows — only parsed {@link QuoteCustomerPreviewDocument}.
  */
 export function QuoteCheckpointRecordedBody({
@@ -35,8 +35,8 @@ export function QuoteCheckpointRecordedBody({
         <div className="border-b border-border border-l-[3px] border-l-danger/60 bg-danger/[0.03] px-4 py-4 sm:px-6">
           <p className="text-sm font-medium text-foreground">Staff-only: proposal title fallback</p>
           <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            At least one line used internal line wording as the customer-facing title at capture time because no
-            customer scope title was set.
+            At least one line used internal line wording as the proposal line title at capture time because no proposal
+            scope title was set.
           </p>
         </div>
       ) : null}
@@ -63,7 +63,7 @@ export function QuoteCheckpointRecordedBody({
       <div className="px-4 py-6 sm:px-6">
         <SectionHeading
           title="Scope"
-          description="Sellable rows as captured — display-only grouping labels; not workflow stages."
+          description="Sellable rows as captured — display-only grouping labels; not stages or tasks."
         />
         {document.lineItems.length === 0 ? (
           <p className="mt-4 text-sm text-foreground-muted">No line items were captured on this checkpoint.</p>
@@ -84,7 +84,7 @@ export function QuoteCheckpointRecordedBody({
                       {line.presentationGroup}
                     </p>
                   ) : null}
-                  <QuoteCustomerPreviewLineBlock line={line} />
+                  <QuoteLiveProposalPreviewLineBlock line={line} />
                 </li>
               );
             })}

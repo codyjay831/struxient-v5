@@ -21,19 +21,19 @@ export default function PaymentsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
-        items={[{ label: "Finance" }, { label: "Payments" }]}
+        items={[{ label: "Reserved" }, { label: "Payments" }]}
       />
       <PageHeader
-        eyebrow="Finance"
+        eyebrow="Reserved"
         title="Payments"
-        description="Operational money tracking—what is requested, collected, or overdue. This is a shell for future payment workflows, not a live processor or accounting system."
+        description="Planning surface for future operational money tracking—not a live processor, ledger, or accounting system, and not automatically fed from quotes yet."
         actions={
           <>
             <PlaceholderButton title="No payment recording in this build">
-              Record payment (soon)
+              Record payment (not wired)
             </PlaceholderButton>
             <PlaceholderButton title="No payment requests in this build">
-              Request payment (soon)
+              Request payment (not wired)
             </PlaceholderButton>
           </>
         }
@@ -44,10 +44,10 @@ export default function PaymentsPage() {
           Payments surface
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          <span className="font-medium text-foreground">Finance › Payments</span> will
-          track real-world money movement. The agreed terms and payment schedule stay
-          anchored on the <span className="font-medium text-foreground">Quote</span>. No
-          processor (Stripe) or persistence is wired in this shell.
+          <span className="font-medium text-foreground">Reserved › Payments</span> will
+          track real-world money movement later. Agreed commercial language and totals
+          stay anchored on the <span className="font-medium text-foreground">working quote</span>.
+          No processor (Stripe) or persistence is wired in this shell.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge label="Money shell" tone="neutral" />
@@ -61,11 +61,11 @@ export default function PaymentsPage() {
         {/* Primary: Money attention */}
         <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
           <SectionHeading
-            title="Money attention"
-            description="Roll-up of payment status across all active jobs and quotes. When wired, this highlights where money is stuck or needs a human decision."
+            title="Money attention (reserved)"
+            description="Reserved roll-up for payment status across jobs and quotes once models exist. Nothing aggregates here today."
             actions={
               <PlaceholderButton title="No live feed in this build">
-                Refresh ledger (soon)
+                Refresh ledger (not wired)
               </PlaceholderButton>
             }
           />
@@ -73,7 +73,7 @@ export default function PaymentsPage() {
             <SignalCard
               label="Requested"
               value="—"
-              hint="Sent to customer"
+              hint="Future outbound request state"
             />
             <SignalCard
               label="Collected"
@@ -94,10 +94,10 @@ export default function PaymentsPage() {
           <EmptyState
             icon={Wallet}
             title="No payment records yet"
-            description="There is no live ledger, no mock transactions, and no processor sync. After persistence, real-time status from Stripe or manual entries will populate this view."
+            description="There is no live ledger, no mock transactions, and no processor sync. After persistence, real-time status from Stripe or manual entries could populate this view."
           >
             <PlaceholderButton title="No editor in this build">
-              Record payment (soon)
+              Record payment (not wired)
             </PlaceholderButton>
             <Link href="/quotes" className={listLinkClass}>
               Quotes
@@ -114,7 +114,7 @@ export default function PaymentsPage() {
           <EmptyState
             icon={FileText}
             title="View commercial terms"
-            description="Go to Quotes to see the agreed payment schedules that feed this operational surface."
+            description="Go to Quotes for the working commercial record and staff-only checkpoints—no automatic handoff to this shell yet."
           >
             <Link href="/quotes" className={handoffPrimaryLinkClass}>
               Open Quotes
@@ -142,8 +142,8 @@ export default function PaymentsPage() {
           </WorkspacePanel>
           <WorkspacePanel padding="compact">
             <SectionHeading
-              title="Workstation attention"
-              description="Payment blocks and holds surface in the cockpit."
+              title="Workstation attention (reserved)"
+              description="Reserved for how money risk could surface in Workstation later—no feed today."
             />
             <div className="mt-4">
               <Link href="/workstation" className={listLinkClass}>
@@ -180,8 +180,8 @@ export default function PaymentsPage() {
         </WorkspacePanel>
 
         <HandoffPanel
-          title="Payments connect Sales and Work"
-          description="Quotes define the money truth. Jobs define the work. Payments track the fulfillment. Workstation surfaces the risk. This page is the operational home for money, not the record catalog."
+          title="Payments (reserved) sit beside Sales and Work"
+          description="Quotes hold the working commercial record today. Job and payment shells are placeholders. Workstation does not orchestrate money or execution yet—links are normal navigation only."
         >
           <Link href="/quotes" className={handoffMutedLinkClass}>
             Quotes

@@ -114,7 +114,7 @@ export function QuoteDraftForm({
             name="internalNotes"
             rows={4}
             maxLength={QUOTE_FIELD_LIMITS.internalNotes}
-            placeholder="Estimator-only context—not shown to the customer."
+            placeholder="Staff-only—omitted from live proposal preview."
             className={controlClass}
           />
         </label>

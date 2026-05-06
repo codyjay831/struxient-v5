@@ -77,7 +77,7 @@ function QuoteDraftDetailsForm({
     <WorkspacePanel className="mb-6">
       <SectionHeading
         title="Draft details"
-        description="Staff workspace fields: title and internal notes stay here on the working quote. Optional customer proposal document title is separate—it only shapes the internal proposal preview when set (otherwise the workspace title is used there)."
+        description="Staff workspace fields: title and internal notes stay here on the working quote. Optional proposal document title is separate—it only shapes the live proposal preview when set (otherwise the workspace title is used there)."
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
@@ -103,20 +103,20 @@ function QuoteDraftDetailsForm({
               rows={4}
               maxLength={QUOTE_FIELD_LIMITS.internalNotes}
               defaultValue={initialInternalNotes ?? ""}
-              placeholder="Estimator-only context—not shown to the customer."
+              placeholder="Staff-only—omitted from live proposal preview."
               className={controlClass}
             />
           </label>
         </div>
         <div>
           <label className="block">
-            <span className={fieldLabelClass}>Customer proposal document title (optional)</span>
+            <span className={fieldLabelClass}>Proposal document title (optional)</span>
             <input
               name="customerDocumentTitle"
               type="text"
               maxLength={QUOTE_FIELD_LIMITS.customerDocumentTitle}
               defaultValue={initialCustomerDocumentTitle ?? ""}
-              placeholder="Shown on proposal preview instead of workspace title when set"
+              placeholder="Shown on live proposal preview instead of workspace title when set"
               className={controlClass}
               autoComplete="off"
             />
@@ -142,7 +142,7 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
         Add line item
       </p>
       <p className="text-xs leading-relaxed text-foreground-muted">
-        Enter staff scope and pricing first. Optional customer proposal wording lives in the collapsible section
+        Enter staff scope and pricing first. Optional proposal wording lives in the collapsible section
         below—it does not appear on this list until you expand it. Line total is computed on the server from
         quantity × unit price; quote subtotal and total update in the same request.
       </p>
@@ -452,7 +452,7 @@ export function QuoteDraftWorkspaceControls({
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Line items"
-          description="Each row is part of the current working quote: staff scope and pricing here, optional customer proposal wording per line (internal preview only), and staff-only line notes. Subtotal and total are stored rollups on the quote row."
+          description="Each row is part of the current working quote: staff scope and pricing here, optional proposal wording per line (internal preview only), and staff-only line notes. Subtotal and total are stored rollups on the quote row."
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <SignalCard
@@ -463,7 +463,7 @@ export function QuoteDraftWorkspaceControls({
           <SignalCard
             label="Total"
             value={formatMoneyCents(totalCents)}
-            hint="Same as subtotal for now—no tax or payment schedule."
+            hint="Same as subtotal for now—no tax line on the quote row."
           />
           <SignalCard
             label="Lines"
@@ -546,9 +546,9 @@ export function ArchivedQuoteReadOnlyNotice() {
     <WorkspacePanel padding="compact" className="mb-6 border-border-strong">
       <p className="text-sm font-medium text-foreground">Archived — internal view only</p>
       <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-        This is not a customer-facing quote page. Title, internal notes, and line items cannot be
-        changed until you restore to draft. The only state change from here is restore; send,
-        approval, payments, and job activation are not in this product phase.
+        This is not a shared or portal quote page. Title, internal notes, and line items cannot be
+        changed until you restore to draft. The only state change from here is restore; checkpoints
+        and live proposal preview stay staff-only views on the quote record.
       </p>
     </WorkspacePanel>
   );

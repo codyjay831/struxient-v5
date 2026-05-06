@@ -20,14 +20,14 @@ export default function JobsRecordPage() {
       <PageHeader
         eyebrow="Work"
         title="Jobs"
-        description="Open and manage job records—filters, columns, and detail routes will attach here. This is the Work area for job records, not the Workstation attention lens."
+        description="Reserved workspace for future job records—filters, columns, and detail routes are not wired. This is the Work planning shell, not the Workstation attention strip and not automatically linked from quotes yet."
         actions={
           <>
             <PlaceholderButton title="No job store in this build">
-              New job (soon)
+              New job (not wired)
             </PlaceholderButton>
             <PlaceholderButton title="No import pipeline in this build">
-              Import (soon)
+              Import (not wired)
             </PlaceholderButton>
           </>
         }
@@ -35,7 +35,7 @@ export default function JobsRecordPage() {
 
       <HandoffPanel
         title="Work connection"
-        description="Jobs are expected to come from approved quotes and later feed schedule, issues or change events, and Workstation attention. This page is the Work record catalog—not the attention lens."
+        description="Jobs are expected to become execution records once persistence and explicit quote-to-job handoffs exist—not created from this placeholder. Schedule, issues, and Workstation feeds are likewise deferred. This page is only the reserved catalog shell."
       >
         <Link href="/schedule" className={handoffMutedLinkClass}>
           Go to Schedule
@@ -44,7 +44,7 @@ export default function JobsRecordPage() {
           Open Workstation jobs lens
         </Link>
         <Link href="/payments" className={handoffMutedLinkClass}>
-          Finance: Payments
+          Payments (reserved)
         </Link>
       </HandoffPanel>
 
@@ -58,8 +58,8 @@ export default function JobsRecordPage() {
           >
             Workstation → Jobs lens
           </Link>{" "}
-          for “what needs attention on jobs” across statuses. Use this route when
-          you are explicitly navigating the job catalog.
+          for a reserved “job attention” slice (static today). Use this route when you
+          want the job catalog placeholder.
         </p>
       </WorkspacePanel>
 
@@ -71,9 +71,9 @@ export default function JobsRecordPage() {
       <EmptyState
         icon={FolderKanban}
         title="No jobs to show yet"
-        description="Once Prisma and org data exist, this grid becomes your canonical job directory. Each row will deep-link to the job workspace shell; nothing is linked while the list is empty."
+        description="When a real job store exists, this grid will list org-scoped rows. Until then, nothing is fabricated; `/jobs/[id]` is a static shell from the URL only."
       >
-        <PlaceholderButton>Open first job (soon)</PlaceholderButton>
+        <PlaceholderButton>Open first job (not wired)</PlaceholderButton>
       </EmptyState>
     </div>
   );

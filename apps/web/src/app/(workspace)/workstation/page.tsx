@@ -41,15 +41,15 @@ export default async function WorkstationTodayLensPage() {
           This surface
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          Workstation is the attention strip: what needs a decision, a follow-up, or a
-          handoff—not where you browse every job row or calendar cell. Sales, Customers,
-          Jobs, and Schedule stay the record and planning homes until you jump back here
-          for signals.
+          Workstation is a reserved command surface: layout for future cross-area signals,
+          not a quote dashboard and not orchestrating runtime execution. Only the lead
+          counts below read the database; everything else on this page is an honest
+          placeholder until runtime execution records exist.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Sales snapshot (live)" tone="neutral" />
+          <StatusBadge label="Org-scoped lead counts" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            Lead counts below are org-scoped; jobs, quotes, and finance rollups remain placeholders.
+            Real counts for leads only; job, schedule, quote, and money rollups are not wired.
           </span>
         </div>
       </WorkspacePanel>
@@ -84,47 +84,47 @@ export default async function WorkstationTodayLensPage() {
 
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
-          title="What needs attention"
-          description="Cross-domain signals roll up here later: job risk, schedule slips, quote follow-ups, and customer callbacks. Not a flat task list—each item should carry an owner and a next step when persistence exists."
+          title="Future attention feed (not wired)"
+          description="Reserved for cross-domain signals after runtime execution and explicit quote-to-job handoffs exist. Not a task list, inbox, or routing surface in this build."
           actions={
             <PlaceholderButton title="No feed wiring in this build">
-              Refresh feed (soon)
+              Refresh feed (not wired)
             </PlaceholderButton>
           }
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SignalCard
-            label="Jobs needing review"
+            label="Job attention (reserved)"
             value="—"
-            hint="Activation, holds, or readiness gaps."
+            hint="Future readiness and risk—no job store yet."
           />
           <SignalCard
-            label="Schedule conflicts"
+            label="Timing attention (reserved)"
             value="—"
-            hint="Slips and double-books needing a human."
+            hint="Future planning conflicts—no schedule engine yet."
           />
           <SignalCard
-            label="Quote follow-ups"
+            label="Commercial follow-ups (reserved)"
             value="—"
-            hint="Sent, revised, or waiting on approval."
+            hint="Future staff reminders—separate from checkpoints."
           />
           <SignalCard
-            label="Payment holds"
+            label="Money attention (reserved)"
             value="—"
-            hint="Failed collection or overdue funds later."
+            hint="Future collection status—quote stays the terms anchor."
           />
         </div>
         <EmptyState
           icon={Activity}
-          title="No attention items yet"
-          description="There is no prioritization engine, no fake queue, and no role matrix behind this screen—only layout proving where live signals will land."
+          title="No attention feed yet"
+          description="Intentionally empty—no fabricated queue, scores, or role filtering. This panel only reserves layout for when real signals exist."
         />
       </WorkspacePanel>
 
       <section>
         <SectionHeading
-          title="Lenses"
-          description="Each lens is a filtered slice of the same operational world—narrower than dumping everything into one list."
+          title="Lenses (planning UI only)"
+          description="Each lens is a reserved route with static copy—no shared query layer with Work → Jobs or Work → Schedule yet."
         />
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <WorkspacePanel padding="compact" className="flex flex-col">
@@ -137,11 +137,11 @@ export default async function WorkstationTodayLensPage() {
               <h3 className="text-sm font-semibold text-foreground">Tasks lens</h3>
             </div>
             <p className="mb-4 flex-1 text-xs leading-relaxed text-foreground-muted">
-              Future home for assigned, blocked, and unclaimed action items across
-              jobs—not a task engine yet, just the attention slice.
+              Reserved for assigned and blocked work across quotes and jobs once a task
+              model exists—not a task board or runtime graph in this build.
             </p>
             <Link href="/workstation/tasks" className={listLinkClass}>
-              Open tasks lens
+              Open tasks lens (reserved)
             </Link>
           </WorkspacePanel>
           <WorkspacePanel padding="compact" className="flex flex-col">
@@ -154,11 +154,11 @@ export default async function WorkstationTodayLensPage() {
               <h3 className="text-sm font-semibold text-foreground">Jobs lens</h3>
             </div>
             <p className="mb-4 flex-1 text-xs leading-relaxed text-foreground-muted">
-              Job-centric risk and readiness—different from the full job directory under
+              Reserved job-centric framing—authoritative placeholder routes stay under
               Work → Jobs.
             </p>
             <Link href="/workstation/jobs" className={listLinkClass}>
-              Open jobs lens
+              Open jobs lens (reserved)
             </Link>
           </WorkspacePanel>
           <WorkspacePanel padding="compact" className="flex flex-col">
@@ -171,19 +171,18 @@ export default async function WorkstationTodayLensPage() {
               <h3 className="text-sm font-semibold text-foreground">Schedule lens</h3>
             </div>
             <p className="mb-4 flex-1 text-xs leading-relaxed text-foreground-muted">
-              Near-term schedule risk and decisions—not the planning calendar at Work →
-              Schedule.
+              Reserved timing-risk framing—not the planning surface at Work → Schedule.
             </p>
             <Link href="/workstation/schedule" className={listLinkClass}>
-              Open schedule lens
+              Open schedule lens (reserved)
             </Link>
           </WorkspacePanel>
         </div>
       </section>
 
       <HandoffPanel
-        title="Attention pulls from the rest of Struxient"
-        description="Quotes and leads sit under Sales. Customer relationships sit under Relationships. Jobs and the planning calendar sit under Work. Payments live under Finance. Workstation watches all of it for what needs a human next."
+        title="Authoritative record routes"
+        description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work; the payments shell under Reserved. None of those routes are wired through Workstation yet—links below are normal navigation only."
       >
         <Link href="/quotes" className={handoffMutedLinkClass}>
           Quotes
@@ -192,13 +191,13 @@ export default async function WorkstationTodayLensPage() {
           Customers
         </Link>
         <Link href="/jobs" className={handoffPrimaryLinkClass}>
-          Job records
+          Job records (reserved)
         </Link>
         <Link href="/schedule" className={handoffMutedLinkClass}>
-          Schedule
+          Schedule (reserved)
         </Link>
         <Link href="/payments" className={handoffMutedLinkClass}>
-          Payments
+          Payments (reserved)
         </Link>
       </HandoffPanel>
     </div>

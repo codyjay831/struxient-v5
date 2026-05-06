@@ -111,7 +111,7 @@ export default function SettingsPage() {
 
       <HandoffPanel
         title="Configuration, not operations"
-        description="Sales, Relationships, Work, and Workstation carry day-to-day records and attention. Settings only prepares defaults and preferences for when auth and storage land."
+        description="Sales and Relationships carry real records today; Work and Reserved shells hold planning placeholders; Workstation is a static attention layout. Settings only prepares defaults and preferences for when auth and storage land."
       >
         <Link href="/workstation" className={handoffMutedLinkClass}>
           Workstation

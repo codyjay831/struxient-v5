@@ -42,233 +42,12 @@ import {
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export type QuoteWorkspaceShellProps =
-  | { mode: "new" }
-  | {
-      mode: "detail";
-      quote: QuoteDetailPayload;
-      lineItemTemplates: LineItemTemplatePickerRow[];
-      sendCheckpoints: QuoteSendCheckpointSummary[];
-      workspaceDiffersFromLastSend: boolean;
-    };
-
-/** Suggested authoring order — copy only, no workflow engine. */
-function QuoteBuildOrderStrip() {
-  const steps = [
-    "Link customer or lead",
-    "Build line items (scope)",
-    "Set payment plan (money)",
-    "Add execution detail if helpful",
-    "Review customer-facing terms",
-  ];
-  return (
-    <WorkspacePanel padding="compact" className="mb-6 border-border-strong">
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-        Suggested order (new quote)
-      </p>
-      <ol className="mt-3 flex list-none flex-col gap-2 text-sm text-foreground-muted sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-2">
-        {steps.map((label, i) => (
-          <li key={label} className="flex items-center gap-1">
-            <span className="tabular-nums text-foreground-subtle">{i + 1}.</span>
-            <span>{label}</span>
-            {i < steps.length - 1 ? (
-              <span
-                className="mx-1 hidden text-foreground-subtle sm:inline"
-                aria-hidden
-              >
-                →
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-    </WorkspacePanel>
-  );
-}
-
-function QuoteNewShell() {
-  return (
-    <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
-          { label: "New" },
-        ]}
-      />
-      <PageHeader
-        eyebrow="Sales"
-        title="New quote"
-        description="Authoring and save are not wired yet—list and detail read persisted quotes from your development organization. Send, approve, and payment collection stay out of scope for this phase."
-        actions={
-          <>
-            <Link href="/quotes" className={listLinkClass}>
-              ← Quotes list
-            </Link>
-            <PlaceholderButton title="Create quote server action not implemented yet">
-              Save draft (soon)
-            </PlaceholderButton>
-            <PlaceholderButton title="No send pipeline in this build">
-              Send to customer
-            </PlaceholderButton>
-          </>
-        }
-      />
-
-      <QuoteBuildOrderStrip />
-
-      <div className="space-y-6">
-        <WorkspacePanel>
-          <SectionHeading
-            title="Customer / lead context"
-            description="Pickers and persistence for linking ship with the create-quote phase. Browse existing customers or leads to copy context manually for now."
-          />
-          <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-8 text-center sm:py-10">
-            <UserRound
-              className="mx-auto mb-3 size-9 text-foreground-subtle opacity-70"
-              strokeWidth={1.25}
-              aria-hidden
-            />
-            <p className="text-sm text-foreground-muted">
-              No customer or lead linked yet—nothing saves on this route until create is implemented.
-            </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Link href="/customers" className={listLinkClass}>
-                Customers
-              </Link>
-              <Link href="/leads" className={listLinkClass}>
-                Leads
-              </Link>
-            </div>
-          </div>
-        </WorkspacePanel>
-
-        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-          <SectionHeading
-            title="Line items"
-            description="Line items are the commercial anchor on saved quotes. This workspace is a shell until create and editors exist."
-            actions={
-              <PlaceholderButton title="Line item editor not implemented yet">
-                Add line item
-              </PlaceholderButton>
-            }
-          />
-          <div className="mb-5 grid gap-3 sm:grid-cols-2">
-            <SignalCard
-              label="Quoted total (from lines)"
-              value="—"
-              hint="Appears on detail after line items exist on a saved quote."
-            />
-            <SignalCard
-              label="Line item count"
-              value="—"
-              hint="Honest empty shell—no sample rows here."
-            />
-          </div>
-          <EmptyState
-            icon={ListOrdered}
-            title="No line items yet"
-            description="Open an existing quote from the list to see persisted line items, or wait for create and editing in a later phase."
-          >
-            <Link href="/quotes" className={listLinkClass}>
-              Browse quotes
-            </Link>
-          </EmptyState>
-        </WorkspacePanel>
-
-        <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
-          <SectionHeading
-            title="Payment plan"
-            description="Quote-level payment schedules are deferred—no persisted plan rows in this phase."
-            actions={
-              <PlaceholderButton title="Payment plan editor not implemented yet">
-                Add payment step
-              </PlaceholderButton>
-            }
-          />
-          <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            After send and approval exist, terms should not be silently rewritten—versioning and audit belong with those features. Operational payment tracking will live under{" "}
-            <Link
-              href="/payments"
-              className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-            >
-              Finance → Payments
-            </Link>{" "}
-            later.
-          </p>
-          <EmptyState
-            icon={Wallet}
-            title="No payment plan yet"
-            description="Persisted payment milestones are out of scope until a dedicated phase."
-          >
-            <PlaceholderButton title="Payment plan editor not implemented yet">
-              Add payment step
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        <WorkspacePanel
-          padding="compact"
-          className="border-dashed border-border bg-surface/80"
-        >
-          <SectionHeading
-            title="Execution detail (optional)"
-            description="Rough phases and internal notes on quotes are future work—no task engine here."
-          />
-          <EmptyState
-            icon={Wrench}
-            title="No execution notes"
-            description="Execution planning attaches after activation and job models exist."
-          >
-            <PlaceholderButton title="No notes store on this route yet">
-              Add note
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        <WorkspacePanel>
-          <SectionHeading
-            title="Preview & approval"
-            description="Customer-facing preview, PDF, e-sign, and approval capture are explicitly deferred."
-          />
-          <EmptyState
-            icon={Eye}
-            title="Preview not built yet"
-            description="No customer-facing snapshot or approval recording in this phase."
-          >
-            <PlaceholderButton title="No preview engine in this build">
-              Open preview (soon)
-            </PlaceholderButton>
-            <PlaceholderButton title="No approval capture in this build">
-              Record approval (soon)
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        <WorkspacePanel padding="compact">
-          <SectionHeading
-            title="Notes & activity"
-            description="Internal timeline and chatter—separate from any future customer-facing snapshot."
-          />
-          <EmptyState
-            icon={MessageSquare}
-            title="No activity yet"
-            description="Edits, sends, and handoffs will show here when events exist."
-          />
-        </WorkspacePanel>
-
-        <HandoffPanel
-          title="Quoting spine"
-          description="Lines carry scope; payment plans carry money expectations later. This route is an honest shell until create is implemented."
-        >
-          <Link href="/quotes" className={handoffMutedLinkClass}>
-            Quotes list
-          </Link>
-        </HandoffPanel>
-      </div>
-    </div>
-  );
-}
+export type QuoteWorkspaceShellProps = {
+  quote: QuoteDetailPayload;
+  lineItemTemplates: LineItemTemplatePickerRow[];
+  sendCheckpoints: QuoteSendCheckpointSummary[];
+  workspaceDiffersFromLastSend: boolean;
+};
 
 function QuoteDetailShell({
   quote,
@@ -302,7 +81,7 @@ function QuoteDetailShell({
         title={quote.title}
         description={
           isDraft
-            ? "This is the current working quote in your development organization—edits below save to this record. Line totals roll up to the quote; archive freezes edits (restore brings it back). Recorded proposal sends are staff-only proof rows, not delivery or approval. Payments and job activation stay out of scope for this build."
+            ? "This is the current working quote in your development organization—edits below save to this record. Line totals roll up to the quote; archive freezes edits (restore brings it back). Recorded send checkpoints are staff-only proof rows, not delivery or approval. Live proposal preview follows the saved quote; checkpoints are separate proof captures."
             : "Archived read-only view in your development organization. Restore to draft to edit again; totals and links stay as stored. Existing recorded sends remain internal proof; restore is the only state change from here."
         }
         actions={
@@ -348,11 +127,11 @@ function QuoteDetailShell({
           padding="compact"
           className="mb-6 border border-border border-l-[3px] border-l-danger/60 bg-danger/[0.03]"
         >
-          <p className="text-sm font-medium text-foreground">Workspace differs from last recorded send</p>
+          <p className="text-sm font-medium text-foreground">Workspace differs from last recorded send checkpoint</p>
           <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            The working quote has changed since your latest recorded send. Review the live proposal preview, then
-            record another send when you want updated staff-only proof. This is not customer delivery and not a list
-            of editable versions.
+            The working quote has changed since your latest recorded send checkpoint. Review the live proposal preview,
+            then record another checkpoint when you want updated staff-only proof. This is not external delivery and not
+            a version manager.
           </p>
         </WorkspacePanel>
       ) : null}
@@ -491,33 +270,18 @@ function QuoteDetailShell({
 
         <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
           <SectionHeading
-            title="Payment plan"
-            description="Persisted payment schedules are deferred—no rows yet."
-            actions={
-              <PlaceholderButton title="Payment plan editor not implemented yet">
-                Add payment step
-              </PlaceholderButton>
-            }
+            title="Deferred: holds and invoice timing"
+            description="This build stores commercial totals from line items only—no per-quote milestone or hold rows on the quote record."
           />
           <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            Send, approval, and customer-visible terms are out of scope. Operational payment tracking will live under{" "}
-            <Link
-              href="/payments"
-              className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-            >
-              Finance → Payments
-            </Link>{" "}
-            later.
+            Totals on the quote row are rollups from lines. Nothing here stores billing milestones on the quote—that would
+            be a later product layer, not this placeholder panel.
           </p>
           <EmptyState
             icon={Wallet}
-            title="No payment plan persisted"
-            description="Quote-level milestones and deposits ship in a later phase—not stubbed as fake rows here."
-          >
-            <PlaceholderButton title="Payment plan editor not implemented yet">
-              Add payment step
-            </PlaceholderButton>
-          </EmptyState>
+            title="No milestone rows on the quote"
+            description="Subtotal and total follow line items on the working quote record only."
+          />
         </WorkspacePanel>
 
         <WorkspacePanel
@@ -525,15 +289,15 @@ function QuoteDetailShell({
           className="border-dashed border-border bg-surface/80"
         >
           <SectionHeading
-            title="Execution detail (optional)"
-            description="Progressive execution fields on quotes are deferred—no task engine."
+            title="Site & field context (deferred)"
+            description="Field visit and install notes are not captured on quotes in this build—line items carry commercial scope and rollups only."
           />
           <EmptyState
             icon={Wrench}
-            title="No execution notes persisted"
-            description="Optional quote-time execution hints ship after job and task foundations exist."
+            title="No field or install notes on this quote"
+            description="Nothing stored here; this section stays empty in this build."
           >
-            <PlaceholderButton title="No execution store on quotes yet">
+            <PlaceholderButton title="No field/install store on quotes in this build">
               Add note
             </PlaceholderButton>
           </EmptyState>
@@ -541,28 +305,29 @@ function QuoteDetailShell({
 
         <WorkspacePanel>
           <SectionHeading
-            title="Preview & approval"
-            description="Live internal preview always reflects the current saved quote. PDF, e-sign, and approval capture stay deferred."
+            title="Live proposal preview"
+            description="Internal preview from the current saved working quote—not a portal, delivery channel, or approval capture."
           />
           <EmptyState
             icon={Eye}
-            title="See the quote as your customer would"
-            description="Opens the proposal preview built from this working quote as it exists now. Recorded sends below are separate staff-only proof—not a second editable copy."
+            title="Open live proposal preview"
+            description="Shows how optional proposal wording reads from this quote as saved now. Recorded send checkpoints below are separate staff-only proof—not a second editable copy."
           >
             <Link href={`/quotes/${quote.id}/preview`} className={listLinkClass}>
-              Preview as customer
+              Open live proposal preview
             </Link>
-            <PlaceholderButton title="No approval capture in this build">
-              Record approval (soon)
-            </PlaceholderButton>
           </EmptyState>
+          <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
+            External approval, e-sign, and delivery are outside the scope of this build—only internal preview and recorded
+            checkpoints exist here.
+          </p>
         </WorkspacePanel>
 
         {!isDraft ? (
           <WorkspacePanel padding="compact">
             <SectionHeading
               title="Internal notes"
-              description="Staff-only notes on the quote record—never a customer-facing snapshot in this phase."
+              description="Staff-only notes on the quote record—omitted from live proposal preview and send checkpoint payloads."
             />
             {quote.internalNotes ? (
               <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
@@ -577,18 +342,18 @@ function QuoteDetailShell({
         <WorkspacePanel padding="compact">
           <SectionHeading
             title="Notes & activity"
-            description="Internal timeline when edit and send events exist—no fabricated history."
+            description="When edit and checkpoint events exist, they can surface here as an explanation layer—no fabricated history."
           />
           <EmptyState
             icon={MessageSquare}
             title="No activity yet"
-            description="Event logging for quotes is future work."
+            description="Nothing logged on this quote yet."
           />
         </WorkspacePanel>
 
         <HandoffPanel
-          title="After this quote matures"
-          description="This screen is for your team’s draft and archive workflow. Recorded send checkpoints are internal proof only—no implied customer delivery. Approval, payment schedules, and activation stay off this surface until their dedicated phases."
+          title="Quote workspace scope"
+          description="Draft and archive for the working quote record. Recorded send checkpoints are staff-only proof—not external delivery. Live proposal preview reflects the saved quote; checkpoints are point-in-time captures."
         >
           <Link href="/quotes" className={handoffMutedLinkClass}>
             Quotes list
@@ -600,9 +365,6 @@ function QuoteDetailShell({
 }
 
 export function QuoteWorkspaceShell(props: QuoteWorkspaceShellProps) {
-  if (props.mode === "new") {
-    return <QuoteNewShell />;
-  }
   return (
     <QuoteDetailShell
       quote={props.quote}

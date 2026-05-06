@@ -37,10 +37,10 @@ function customerProposalFieldSummary(line: QuoteLineItemPayload): string {
 }
 
 /**
- * Read-only line body for internal customer preview — same numeric layout as {@link QuoteLineItemScanBlock}
+ * Read-only line body for the live proposal preview — same numeric layout as {@link QuoteLineItemScanBlock}
  * without internal notes (DTO never carries staff-only fields).
  */
-export function QuoteCustomerPreviewLineBlock({ line }: { line: QuoteCustomerPreviewLine }) {
+export function QuoteLiveProposalPreviewLineBlock({ line }: { line: QuoteCustomerPreviewLine }) {
   return (
     <div className="min-w-0">
       <p className="text-sm font-semibold text-foreground">{line.lineTitle}</p>
@@ -114,7 +114,7 @@ export function QuoteLineItemScanBlock({ line }: { line: QuoteLineItemPayload })
       </dl>
 
       <div className="rounded-md border border-border bg-surface/80 px-3 py-2">
-        <p className={lineMetricLabelClass}>Customer proposal wording (optional)</p>
+        <p className={lineMetricLabelClass}>Proposal wording (optional)</p>
         {hasCustomerProposal ? (
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
             <span className="font-medium text-foreground-subtle">Set: </span>
@@ -123,7 +123,7 @@ export function QuoteLineItemScanBlock({ line }: { line: QuoteLineItemPayload })
         ) : (
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
             Not set on this line. Expand <span className="font-medium text-foreground-subtle">Edit</span> to add
-            optional customer-facing title, scope text, notes, or a presentation group.
+            optional proposal title, scope text, notes, or a presentation group for the internal preview.
           </p>
         )}
       </div>

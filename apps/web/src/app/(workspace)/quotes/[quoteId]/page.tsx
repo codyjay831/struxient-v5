@@ -189,7 +189,6 @@ export default async function QuoteDetailPage({
 
   return (
     <QuoteWorkspaceShell
-      mode="detail"
       quote={quote}
       lineItemTemplates={lineItemTemplates}
       sendCheckpoints={sendCheckpoints}

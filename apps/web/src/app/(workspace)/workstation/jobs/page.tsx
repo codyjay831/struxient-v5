@@ -22,7 +22,7 @@ export default function WorkstationJobsLensPage() {
       <SectionHeader
         eyebrow="Workstation · Jobs lens"
         title="Jobs"
-        description="Job-related attention: readiness, slips, and issues that need a decision—not the full job catalog. For every row and detail shell, use Work → Jobs."
+        description="Reserved job-attention layout—no signals loaded. For the job directory placeholder and detail shell, use Work → Jobs."
       />
 
       <WorkspacePanel padding="compact">
@@ -47,18 +47,18 @@ export default function WorkstationJobsLensPage() {
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Job attention signals"
-          description="When wired, this lens highlights activation reviews, schedule blockers, change or issue noise, and jobs that are simply ready for the next step—without replacing the job record."
+          description="When wired, this lens could highlight execution handoffs, timing blockers, issue noise, and jobs ready for the next step—without replacing the job record."
           actions={
             <PlaceholderButton title="No signal query in this build">
-              Tune lens (soon)
+              Tune lens (not wired)
             </PlaceholderButton>
           }
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SignalCard
-            label="Activation reviews"
+            label="Execution handoff (reserved)"
             value="—"
-            hint="Jobs waiting on a deliberate start check."
+            hint="Future deliberate start checks—not run here."
           />
           <SignalCard
             label="Schedule blockers"
@@ -103,7 +103,7 @@ export default function WorkstationJobsLensPage() {
 
       <HandoffPanel
         title="Job lens watches work in motion"
-        description="Attention stays here; authoritative job rows and sold-scope context stay on Work → Jobs and the job detail shell. Schedule planning stays on Work → Schedule."
+        description="Attention layout only; authoritative job rows stay on Work → Jobs. Schedule planning stays on Work → Schedule. Nothing here queries org data yet."
       >
         <Link href="/jobs" className={handoffMutedLinkClass}>
           Jobs list

@@ -88,14 +88,14 @@ export default async function QuoteCheckpointViewPage({
           { label: "Sales" },
           { label: "Quotes", href: "/quotes" },
           { label: "Quote", href: `/quotes/${quoteId}` },
-          { label: `Send checkpoint #${checkpoint.sequence}` },
+          { label: `Recorded send #${checkpoint.sequence}` },
         ]}
       />
 
       <PageHeader
         eyebrow="Sales · internal only"
         title="Recorded send checkpoint"
-        description="Staff-only proof of the customer proposal projection at capture time. This is not delivery, not a public link, and not customer approval."
+        description="Staff-only proof of the proposal projection stored at capture time. This is not delivery, not a public link, and not approval capture."
         actions={
           <>
             <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
@@ -112,7 +112,7 @@ export default async function QuoteCheckpointViewPage({
         padding="compact"
         className="mb-6 border border-border border-l-[3px] border-l-accent bg-foreground/[0.02]"
       >
-        <p className="text-sm font-medium text-foreground">Recorded send checkpoint — not proof of customer delivery</p>
+        <p className="text-sm font-medium text-foreground">Recorded send checkpoint — not proof of external delivery</p>
         <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
           Kind: {checkpoint.kind} · Sequence: {checkpoint.sequence} · Captured: {capturedLabel}. No email, SMS, or
           portal was implied by saving this row.

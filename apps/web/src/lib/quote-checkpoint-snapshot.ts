@@ -8,7 +8,7 @@ import type {
 /** Column + JSON shape version for SEND checkpoint payloads. Bump when breaking stored shape. */
 export const QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 1;
 
-/** Prisma `select` for quotes when building customer-safe checkpoints — mirrors preview route (no internalNotes). */
+/** Prisma `select` for quotes when building SEND checkpoint payloads — mirrors preview route (no internalNotes). */
 export const quoteSelectForCustomerProposalCheckpoint = {
   id: true,
   title: true,

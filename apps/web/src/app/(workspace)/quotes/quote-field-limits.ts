@@ -10,7 +10,7 @@ export const QUOTE_LINE_FIELD_LIMITS = {
   internalNotes: 10_000,
 } as const;
 
-/** Optional customer-facing proposal text on quotes and line items (trimmed empty → null). */
+/** Optional proposal wording fields on quotes and line items (trimmed empty → null). */
 export const QUOTE_PROPOSAL_FIELD_LIMITS = {
   customerScopeTitle: 500,
   customerScopeDescription: 10_000,

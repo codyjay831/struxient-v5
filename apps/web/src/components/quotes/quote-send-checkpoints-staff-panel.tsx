@@ -8,8 +8,8 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 /**
- * Staff-only list of SEND checkpoints — not a customer version manager.
- * QuoteCheckpoint rows are internal proof; future jobs/tasks must not be driven from SEND alone.
+ * Staff-only list of SEND checkpoints — not a quote version manager.
+ * QuoteCheckpoint rows are internal proof; SEND is not an execution or delivery signal.
  */
 export function QuoteSendCheckpointsStaffPanel({
   quoteId,
@@ -26,15 +26,15 @@ export function QuoteSendCheckpointsStaffPanel({
   return (
     <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
       <SectionHeading
-        title="Recorded proposal sends"
-        description="Staff-only hidden checkpoints: proof of what the customer-safe proposal looked like at each send moment. Not email, SMS, a portal link, or approval. The live preview elsewhere always follows the current working quote."
+        title="Recorded send checkpoints"
+        description="Staff-only hidden checkpoints: proof of optional proposal wording from the quote at each capture moment. Not email, SMS, a portal link, or approval. The live proposal preview elsewhere always follows the current working quote."
       />
 
       {isDraft ? (
         <>
           <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
-            Recording a send stores internal proof from the quote as it is now. It does not email, text, or publish a
-            customer link. Edit the working quote freely; record again when you want a new proof row.
+            Recording a checkpoint stores internal proof from the quote as it is now. It does not email, text, or publish
+            an external link. Edit the working quote freely; record again when you want a new proof row.
           </p>
           <QuoteRecordSendCheckpointForm quoteId={quoteId} />
         </>
@@ -47,7 +47,7 @@ export function QuoteSendCheckpointsStaffPanel({
 
       {latest && lastRecordedLabel ? (
         <p className="mt-4 text-xs font-medium text-foreground">
-          Last send recorded: <time dateTime={latest.createdAt.toISOString()}>{lastRecordedLabel}</time>
+          Last recorded checkpoint: <time dateTime={latest.createdAt.toISOString()}>{lastRecordedLabel}</time>
           {latest.quoteUpdatedAtAtCapture ? (
             <span className="mt-1 block font-normal text-foreground-muted">
               Workspace last updated at capture:{" "}
@@ -64,7 +64,7 @@ export function QuoteSendCheckpointsStaffPanel({
           {sendCheckpoints.map((cp) => (
             <li key={cp.id} className="flex flex-wrap items-baseline justify-between gap-2">
               <span>
-                Send #{cp.sequence} ·{" "}
+                Checkpoint #{cp.sequence} ·{" "}
                 <time dateTime={cp.createdAt.toISOString()}>{new Date(cp.createdAt).toLocaleString()}</time>
               </span>
               <Link href={`/quotes/${quoteId}/checkpoints/${cp.id}`} className={listLinkClass}>
@@ -75,7 +75,7 @@ export function QuoteSendCheckpointsStaffPanel({
         </ul>
       ) : (
         <p className="mt-4 border-t border-border pt-4 text-xs text-foreground-muted">
-          No send checkpoints yet — the current quote is the only working copy until you record one.
+          No send checkpoints yet — the working quote is the only live copy until you record one.
         </p>
       )}
     </WorkspacePanel>

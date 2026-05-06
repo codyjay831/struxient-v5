@@ -53,10 +53,10 @@ export default function WorkstationScheduleLensPage() {
           actions={
             <>
               <PlaceholderButton title="No lens config in this build">
-                Tune schedule lens (soon)
+                Tune schedule lens (not wired)
               </PlaceholderButton>
               <PlaceholderButton title="No feed wiring in this build">
-                Refresh signals (soon)
+                Refresh signals (not wired)
               </PlaceholderButton>
             </>
           }

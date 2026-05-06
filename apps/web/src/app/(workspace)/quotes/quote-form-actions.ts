@@ -81,7 +81,7 @@ function parseQuoteLineProposalFieldsFromForm(
   const title = parseOptionalProposalString(
     formData,
     "customerScopeTitle",
-    "Customer scope title",
+    "Proposal scope title",
     QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle,
   );
   if (!title.ok) {
@@ -90,7 +90,7 @@ function parseQuoteLineProposalFieldsFromForm(
   const desc = parseOptionalProposalString(
     formData,
     "customerScopeDescription",
-    "Customer scope description",
+    "Proposal scope description",
     QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription,
   );
   if (!desc.ok) {
@@ -149,7 +149,7 @@ function parseTemplateDefaultProposalFieldsFromForm(
   const title = parseOptionalProposalString(
     formData,
     "defaultCustomerScopeTitle",
-    "Preset customer scope title",
+    "Preset proposal scope title",
     QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle,
   );
   if (!title.ok) {
@@ -158,7 +158,7 @@ function parseTemplateDefaultProposalFieldsFromForm(
   const desc = parseOptionalProposalString(
     formData,
     "defaultCustomerScopeDescription",
-    "Preset customer scope description",
+    "Preset proposal scope description",
     QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription,
   );
   if (!desc.ok) {
@@ -1048,11 +1048,9 @@ export async function applyLineItemTemplateToQuoteAction(
 }
 
 /**
- * Records a hidden SEND checkpoint: customer-safe proposal projection only.
+ * Records a hidden SEND checkpoint: proposal projection for staff-only proof (snapshot payload only).
  * DRAFT-only: archived quotes keep historical checkpoints but cannot record new sends here.
- * Does not change QuoteStatus, does not notify customers, does not create jobs or tasks.
- * SEND checkpoints are proof of customer-facing proposal content — not an execution source;
- * future runtime tasks/jobs should materialize from approved checkpoints plus execution planning.
+ * Does not change QuoteStatus, does not notify anyone externally, and does not imply delivery or approval.
  * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
  */
 export async function recordQuoteSendCheckpointAction(

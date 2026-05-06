@@ -61,7 +61,7 @@ export default async function CustomersPage() {
 
       <HandoffPanel
         title="Relationship context"
-        description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes, jobs, and payments still open in their own routes when you need placeholders—nothing is auto-wired yet."
+        description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes are live under Sales; job, schedule, and payment routes are reserved shells—not auto-wired from this page."
       >
         <Link href="/leads" className={handoffMutedLinkClass}>
           Sales: Leads
@@ -70,14 +70,14 @@ export default async function CustomersPage() {
           Sales: Quotes
         </Link>
         <Link href="/payments" className={handoffMutedLinkClass}>
-          Finance: Payments
+          Payments (reserved)
         </Link>
       </HandoffPanel>
 
       <section className="mb-10">
         <SectionHeading
           title="Organization snapshot"
-          description="Real Lead + Customer counts for this development tenant only. Jobs, AR, and contact-age signals stay placeholders until those models exist."
+          description="Real Lead + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
         />
         <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li>

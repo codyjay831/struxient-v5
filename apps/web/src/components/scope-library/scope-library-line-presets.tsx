@@ -114,7 +114,7 @@ function ScopeLibraryCreatePresetForm() {
             rows={2}
             maxLength={QUOTE_LINE_FIELD_LIMITS.internalNotes}
             className={controlClass}
-            placeholder="Copied to the quote line as internal notes when applied—not shown in customer preview."
+            placeholder="Copied to the quote line as internal notes when applied—not shown on live proposal preview."
           />
         </label>
       </div>
@@ -190,7 +190,7 @@ function ScopeLibraryTemplateEditForm({
             maxLength={QUOTE_LINE_FIELD_LIMITS.internalNotes}
             defaultValue={template.defaultInternalNotes ?? ""}
             className={controlClass}
-            placeholder="Copied to the quote line as internal notes when applied—not shown in customer preview."
+            placeholder="Copied to the quote line as internal notes when applied—not shown on live proposal preview."
           />
         </label>
       </div>
@@ -260,7 +260,7 @@ export function ScopeLibraryLinePresetsPanel({
         <EmptyState
           icon={Library}
           title="No line presets yet"
-          description="Add your first line preset using the form above: internal description, default quantity and unit price, optional internal notes, and optional customer proposal text. After you save, copy presets into draft quotes from the quote workspace."
+          description="Add your first line preset using the form above: internal description, default quantity and unit price, optional internal notes, and optional proposal wording. After you save, copy presets into draft quotes from the quote workspace."
         >
           <a href="#scope-library-line-preset-create" className={anchorToFormClass}>
             Jump to new line preset form

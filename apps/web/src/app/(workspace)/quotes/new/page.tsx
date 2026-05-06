@@ -115,7 +115,7 @@ export default async function NewQuotePage({
       <PageHeader
         eyebrow="Sales"
         title="New quote"
-        description="Create a draft quote in your development organization. Status stays Draft; totals start at zero and line items are added later. Send, approval, payment schedules, and activation are not available yet."
+        description="Create a draft working quote in your development organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, live proposal preview from the saved record, and staff-only recorded send checkpoints when you want proof—not delivery or approval."
         actions={
           <Link href="/quotes" className={listLinkClass}>
             ← Quotes list
@@ -126,7 +126,7 @@ export default async function NewQuotePage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Draft quote"
-          description="Organization scope is applied on the server from your session context—never from hidden fields alone. Lead and customer ids from the URL are validated here; the action re-validates before insert."
+          description="Organization scope is applied on the server from your session context—never from hidden fields alone. Lead and customer ids from the URL are validated here; create re-validates before insert."
         />
         <QuoteDraftForm
           cancelHref="/quotes"
