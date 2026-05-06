@@ -15,6 +15,16 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import {
+  formatLeadSource,
+  formatLeadStatus,
+  leadStatusBadgeTone,
+} from "@/lib/lead-display";
+import {
+  formatMoneyCents,
+  formatQuoteStatus,
+  quoteStatusBadgeTone,
+} from "@/lib/quote-display";
+import {
   Building2,
   CalendarDays,
   CreditCard,
@@ -119,6 +129,48 @@ export default async function CustomerDetailPage({
   const createdLabel = new Date(customer.createdAt).toLocaleString();
   const updatedLabel = new Date(customer.updatedAt).toLocaleString();
 
+  const linkedLeads = await db.lead.findMany({
+    where: {
+      organizationId: org.id,
+      customerId: customer.id,
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      source: true,
+      contactName: true,
+      email: true,
+      phone: true,
+      createdAt: true,
+      convertedAt: true,
+    },
+  });
+
+  const linkedQuotes = await db.quote.findMany({
+    where: {
+      organizationId: org.id,
+      customerId: customer.id,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      totalCents: true,
+      updatedAt: true,
+    },
+  });
+
+  const linkedLeadCount = linkedLeads.length;
+  const newestLinkedLeadCreatedAt = linkedLeads[0]?.createdAt ?? null;
+  const linkedWithConvertedStatus = linkedLeads.filter((l) => l.status === "CONVERTED").length;
+  const linkedWithConversionTimestamp = linkedLeads.filter((l) => l.convertedAt != null).length;
+  const newestLinkedLeadLabel = newestLinkedLeadCreatedAt
+    ? new Date(newestLinkedLeadCreatedAt).toLocaleString()
+    : "—";
+
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
@@ -131,15 +183,21 @@ export default async function CustomerDetailPage({
       <PageHeader
         eyebrow="Relationships"
         title={customer.displayName}
-        description="Durable relationship record—not Sales-only. When connected models exist, quotes, jobs, and intake tie back here. This page is read-only; edits are not wired yet."
+        description="Durable relationship record—not Sales-only. A customer can exist without any leads; leads you link or create from intake appear in Linked leads below. Linked quotes are read-only from the database for this organization; jobs, schedule, and payments stay out of scope here. Identity and contact fields are edited on the separate edit route; this view stays read-first."
         actions={
           <>
             <Link href="/customers" className={listLinkClass}>
               ← Customers list
             </Link>
-            <PlaceholderButton title="Create flow is not wired in this build">
-              Edit record (soon)
-            </PlaceholderButton>
+            <Link href={`/customers/${customer.id}/edit`} className={listLinkClass}>
+              Edit customer
+            </Link>
+            <Link
+              href={`/quotes/new?customerId=${encodeURIComponent(customer.id)}`}
+              className={listLinkClass}
+            >
+              Create quote
+            </Link>
           </>
         }
       />
@@ -165,6 +223,35 @@ export default async function CustomerDetailPage({
             <dd className="mt-0.5 text-foreground">{updatedLabel}</dd>
           </div>
         </dl>
+      </WorkspacePanel>
+
+      <WorkspacePanel className="mb-6">
+        <SectionHeading
+          title="Relationship summary (Sales)"
+          description="Derived from leads linked to this customer in this organization—counts are honest database reads, not fabricated activity. Quotes and jobs get their own sections when modeled."
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SignalCard
+            label="Linked leads"
+            value={String(linkedLeadCount)}
+            hint="Intake rows with this customerId in your org."
+          />
+          <SignalCard
+            label="Newest linked intake"
+            value={newestLinkedLeadLabel}
+            hint="By lead created date (newest first in the list below)."
+          />
+          <SignalCard
+            label='Status "Converted" (manual)'
+            value={String(linkedWithConvertedStatus)}
+            hint="Count where lead.status is CONVERTED—set on the lead, not inferred here."
+          />
+          <SignalCard
+            label="Conversion timestamp recorded"
+            value={String(linkedWithConversionTimestamp)}
+            hint="Leads with convertedAt from explicit link or create-from-lead."
+          />
+        </div>
       </WorkspacePanel>
 
       <WorkspacePanel className="mb-6">
@@ -216,14 +303,11 @@ export default async function CustomerDetailPage({
           <EmptyState
             icon={Phone}
             title="No contact methods on file"
-            description="Add email or phone when create/edit flows exist; none are stored for this customer yet."
+            description="None are stored for this customer yet. Add email or phone on Edit customer."
           >
-            <PlaceholderButton title="No contact editor in this build">
-              Add phone (soon)
-            </PlaceholderButton>
-            <PlaceholderButton title="No contact editor in this build">
-              Add email (soon)
-            </PlaceholderButton>
+            <Link href={`/customers/${customer.id}/edit`} className={listLinkClass}>
+              Edit customer
+            </Link>
           </EmptyState>
         )}
       </WorkspacePanel>
@@ -231,7 +315,7 @@ export default async function CustomerDetailPage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Internal notes"
-          description="Free-form notes stored on the customer record—read-only in this build."
+          description="Free-form notes stored on the customer record—edit on the customer edit route."
         />
         {customer.notes ? (
           <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
@@ -242,21 +326,125 @@ export default async function CustomerDetailPage({
         )}
       </WorkspacePanel>
 
+      <WorkspacePanel className="mb-6">
+        <SectionHeading
+          title="Linked leads"
+          description="Read-only: intake records in this organization that were explicitly linked or created-from-lead for this customer. Linking and unlinking happen on each lead’s detail page—not here."
+        />
+        {linkedLeads.length === 0 ? (
+          <p className="text-sm text-foreground-muted">No leads are linked to this customer yet.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+            {linkedLeads.map((row) => {
+              const created = new Date(row.createdAt).toLocaleString();
+              const converted = row.convertedAt
+                ? new Date(row.convertedAt).toLocaleString()
+                : null;
+              const contactBits = [row.contactName, row.email, row.phone].filter(Boolean);
+              const contactLine =
+                contactBits.length > 0 ? contactBits.join(" · ") : "No contact on lead";
+              return (
+                <li key={row.id} className="px-4 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/leads/${row.id}`}
+                        className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        {row.title}
+                      </Link>
+                      <p className="mt-1 text-xs text-foreground-muted">
+                        <span className="break-words">{contactLine}</span>
+                      </p>
+                      <dl className="mt-2 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
+                        <div>
+                          <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                            Created
+                          </dt>
+                          <dd className="mt-0.5 text-foreground">{created}</dd>
+                        </div>
+                        {converted ? (
+                          <div>
+                            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                              Converted (recorded)
+                            </dt>
+                            <dd className="mt-0.5 text-foreground">{converted}</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                      <StatusBadge
+                        label={formatLeadStatus(row.status)}
+                        tone={leadStatusBadgeTone(row.status)}
+                      />
+                      <span className="text-xs text-foreground-muted">
+                        {formatLeadSource(row.source)}
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </WorkspacePanel>
+
+      <WorkspacePanel className="mb-6">
+        <SectionHeading
+          title="Linked quotes"
+          description="Read-only: quotes in this organization that reference this customer. Create and edit quote actions are not implemented yet."
+        />
+        {linkedQuotes.length === 0 ? (
+          <p className="text-sm text-foreground-muted">
+            No quotes reference this customer yet. Quote authoring will land in a later phase—this
+            section only reflects persisted rows.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+            {linkedQuotes.map((q) => {
+              const updated = new Date(q.updatedAt).toLocaleString();
+              return (
+                <li key={q.id} className="px-4 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/quotes/${q.id}`}
+                        className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        {q.title}
+                      </Link>
+                      <p className="mt-1 text-xs text-foreground-muted">
+                        Updated {updated} · Total {formatMoneyCents(q.totalCents)}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      label={formatQuoteStatus(q.status)}
+                      tone={quoteStatusBadgeTone(q.status)}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </WorkspacePanel>
+
       <WorkspacePanel className="mb-6 border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Connected records"
-          description="The customer record is where Sales history and Work history meet—leads and quotes on one side, jobs and schedule context on the other. Counts stay honest (—) until queries exist."
+          description="The customer record is where Sales history and Work history meet. Linked leads and quotes above are live for this organization; jobs, schedule, and payments remain placeholders until those models exist."
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SignalCard
             label="Linked leads"
-            value="—"
-            hint="Intake tied to this party."
+            value={String(linkedLeads.length)}
+            hint="Intake tied to this party in this organization."
           />
           <SignalCard
             label="Quotes (any state)"
-            value="—"
-            hint="Commercial artifacts for this customer."
+            value={String(linkedQuotes.length)}
+            hint="Commercial quotes with this customerId in your org."
           />
           <SignalCard
             label="Jobs"
@@ -272,7 +460,7 @@ export default async function CustomerDetailPage({
         <div className="grid gap-4 sm:grid-cols-2">
           <ConnectedRecordSlot
             title="Leads"
-            description="Open or past intake that referenced this customer. No rows are invented in this build."
+            description="Browse all leads in Sales. Records linked to this customer are listed in Linked leads above."
             icon={Users}
             href="/leads"
             linkLabel="Open Leads"

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, LeadSource, LeadStatus, QuoteStatus } from "@prisma/client";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -65,6 +65,202 @@ async function main() {
       create: row,
     });
   }
+
+  const convertedAt = new Date("2026-05-01T15:00:00.000Z");
+  const devLeads = [
+    {
+      id: "dev-lead-open-website",
+      organizationId: devOrg.id,
+      customerId: null as string | null,
+      status: LeadStatus.OPEN,
+      source: LeadSource.WEBSITE,
+      sourceDetail: "Contact form — commercial roof replacement",
+      title: "Website: roof replacement inquiry",
+      contactName: "Jordan Lee",
+      email: "jordan.lee@example.com",
+      phone: "555-0401",
+      notes: "[dev seed] Open lead; not linked to a customer.",
+      convertedAt: null as Date | null,
+    },
+    {
+      id: "dev-lead-qualifying-referral",
+      organizationId: devOrg.id,
+      customerId: null,
+      status: LeadStatus.QUALIFYING,
+      source: LeadSource.REFERRAL,
+      sourceDetail: "Referred by Riverside Builders",
+      title: "Referral: tenant improvement fit-out",
+      contactName: "Alex Morgan",
+      email: "alex.morgan@example.com",
+      phone: "555-0402",
+      notes: "[dev seed] In qualification; duplicate checks are future work.",
+      convertedAt: null,
+    },
+    {
+      id: "dev-lead-converted-acme",
+      organizationId: devOrg.id,
+      customerId: "dev-customer-acme",
+      status: LeadStatus.CONVERTED,
+      source: LeadSource.PHONE,
+      sourceDetail: null,
+      title: "Phone intake — Acme follow-up",
+      contactName: "Pat Acme",
+      email: "contact@acme.com",
+      phone: "555-0100",
+      notes: "[dev seed] Linked to dev-customer-acme for read-path testing.",
+      convertedAt,
+    },
+    {
+      id: "dev-lead-open-walkin",
+      organizationId: devOrg.id,
+      customerId: null,
+      status: LeadStatus.OPEN,
+      source: LeadSource.WALK_IN,
+      sourceDetail: null,
+      title: "Walk-in: service call scheduling",
+      contactName: null,
+      email: null,
+      phone: "555-0403",
+      notes: "[dev seed] Minimal contact fields.",
+      convertedAt: null,
+    },
+  ] as const;
+
+  for (const row of devLeads) {
+    await prisma.lead.upsert({
+      where: { id: row.id },
+      update: {
+        organizationId: row.organizationId,
+        customerId: row.customerId,
+        status: row.status,
+        source: row.source,
+        sourceDetail: row.sourceDetail,
+        title: row.title,
+        contactName: row.contactName,
+        email: row.email,
+        phone: row.phone,
+        notes: row.notes,
+        convertedAt: row.convertedAt,
+      },
+      create: row,
+    });
+  }
+
+  const devQuoteRows = [
+    {
+      id: "dev-quote-title-only",
+      organizationId: devOrg.id,
+      customerId: null as string | null,
+      leadId: null as string | null,
+      status: QuoteStatus.DRAFT,
+      title: "[dev seed] Title-only draft quote",
+      internalNotes:
+        "[dev seed] No customer or lead; title satisfies the draft-only rule for orphan shells.",
+      subtotalCents: 0,
+      totalCents: 0,
+    },
+    {
+      id: "dev-quote-lead-website",
+      organizationId: devOrg.id,
+      customerId: null,
+      leadId: "dev-lead-open-website",
+      status: QuoteStatus.DRAFT,
+      title: "[dev seed] Lead-only draft (website roof inquiry)",
+      internalNotes: "[dev seed] Linked to dev-lead-open-website for read-path testing.",
+      subtotalCents: 0,
+      totalCents: 0,
+    },
+    {
+      id: "dev-quote-customer-globex",
+      organizationId: devOrg.id,
+      customerId: "dev-customer-globex",
+      leadId: null,
+      status: QuoteStatus.DRAFT,
+      title: "[dev seed] Customer-only draft (Globex)",
+      internalNotes: "[dev seed] Linked to dev-customer-globex for read-path testing.",
+      subtotalCents: 0,
+      totalCents: 0,
+    },
+    {
+      id: "dev-quote-archived-sample",
+      organizationId: devOrg.id,
+      customerId: null,
+      leadId: null,
+      status: QuoteStatus.ARCHIVED,
+      title: "[dev seed] Archived sample quote",
+      internalNotes: "[dev seed] Archived status for badge testing—no customer or lead.",
+      subtotalCents: 0,
+      totalCents: 0,
+    },
+    {
+      id: "dev-quote-acme-with-lines",
+      organizationId: devOrg.id,
+      customerId: "dev-customer-acme",
+      leadId: "dev-lead-converted-acme",
+      status: QuoteStatus.DRAFT,
+      title: "[dev seed] Acme quote with line items",
+      internalNotes:
+        "[dev seed] Linked to dev-customer-acme and dev-lead-converted-acme (consistent pair).",
+      subtotalCents: 85_000,
+      totalCents: 85_000,
+    },
+  ] as const;
+
+  for (const q of devQuoteRows) {
+    await prisma.quoteLineItem.deleteMany({ where: { quoteId: q.id } });
+    await prisma.quote.upsert({
+      where: { id: q.id },
+      update: {
+        organizationId: q.organizationId,
+        customerId: q.customerId,
+        leadId: q.leadId,
+        status: q.status,
+        title: q.title,
+        internalNotes: q.internalNotes,
+        subtotalCents: q.subtotalCents,
+        totalCents: q.totalCents,
+      },
+      create: {
+        id: q.id,
+        organizationId: q.organizationId,
+        customerId: q.customerId,
+        leadId: q.leadId,
+        status: q.status,
+        title: q.title,
+        internalNotes: q.internalNotes,
+        subtotalCents: q.subtotalCents,
+        totalCents: q.totalCents,
+      },
+    });
+  }
+
+  await prisma.quoteLineItem.deleteMany({
+    where: { quoteId: "dev-quote-acme-with-lines" },
+  });
+  await prisma.quoteLineItem.createMany({
+    data: [
+      {
+        id: "dev-line-acme-roof",
+        quoteId: "dev-quote-acme-with-lines",
+        sortOrder: 0,
+        description: "[dev seed] Commercial roof labor (sample line)",
+        quantity: new Prisma.Decimal("4"),
+        unitAmountCents: 15_000,
+        lineTotalCents: 60_000,
+        internalNotes: "[dev seed] Estimator-facing note on a sample line.",
+      },
+      {
+        id: "dev-line-acme-materials",
+        quoteId: "dev-quote-acme-with-lines",
+        sortOrder: 1,
+        description: "[dev seed] Materials allowance",
+        quantity: new Prisma.Decimal("1"),
+        unitAmountCents: 25_000,
+        lineTotalCents: 25_000,
+        internalNotes: null,
+      },
+    ],
+  });
 
   console.log("[dev seed] Completed (idempotent upserts).");
 }

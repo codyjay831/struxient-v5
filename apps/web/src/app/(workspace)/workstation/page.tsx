@@ -10,12 +10,30 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
+import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { Activity, CalendarDays, ClipboardList, FolderKanban } from "lucide-react";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export default function WorkstationTodayLensPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WorkstationTodayLensPage() {
+  const org = await getDevOrganizationOrThrow();
+  const [openPipelineLeads, unlinkedLeads, totalLeads] = await Promise.all([
+    db.lead.count({
+      where: {
+        organizationId: org.id,
+        status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
+      },
+    }),
+    db.lead.count({
+      where: { organizationId: org.id, customerId: null },
+    }),
+    db.lead.count({ where: { organizationId: org.id } }),
+  ]);
+
   return (
     <div className="space-y-6">
       <WorkspacePanel padding="compact">
@@ -29,10 +47,38 @@ export default function WorkstationTodayLensPage() {
           for signals.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Attention feed" tone="neutral" />
+          <StatusBadge label="Sales snapshot (live)" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            No live aggregation in this build
+            Lead counts below are org-scoped; jobs, quotes, and finance rollups remain placeholders.
           </span>
+        </div>
+      </WorkspacePanel>
+
+      <WorkspacePanel padding="compact" className="border-border-strong shadow-sm ring-1 ring-ring/20">
+        <SectionHeading
+          title="Sales intake (this organization)"
+          description="Cheap counts only—no match scanning, no task engine, not a CRM dashboard. Open pipeline means status Open or Qualifying (manual)."
+        />
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <SignalCard
+            label="Open pipeline leads"
+            value={String(openPipelineLeads)}
+            hint="Statuses Open or Qualifying."
+          />
+          <SignalCard
+            label="Unlinked leads"
+            value={String(unlinkedLeads)}
+            hint="No customer linked yet."
+          />
+          <SignalCard label="All leads" value={String(totalLeads)} hint="Intake rows in this org." />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/leads" className={listLinkClass}>
+            Open leads list
+          </Link>
+          <Link href="/customers" className={listLinkClass}>
+            Open customers
+          </Link>
         </div>
       </WorkspacePanel>
 

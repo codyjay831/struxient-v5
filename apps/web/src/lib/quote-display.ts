@@ -1,0 +1,77 @@
+import type { QuoteStatus } from "@prisma/client";
+import type { StatusBadgeTone } from "@/components/ui/status-badge";
+
+/** Serializable quote row for list views (server-fetched, org-scoped). */
+export type QuoteListRowPayload = {
+  id: string;
+  title: string;
+  status: QuoteStatus;
+  totalCents: number;
+  createdAt: Date;
+  updatedAt: Date;
+  customer: { id: string; displayName: string } | null;
+  lead: { id: string; title: string } | null;
+};
+
+/** Minimal quote row for lead/customer detail sidebars (org-scoped). */
+export type QuoteLinkedSummary = {
+  id: string;
+  title: string;
+  status: QuoteStatus;
+  totalCents: number;
+  updatedAt: Date;
+};
+
+export type QuoteLineItemPayload = {
+  id: string;
+  sortOrder: number;
+  description: string;
+  quantityDisplay: string;
+  unitAmountCents: number;
+  lineTotalCents: number;
+  internalNotes: string | null;
+};
+
+/** Serializable quote for detail shell (server-fetched, org-scoped). */
+export type QuoteDetailPayload = {
+  id: string;
+  title: string;
+  status: QuoteStatus;
+  internalNotes: string | null;
+  subtotalCents: number;
+  totalCents: number;
+  createdAt: Date;
+  updatedAt: Date;
+  customerId: string | null;
+  leadId: string | null;
+  customer: { id: string; displayName: string } | null;
+  lead: { id: string; title: string } | null;
+  lineItems: QuoteLineItemPayload[];
+};
+
+const STATUS_LABELS: Record<QuoteStatus, string> = {
+  DRAFT: "Draft",
+  ARCHIVED: "Archived",
+};
+
+/** Formats integer cents as USD for read-only UI (dev / en-US baseline). */
+export function formatMoneyCents(cents: number): string {
+  const safe = Number.isFinite(cents) ? cents : 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(safe / 100);
+}
+
+export function formatQuoteStatus(status: QuoteStatus): string {
+  return STATUS_LABELS[status];
+}
+
+export function quoteStatusBadgeTone(status: QuoteStatus): StatusBadgeTone {
+  switch (status) {
+    case "ARCHIVED":
+      return "neutral";
+    default:
+      return "draft";
+  }
+}

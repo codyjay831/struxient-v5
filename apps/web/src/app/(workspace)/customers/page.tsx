@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   HandoffPanel,
   handoffMutedLinkClass,
+  handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,15 +13,32 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { UserCircle } from "lucide-react";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomersPage() {
   const org = await getDevOrganizationOrThrow();
-  const customers = await db.customer.findMany({
-    where: { organizationId: org.id },
-    orderBy: { createdAt: "desc" },
-  });
+  const [customers, totalLeads, unlinkedLeads, openPipelineLeads] = await Promise.all([
+    db.customer.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: {
+          select: { leads: true },
+        },
+      },
+    }),
+    db.lead.count({ where: { organizationId: org.id } }),
+    db.lead.count({ where: { organizationId: org.id, customerId: null } }),
+    db.lead.count({
+      where: {
+        organizationId: org.id,
+        status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
+      },
+    }),
+  ]);
+  const customersWithLinkedLead = customers.filter((c) => c._count.leads > 0).length;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -30,12 +48,12 @@ export default async function CustomersPage() {
       <PageHeader
         eyebrow="Relationships"
         title="Customers"
-        description="The first relationship record surface in Struxient—billing parties, job history, and tags you keep across quotes and work. It is not a sales-only list; Sales stays in Leads and Quotes."
+        description="Relationship records for this organization—identity and contact live here; linked intake appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
         actions={
           <>
-            <PlaceholderButton title="Create flow is not wired in this build">
-              New customer (soon)
-            </PlaceholderButton>
+            <Link href="/customers/new" className={handoffPrimaryLinkClass}>
+              New customer
+            </Link>
             <PlaceholderButton>Merge records (soon)</PlaceholderButton>
           </>
         }
@@ -43,7 +61,7 @@ export default async function CustomersPage() {
 
       <HandoffPanel
         title="Relationship context"
-        description="Customer records will tie together Sales history (leads and quotes), approved Work (jobs), contacts, and later repeat-business signals—still one route today; no extra relationship types or mock parties."
+        description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes, jobs, and payments still open in their own routes when you need placeholders—nothing is auto-wired yet."
       >
         <Link href="/leads" className={handoffMutedLinkClass}>
           Sales: Leads
@@ -58,9 +76,31 @@ export default async function CustomersPage() {
 
       <section className="mb-10">
         <SectionHeading
-          title="System signals (preview)"
-          description="Org-wide rollups—empty placeholders, not live metrics."
+          title="Organization snapshot"
+          description="Real Lead + Customer counts for this development tenant only. Jobs, AR, and contact-age signals stay placeholders until those models exist."
         />
+        <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <li>
+            <SignalCard label="Customers" value={String(customers.length)} hint="Rows in this org." />
+          </li>
+          <li>
+            <SignalCard label="Leads (all)" value={String(totalLeads)} hint="Intake records in this org." />
+          </li>
+          <li>
+            <SignalCard
+              label="Open pipeline leads"
+              value={String(openPipelineLeads)}
+              hint="Status Open or Qualifying—manual lifecycle."
+            />
+          </li>
+          <li>
+            <SignalCard
+              label="Unlinked leads"
+              value={String(unlinkedLeads)}
+              hint="No customerId yet; link or create from each lead’s page."
+            />
+          </li>
+        </ul>
         <ul className="grid gap-3 sm:grid-cols-3">
           <li>
             <SignalCard label="Active jobs" value="—" hint="Open work tied to customers" />
@@ -72,6 +112,10 @@ export default async function CustomersPage() {
             <SignalCard label="Stale contact" value="—" hint="No touch in N days" />
           </li>
         </ul>
+        <p className="mt-3 text-xs text-foreground-muted">
+          Customers with at least one linked lead:{" "}
+          <span className="font-medium text-foreground">{customersWithLinkedLead}</span>
+        </p>
       </section>
 
       <WorkspacePanel padding="compact" className="mb-8">
@@ -88,7 +132,7 @@ export default async function CustomersPage() {
 
       <SectionHeading
         title="Customer records"
-        description="Each row will open `/customers/{id}` with relationship context across Sales and Work."
+        description="Each row opens the customer detail page. Linked leads counts come from the Lead → Customer link in this org only."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -98,7 +142,7 @@ export default async function CustomersPage() {
               <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                 <th className="pb-3 pr-4 font-medium">Customer</th>
                 <th className="pb-3 pr-4 font-medium">Contact</th>
-                <th className="pb-3 pr-4 font-medium">Signals</th>
+                <th className="pb-3 pr-4 font-medium">Linked leads</th>
                 <th className="pb-3 font-medium">Created</th>
               </tr>
             </thead>
@@ -122,7 +166,15 @@ export default async function CustomersPage() {
                     <div className="text-foreground-muted">{customer.email || "—"}</div>
                     <div className="text-xs text-foreground-subtle">{customer.phone || "—"}</div>
                   </td>
-                  <td className="py-4 pr-4 text-foreground-subtle">—</td>
+                  <td className="py-4 pr-4 text-foreground-muted">
+                    {customer._count.leads === 0 ? (
+                      <span className="text-foreground-subtle">0</span>
+                    ) : (
+                      <span className="font-medium tabular-nums text-foreground">
+                        {customer._count.leads}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-4 text-foreground-subtle">
                     {new Date(customer.createdAt).toLocaleDateString()}
                   </td>
@@ -136,9 +188,11 @@ export default async function CustomersPage() {
             <EmptyState
               icon={UserCircle}
               title="No customer rows yet"
-              description="Tags (VIP, GC, service plan) and system signals (credit hold, warranty) will render in the middle columns. Activity and job references will populate the history column from events—no sample rows are shown."
+              description="Create a customer to anchor identity and contact; link intake from each lead’s detail page when you are ready—no sample rows."
             >
-              <PlaceholderButton>Open row detail (needs data)</PlaceholderButton>
+              <Link href="/customers/new" className={handoffPrimaryLinkClass}>
+                New customer
+              </Link>
             </EmptyState>
           </div>
         )}

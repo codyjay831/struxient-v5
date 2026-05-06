@@ -2,6 +2,9 @@ node_modules
 .next
 .git
 *.md
+# Host-only dev credentials; must not bake localhost DATABASE_URL into the production image.
+# Runtime DATABASE_URL for the web container comes from docker-compose.yml (db:5432).
+.env
 .env*.local
 npm-debug.log*
 .vercel

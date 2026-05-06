@@ -10,12 +10,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum LeadStatus {
+  OPEN
+  QUALIFYING
+  CONVERTED
+  LOST
+  ARCHIVED
+}
+
+enum LeadSource {
+  PHONE
+  EMAIL
+  SMS
+  WEBSITE
+  REFERRAL
+  WALK_IN
+  MANUAL
+  OTHER
+}
+
+enum QuoteStatus {
+  DRAFT
+  ARCHIVED
+}
+
 model Organization {
   id        String     @id @default(cuid())
   name      String
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   customers Customer[]
+  leads     Lead[]
+  quotes    Quote[]
 }
 
 model Customer {
@@ -29,6 +55,74 @@ model Customer {
   notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  leads          Lead[]
+  quotes         Quote[]
 
   @@index([organizationId])
+}
+
+model Lead {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  customerId     String?
+  customer       Customer?      @relation(fields: [customerId], references: [id])
+  status         LeadStatus     @default(OPEN)
+  source         LeadSource     @default(MANUAL)
+  sourceDetail   String?
+  title          String
+  contactName    String?
+  email          String?
+  phone          String?
+  notes          String?
+  convertedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  quotes         Quote[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([status])
+  @@index([source])
+}
+
+model Quote {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  customerId       String?
+  customer         Customer?      @relation(fields: [customerId], references: [id])
+  leadId           String?
+  lead             Lead?          @relation(fields: [leadId], references: [id])
+  status             QuoteStatus    @default(DRAFT)
+  title              String
+  internalNotes      String?
+  subtotalCents      Int            @default(0)
+  totalCents         Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  lineItems          QuoteLineItem[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([leadId])
+  @@index([status])
+}
+
+/// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
+/// No denormalized organizationId here—avoids redundant writes and drift.
+model QuoteLineItem {
+  id               String   @id @default(cuid())
+  quoteId          String
+  quote            Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sortOrder        Int      @default(0)
+  description      String
+  quantity         Decimal  @db.Decimal(18, 6)
+  unitAmountCents  Int
+  lineTotalCents   Int
+  internalNotes    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([quoteId])
 }
