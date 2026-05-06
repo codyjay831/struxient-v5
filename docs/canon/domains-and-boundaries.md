@@ -9,7 +9,7 @@
 3. **Quote authoring** — Line items, pricing, internal vs external descriptions, operational enrichments, templates, quote-level tasks for preparation.
 4. **Template library** — Reusable definitions; versioning and update semantics vs instances on quotes/jobs.
 5. **Workflow and tasks** — Assignment, dependency, ordering, readiness, blocking reasons, detours, return points; spans pre-sale and post-sale.
-6. **Commitment and activation** — Customer approval/signature; conversion to executable job structure; immutability rules for commercial baseline (see invariants).
+6. **Commitment and activation** — Customer approval/signature; conversion to executable job structure; **checkpoints** preserve commercial baseline at commitment moments ([quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md)); immutability rules (see invariants).
 7. **Execution and operations** — Field and office execution, attachments, resource needs (crew, equipment, parts), operational checklists.
 8. **Events and corrections** — Interruptions, change orders, rework, pauses; causal metadata and ownership.
 9. **Scheduling and calendar** — Task due/start/end + **appointments**; calendar UI reads same truth; **no** resource-leveling engine v1 — see [locked-decisions-v1.md](./locked-decisions-v1.md) §5.
@@ -25,7 +25,7 @@
 
 ## Boundary: quote vs job
 
-**Quote** optimizes for **selling and defining scope**. **Job** optimizes for **doing work under constraints**.
+**Quote** optimizes for **selling and defining scope** (the **working record** while pre- and mid-sale rules apply). **Job** optimizes for **doing work under constraints** (the **execution record** after activation). **Approved sold truth** at handoff is anchored on **checkpoint proof** + projection rules, not on users editing a frozen “version” surface—[quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).
 
 Canon requires **continuity** across the boundary (no manual rebuild of the same structure), while allowing **execution-only** enrichments post-commitment (e.g., dispatch detail that was not sold textually).
 
@@ -79,4 +79,5 @@ This canon does not mandate a specific **tech stack**, **multi-tenant topology**
 
 ---
 
-*Canon update (2026-05-05): Customer graph — system-derived signals vs user tags; payment schedule vs gate vs task (money truth).*
+*Canon update (2026-05-05): Customer graph — system-derived signals vs user tags; payment schedule vs gate vs task (money truth).*  
+*Canon update (2026-05-06): Domain 6 + quote vs job boundary — checkpoints / [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*

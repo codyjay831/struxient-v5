@@ -28,6 +28,8 @@ Customers may also be created **without** a lead.
 
 A **quote** is the primary internal artifact where the company defines **what is for sale** and increasingly **what may need to happen if sold**. It contains **line items** and may accumulate **tasks** and **operational attachments** relevant to preparation and eventual execution.
 
+In v5, treat the **quote** as the **working record** day to day; **immutable proof** at commitment moments (send, approve, activate, approved customer-facing change) is captured in **checkpoints**—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). That separation keeps the main UI off a “version manager” while still preserving sold truth.
+
 Execution-oriented structure on a quote (e.g., **stages**, **tasks** under line items) may exist as **draft execution planning** while still pre-approval: useful for speed and templates, **not** synonymous with customer-facing commitment unless explicitly published.
 
 **Responsibility:** be the **authoritative commercial definition** of sold scope at approval time, while supporting **internal-only** detail that must not leak to the customer view without explicit configuration.
@@ -187,4 +189,5 @@ Canon expects implementations to **avoid duplicate conflicting sources of truth*
 ---
 
 *Canon update (2026-05-05): Authentication vs permissions; account creation and permission modeling patterns; glossary alignment.*  
-*Canon update (2026-05-05): Customer signals vs user tags; payment schedule as money truth (pointer to domains-and-boundaries).*
+*Canon update (2026-05-05): Customer signals vs user tags; payment schedule as money truth (pointer to domains-and-boundaries).*  
+*Canon update (2026-05-06): Quote section — **working record** vs **checkpoints** pointer to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*

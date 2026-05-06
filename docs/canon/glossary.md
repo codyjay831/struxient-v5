@@ -31,10 +31,11 @@
 | **Lead** | Early-stage opportunity or inquiry; may auto-create from a channel or be manual; may or may not yet map cleanly to a customer. |
 | **Customer** | Durable business relationship record; may exist with or without a preceding lead. |
 | **Tag / label / metadata** | Non-exclusive signals describing origin, lifecycle state, or segmentation. **User tags** are manual/company-specific; **system-derived lifecycle signals** (e.g. has approved job, import provenance) should be modeled separately when the product already knows them—see [domains-and-boundaries.md](./domains-and-boundaries.md) (Customer graph). |
-| **Quote** | Commercial artifact defining **what is for sale** and anchoring **approval**; may carry operational hints for later execution. |
+| **Quote** | **Working record** where the team defines **what is for sale**; may carry operational hints for later execution. **Commitment** and **immutable proof** at send/approve/activate are captured in **checkpoints**, not by turning the quote into a user-managed version tree—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). |
 | **Line item** | A row on a quote representing a sellable/billable unit; may carry tasks, resources, dependencies, and disclosure variants. |
 | **Approval / signature** | Customer commitment boundary; triggers **activation** into executable work. |
-| **Change order (CO)** | Post-approval **append** of commercial scope/price (and linked tasks); does **not** silently rewrite the **approved quote snapshot** — [locked-decisions-v1.md](./locked-decisions-v1.md) §7. |
+| **Checkpoint** | **Hidden proof record** created at **commitment moments** (e.g. quote sent, approval/signature, job activation, approved customer-facing change) so the system can preserve **what was true** without making users manage “versions” as daily work—[quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). |
+| **Change order (CO)** | Post-approval **append** of commercial scope/price (and linked tasks); does **not** silently rewrite **approved baseline truth** (checkpoint / execution rules)—[locked-decisions-v1.md](./locked-decisions-v1.md) §7. |
 | **Job collaborator** | Subcontractor (or guest) **job-scoped** access grant; see **Subcontractor** in locked decisions §1. |
 | **Construction issue** | Typed operational problem (delay, defect, inspection fail, payment block, …); **guided event** with required fields and optional **spawned tasks** — [locked-decisions-v1.md](./locked-decisions-v1.md) §10. **Must not** be only unstructured note when execution is affected (I16). **MVP lifecycle:** open → triaged/in_progress → resolved (optional cancelled/misfiled); task completion does not silently close the issue unless explicitly defined. |
 
@@ -85,4 +86,9 @@
 
 - Prefer **job** / **task** language in execution contexts; prefer **quote** / **line item** language in commercial contexts.  
 - Avoid calling the Workstation a “portal”; **portal** implies customer audience.  
-- Use **projection** when discussing customer-visible subsets of internal data.
+- Use **projection** when discussing customer-visible subsets of internal data.  
+- Prefer **checkpoint** / **approval record** for preserved commitment truth; reserve **snapshot** for implementation innards (e.g. serialized payload inside a checkpoint), not primary UX copy.
+
+---
+
+*Canon update (2026-05-06): Glossary — **Quote**, **Checkpoint**, **CO** rows aligned with [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); usage note on snapshot wording.*

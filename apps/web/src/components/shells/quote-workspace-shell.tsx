@@ -1,4 +1,14 @@
 import Link from "next/link";
+import { QuoteStatus } from "@prisma/client";
+import {
+  QuoteArchivedRestorePanel,
+  QuoteDraftArchivePanel,
+} from "@/components/quotes/quote-archive-controls";
+import {
+  ArchivedQuoteReadOnlyNotice,
+  QuoteDraftWorkspaceControls,
+} from "@/components/quotes/quote-draft-workspace-controls";
+import { QuoteSendCheckpointsStaffPanel } from "@/components/quotes/quote-send-checkpoints-staff-panel";
 import {
   HandoffPanel,
   handoffMutedLinkClass,
@@ -11,11 +21,14 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
+import { QuoteLineItemScanBlock } from "@/components/quotes/quote-line-item-display";
+import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import {
   formatMoneyCents,
   formatQuoteStatus,
   quoteStatusBadgeTone,
   type QuoteDetailPayload,
+  type QuoteSendCheckpointSummary,
 } from "@/lib/quote-display";
 import {
   ListOrdered,
@@ -31,7 +44,13 @@ const listLinkClass =
 
 export type QuoteWorkspaceShellProps =
   | { mode: "new" }
-  | { mode: "detail"; quote: QuoteDetailPayload };
+  | {
+      mode: "detail";
+      quote: QuoteDetailPayload;
+      lineItemTemplates: LineItemTemplatePickerRow[];
+      sendCheckpoints: QuoteSendCheckpointSummary[];
+      workspaceDiffersFromLastSend: boolean;
+    };
 
 /** Suggested authoring order — copy only, no workflow engine. */
 function QuoteBuildOrderStrip() {
@@ -251,7 +270,18 @@ function QuoteNewShell() {
   );
 }
 
-function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
+function QuoteDetailShell({
+  quote,
+  lineItemTemplates,
+  sendCheckpoints,
+  workspaceDiffersFromLastSend,
+}: {
+  quote: QuoteDetailPayload;
+  lineItemTemplates: LineItemTemplatePickerRow[];
+  sendCheckpoints: QuoteSendCheckpointSummary[];
+  workspaceDiffersFromLastSend: boolean;
+}) {
+  const isDraft = quote.status === QuoteStatus.DRAFT;
   const createdLabel = new Date(quote.createdAt).toLocaleString();
   const updatedLabel = new Date(quote.updatedAt).toLocaleString();
   const hasCustomer = quote.customer != null;
@@ -268,27 +298,23 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
         ]}
       />
       <PageHeader
-        eyebrow="Sales"
+        eyebrow="Sales · Internal quote workspace"
         title={quote.title}
-        description="Read-only view for this development organization. Edit, send, approve, payment collection, and activation are deferred—actions below are placeholders only."
+        description={
+          isDraft
+            ? "Draft in your development organization: edit the current quote below. Totals come from line items and are recomputed on the server. Archive freezes edits and is reversible. Use Recorded proposal sends to store internal proof checkpoints — not customer delivery. Approvals, payments, and job activation stay future work."
+            : "Archived in your development organization: read-only view of this page. Restore to draft when you need to edit again; totals and links stay as stored. Existing send checkpoints remain historical proof; only restore performs a state change here."
+        }
         actions={
-          <>
-            <Link href="/quotes" className={listLinkClass}>
-              ← Quotes list
-            </Link>
-            <PlaceholderButton title="Update quote not implemented yet">
-              Save draft (soon)
-            </PlaceholderButton>
-            <PlaceholderButton title="No send pipeline in this build">
-              Send to customer
-            </PlaceholderButton>
-          </>
+          <Link href="/quotes" className={listLinkClass}>
+            ← Quotes list
+          </Link>
         }
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Record
+          Quote record
         </p>
         <p className="mt-1 break-all font-mono text-xs text-foreground-muted">{quote.id}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -297,7 +323,9 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
             tone={quoteStatusBadgeTone(quote.status)}
           />
           <span className="text-xs text-foreground-muted">
-            Totals are stored rollups (cents)—editing line items will recompute them when mutations exist.
+            {isDraft
+              ? "Subtotal and total are stored rollups (cents) on the quote row; they are recomputed from line totals after each line change."
+              : "Subtotal and total are stored rollups on the quote row. This archived view is read-only except restore below."}
           </span>
         </div>
         <dl className="mt-4 grid gap-2 text-xs text-foreground-muted sm:grid-cols-2">
@@ -312,11 +340,24 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
         </dl>
       </WorkspacePanel>
 
+      {isDraft && workspaceDiffersFromLastSend ? (
+        <WorkspacePanel
+          padding="compact"
+          className="mb-6 border border-border border-l-[3px] border-l-danger/60 bg-danger/[0.03]"
+        >
+          <p className="text-sm font-medium text-foreground">Workspace differs from last recorded send</p>
+          <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
+            The current quote has changed since your latest send checkpoint. Review the live proposal preview, then
+            record another send when you want updated internal proof — this is not a customer-facing version system.
+          </p>
+        </WorkspacePanel>
+      ) : null}
+
       <div className="space-y-6">
         <WorkspacePanel>
           <SectionHeading
-            title="Customer / lead context"
-            description="Quotes may reference a customer, a lead, both when consistent, or neither when the title alone identifies a draft shell."
+            title="Linked customer and lead"
+            description="Optional links for your team—neither is required. When both are set, they should match your org’s lead–customer rules. Open the record for more context."
           />
           {hasCustomer || hasLead ? (
             <div className="rounded-lg border border-border bg-surface px-4 py-5">
@@ -365,7 +406,7 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
                 aria-hidden
               />
               <p className="text-sm text-foreground-muted">
-                No customer or lead linked—title-only draft is allowed for this quote.
+                No customer or lead on this quote—that is allowed. The title above identifies this draft for your team; use Customers or Leads when you want a navigable link.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <Link href="/customers" className={listLinkClass}>
@@ -379,66 +420,70 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
           )}
         </WorkspacePanel>
 
-        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-          <SectionHeading
-            title="Line items"
-            description="Commercial scope rows for this quote—read-only until editing ships."
-            actions={
-              <PlaceholderButton title="Line item editor not implemented yet">
-                Add line item
-              </PlaceholderButton>
-            }
+        {!isDraft ? <ArchivedQuoteReadOnlyNotice /> : null}
+        {!isDraft ? <QuoteArchivedRestorePanel quoteId={quote.id} /> : null}
+
+        {isDraft ? (
+          <QuoteDraftWorkspaceControls
+            quoteId={quote.id}
+            initialTitle={quote.title}
+            initialInternalNotes={quote.internalNotes}
+            initialCustomerDocumentTitle={quote.customerDocumentTitle}
+            subtotalCents={quote.subtotalCents}
+            totalCents={quote.totalCents}
+            lineItems={quote.lineItems}
+            lineItemTemplates={lineItemTemplates}
           />
-          <div className="mb-5 grid gap-3 sm:grid-cols-2">
-            <SignalCard
-              label="Subtotal"
-              value={formatMoneyCents(quote.subtotalCents)}
-              hint="Stored rollup on the quote row."
+        ) : (
+          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+            <SectionHeading
+              title="Line items"
+              description="Read-only scope rows as stored when archived. Subtotal and total on the quote row reflect line totals at archive time; no edits here."
             />
-            <SignalCard
-              label="Total"
-              value={formatMoneyCents(quote.totalCents)}
-              hint="Stored rollup; tax and discounts are out of scope for this phase."
-            />
-            <SignalCard
-              label="Line item count"
-              value={String(lineCount)}
-              hint="Persisted rows ordered for display."
-            />
-          </div>
-          {lineCount === 0 ? (
-            <EmptyState
-              icon={ListOrdered}
-              title="No line items on this quote"
-              description="Seed quotes may include lines; otherwise this quote is a shell until authoring exists."
-            >
-              <PlaceholderButton title="Line item editor not implemented yet">
-                Add line item
-              </PlaceholderButton>
-            </EmptyState>
-          ) : (
-            <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-              {quote.lineItems.map((line) => (
-                <li key={line.id} className="px-4 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">{line.description}</p>
-                      <p className="mt-1 text-xs text-foreground-muted">
-                        Qty {line.quantityDisplay} · Unit {formatMoneyCents(line.unitAmountCents)} ·
-                        Line {formatMoneyCents(line.lineTotalCents)}
-                      </p>
-                      {line.internalNotes ? (
-                        <p className="mt-2 rounded-md border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-                          {line.internalNotes}
-                        </p>
-                      ) : null}
+            <div className="mb-5 grid gap-3 sm:grid-cols-3">
+              <SignalCard
+                label="Subtotal"
+                value={formatMoneyCents(quote.subtotalCents)}
+                hint="Stored rollup (sum of line totals)."
+              />
+              <SignalCard
+                label="Total"
+                value={formatMoneyCents(quote.totalCents)}
+                hint="Same as subtotal for now—no tax line."
+              />
+              <SignalCard
+                label="Lines"
+                value={String(lineCount)}
+                hint="Persisted rows, ordered for display."
+              />
+            </div>
+            {lineCount === 0 ? (
+              <EmptyState
+                icon={ListOrdered}
+                title="No line items were captured before archive"
+                description="Restore to draft if you need to add scope rows; this read-only view stays empty until lines exist on the record."
+              />
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+                {quote.lineItems.map((line) => (
+                  <li key={line.id} className="px-4 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <QuoteLineItemScanBlock line={line} />
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </WorkspacePanel>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </WorkspacePanel>
+        )}
+
+        {isDraft ? <QuoteDraftArchivePanel quoteId={quote.id} /> : null}
+
+        <QuoteSendCheckpointsStaffPanel
+          quoteId={quote.id}
+          isDraft={isDraft}
+          sendCheckpoints={sendCheckpoints}
+        />
 
         <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
           <SectionHeading
@@ -493,35 +538,37 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
         <WorkspacePanel>
           <SectionHeading
             title="Preview & approval"
-            description="Customer-facing preview, PDF, e-sign, and approval are explicitly out of scope for this phase."
+            description="Live internal preview of the current workspace quote. PDF, e-sign, and approval capture stay deferred."
           />
           <EmptyState
             icon={Eye}
-            title="Preview and approval not available"
-            description="Nothing here implies a quote was sent or approved—those flows require future product work."
+            title="See the quote as your customer would"
+            description="Opens the live proposal preview from the current quote. Recorded send checkpoints are separate internal proof rows — use Recorded proposal sends above."
           >
-            <PlaceholderButton title="No preview engine in this build">
-              Open preview (soon)
-            </PlaceholderButton>
+            <Link href={`/quotes/${quote.id}/preview`} className={listLinkClass}>
+              Preview as customer
+            </Link>
             <PlaceholderButton title="No approval capture in this build">
               Record approval (soon)
             </PlaceholderButton>
           </EmptyState>
         </WorkspacePanel>
 
-        <WorkspacePanel padding="compact">
-          <SectionHeading
-            title="Internal notes"
-            description="Staff-only notes on the quote record—never a customer-facing snapshot in this phase."
-          />
-          {quote.internalNotes ? (
-            <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
-              {quote.internalNotes}
-            </p>
-          ) : (
-            <p className="text-sm text-foreground-muted">No internal notes on this quote.</p>
-          )}
-        </WorkspacePanel>
+        {!isDraft ? (
+          <WorkspacePanel padding="compact">
+            <SectionHeading
+              title="Internal notes"
+              description="Staff-only notes on the quote record—never a customer-facing snapshot in this phase."
+            />
+            {quote.internalNotes ? (
+              <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
+                {quote.internalNotes}
+              </p>
+            ) : (
+              <p className="text-sm text-foreground-muted">No internal notes on this quote.</p>
+            )}
+          </WorkspacePanel>
+        ) : null}
 
         <WorkspacePanel padding="compact">
           <SectionHeading
@@ -537,7 +584,7 @@ function QuoteDetailShell({ quote }: { quote: QuoteDetailPayload }) {
 
         <HandoffPanel
           title="After this quote matures"
-          description="Send, approval, payment schedules, and activation stay off this surface until their dedicated phases—no implied customer commitment here."
+          description="This screen is for your team’s draft and archive workflow. Recorded send checkpoints are internal proof only—no implied customer delivery. Approval, payment schedules, and activation stay off this surface until their dedicated phases."
         >
           <Link href="/quotes" className={handoffMutedLinkClass}>
             Quotes list
@@ -552,5 +599,12 @@ export function QuoteWorkspaceShell(props: QuoteWorkspaceShellProps) {
   if (props.mode === "new") {
     return <QuoteNewShell />;
   }
-  return <QuoteDetailShell quote={props.quote} />;
+  return (
+    <QuoteDetailShell
+      quote={props.quote}
+      lineItemTemplates={props.lineItemTemplates}
+      sendCheckpoints={props.sendCheckpoints}
+      workspaceDiffersFromLastSend={props.workspaceDiffersFromLastSend}
+    />
+  );
 }

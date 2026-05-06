@@ -8,7 +8,7 @@ All artifacts in `docs/canon/` describe **Struxient v5** only. Other repos or ve
 
 ## I2 — Quote as commercial anchor
 
-The **approved quote** (plus explicitly attached customer-facing terms) is the **baseline for what was sold** at activation time.
+The **baseline for what was sold** at activation time is defined by the **approved checkpoint** (proof of what was committed) plus explicitly attached customer-facing terms. The **Quote** remains the team’s **working record** for ongoing authoring where product rules allow—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).
 
 - **Must not:** silently discard sold line structure on activation without user-visible reconciliation.  
 - **Must:** support a **customer-facing projection** distinct from internal operational detail.
@@ -129,7 +129,7 @@ Customer access still favors **magic-link** and **SMS-link** flows where they re
 
 ## I20 — Change orders for post-approval commercial delta
 
-**Customer-visible or monetary** changes to **approved** sold scope **must** go through a **change order** (append model) or an explicit **new quote revision** per [locked-decisions-v1.md](./locked-decisions-v1.md) §7—**must not** silently mutate the **approved snapshot**. **Customer re-approval** follows the rules in that section (default: re-approve when CO has **price impact**).
+**Customer-visible or monetary** changes to **approved** sold scope **must** go through a **change order** (append model) or an explicit **new quote / supersede path** per [locked-decisions-v1.md](./locked-decisions-v1.md) §7—**must not** silently mutate **approved baseline truth** (checkpoint / execution rules). **Customer re-approval** follows the rules in that section (default: re-approve when CO has **price impact**).
 
 ## I21 — v1 multi-tenant default
 
@@ -181,4 +181,5 @@ When product decisions contradict prior canon:
 
 *Canon update (2026-05-05): Added I22 — engineering delivery standards.*
 
-*Canon update (2026-05-06): Added I23 — light and dark appearance (shell / design system).*
+*Canon update (2026-05-06): Added I23 — light and dark appearance (shell / design system).*  
+*Canon update (2026-05-06): I2 + I20 — **working quote** vs **checkpoint** / approved baseline wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*

@@ -26,16 +26,30 @@ export type QuoteLineItemPayload = {
   id: string;
   sortOrder: number;
   description: string;
+  customerScopeTitle: string | null;
+  customerScopeDescription: string | null;
+  customerIncludedNotes: string | null;
+  customerExcludedNotes: string | null;
+  customerPresentationGroup: string | null;
   quantityDisplay: string;
   unitAmountCents: number;
   lineTotalCents: number;
   internalNotes: string | null;
 };
 
+/** Minimal SEND checkpoint row for quote detail (staff-only list; not a version manager). */
+export type QuoteSendCheckpointSummary = {
+  id: string;
+  sequence: number;
+  createdAt: Date;
+  quoteUpdatedAtAtCapture: Date | null;
+};
+
 /** Serializable quote for detail shell (server-fetched, org-scoped). */
 export type QuoteDetailPayload = {
   id: string;
   title: string;
+  customerDocumentTitle: string | null;
   status: QuoteStatus;
   internalNotes: string | null;
   subtotalCents: number;
@@ -53,6 +67,12 @@ const STATUS_LABELS: Record<QuoteStatus, string> = {
   DRAFT: "Draft",
   ARCHIVED: "Archived",
 };
+
+/** Default value for dollar inputs seeded from stored integer cents (client-safe). */
+export function formatCentsAsDollarInput(cents: number): string {
+  const safe = Number.isFinite(cents) ? Math.trunc(cents) : 0;
+  return (safe / 100).toFixed(2);
+}
 
 /** Formats integer cents as USD for read-only UI (dev / en-US baseline). */
 export function formatMoneyCents(cents: number): string {

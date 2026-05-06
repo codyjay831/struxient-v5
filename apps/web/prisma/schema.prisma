@@ -34,14 +34,22 @@ enum QuoteStatus {
   ARCHIVED
 }
 
+/// Hidden proof records at commitment moments — not a user-managed version system.
+/// SEND checkpoints capture the customer-safe proposal projection; they are not execution or task sources.
+enum QuoteCheckpointKind {
+  SEND
+}
+
 model Organization {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  customers Customer[]
-  leads     Lead[]
-  quotes    Quote[]
+  id                 String             @id @default(cuid())
+  name               String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  customers          Customer[]
+  leads              Lead[]
+  quotes             Quote[]
+  lineItemTemplates  LineItemTemplate[]
+  quoteCheckpoints   QuoteCheckpoint[]
 }
 
 model Customer {
@@ -94,14 +102,16 @@ model Quote {
   customer         Customer?      @relation(fields: [customerId], references: [id])
   leadId           String?
   lead             Lead?          @relation(fields: [leadId], references: [id])
-  status             QuoteStatus    @default(DRAFT)
-  title              String
-  internalNotes      String?
+  status                 QuoteStatus    @default(DRAFT)
+  title                  String
+  customerDocumentTitle  String?
+  internalNotes          String?
   subtotalCents      Int            @default(0)
   totalCents         Int            @default(0)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   lineItems          QuoteLineItem[]
+  checkpoints        QuoteCheckpoint[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -109,20 +119,75 @@ model Quote {
   @@index([status])
 }
 
+/// Immutable staff-only proof of what the customer-facing proposal contained at a send moment.
+/// Quote remains the editable working record; QuoteStatus is unchanged by recording a checkpoint.
+/// Future runtime tasks and jobs must materialize from approved checkpoints + execution planning — not from SEND rows.
+model QuoteCheckpoint {
+  id                        String              @id @default(cuid())
+  organizationId          String
+  organization            Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteId                   String
+  quote                     Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  kind                      QuoteCheckpointKind
+  sequence                  Int
+  schemaVersion             Int
+  snapshotJson              Json
+  staffOnlyJson             Json?
+  /// Quote row `updatedAt` at capture time — staff context for drift vs proof.
+  quoteUpdatedAtAtCapture   DateTime?
+  createdAt                 DateTime            @default(now())
+
+  @@unique([quoteId, kind, sequence])
+  @@index([organizationId])
+  @@index([quoteId, kind])
+}
+
+/// Reusable commercial line presets for an organization. Applying copies values onto [QuoteLineItem];
+/// quotes never read live template fields for pricing after insert.
+model LineItemTemplate {
+  id                       String          @id @default(cuid())
+  organizationId         String
+  organization           Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  description            String
+  defaultQuantity        Decimal         @db.Decimal(18, 6)
+  defaultUnitAmountCents Int
+  defaultInternalNotes             String?
+  defaultCustomerScopeTitle        String?
+  defaultCustomerScopeDescription  String?
+  defaultCustomerIncludedNotes     String?
+  defaultCustomerExcludedNotes     String?
+  defaultCustomerPresentationGroup String?
+  archivedAt                       DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  quoteLineItems         QuoteLineItem[]
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt])
+}
+
 /// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
 /// No denormalized organizationId here—avoids redundant writes and drift.
 model QuoteLineItem {
-  id               String   @id @default(cuid())
-  quoteId          String
-  quote            Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  sortOrder        Int      @default(0)
-  description      String
-  quantity         Decimal  @db.Decimal(18, 6)
-  unitAmountCents  Int
-  lineTotalCents   Int
-  internalNotes    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                       String             @id @default(cuid())
+  quoteId                  String
+  quote                    Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sortOrder                Int                @default(0)
+  description                 String
+  customerScopeTitle          String?
+  customerScopeDescription    String?
+  customerIncludedNotes       String?
+  customerExcludedNotes       String?
+  customerPresentationGroup   String?
+  quantity                    Decimal            @db.Decimal(18, 6)
+  unitAmountCents             Int
+  lineTotalCents              Int
+  internalNotes               String?
+  sourceLineItemTemplateId String?
+  sourceLineItemTemplate   LineItemTemplate?  @relation(fields: [sourceLineItemTemplateId], references: [id], onDelete: SetNull)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   @@index([quoteId])
+  @@index([sourceLineItemTemplateId])
 }

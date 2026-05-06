@@ -1,11 +1,17 @@
 import Link from "next/link";
+import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
-import type { QuoteDetailPayload, QuoteLineItemPayload } from "@/lib/quote-display";
+import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
+import type {
+  QuoteDetailPayload,
+  QuoteLineItemPayload,
+  QuoteSendCheckpointSummary,
+} from "@/lib/quote-display";
 import { FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +96,11 @@ export default async function QuoteDetailPage({
     id: line.id,
     sortOrder: line.sortOrder,
     description: line.description,
+    customerScopeTitle: line.customerScopeTitle,
+    customerScopeDescription: line.customerScopeDescription,
+    customerIncludedNotes: line.customerIncludedNotes,
+    customerExcludedNotes: line.customerExcludedNotes,
+    customerPresentationGroup: line.customerPresentationGroup,
     quantityDisplay: line.quantity.toString(),
     unitAmountCents: line.unitAmountCents,
     lineTotalCents: line.lineTotalCents,
@@ -99,6 +110,7 @@ export default async function QuoteDetailPage({
   const quote: QuoteDetailPayload = {
     id: row.id,
     title: row.title,
+    customerDocumentTitle: row.customerDocumentTitle,
     status: row.status,
     internalNotes: row.internalNotes,
     subtotalCents: row.subtotalCents,
@@ -112,5 +124,76 @@ export default async function QuoteDetailPage({
     lineItems,
   };
 
-  return <QuoteWorkspaceShell mode="detail" quote={quote} />;
+  const lineItemTemplates: LineItemTemplatePickerRow[] =
+    row.status === QuoteStatus.DRAFT
+      ? (
+          await db.lineItemTemplate.findMany({
+            where: { organizationId: org.id, archivedAt: null },
+            orderBy: { updatedAt: "desc" },
+            select: {
+              id: true,
+              description: true,
+              defaultQuantity: true,
+              defaultUnitAmountCents: true,
+              defaultCustomerScopeTitle: true,
+              defaultCustomerScopeDescription: true,
+              defaultCustomerIncludedNotes: true,
+              defaultCustomerExcludedNotes: true,
+              defaultCustomerPresentationGroup: true,
+            },
+          })
+        ).map((t) => ({
+          id: t.id,
+          description: t.description,
+          defaultQuantityDisplay: t.defaultQuantity.toString(),
+          defaultUnitAmountCents: t.defaultUnitAmountCents,
+          hasCustomerProposalDefaults: Boolean(
+            t.defaultCustomerScopeTitle ||
+              t.defaultCustomerScopeDescription ||
+              t.defaultCustomerIncludedNotes ||
+              t.defaultCustomerExcludedNotes ||
+              t.defaultCustomerPresentationGroup,
+          ),
+        }))
+      : [];
+
+  const sendCheckpointRows = await db.quoteCheckpoint.findMany({
+    where: {
+      organizationId: org.id,
+      quoteId: row.id,
+      kind: QuoteCheckpointKind.SEND,
+    },
+    orderBy: { sequence: "asc" },
+    select: {
+      id: true,
+      sequence: true,
+      createdAt: true,
+      quoteUpdatedAtAtCapture: true,
+    },
+  });
+
+  const sendCheckpoints: QuoteSendCheckpointSummary[] = sendCheckpointRows.map((c) => ({
+    id: c.id,
+    sequence: c.sequence,
+    createdAt: c.createdAt,
+    quoteUpdatedAtAtCapture: c.quoteUpdatedAtAtCapture,
+  }));
+
+  const latestSend =
+    sendCheckpoints.length > 0 ? sendCheckpoints[sendCheckpoints.length - 1] : null;
+  const workspaceDiffersFromLastSend = Boolean(
+    latestSend &&
+      row.status === QuoteStatus.DRAFT &&
+      row.updatedAt.getTime() > latestSend.createdAt.getTime(),
+  );
+
+  return (
+    <QuoteWorkspaceShell
+      mode="detail"
+      quote={quote}
+      lineItemTemplates={lineItemTemplates}
+      sendCheckpoints={sendCheckpoints}
+      workspaceDiffersFromLastSend={workspaceDiffersFromLastSend}
+    />
+  );
 }

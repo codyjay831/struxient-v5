@@ -1,9 +1,25 @@
 "use server";
 
-import { QuoteStatus } from "@prisma/client";
+import { Prisma, QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
+import {
+  computeLineTotalCents,
+  parsePositiveQuantityString,
+  parseUsdStringToCents,
+} from "@/lib/quote-money";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
-import { QUOTE_FIELD_LIMITS } from "./quote-field-limits";
+import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
+import {
+  QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
+  quoteRowToCustomerPreviewInput,
+  quoteSelectForCustomerProposalCheckpoint,
+  serializeCustomerPreviewDocumentForCheckpoint,
+} from "@/lib/quote-checkpoint-snapshot";
+import {
+  QUOTE_FIELD_LIMITS,
+  QUOTE_LINE_FIELD_LIMITS,
+  QUOTE_PROPOSAL_FIELD_LIMITS,
+} from "./quote-field-limits";
 
 export type QuoteFormState = {
   error?: string;
@@ -33,6 +49,158 @@ function enforceMaxLength(
     return { error: `${label} is too long (max ${max} characters).` };
   }
   return null;
+}
+
+function parseOptionalProposalString(
+  formData: FormData,
+  fieldName: string,
+  label: string,
+  max: number,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  const v = trimOrNull(formData.get(fieldName));
+  if (!v) {
+    return { ok: true, value: null };
+  }
+  if (v.length > max) {
+    return { ok: false, error: `${label} is too long (max ${max} characters).` };
+  }
+  return { ok: true, value: v };
+}
+
+type QuoteLineProposalFields = {
+  customerScopeTitle: string | null;
+  customerScopeDescription: string | null;
+  customerIncludedNotes: string | null;
+  customerExcludedNotes: string | null;
+  customerPresentationGroup: string | null;
+};
+
+function parseQuoteLineProposalFieldsFromForm(
+  formData: FormData,
+): { ok: true; data: QuoteLineProposalFields } | { ok: false; error: string } {
+  const title = parseOptionalProposalString(
+    formData,
+    "customerScopeTitle",
+    "Customer scope title",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle,
+  );
+  if (!title.ok) {
+    return { ok: false, error: title.error };
+  }
+  const desc = parseOptionalProposalString(
+    formData,
+    "customerScopeDescription",
+    "Customer scope description",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription,
+  );
+  if (!desc.ok) {
+    return { ok: false, error: desc.error };
+  }
+  const inc = parseOptionalProposalString(
+    formData,
+    "customerIncludedNotes",
+    "Included notes",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerIncludedNotes,
+  );
+  if (!inc.ok) {
+    return { ok: false, error: inc.error };
+  }
+  const exc = parseOptionalProposalString(
+    formData,
+    "customerExcludedNotes",
+    "Excluded notes",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerExcludedNotes,
+  );
+  if (!exc.ok) {
+    return { ok: false, error: exc.error };
+  }
+  const grp = parseOptionalProposalString(
+    formData,
+    "customerPresentationGroup",
+    "Presentation group",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerPresentationGroup,
+  );
+  if (!grp.ok) {
+    return { ok: false, error: grp.error };
+  }
+  return {
+    ok: true,
+    data: {
+      customerScopeTitle: title.value,
+      customerScopeDescription: desc.value,
+      customerIncludedNotes: inc.value,
+      customerExcludedNotes: exc.value,
+      customerPresentationGroup: grp.value,
+    },
+  };
+}
+
+type TemplateDefaultProposalFields = {
+  defaultCustomerScopeTitle: string | null;
+  defaultCustomerScopeDescription: string | null;
+  defaultCustomerIncludedNotes: string | null;
+  defaultCustomerExcludedNotes: string | null;
+  defaultCustomerPresentationGroup: string | null;
+};
+
+function parseTemplateDefaultProposalFieldsFromForm(
+  formData: FormData,
+): { ok: true; data: TemplateDefaultProposalFields } | { ok: false; error: string } {
+  const title = parseOptionalProposalString(
+    formData,
+    "defaultCustomerScopeTitle",
+    "Preset customer scope title",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle,
+  );
+  if (!title.ok) {
+    return { ok: false, error: title.error };
+  }
+  const desc = parseOptionalProposalString(
+    formData,
+    "defaultCustomerScopeDescription",
+    "Preset customer scope description",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription,
+  );
+  if (!desc.ok) {
+    return { ok: false, error: desc.error };
+  }
+  const inc = parseOptionalProposalString(
+    formData,
+    "defaultCustomerIncludedNotes",
+    "Preset included notes",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerIncludedNotes,
+  );
+  if (!inc.ok) {
+    return { ok: false, error: inc.error };
+  }
+  const exc = parseOptionalProposalString(
+    formData,
+    "defaultCustomerExcludedNotes",
+    "Preset excluded notes",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerExcludedNotes,
+  );
+  if (!exc.ok) {
+    return { ok: false, error: exc.error };
+  }
+  const grp = parseOptionalProposalString(
+    formData,
+    "defaultCustomerPresentationGroup",
+    "Preset presentation group",
+    QUOTE_PROPOSAL_FIELD_LIMITS.customerPresentationGroup,
+  );
+  if (!grp.ok) {
+    return { ok: false, error: grp.error };
+  }
+  return {
+    ok: true,
+    data: {
+      defaultCustomerScopeTitle: title.value,
+      defaultCustomerScopeDescription: desc.value,
+      defaultCustomerIncludedNotes: inc.value,
+      defaultCustomerExcludedNotes: exc.value,
+      defaultCustomerPresentationGroup: grp.value,
+    },
+  };
 }
 
 function defaultTitleFromContext(params: {
@@ -170,4 +338,759 @@ export async function createQuoteDraftAction(
   });
 
   redirect(`/quotes/${quote.id}`);
+}
+
+type QuoteRollupTx = Pick<typeof db, "quoteLineItem" | "quote">;
+
+async function recalculateQuoteRollupsInTx(
+  tx: QuoteRollupTx,
+  params: { quoteId: string; organizationId: string },
+) {
+  const { quoteId, organizationId } = params;
+  const lines = await tx.quoteLineItem.findMany({
+    where: { quoteId },
+    select: { lineTotalCents: true },
+  });
+  const subtotal = lines.reduce((sum, row) => sum + row.lineTotalCents, 0);
+  await tx.quote.updateMany({
+    where: {
+      id: quoteId,
+      organizationId,
+      status: QuoteStatus.DRAFT,
+    },
+    data: {
+      subtotalCents: subtotal,
+      totalCents: subtotal,
+    },
+  });
+}
+
+/**
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ */
+export async function updateDraftQuoteDetailsAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const title = trimRequired(formData.get("title"));
+  if (!title) {
+    return { error: "Workspace title is required." };
+  }
+  const titleErr = enforceMaxLength("Workspace title", title, QUOTE_FIELD_LIMITS.title);
+  if (titleErr) {
+    return titleErr;
+  }
+
+  const internalNotes = trimOrNull(formData.get("internalNotes"));
+  if (internalNotes) {
+    const notesErr = enforceMaxLength(
+      "Internal notes",
+      internalNotes,
+      QUOTE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return notesErr;
+    }
+  }
+
+  const customerDocTitle = parseOptionalProposalString(
+    formData,
+    "customerDocumentTitle",
+    "Customer proposal document title",
+    QUOTE_FIELD_LIMITS.customerDocumentTitle,
+  );
+  if (!customerDocTitle.ok) {
+    return { error: customerDocTitle.error };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+  const result = await db.quote.updateMany({
+    where: {
+      id,
+      organizationId: org.id,
+      status: QuoteStatus.DRAFT,
+    },
+    data: {
+      title,
+      internalNotes,
+      customerDocumentTitle: customerDocTitle.value,
+    },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This quote could not be updated. It may be archived, missing, or outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ */
+export async function addQuoteLineItemAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const description = trimRequired(formData.get("description"));
+  if (!description) {
+    return { error: "Internal line description is required." };
+  }
+  const descErr = enforceMaxLength(
+    "Internal line description",
+    description,
+    QUOTE_LINE_FIELD_LIMITS.description,
+  );
+  if (descErr) {
+    return descErr;
+  }
+
+  const quantityRaw = trimRequired(formData.get("quantity"));
+  const qtyParsed = parsePositiveQuantityString(quantityRaw);
+  if (!qtyParsed.ok) {
+    return { error: qtyParsed.error };
+  }
+
+  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
+  const unitParsed = parseUsdStringToCents(unitRaw);
+  if (!unitParsed.ok) {
+    return { error: unitParsed.error };
+  }
+
+  const internalNotes = trimOrNull(formData.get("internalNotes"));
+  if (internalNotes) {
+    const notesErr = enforceMaxLength(
+      "Line internal notes",
+      internalNotes,
+      QUOTE_LINE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return notesErr;
+    }
+  }
+
+  const proposalParsed = parseQuoteLineProposalFieldsFromForm(formData);
+  if (!proposalParsed.ok) {
+    return { error: proposalParsed.error };
+  }
+
+  const lineTotal = computeLineTotalCents(qtyParsed.decimal, unitParsed.cents);
+  if (!lineTotal.ok) {
+    return { error: lineTotal.error };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const quote = await tx.quote.findFirst({
+      where: {
+        id,
+        organizationId: org.id,
+        status: QuoteStatus.DRAFT,
+      },
+      select: { id: true },
+    });
+    if (!quote) {
+      return { ok: false as const };
+    }
+
+    const agg = await tx.quoteLineItem.aggregate({
+      where: { quoteId: id },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (agg._max.sortOrder ?? -1) + 1;
+
+    await tx.quoteLineItem.create({
+      data: {
+        quoteId: id,
+        sortOrder: nextOrder,
+        description,
+        ...proposalParsed.data,
+        quantity: qtyParsed.decimal,
+        unitAmountCents: unitParsed.cents,
+        lineTotalCents: lineTotal.lineTotalCents,
+        internalNotes,
+        sourceLineItemTemplateId: null,
+      },
+    });
+
+    await recalculateQuoteRollupsInTx(tx, { quoteId: id, organizationId: org.id });
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return {
+      error:
+        "This line could not be added. The quote may be archived, missing, or outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ */
+export async function updateQuoteLineItemAction(
+  quoteId: string,
+  lineItemId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item id." };
+  }
+
+  const description = trimRequired(formData.get("description"));
+  if (!description) {
+    return { error: "Internal line description is required." };
+  }
+  const descErr = enforceMaxLength(
+    "Internal line description",
+    description,
+    QUOTE_LINE_FIELD_LIMITS.description,
+  );
+  if (descErr) {
+    return descErr;
+  }
+
+  const quantityRaw = trimRequired(formData.get("quantity"));
+  const qtyParsed = parsePositiveQuantityString(quantityRaw);
+  if (!qtyParsed.ok) {
+    return { error: qtyParsed.error };
+  }
+
+  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
+  const unitParsed = parseUsdStringToCents(unitRaw);
+  if (!unitParsed.ok) {
+    return { error: unitParsed.error };
+  }
+
+  const internalNotes = trimOrNull(formData.get("internalNotes"));
+  if (internalNotes) {
+    const notesErr = enforceMaxLength(
+      "Line internal notes",
+      internalNotes,
+      QUOTE_LINE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return notesErr;
+    }
+  }
+
+  const proposalParsed = parseQuoteLineProposalFieldsFromForm(formData);
+  if (!proposalParsed.ok) {
+    return { error: proposalParsed.error };
+  }
+
+  const lineTotal = computeLineTotalCents(qtyParsed.decimal, unitParsed.cents);
+  if (!lineTotal.ok) {
+    return { error: lineTotal.error };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const line = await tx.quoteLineItem.findFirst({
+      where: {
+        id: lid,
+        quoteId: qid,
+        quote: {
+          organizationId: org.id,
+          status: QuoteStatus.DRAFT,
+        },
+      },
+      select: { id: true },
+    });
+    if (!line) {
+      return { ok: false as const };
+    }
+
+    await tx.quoteLineItem.update({
+      where: { id: lid },
+      data: {
+        description,
+        ...proposalParsed.data,
+        quantity: qtyParsed.decimal,
+        unitAmountCents: unitParsed.cents,
+        lineTotalCents: lineTotal.lineTotalCents,
+        internalNotes,
+      },
+    });
+
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return {
+      error:
+        "This line could not be updated. It may not belong to this draft quote, the quote may be archived, or it is outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${qid}`);
+}
+
+/**
+ * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ */
+export async function deleteQuoteLineItemAction(
+  quoteId: string,
+  lineItemId: string,
+  prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void prevState;
+  void formData;
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const line = await tx.quoteLineItem.findFirst({
+      where: {
+        id: lid,
+        quoteId: qid,
+        quote: {
+          organizationId: org.id,
+          status: QuoteStatus.DRAFT,
+        },
+      },
+      select: { id: true },
+    });
+    if (!line) {
+      return { ok: false as const };
+    }
+
+    await tx.quoteLineItem.delete({
+      where: { id: lid },
+    });
+
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return {
+      error:
+        "This line could not be removed. It may not belong to this draft quote, the quote may be archived, or it is outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${qid}`);
+}
+
+/**
+ * `returnQuoteId` must be supplied via `.bind(null, quote.id)` when creating from quote draft.
+ */
+export async function createLineItemTemplateAction(
+  returnQuoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const rid = returnQuoteId.trim();
+  if (!rid) {
+    return { error: "Missing return quote id." };
+  }
+
+  const description = trimRequired(formData.get("description"));
+  if (!description) {
+    return { error: "Internal preset description is required." };
+  }
+  const descErr = enforceMaxLength(
+    "Internal preset description",
+    description,
+    QUOTE_LINE_FIELD_LIMITS.description,
+  );
+  if (descErr) {
+    return descErr;
+  }
+
+  const quantityRaw = trimRequired(formData.get("quantity"));
+  const qtyParsed = parsePositiveQuantityString(quantityRaw);
+  if (!qtyParsed.ok) {
+    return { error: qtyParsed.error };
+  }
+
+  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
+  const unitParsed = parseUsdStringToCents(unitRaw);
+  if (!unitParsed.ok) {
+    return { error: unitParsed.error };
+  }
+
+  const defaultInternalNotes = trimOrNull(formData.get("defaultInternalNotes"));
+  if (defaultInternalNotes) {
+    const notesErr = enforceMaxLength(
+      "Preset internal notes",
+      defaultInternalNotes,
+      QUOTE_LINE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return notesErr;
+    }
+  }
+
+  const templateProposalParsed = parseTemplateDefaultProposalFieldsFromForm(formData);
+  if (!templateProposalParsed.ok) {
+    return { error: templateProposalParsed.error };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const quoteExists = await db.quote.findFirst({
+    where: { id: rid, organizationId: org.id, status: QuoteStatus.DRAFT },
+    select: { id: true },
+  });
+  if (!quoteExists) {
+    return {
+      error:
+        "That quote was not found as a draft in your organization. Open a draft quote to manage line presets.",
+    };
+  }
+
+  await db.lineItemTemplate.create({
+    data: {
+      organizationId: org.id,
+      description,
+      defaultQuantity: qtyParsed.decimal,
+      defaultUnitAmountCents: unitParsed.cents,
+      defaultInternalNotes,
+      ...templateProposalParsed.data,
+    },
+  });
+
+  redirect(`/quotes/${rid}`);
+}
+
+/**
+ * `returnQuoteId` and `templateId` must be supplied via `.bind(null, quote.id, template.id)`.
+ */
+export async function archiveLineItemTemplateAction(
+  returnQuoteId: string,
+  templateId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const rid = returnQuoteId.trim();
+  const tid = templateId.trim();
+  if (!rid || !tid) {
+    return { error: "Missing quote or template id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const quoteExists = await db.quote.findFirst({
+    where: { id: rid, organizationId: org.id, status: QuoteStatus.DRAFT },
+    select: { id: true },
+  });
+  if (!quoteExists) {
+    return {
+      error:
+        "That quote was not found as a draft in your organization. Open a draft quote to manage line presets.",
+    };
+  }
+
+  const result = await db.lineItemTemplate.updateMany({
+    where: {
+      id: tid,
+      organizationId: org.id,
+      archivedAt: null,
+    },
+    data: { archivedAt: new Date() },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This preset could not be hidden. It may already be hidden, missing, or outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${rid}`);
+}
+
+/**
+ * `quoteId` and `templateId` must be supplied via `.bind(null, quote.id, template.id)`.
+ * Copies commercial fields onto a new line; does not mutate the template.
+ */
+export async function applyLineItemTemplateToQuoteAction(
+  quoteId: string,
+  templateId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const qid = quoteId.trim();
+  const tid = templateId.trim();
+  if (!qid || !tid) {
+    return { error: "Missing quote or template id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const template = await tx.lineItemTemplate.findFirst({
+      where: {
+        id: tid,
+        organizationId: org.id,
+        archivedAt: null,
+      },
+    });
+    if (!template) {
+      return { ok: false as const, message: null as string | null };
+    }
+
+    const quote = await tx.quote.findFirst({
+      where: {
+        id: qid,
+        organizationId: org.id,
+        status: QuoteStatus.DRAFT,
+      },
+      select: { id: true },
+    });
+    if (!quote) {
+      return { ok: false as const, message: null as string | null };
+    }
+
+    const lineTotal = computeLineTotalCents(
+      template.defaultQuantity,
+      template.defaultUnitAmountCents,
+    );
+    if (!lineTotal.ok) {
+      return { ok: false as const, message: lineTotal.error };
+    }
+
+    const agg = await tx.quoteLineItem.aggregate({
+      where: { quoteId: qid },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (agg._max.sortOrder ?? -1) + 1;
+
+    await tx.quoteLineItem.create({
+      data: {
+        quoteId: qid,
+        sortOrder: nextOrder,
+        description: template.description,
+        customerScopeTitle: template.defaultCustomerScopeTitle,
+        customerScopeDescription: template.defaultCustomerScopeDescription,
+        customerIncludedNotes: template.defaultCustomerIncludedNotes,
+        customerExcludedNotes: template.defaultCustomerExcludedNotes,
+        customerPresentationGroup: template.defaultCustomerPresentationGroup,
+        quantity: template.defaultQuantity,
+        unitAmountCents: template.defaultUnitAmountCents,
+        lineTotalCents: lineTotal.lineTotalCents,
+        internalNotes: template.defaultInternalNotes,
+        sourceLineItemTemplateId: template.id,
+      },
+    });
+
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    return { ok: true as const, message: null as string | null };
+  });
+
+  if (!outcome.ok) {
+    if (outcome.message) {
+      return { error: outcome.message };
+    }
+    return {
+      error:
+        "This preset could not be copied to the quote. The quote may not be a draft, the preset may be hidden, or the record is outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${qid}`);
+}
+
+/**
+ * Records a hidden SEND checkpoint: customer-safe proposal projection only.
+ * DRAFT-only: archived quotes keep historical checkpoints but cannot record new sends here.
+ * Does not change QuoteStatus, does not notify customers, does not create jobs or tasks.
+ * SEND checkpoints are proof of customer-facing proposal content — not an execution source;
+ * future runtime tasks/jobs should materialize from approved checkpoints plus execution planning.
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ */
+export async function recordQuoteSendCheckpointAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const draftExists = await db.quote.findFirst({
+    where: {
+      id,
+      organizationId: org.id,
+      status: QuoteStatus.DRAFT,
+    },
+    select: { id: true },
+  });
+  if (!draftExists) {
+    return {
+      error:
+        "A send checkpoint can only be recorded for a draft quote in your organization. Restore from archive if you need to record another send.",
+    };
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const quote = await tx.quote.findFirst({
+        where: {
+          id,
+          organizationId: org.id,
+          status: QuoteStatus.DRAFT,
+        },
+        select: quoteSelectForCustomerProposalCheckpoint,
+      });
+
+      if (!quote) {
+        throw new Error("QUOTE_SEND_CHECKPOINT_RACE");
+      }
+
+      const input = quoteRowToCustomerPreviewInput(quote, org.id);
+      const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
+        organizationDisplayName: org.name,
+      });
+
+      const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
+
+      const aggregate = await tx.quoteCheckpoint.aggregate({
+        where: {
+          organizationId: org.id,
+          quoteId: id,
+          kind: QuoteCheckpointKind.SEND,
+        },
+        _max: { sequence: true },
+      });
+      const nextSequence = (aggregate._max.sequence ?? 0) + 1;
+
+      await tx.quoteCheckpoint.create({
+        data: {
+          organizationId: org.id,
+          quoteId: id,
+          kind: QuoteCheckpointKind.SEND,
+          sequence: nextSequence,
+          schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
+          snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
+          staffOnlyJson: {
+            anyLineUsesInternalDescriptionForTitle: staffOnly.anyLineUsesInternalDescriptionForTitle,
+          } as Prisma.InputJsonValue,
+          quoteUpdatedAtAtCapture: quote.updatedAt,
+        },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "QUOTE_SEND_CHECKPOINT_RACE") {
+      return {
+        error:
+          "This quote changed state while recording the checkpoint (for example it was archived). Refresh the page and try again if it should still be a draft.",
+      };
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return {
+        error:
+          "Another send checkpoint was recorded at the same moment. Refresh the page and try again if you still need a new checkpoint.",
+      };
+    }
+    throw e;
+  }
+
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ * Transitions DRAFT → ARCHIVED only; does not modify lines, totals, or links.
+ */
+export async function archiveQuoteAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+  const result = await db.quote.updateMany({
+    where: {
+      id,
+      organizationId: org.id,
+      status: QuoteStatus.DRAFT,
+    },
+    data: { status: QuoteStatus.ARCHIVED },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This quote could not be archived. It may already be archived, missing, or outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ * Transitions ARCHIVED → DRAFT only; does not modify lines, totals, or links.
+ */
+export async function restoreQuoteToDraftAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+  const result = await db.quote.updateMany({
+    where: {
+      id,
+      organizationId: org.id,
+      status: QuoteStatus.ARCHIVED,
+    },
+    data: { status: QuoteStatus.DRAFT },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This quote could not be restored. It may already be a draft, missing, or outside your organization.",
+    };
+  }
+
+  redirect(`/quotes/${id}`);
 }

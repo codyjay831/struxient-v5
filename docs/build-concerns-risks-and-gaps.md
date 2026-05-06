@@ -25,7 +25,7 @@
 |----|--------|----------------|-----------------|---------------------|
 | D1 | **Schema not in canon** | Canon describes entities and relationships conceptually, not Prisma/SQL tables. | Inconsistent modeling vs I3–I15, duplicate sources of truth. | Add `apps/web/prisma/schema.prisma` (or chosen ORM) aligned to [conceptual-model.md](./canon/conceptual-model.md) + [glossary.md](./canon/glossary.md); ADR for major forks. |
 | D2 | **Enum strings** | Locked lifecycles allow “semantic equivalence” if DB strings differ. | Drift between code, reports, and integrations. | Pick canonical enums in code + DB; document mapping once in glossary or locked doc. |
-| D3 | **Immutability of approved quote** | Snapshot rules (locked §7) need technical representation (version rows, JSON snapshot, etc.). | Silent mutation of sold truth (violates I2, I20). | Design `QuoteRevision` / `ApprovedSnapshot` before write path to jobs. |
+| D3 | **Immutability of approved quote** | Locked §7 + [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md): **checkpoints** at commitment moments need a technical representation (rows + optional denormalized payload such as JSON **inside** the checkpoint—not a user-managed “proposal version” UI). | Silent mutation of sold truth (violates I2, I20). | Design **`QuoteCheckpoint`** (or domain-specific checkpoint types) and job materialization from **approved checkpoint** before write path to jobs; keep staff UX on **current quote**. |
 | D4 | **Multi-tenant isolation** | I21 + locked §6: `activeOrganizationId` in session. | Cross-org data leaks (critical). | Middleware + every query scoped by org; integration tests for isolation. |
 
 ---
@@ -99,7 +99,7 @@
 1. **App shell + design tokens** (current step)—production-shaped UI, no dev-only preview (I22).  
 2. **Database + org/membership + auth**—tenant boundary before any business data.  
 3. **Leads + customers**—intake and dedupe warn-only (locked §4).  
-4. **Quotes**—draft/sent/approved with snapshot on approve.  
+4. **Quotes**—draft/sent/approved lifecycle with **hidden checkpoint** on approve (and on other commitment moments per [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md)); **not** a standing “save = version” UX.  
 5. **Job activation + task graph**—I3 path.  
 6. **Workstation lenses**—Today / Tasks / Jobs / Schedule (locked §11).  
 7. **Issues + payment blocks**—typed events and gating.  
@@ -128,3 +128,4 @@ This is **process guidance for people and agents shaping the repo**—not produc
 | 2026-05-05 | Repo layout: Next.js app path updated to `apps/web/`. |
 | 2026-05-05 | Added R4 (RSC / client component props); workspace shell and routes. |
 | 2026-05-05 | Added §10 Fast Build vs Strict Correction (outside product canon). |
+| 2026-05-06 | D3 + §9 step 4 — aligned with [canon/quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md); `QuoteCheckpoint` naming guidance vs `QuoteRevision` / `ApprovedSnapshot`. |

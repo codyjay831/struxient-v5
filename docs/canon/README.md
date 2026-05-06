@@ -30,12 +30,13 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [workstation-canon.md](./workstation-canon.md) | Workstation as **action-discovery destination**; cockpit / “what’s next” deep rules |
 | [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) | Non-negotiables, default decisions, **engineering delivery standards (I22)**, **light/dark appearance (I23)** |
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | v1 product locks: RBAC, states, money, portal, issues, Workstation, phasing |
+| [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | **Working quote vs hidden checkpoints**, job as execution, activity layer; UX/naming guardrails (current-state-first) |
 | [glossary.md](./glossary.md) | Ubiquitous language |
 
 ## Reading order (suggested)
 
 1. `overview.md` + `lineage-and-prior-art.md` (context from earlier repos)  
-2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md`  
+2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `quote-truth-and-checkpoints.md`  
 3. `conceptual-model.md` + `domains-and-boundaries.md` + `templates-and-execution-planning.md`  
 4. `experience-canon-lead-to-workstation.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  
 5. `glossary.md` as reference  

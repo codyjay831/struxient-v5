@@ -336,7 +336,7 @@ Users should **not** have to manually rebuild the job from scratch after signing
 - **Sold line items** become the **job scope anchors** for commercial continuity.  
 - **Quote-time stages/tasks**, when present, **copy into** the job as **editable job instances**—the job graph is the operational home for refinement; quote-time structure is **seed**, not an unchangeable diagram.  
 - If **no** stages/tasks exist at approval, activation still produces a **usable job container** with a **planning prompt** or **starter task** so execution is not a blank slate.  
-- Activation **never mutates** the **approved quote snapshot**; post-approval changes to sold terms flow through **change orders** and related canon paths.
+- Activation **never mutates** **checkpoint proof** for what was approved at sign time; post-approval changes to sold terms flow through **change orders**, **approved change records**, and related canon paths—while **job execution** remains the operational home ([quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md)).
 
 ---
 
@@ -400,4 +400,5 @@ See [overview.md](./overview.md). This experience canon exists to keep planning 
 
 ---
 
-*Canon update (2026-05-05): System signals vs user tags (§2); construction issue MVP lifecycle (§7); activation MVP behavior (§10); payment schedule vs gate vs task (§12).*
+*Canon update (2026-05-05): System signals vs user tags (§2); construction issue MVP lifecycle (§7); activation MVP behavior (§10); payment schedule vs gate vs task (§12).*  
+*Canon update (2026-05-06): §10 activation — checkpoint proof vs CO / activity wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*

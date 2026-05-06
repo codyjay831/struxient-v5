@@ -54,7 +54,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | State | Meaning |
 |--------|---------|
 | `draft` | Editable; not customer-visible. |
-| `sent` | Customer-facing link active; still editable only per product rules (prefer **revision** after first send—see change orders). |
+| `sent` | Customer-facing link active; still editable only per product rules (prefer explicit **send update** / supersede flows over silent drift; checkpoints capture sends—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md)). |
 | `approved` | Customer commitment recorded; triggers **job activation** path. |
 | `declined` | Customer declined or company voided. |
 | `expired` | Past validity without approval. |
@@ -117,11 +117,13 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 7. Change orders — sold scope, re-sign, tasks
 
+**v5 posture (UX + truth):** Staff work from the **current quote** as the **working record**; **immutable proof** of what was committed at send/approve/activate lives in **hidden checkpoints** (receipts), not in a user-managed “version browser.” See [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). Denormalized captures (e.g. JSON) may live **inside checkpoint records** as an implementation detail.
+
 | Topic | v1 decision |
 |--------|-------------|
-| **Approved quote** | Treated as an **immutable snapshot** of **what was approved** (line items, totals, customer-facing text at sign time). |
-| **Scope or price change after approval** | Done through a **Change order** artifact: **new line group / lines** (or explicit CO document) **appended** to the job’s **commercial record**—**not** silent edits to approved lines. |
-| **Minor corrections** | **Typo / internal-only** fixes may use **administrative revision** with audit; anything **customer-visible or monetary** goes through **CO** or new quote revision per org policy. |
+| **Approved quote** | Customer commitment is recorded; **a checkpoint** preserves **immutable proof** of **what was approved** (line items, totals, customer-facing text at sign time). **Must not** silently rewrite that proof for **customer-visible or monetary** sold truth—use **change orders** and related paths. |
+| **Scope or price change after approval** | Done through a **Change order** artifact: **new line group / lines** (or explicit CO document) **appended** to the job’s **commercial record**—**not** silent edits to the **approved baseline** encoded in the checkpoint / execution rules. |
+| **Minor corrections** | **Typo / internal-only** fixes may use **administrative correction** with audit; anything **customer-visible or monetary** goes through **CO** or an explicit **new quote / supersede path** per org policy—without pretending the prior commitment never happened. |
 | **Customer re-sign** | **Required** when CO changes **customer total**, **legal scope**, or **payment schedule** in a material way; configurable **threshold** (e.g. any price change) default = **always re-approve** for any CO with price impact. |
 | **Task graph** | CO may **add tasks**; optionally **flag** existing tasks as **review required** when CO affects their line item. |
 
@@ -218,4 +220,5 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 ---
 
 *Canon update (2026-05-05): Initial v1 locks for RBAC, lifecycles, accounting boundary, intake, calendar depth, tenancy, CO, payments, portal, construction issues, Workstation, second wave, and edge statement. §11 — added **Product surface** row (Workstation as destination / role-aware action-discovery; tabs/lenses as views inside the surface).*  
-*Canon update (2026-05-05): §10 — MVP construction issue lifecycle + anchoring + task vs issue closure clarification.*
+*Canon update (2026-05-05): §10 — MVP construction issue lifecycle + anchoring + task vs issue closure clarification.*  
+*Canon update (2026-05-06): §2 quote `sent` row + §7 — aligned **approved truth** language with **checkpoint** model and [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); “administrative revision” → **administrative correction**.*
