@@ -58,7 +58,9 @@ export function LeadsScaffoldingDialog() {
                 context is connected.
               </li>
               <li>
-                Lead channels are planned for website, email, phone, text, and manual entry.
+                Public Request Link (`/request/[companySlug]`) creates leads with source{" "}
+                <span className="font-mono text-[0.7rem]">PUBLIC_REQUEST_LINK</span>; other
+                channels are still planned.
               </li>
               <li>
                 Customer matching is planned so leads can attach to existing customers or

@@ -5,3 +5,5 @@
  */
 export const DEV_ORGANIZATION_ID = "dev-org-id" as const;
 export const DEV_ORGANIZATION_NAME = "Development Organization" as const;
+/** Public `/request/[companySlug]` handle for the development tenant (lowercase). */
+export const DEV_ORGANIZATION_SLUG = "demo-co" as const;

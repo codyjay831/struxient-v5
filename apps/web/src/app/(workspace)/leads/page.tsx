@@ -11,6 +11,8 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { LeadsScaffoldingDialog } from "@/components/leads/leads-scaffolding-dialog";
+import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
+import { resolvePublicSiteBaseUrl } from "@/lib/public-site-base-url";
 import {
   formatLeadSource,
   formatLeadStatus,
@@ -30,6 +32,12 @@ const rowLinkClass =
 
 export default async function LeadsPage() {
   const org = await getDevOrganizationOrThrow();
+  const publicSiteBaseUrl = await resolvePublicSiteBaseUrl();
+  const publicRequestGate = await db.publicRequestSettings.findUnique({
+    where: { organizationId: org.id },
+    select: { enabled: true },
+  });
+  const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
   const leads = await db.lead.findMany({
     where: { organizationId: org.id },
     orderBy: { createdAt: "desc" },
@@ -162,18 +170,22 @@ export default async function LeadsPage() {
         </div>
 
         <aside>
+          <PublicRequestLinkPanel
+            organizationName={org.name}
+            slug={org.slug}
+            baseUrl={publicSiteBaseUrl}
+            publicRequestLive={publicRequestLive}
+          />
           <WorkspacePanel padding="compact">
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               Connected channels
             </p>
             <p className="mt-2 text-sm text-foreground-muted">
-              Website, email, phone, text, and manual entry will land in this queue as
-              integrations roll out. Today you can add leads by hand from the New lead action.
+              Your Public Request Link sends leads here automatically. Other channels—email,
+              phone, text, imports—will land in this queue as integrations roll out. You can
+              always add leads by hand from the New lead action.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <PlaceholderButton title="Website form intake is not connected in this build.">
-                Website form (soon)
-              </PlaceholderButton>
               <PlaceholderButton title="CSV import is not connected in this build.">
                 CSV import (soon)
               </PlaceholderButton>

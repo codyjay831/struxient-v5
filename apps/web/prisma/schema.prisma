@@ -23,6 +23,7 @@ enum LeadSource {
   EMAIL
   SMS
   WEBSITE
+  PUBLIC_REQUEST_LINK
   REFERRAL
   WALK_IN
   MANUAL
@@ -41,15 +42,34 @@ enum QuoteCheckpointKind {
 }
 
 model Organization {
-  id                 String             @id @default(cuid())
-  name               String
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  customers          Customer[]
-  leads              Lead[]
-  quotes             Quote[]
-  lineItemTemplates  LineItemTemplate[]
-  quoteCheckpoints   QuoteCheckpoint[]
+  id                    String                 @id @default(cuid())
+  name                  String
+  /// Lowercase public handle for `/request/[slug]` — optional until configured.
+  slug                  String?                @unique
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  customers             Customer[]
+  leads                 Lead[]
+  quotes                Quote[]
+  lineItemTemplates     LineItemTemplate[]
+  quoteCheckpoints      QuoteCheckpoint[]
+  publicRequestSettings PublicRequestSettings?
+}
+
+/// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
+model PublicRequestSettings {
+  id                       String       @id @default(cuid())
+  organizationId           String       @unique
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled                  Boolean      @default(true)
+  formTitle                String       @default("Request service")
+  introMessage             String?
+  emergencyWarningText     String?
+  submitButtonText         String       @default("Send request")
+  /// JSON array of `{ "value": "slug-key", "label": "Customer label" }` — validated server-side.
+  requestTypeOptionsJson   Json         @default("[]")
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
 }
 
 model Customer {

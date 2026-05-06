@@ -2,7 +2,14 @@ import { Prisma, PrismaClient, LeadSource, LeadStatus, QuoteStatus } from "@pris
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
+  DEV_ORGANIZATION_SLUG,
 } from "../src/lib/dev-organization";
+import {
+  DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+  DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
+  DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+  DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+} from "../src/lib/public-request-settings-defaults";
 
 const prisma = new PrismaClient();
 
@@ -12,14 +19,31 @@ async function main() {
 
   const devOrg = await prisma.organization.upsert({
     where: { id: DEV_ORGANIZATION_ID },
-    update: { name: DEV_ORGANIZATION_NAME },
+    update: { name: DEV_ORGANIZATION_NAME, slug: DEV_ORGANIZATION_SLUG },
     create: {
       id: DEV_ORGANIZATION_ID,
       name: DEV_ORGANIZATION_NAME,
+      slug: DEV_ORGANIZATION_SLUG,
     },
   });
 
   console.log(`[dev seed] Organization: ${devOrg.name} (${devOrg.id})`);
+
+  const existingPublicSettings = await prisma.publicRequestSettings.findUnique({
+    where: { organizationId: devOrg.id },
+  });
+  if (!existingPublicSettings) {
+    await prisma.publicRequestSettings.create({
+      data: {
+        organizationId: devOrg.id,
+        enabled: true,
+        formTitle: DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+        introMessage: DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
+        submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+        requestTypeOptionsJson: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+      },
+    });
+  }
 
   const devCustomers = [
     {

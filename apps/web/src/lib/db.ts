@@ -1,5 +1,13 @@
 import { PrismaClient } from "@prisma/client";
-import { DEV_ORGANIZATION_ID, DEV_ORGANIZATION_NAME } from "./dev-organization";
+import {
+  DEV_ORGANIZATION_ID,
+  DEV_ORGANIZATION_NAME,
+  DEV_ORGANIZATION_SLUG,
+} from "./dev-organization";
+import {
+  effectivePublicRequestSettingsFromRow,
+  type EffectivePublicRequestSettings,
+} from "@/lib/public-request-settings-effective";
 
 const prismaClientSingleton = () => {
   if (!process.env.DATABASE_URL) {
@@ -45,12 +53,67 @@ export async function getDevOrganizationOrThrow() {
     where: { id: DEV_ORGANIZATION_ID },
   });
   if (existing) {
+    if (!existing.slug) {
+      await db.organization.update({
+        where: { id: DEV_ORGANIZATION_ID },
+        data: { slug: DEV_ORGANIZATION_SLUG },
+      });
+      return db.organization.findUniqueOrThrow({
+        where: { id: DEV_ORGANIZATION_ID },
+      });
+    }
     return existing;
   }
   return db.organization.create({
     data: {
       id: DEV_ORGANIZATION_ID,
       name: DEV_ORGANIZATION_NAME,
+      slug: DEV_ORGANIZATION_SLUG,
     },
   });
+}
+
+export type PublicRequestIntakeBundle = {
+  organizationDisplayName: string;
+  companySlug: string;
+  intake: EffectivePublicRequestSettings;
+};
+
+/**
+ * Public `/request/[slug]` payload: org display name, slug, and effective intake settings.
+ * Returns null when no organization matches the slug.
+ */
+export async function getPublicRequestIntakeBundleBySlug(
+  slug: string,
+): Promise<PublicRequestIntakeBundle | null> {
+  const normalized = slug.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  const org = await db.organization.findFirst({
+    where: { slug: normalized },
+    select: {
+      name: true,
+      slug: true,
+      publicRequestSettings: {
+        select: {
+          enabled: true,
+          formTitle: true,
+          introMessage: true,
+          emergencyWarningText: true,
+          submitButtonText: true,
+          requestTypeOptionsJson: true,
+        },
+      },
+    },
+  });
+  if (!org?.slug) {
+    return null;
+  }
+  const intake = effectivePublicRequestSettingsFromRow(org.publicRequestSettings);
+  return {
+    organizationDisplayName: org.name,
+    companySlug: org.slug,
+    intake,
+  };
 }

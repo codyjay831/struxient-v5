@@ -6,4 +6,8 @@ export const LEAD_FIELD_LIMITS = {
   email: 320,
   phone: 80,
   notes: 20_000,
+  /** Public Intake Form — sections are composed into `Lead.notes`. */
+  publicIntakeServiceAddress: 2000,
+  publicIntakePreferredTiming: 500,
+  publicIntakeRequestDetails: 12_000,
 } as const;
