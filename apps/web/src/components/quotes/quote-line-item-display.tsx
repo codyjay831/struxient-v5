@@ -1,6 +1,11 @@
 import type { QuoteCustomerPreviewLine } from "@/lib/quote-customer-projection";
 import type { QuoteLineItemPayload } from "@/lib/quote-display";
 import { formatMoneyCents } from "@/lib/quote-display";
+import { buildQuoteLineExecutionPlanningSummaryLine } from "@/lib/quote-line-execution-planning-display";
+import { QuoteLineExecutionPlanningSettingsPanel } from "@/components/quotes/quote-line-execution-planning-settings-panel";
+import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
+import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
+import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 
 const lineMetricLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -85,6 +90,63 @@ export function QuoteLiveProposalPreviewLineBlock({ line }: { line: QuoteCustome
  * Read-only line body: internal description plus qty / unit / line total for scanning.
  * Used on draft (summary row) and archived quote detail.
  */
+/**
+ * Calm one-line draft execution summary plus the inline edit toggle on editable quotes.
+ * The inline editor opens directly under this summary — there is no separate execution route.
+ */
+export function QuoteLineDraftExecutionSummary({
+  quoteId,
+  line,
+  isExecutionEditable,
+  draftTasks,
+  reusableOptions,
+}: {
+  quoteId: string;
+  line: QuoteLineItemPayload;
+  isExecutionEditable: boolean;
+  draftTasks: readonly QuoteLineDraftExecutionTaskRow[];
+  reusableOptions: ReusableTaskPickerOption[];
+}) {
+  const text = buildQuoteLineExecutionPlanningSummaryLine({
+    executionReviewStatus: line.executionReviewStatus,
+    executionMergeMode: line.executionMergeMode,
+    taskCount: line.executionSummary.taskCount,
+    executionSummaryLine: line.executionSummary.summaryLine,
+    workOrderPosition: line.workOrderPosition,
+    workOrderTotal: line.workOrderTotal,
+  });
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-dashed border-border pt-3">
+      <p className="text-xs text-foreground-subtle">
+        <span className="font-medium text-foreground-muted">Internal: </span>
+        {text}
+      </p>
+      {isExecutionEditable ? (
+        <>
+          <QuoteLineDraftExecutionInlineToggle
+            quoteId={quoteId}
+            lineItemId={line.id}
+            taskCount={line.executionSummary.taskCount}
+            draftTasks={draftTasks}
+            reusableOptions={reusableOptions}
+          />
+          <div className="min-w-0">
+            <QuoteLineExecutionPlanningSettingsPanel
+              quoteId={quoteId}
+              lineItemId={line.id}
+              executionReviewStatus={line.executionReviewStatus}
+              executionMergeMode={line.executionMergeMode}
+              workOrderPosition={line.workOrderPosition}
+              workOrderTotal={line.workOrderTotal}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function QuoteLineItemScanBlock({ line }: { line: QuoteLineItemPayload }) {
   const hasCustomerProposal = lineHasCustomerProposalSurface(line);
   return (

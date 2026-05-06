@@ -1,6 +1,13 @@
 "use server";
 
-import { Prisma, QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
+import {
+  Prisma,
+  QuoteCheckpointKind,
+  QuoteLineExecutionMergeMode,
+  QuoteLineExecutionReviewStatus,
+  QuoteStatus,
+} from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   computeLineTotalCents,
@@ -8,6 +15,7 @@ import {
   parseUsdStringToCents,
 } from "@/lib/quote-money";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import {
   QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
@@ -404,10 +412,25 @@ export async function createQuoteDraftAction(
     },
   });
 
+  revalidatePath("/quotes");
   redirect(`/quotes/${quote.id}`);
 }
 
 type QuoteRollupTx = Pick<typeof db, "quoteLineItem" | "quote">;
+
+async function normalizeQuoteLineExecutionOrdersTx(tx: QuoteRollupTx, quoteId: string) {
+  const lines = await tx.quoteLineItem.findMany({
+    where: { quoteId },
+    orderBy: [{ executionOrder: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  for (let i = 0; i < lines.length; i++) {
+    await tx.quoteLineItem.update({
+      where: { id: lines[i].id },
+      data: { executionOrder: i },
+    });
+  }
+}
 
 async function recalculateQuoteRollupsInTx(
   tx: QuoteRollupTx,
@@ -493,10 +516,13 @@ export async function updateDraftQuoteDetailsAction(
   if (result.count === 0) {
     return {
       error:
-        "This quote could not be updated. It may be archived, missing, or outside your organization.",
+        "This quote could not be updated. It may not be a draft, may be archived, missing, or outside your organization.",
     };
   }
 
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${id}`);
 }
 
@@ -592,6 +618,9 @@ export async function addQuoteLineItemAction(
         lineTotalCents: lineTotal.lineTotalCents,
         internalNotes,
         sourceLineItemTemplateId: null,
+        executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
+        executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
+        executionOrder: nextOrder,
       },
     });
 
@@ -602,10 +631,13 @@ export async function addQuoteLineItemAction(
   if (!outcome.ok) {
     return {
       error:
-        "This line could not be added. The quote may be archived, missing, or outside your organization.",
+        "This line could not be added. The quote may not be a draft, may be archived, missing, or outside your organization.",
     };
   }
 
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${id}`);
 }
 
@@ -712,6 +744,9 @@ export async function updateQuoteLineItemAction(
     };
   }
 
+  revalidatePath(`/quotes/${qid}`);
+  revalidatePath(`/quotes/${qid}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${qid}`);
 }
 
@@ -754,6 +789,7 @@ export async function deleteQuoteLineItemAction(
       where: { id: lid },
     });
 
+    await normalizeQuoteLineExecutionOrdersTx(tx, qid);
     await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
     return { ok: true as const };
   });
@@ -765,6 +801,9 @@ export async function deleteQuoteLineItemAction(
     };
   }
 
+  revalidatePath(`/quotes/${qid}`);
+  revalidatePath(`/quotes/${qid}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${qid}`);
 }
 
@@ -1012,7 +1051,7 @@ export async function applyLineItemTemplateToQuoteAction(
     });
     const nextOrder = (agg._max.sortOrder ?? -1) + 1;
 
-    await tx.quoteLineItem.create({
+    const createdLine = await tx.quoteLineItem.create({
       data: {
         quoteId: qid,
         sortOrder: nextOrder,
@@ -1027,8 +1066,38 @@ export async function applyLineItemTemplateToQuoteAction(
         lineTotalCents: lineTotal.lineTotalCents,
         internalNotes: template.defaultInternalNotes,
         sourceLineItemTemplateId: template.id,
+        executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
+        executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
+        executionOrder: nextOrder,
       },
     });
+
+    const templateTasks = await tx.lineItemTemplateTask.findMany({
+      where: { lineItemTemplateId: template.id },
+    });
+    const sortedTemplateTasks = [...templateTasks].sort((a, b) => {
+      const ia = EXECUTION_STAGE_KEYS_ORDERED.indexOf(a.stageKey);
+      const ib = EXECUTION_STAGE_KEYS_ORDERED.indexOf(b.stageKey);
+      if (ia !== ib) {
+        return ia - ib;
+      }
+      return a.sortOrder - b.sortOrder;
+    });
+    for (const tt of sortedTemplateTasks) {
+      await tx.quoteLineExecutionTask.create({
+        data: {
+          quoteLineItemId: createdLine.id,
+          sourceLineItemTemplateTaskId: tt.id,
+          sourceTaskTemplateId: tt.sourceTaskTemplateId,
+          sourceType: tt.sourceType,
+          title: tt.title,
+          stageKey: tt.stageKey,
+          category: tt.category,
+          instructions: tt.instructions,
+          sortOrder: tt.sortOrder,
+        },
+      });
+    }
 
     await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
     return { ok: true as const, message: null as string | null };
@@ -1040,17 +1109,19 @@ export async function applyLineItemTemplateToQuoteAction(
     }
     return {
       error:
-        "This preset could not be copied to the quote. The quote may not be a draft, the preset may be hidden, or the record is outside your organization.",
+        "This saved line item could not be copied to the quote. The quote may not be a draft, the saved line item may be hidden, or the record is outside your organization.",
     };
   }
 
+  revalidatePath(`/quotes/${qid}`);
+  revalidatePath(`/quotes/${qid}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${qid}`);
 }
 
 /**
- * Records a hidden SEND checkpoint: proposal projection for staff-only proof (snapshot payload only).
- * DRAFT-only: archived quotes keep historical checkpoints but cannot record new sends here.
- * Does not change QuoteStatus, does not notify anyone externally, and does not imply delivery or approval.
+ * Sends a draft quote: records a hidden SEND checkpoint (commercial proposal projection only) and sets status to SENT.
+ * Does not email customers, does not include internal execution planning in the checkpoint payload, and does not create jobs.
  * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
  */
 export async function recordQuoteSendCheckpointAction(
@@ -1077,7 +1148,7 @@ export async function recordQuoteSendCheckpointAction(
   if (!draftExists) {
     return {
       error:
-        "A send checkpoint can only be recorded for a draft quote in your organization. Restore from archive if you need to record another send.",
+        "Send is only available while the quote is a draft. If it was already sent, approved, or archived, open the quote and review its status.",
     };
   }
 
@@ -1127,29 +1198,170 @@ export async function recordQuoteSendCheckpointAction(
           quoteUpdatedAtAtCapture: quote.updatedAt,
         },
       });
+
+      const statusUpdate = await tx.quote.updateMany({
+        where: {
+          id,
+          organizationId: org.id,
+          status: QuoteStatus.DRAFT,
+        },
+        data: { status: QuoteStatus.SENT },
+      });
+      if (statusUpdate.count !== 1) {
+        throw new Error("QUOTE_SEND_STATUS_RACE");
+      }
     });
   } catch (e) {
     if (e instanceof Error && e.message === "QUOTE_SEND_CHECKPOINT_RACE") {
       return {
         error:
-          "This quote changed state while recording the checkpoint (for example it was archived). Refresh the page and try again if it should still be a draft.",
+          "This quote changed state while sending (for example it was archived). Refresh the page and try again if it should still be a draft.",
+      };
+    }
+    if (e instanceof Error && e.message === "QUOTE_SEND_STATUS_RACE") {
+      return {
+        error:
+          "This quote could not be marked sent—another change may have happened at the same time. Refresh and try again.",
       };
     }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return {
         error:
-          "Another send checkpoint was recorded at the same moment. Refresh the page and try again if you still need a new checkpoint.",
+          "Another send was recorded at the same moment. Refresh the page and try again if you still need to send.",
       };
     }
     throw e;
   }
 
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * Staff-recorded customer acceptance of the commercial proposal (no e-sign provider in this build).
+ * Creates an APPROVAL checkpoint with the same commercial projection shape as SEND, then sets status to APPROVED.
+ * SENT-only. Does not create jobs or freeze internal execution planning.
+ */
+export async function markQuoteApprovedAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const sentExists = await db.quote.findFirst({
+    where: {
+      id,
+      organizationId: org.id,
+      status: QuoteStatus.SENT,
+    },
+    select: { id: true },
+  });
+  if (!sentExists) {
+    return {
+      error:
+        "Approval can only be recorded for a sent quote. Send the quote first, or refresh if the status already changed.",
+    };
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const quote = await tx.quote.findFirst({
+        where: {
+          id,
+          organizationId: org.id,
+          status: QuoteStatus.SENT,
+        },
+        select: quoteSelectForCustomerProposalCheckpoint,
+      });
+
+      if (!quote) {
+        throw new Error("QUOTE_APPROVAL_RACE");
+      }
+
+      const input = quoteRowToCustomerPreviewInput(quote, org.id);
+      const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
+        organizationDisplayName: org.name,
+      });
+
+      const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
+
+      const aggregate = await tx.quoteCheckpoint.aggregate({
+        where: {
+          organizationId: org.id,
+          quoteId: id,
+          kind: QuoteCheckpointKind.APPROVAL,
+        },
+        _max: { sequence: true },
+      });
+      const nextSequence = (aggregate._max.sequence ?? 0) + 1;
+
+      await tx.quoteCheckpoint.create({
+        data: {
+          organizationId: org.id,
+          quoteId: id,
+          kind: QuoteCheckpointKind.APPROVAL,
+          sequence: nextSequence,
+          schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
+          snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
+          staffOnlyJson: {
+            anyLineUsesInternalDescriptionForTitle: staffOnly.anyLineUsesInternalDescriptionForTitle,
+          } as Prisma.InputJsonValue,
+          quoteUpdatedAtAtCapture: quote.updatedAt,
+        },
+      });
+
+      const statusUpdate = await tx.quote.updateMany({
+        where: {
+          id,
+          organizationId: org.id,
+          status: QuoteStatus.SENT,
+        },
+        data: { status: QuoteStatus.APPROVED },
+      });
+      if (statusUpdate.count !== 1) {
+        throw new Error("QUOTE_APPROVAL_STATUS_RACE");
+      }
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "QUOTE_APPROVAL_RACE") {
+      return {
+        error:
+          "This quote changed state while recording approval. Refresh the page and try again if it should still be sent.",
+      };
+    }
+    if (e instanceof Error && e.message === "QUOTE_APPROVAL_STATUS_RACE") {
+      return {
+        error:
+          "This quote could not be marked approved—another change may have happened at the same time. Refresh and try again.",
+      };
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return {
+        error:
+          "Another approval row was written at the same moment. Refresh the page and try again if you still need to record acceptance.",
+      };
+    }
+    throw e;
+  }
+
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${id}`);
 }
 
 /**
  * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
- * Transitions DRAFT → ARCHIVED only; does not modify lines, totals, or links.
+ * Transitions draft, sent, or approved quotes → ARCHIVED; does not modify lines, totals, or links.
  */
 export async function archiveQuoteAction(
   quoteId: string,
@@ -1167,7 +1379,7 @@ export async function archiveQuoteAction(
     where: {
       id,
       organizationId: org.id,
-      status: QuoteStatus.DRAFT,
+      status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] },
     },
     data: { status: QuoteStatus.ARCHIVED },
   });
@@ -1179,6 +1391,9 @@ export async function archiveQuoteAction(
     };
   }
 
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${id}`);
 }
 
@@ -1214,5 +1429,8 @@ export async function restoreQuoteToDraftAction(
     };
   }
 
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
   redirect(`/quotes/${id}`);
 }

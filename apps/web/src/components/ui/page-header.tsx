@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type PageHeaderProps = {
   eyebrow: string;
   title: string;
-  description?: string;
+  description?: ReactNode;
   /** Optional right-aligned actions (toolbar buttons, etc.). */
   actions?: ReactNode;
 };
@@ -27,9 +27,9 @@ export function PageHeader({
           {title}
         </h1>
         {description ? (
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
+          <div className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
             {description}
-          </p>
+          </div>
         ) : null}
       </div>
       {actions ? (

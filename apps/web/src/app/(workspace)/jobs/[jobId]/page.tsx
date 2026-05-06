@@ -1,27 +1,23 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { JobStageBlockType } from "@prisma/client";
+import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { PageHeader } from "@/components/ui/page-header";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { PlaceholderButton } from "@/components/ui/placeholder-button";
+  formatJobStatus,
+  formatJobTaskStatus,
+  jobStatusBadgeTone,
+  jobTaskStatusBadgeTone,
+} from "@/lib/job-display";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import {
-  AlertTriangle,
-  Briefcase,
-  CalendarDays,
-  CreditCard,
-  FileText,
-  ListOrdered,
-  MessageSquare,
-  ShieldCheck,
-} from "lucide-react";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { Briefcase, Layers, ListOrdered } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -32,6 +28,95 @@ export default async function JobDetailPage({
   params: Promise<{ jobId: string }>;
 }) {
   const { jobId } = await params;
+  const id = jobId.trim();
+  if (!id) {
+    notFound();
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const job = await db.job.findFirst({
+    where: { id, organizationId: org.id },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      activatedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      quoteId: true,
+      quote: { select: { id: true, title: true, organizationId: true } },
+      customer: { select: { id: true, displayName: true, organizationId: true } },
+      lead: { select: { id: true, title: true, organizationId: true } },
+      stages: {
+        orderBy: [{ sortOrder: "asc" }],
+        select: {
+          id: true,
+          stageKey: true,
+          title: true,
+          blockType: true,
+          blockTitle: true,
+          blockSortOrder: true,
+          sourceQuoteLineItemId: true,
+          tasks: {
+            orderBy: [{ sortOrder: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              category: true,
+              instructions: true,
+              sourceQuoteLineItemId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!job) {
+    notFound();
+  }
+
+  const safeQuote = job.quote && job.quote.organizationId === org.id ? job.quote : null;
+  const safeCustomer =
+    job.customer && job.customer.organizationId === org.id ? job.customer : null;
+  const safeLead = job.lead && job.lead.organizationId === org.id ? job.lead : null;
+
+  const sharedStages = job.stages.filter((s) => s.blockType === JobStageBlockType.SHARED);
+
+  const separateStages = job.stages.filter(
+    (s) => s.blockType === JobStageBlockType.SEPARATE_LINE_ITEM,
+  );
+
+  type SeparateBlock = {
+    blockKey: string;
+    blockTitle: string;
+    blockSortOrder: number;
+    stages: typeof separateStages;
+  };
+
+  const blockMap = new Map<string, SeparateBlock>();
+  for (const stage of separateStages) {
+    const key = stage.sourceQuoteLineItemId ?? `__orphan_${stage.id}`;
+    const existing = blockMap.get(key);
+    if (existing) {
+      existing.stages.push(stage);
+    } else {
+      blockMap.set(key, {
+        blockKey: key,
+        blockTitle: stage.blockTitle ?? "Separate work block",
+        blockSortOrder: stage.blockSortOrder,
+        stages: [stage],
+      });
+    }
+  }
+  const separateBlocks: SeparateBlock[] = [...blockMap.values()].sort(
+    (a, b) => a.blockSortOrder - b.blockSortOrder || a.blockTitle.localeCompare(b.blockTitle),
+  );
+
+  const totalTasks = job.stages.reduce((sum, s) => sum + s.tasks.length, 0);
+  const activatedLabel = new Date(job.activatedAt).toLocaleString();
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -39,244 +124,208 @@ export default async function JobDetailPage({
         items={[
           { label: "Work" },
           { label: "Jobs", href: "/jobs" },
-          { label: `Job ${jobId}` },
+          { label: job.title },
         ]}
       />
       <PageHeader
-        eyebrow="Work"
-        title="Job"
-        description="Reserved execution-record shell from the URL only—not a live task runner. The working quote remains the commercial record; this page is not wired to checkpoints or quote-to-job handoffs."
+        eyebrow="Work · Runtime job"
+        title={job.title}
+        description="Stages and tasks were copied from the source quote at activation. Editing the source quote does not change tasks already on this job."
         actions={
-          <>
+          <div className="flex flex-wrap justify-end gap-2">
+            {safeQuote ? (
+              <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
+                Open source quote
+              </Link>
+            ) : null}
             <Link href="/jobs" className={listLinkClass}>
               ← Jobs list
             </Link>
-            <Link href="/workstation/jobs" className={listLinkClass}>
-              Workstation jobs lens
-            </Link>
-            <PlaceholderButton title="No job store in this build">
-              Save job (not wired)
-            </PlaceholderButton>
-          </>
+          </div>
         }
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Placeholder identifier (from URL)
+          Job record
         </p>
-        <p className="mt-1 break-all font-mono text-sm text-foreground">{jobId}</p>
+        <p className="mt-2 break-all font-mono text-xs text-foreground-muted">{job.id}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Work record shell" tone="neutral" />
+          <StatusBadge label={formatJobStatus(job.status)} tone={jobStatusBadgeTone(job.status)} />
           <span className="text-xs text-foreground-muted">
-            Visual only—not loaded from a database
+            Activated <time dateTime={job.activatedAt.toISOString()}>{activatedLabel}</time>
           </span>
         </div>
+        <dl className="mt-4 grid gap-3 text-xs text-foreground-muted sm:grid-cols-2">
+          <div>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Customer</dt>
+            <dd className="mt-0.5 text-foreground">
+              {safeCustomer ? (
+                <Link href={`/customers/${safeCustomer.id}`} className="underline-offset-4 hover:underline">
+                  {safeCustomer.displayName}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Lead</dt>
+            <dd className="mt-0.5 text-foreground">
+              {safeLead ? (
+                <Link href={`/leads/${safeLead.id}`} className="underline-offset-4 hover:underline">
+                  {safeLead.title}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+        </dl>
       </WorkspacePanel>
 
-      <div className="space-y-6">
-        {/* Job identity */}
+      <section className="mb-8">
+        <SectionHeading
+          title="Execution overview"
+          description="Counts reflect the snapshot copied at activation. Status changes and assignments will land in a later slice."
+        />
+        <ul className="grid gap-3 sm:grid-cols-3">
+          <li>
+            <SignalCard label="Stages" value={String(job.stages.length)} hint="Shared and separate combined." />
+          </li>
+          <li>
+            <SignalCard label="Shared stages" value={String(sharedStages.length)} hint="Canonical phases across lines." />
+          </li>
+          <li>
+            <SignalCard label="Separate work blocks" value={String(separateBlocks.length)} hint="One per source line." />
+          </li>
+        </ul>
+      </section>
+
+      {totalTasks === 0 ? (
         <WorkspacePanel>
+          <EmptyState
+            icon={Briefcase}
+            title="No execution tasks on this job"
+            description="No stages or tasks were copied at activation. Activation requires at least one executable task on the source quote in this build."
+          >
+            {safeQuote ? (
+              <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
+                Open source quote
+              </Link>
+            ) : null}
+          </EmptyState>
+        </WorkspacePanel>
+      ) : null}
+
+      {sharedStages.length > 0 ? (
+        <WorkspacePanel className="mb-6">
           <SectionHeading
-            title="Job identity & work status"
-            description="Display name, site address, field assignment, and lifecycle state could live here later. Nothing is evaluated yet—no schedule engine, no task graph, no runtime execution."
+            title="Shared stages"
+            description="Tasks merged across quote lines using canonical phases. Order follows the canonical stage order, then line work order, then task order at activation."
           />
-          <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-10 text-center">
-            <Briefcase
-              className="mx-auto mb-3 size-10 text-foreground-subtle opacity-70"
-              strokeWidth={1.25}
-              aria-hidden
-            />
-            <p className="text-sm font-medium text-foreground">Future job profile</p>
-            <p className="mt-2 text-xs text-foreground-muted">
-              Internal work record for a future real job. The URL id is the only input this page
-              receives.
-            </p>
+          <div className="space-y-6">
+            {sharedStages.map((stage) => (
+              <section key={stage.id}>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                  {stage.title}
+                </h3>
+                {stage.tasks.length === 0 ? (
+                  <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {stage.tasks.map((task) => (
+                      <li
+                        key={task.id}
+                        className="rounded-md border border-border/80 bg-background/30 px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground">{task.title}</p>
+                            {task.instructions ? (
+                              <p className="mt-1 text-xs text-foreground-muted">{task.instructions}</p>
+                            ) : null}
+                          </div>
+                          <StatusBadge
+                            label={formatJobTaskStatus(task.status)}
+                            tone={jobTaskStatusBadgeTone(task.status)}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ))}
           </div>
         </WorkspacePanel>
+      ) : null}
 
-        {/* Quote origin (future link) */}
+      {separateBlocks.length > 0 ? (
         <WorkspacePanel>
           <SectionHeading
-            title="Commercial anchor on the quote"
-            description="Future jobs should reference the working quote and recorded send checkpoints—not this placeholder. Agreed scope and money language stay on Sales until an explicit execution link exists."
+            title="Separate work blocks"
+            description="Each block is one quoted scope kept apart from shared stages. Tasks were copied at activation and remain pinned to the source line."
           />
-          <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            This shell does not fetch a quote. Line items and totals remain on the quote
-            workspace; nothing here duplicates or replaces that record.
+          <div className="space-y-6">
+            {separateBlocks.map((block) => (
+              <section
+                key={block.blockKey}
+                className="rounded-lg border border-border-strong bg-surface/80 px-4 py-4 ring-1 ring-ring/20"
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <Layers className="size-4 text-foreground-subtle" aria-hidden />
+                  <h3 className="text-sm font-semibold text-foreground">{block.blockTitle}</h3>
+                </div>
+                <div className="space-y-4 border-t border-border pt-3">
+                  {block.stages.map((stage) => (
+                    <div key={stage.id}>
+                      <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                        {stage.title}
+                      </p>
+                      {stage.tasks.length === 0 ? (
+                        <p className="mt-2 text-xs text-foreground-muted">No tasks on this stage.</p>
+                      ) : (
+                        <ul className="mt-2 space-y-1.5">
+                          {stage.tasks.map((task) => (
+                            <li
+                              key={task.id}
+                              className="rounded border border-border/60 bg-background/40 px-2.5 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-foreground">{task.title}</p>
+                                  {task.instructions ? (
+                                    <p className="mt-1 text-xs text-foreground-muted">{task.instructions}</p>
+                                  ) : null}
+                                </div>
+                                <StatusBadge
+                                  label={formatJobTaskStatus(task.status)}
+                                  tone={jobTaskStatusBadgeTone(task.status)}
+                                />
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </WorkspacePanel>
+      ) : null}
+
+      <WorkspacePanel padding="compact" className="mt-6 border-dashed border-border bg-surface/80">
+        <div className="flex gap-2">
+          <ListOrdered className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <p className="text-xs leading-relaxed text-foreground-muted">
+            Read-only stages and tasks for now. Status changes, assignments, scheduling, and field workflow ship in
+            later slices—nothing here mutates the source quote.
           </p>
-          <EmptyState
-            icon={FileText}
-            title="No linked quote"
-            description="Future linking would show the quote id here—nothing is invented for this route."
-          >
-            <Link href="/quotes" className={listLinkClass}>
-              Browse quotes
-            </Link>
-            <PlaceholderButton title="No quote linker in this build">
-              Open linked quote (not wired)
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Sold scope / execution bridge — primary */}
-        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-          <SectionHeading
-            title="Sold scope / execution bridge (reserved)"
-            description="Reserved for how agreed scope on the quote could map to field execution later. Line items and totals stay on the quote today; nothing here starts work or mutates records."
-            actions={
-              <PlaceholderButton title="No scope viewer in this build">
-                Review sold scope (not wired)
-              </PlaceholderButton>
-            }
-          />
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SignalCard
-              label="Sold scope"
-              value="—"
-              hint="Would roll up from linked quote lines later."
-            />
-            <SignalCard
-              label="Execution readiness (reserved)"
-              value="—"
-              hint="Future checklist surface—nothing evaluated here."
-            />
-            <SignalCard
-              label="Schedule context"
-              value="—"
-              hint="Holds, visits, and slips attach later."
-            />
-            <SignalCard
-              label="Workstation attention"
-              value="—"
-              hint="Next actions surface in Workstation, not here."
-            />
-          </div>
-          <EmptyState
-            icon={ListOrdered}
-            title="No execution bridge yet"
-            description="When wired, this area would summarize how quote scope could feed a job plan. Runtime tasks, dependencies, and sequencing are out of scope for this shell."
-          >
-            <PlaceholderButton title="No execution prep in this build">
-              Prepare execution handoff (not wired)
-            </PlaceholderButton>
-            <Link href="/quotes" className={listLinkClass}>
-              Quotes
-            </Link>
-            <Link href="/schedule" className={listLinkClass}>
-              Schedule
-            </Link>
-            <Link href="/workstation/jobs" className={listLinkClass}>
-              Workstation jobs
-            </Link>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Activation review */}
-        <WorkspacePanel>
-          <SectionHeading
-            title="Execution handoff (reserved)"
-            description="Reserved for a future deliberate handoff before field work—office/field alignment, not wired here. No readiness scoring, gates, or spawned tasks in this build."
-          />
-          <EmptyState
-            icon={ShieldCheck}
-            title="Handoff not available"
-            description="No scoring, gates, or task graphs—layout only until execution persistence exists."
-          >
-            <PlaceholderButton title="No handoff flow in this build">
-              Start handoff review (not wired)
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Schedule context */}
-        <WorkspacePanel>
-          <SectionHeading
-            title="Schedule context"
-            description="Coordinates job timing with customer availability, crew capacity, and what Workstation is asking people to do next. No date picking, assignments, or calendar sync here."
-          />
-          <EmptyState
-            icon={CalendarDays}
-            title="No schedule data"
-            description="Calendar and routing live under Work → Schedule; this job will subscribe to holds and visits when the engine exists."
-          >
-            <Link href="/schedule" className={listLinkClass}>
-              Open Schedule
-            </Link>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Issues / change events */}
-        <WorkspacePanel>
-          <SectionHeading
-            title="Issues & corrections (reserved)"
-            description="Future home for interruptions and field corrections logged against the job—always anchored back to the quote record, not silent rewrites of commercial truth."
-          />
-          <EmptyState
-            icon={AlertTriangle}
-            title="No issues or corrections"
-            description="No fabricated tickets—typed issues and follow-on activity ship with future persistence."
-          >
-            <PlaceholderButton title="No issue tracker in this build">
-              Log issue (not wired)
-            </PlaceholderButton>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Money on job (reserved) */}
-        <WorkspacePanel padding="compact">
-          <SectionHeading
-            title="Money on the job (reserved)"
-            description="Reserved for collection status and money-related blockers tied to work—no ledger or processor here. Quote remains the anchor for agreed terms."
-          />
-          <EmptyState
-            icon={CreditCard}
-            title="No payment status"
-            description="Job-level money views are not wired. The quote record holds commercial totals and wording today."
-          >
-            <Link href="/payments" className={listLinkClass}>
-              Open Payments
-            </Link>
-          </EmptyState>
-        </WorkspacePanel>
-
-        {/* Notes & activity */}
-        <WorkspacePanel padding="compact">
-          <SectionHeading
-            title="Notes & activity"
-            description="Job chatter, photos, and audit trail attach here when logging exists—internal record, not the Workstation inbox."
-          />
-          <EmptyState
-            icon={MessageSquare}
-            title="No activity yet"
-            description="No fabricated events or timeline rows."
-          />
-        </WorkspacePanel>
-
-        <HandoffPanel
-          title="Between quote and field"
-          description="This route is a reserved execution shell—not live coordination. Quotes live under Sales; customers under Relationships; schedule and job placeholders under Work; Workstation is a separate reserved attention surface."
-        >
-          <Link href="/jobs" className={handoffMutedLinkClass}>
-            Jobs list
-          </Link>
-          <Link href="/quotes" className={handoffMutedLinkClass}>
-            Quotes
-          </Link>
-          <Link href="/customers" className={handoffMutedLinkClass}>
-            Customers
-          </Link>
-          <Link href="/schedule" className={handoffMutedLinkClass}>
-            Schedule
-          </Link>
-          <Link href="/payments" className={handoffMutedLinkClass}>
-            Payments
-          </Link>
-          <Link href="/workstation/jobs" className={handoffPrimaryLinkClass}>
-            Workstation jobs
-          </Link>
-        </HandoffPanel>
-      </div>
+        </div>
+      </WorkspacePanel>
     </div>
   );
 }

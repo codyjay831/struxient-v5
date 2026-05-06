@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   archiveLineItemTemplateFromScopeLibraryAction,
@@ -59,10 +60,10 @@ function ScopeLibraryCreatePresetForm() {
       className="mb-8 space-y-3 scroll-mt-24 rounded-lg border border-border bg-surface px-4 py-4"
     >
       <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-        New line preset
+        New saved line item
       </p>
-      <p className="text-xs leading-relaxed text-foreground-muted">
-        Saves commercial defaults for your organization. Applying a preset on a draft quote inserts a{" "}
+        <p className="text-xs leading-relaxed text-foreground-muted">
+        Saves commercial defaults for your organization. Applying a saved line item on a draft quote inserts a{" "}
         <span className="font-medium text-foreground">new copied line</span>—lines are never
         live-linked back to the library.
       </p>
@@ -119,8 +120,8 @@ function ScopeLibraryCreatePresetForm() {
         </label>
       </div>
       <CustomerProposalOptionalFields names={TEMPLATE_PROPOSAL_NAMES} variant="template" />
-      <button type="submit" className={primaryButtonClass} disabled={isPending}>
-        {isPending ? "Saving…" : "Save line preset"}
+        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+        {isPending ? "Saving…" : "Save saved line item"}
       </button>
     </form>
   );
@@ -252,18 +253,18 @@ export function ScopeLibraryLinePresetsPanel({
   return (
     <>
       <SectionHeading
-        title="Line presets"
-        description="Reusable quote rows and optional proposal wording you can copy into draft quotes. Newest updated first."
+        title="Saved line items"
+        description="Commercial defaults and optional proposal wording—plus optional default execution you can copy into quotes later. Newest updated first."
       />
       <ScopeLibraryCreatePresetForm />
       {templates.length === 0 ? (
         <EmptyState
           icon={Library}
-          title="No line presets yet"
-          description="Add your first line preset using the form above: internal description, default quantity and unit price, optional internal notes, and optional proposal wording. After you save, copy presets into draft quotes from the quote workspace."
+          title="No saved line items yet"
+          description="Add your first saved line item using the form above: internal description, default quantity and unit price, optional internal notes, and optional proposal wording. After you save, copy into draft quotes from the quote workspace."
         >
           <a href="#scope-library-line-preset-create" className={anchorToFormClass}>
-            Jump to new line preset form
+            Jump to new saved line item form
           </a>
         </EmptyState>
       ) : (
@@ -282,16 +283,27 @@ export function ScopeLibraryLinePresetsPanel({
                       </span>
                     ) : null}
                   </p>
+                  <p className="mt-2 text-xs text-foreground-subtle">
+                    {t.executionSummary.taskCount === 0
+                      ? "No default execution saved"
+                      : t.executionSummary.summaryLine}
+                  </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {editingId === t.id ? null : (
                     <>
+                      <Link
+                        href={`/scope-library/line-presets/${t.id}/default-execution`}
+                        className={secondaryButtonClass}
+                      >
+                        {t.executionSummary.taskCount === 0 ? "Add default execution" : "Edit default execution"}
+                      </Link>
                       <button
                         type="button"
                         className={secondaryButtonClass}
                         onClick={() => setEditingId(t.id)}
                       >
-                        Edit
+                        Edit pricing and scope
                       </button>
                       <ScopeLibraryArchiveForm templateId={t.id} />
                     </>

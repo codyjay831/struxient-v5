@@ -112,6 +112,10 @@ The system must support:
 
 Quoting is where the company defines **what is sold** and increasingly **what will need to happen** if sold.
 
+**v5 app alignment:** the internal quote workspace advances **Draft → Sent → Approved → Archived** on the persisted quote record; **Send** and **Acceptance** each create hidden **commercial** checkpoint rows (staff-only). **Execution Review** and internal draft execution stay **separate** from customer-facing checkpoints until activation materializes a job.
+
+**v5 app alignment (Job runtime V1):** an **Activate job** action on Execution Review creates **one** `Job` per approved quote, with **shared stages** (canonical phases merged across lines) and **separate work blocks** (one per source line) copied from the quote's draft execution. Job pages are minimal in V1—no scheduling, assignments, or completion workflow yet—but stage/task lineage to the source quote is preserved on every row.
+
 ### Line items
 
 Line items represent sold work, services, materials, labor, phases, packages, or other quoteable units per company workflow.
@@ -172,7 +176,7 @@ Users must be able to:
 - **Plan during the quote** (tasks/stages attached while selling—often via templates), **or**  
 - **Defer execution planning** until after customer approval, **without** being penalized for choosing either path.
 
-Rich execution structure on a quote must remain **refinable after signature** as part of normal job operations. See [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+Rich execution structure on a quote must remain **refinable after customer signature** during **Execution Review** (internal, pre-activation), then **again on the job** as normal operational edits after activation. See [templates-and-execution-planning.md](./templates-and-execution-planning.md).
 
 ---
 
@@ -186,7 +190,7 @@ Quotes and tasks create a **clear executable path** that survives real life.
 
 **Pre-approval:** execution structure on the quote may be **partial**, **draft**, or **rich**; the primary obligation of the quote remains **commercial clarity** and controlled customer disclosure.
 
-**Post-approval:** the job’s executable graph is the **operational home** for refinement—reorder, assign, add mobilization tasks, split work, etc.—without implying that every quote-time task was a **customer commitment**. Post-sign workflow editing is **expected**, not an edge case. Full intent: [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+**Post-approval (customer sign):** teams finalize or attach internal execution through **Execution Review** before **job activation** creates runtime stages/tasks. **Post-activation:** the job’s executable graph remains the **operational home** for day-to-day refinement—reorder, assign, add mobilization tasks, split work, etc.—without implying that every quote-time stub was a **customer commitment**. Full intent: [templates-and-execution-planning.md](./templates-and-execution-planning.md).
 
 ### Questions the system should help answer
 

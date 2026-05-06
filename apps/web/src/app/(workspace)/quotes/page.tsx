@@ -72,6 +72,8 @@ function statusFilterLabel(status: QuoteListStatusParam): string {
   switch (status) {
     case "draft":
       return "Draft";
+    case "active":
+      return "Active (not archived)";
     case "archived":
       return "Archived";
     case "all":
@@ -97,6 +99,8 @@ export default async function QuotesPage({
     matchingCount,
     totalInOrg,
     draftCount,
+    sentCount,
+    approvedCount,
     archivedCount,
     draftTotalsAgg,
   ] = await Promise.all([
@@ -111,6 +115,8 @@ export default async function QuotesPage({
     db.quote.count({ where: listWhere }),
     db.quote.count({ where: { organizationId: org.id } }),
     db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.DRAFT } }),
+    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.SENT } }),
+    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.APPROVED } }),
     db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.ARCHIVED } }),
     db.quote.aggregate({
       where: { organizationId: org.id, status: QuoteStatus.DRAFT },
@@ -141,7 +147,7 @@ export default async function QuotesPage({
       <PageHeader
         eyebrow="Sales"
         title="Quotes"
-        description="Working quote records for this organization—list and detail reads are org-scoped. Create drafts from New quote, edit on quote detail, and archive or restore as needed. Recorded send checkpoints and live proposal preview are internal staff tools on the quote record."
+        description="Working quote records for this organization—list and detail reads are org-scoped. Draft quotes are editable; Send quote and Mark approved advance lifecycle on the quote detail page. Live proposal preview and commercial checkpoints are internal staff tools."
         actions={
           <>
             <Link href="/quotes/new" className={primaryLinkClass}>
@@ -166,12 +172,18 @@ export default async function QuotesPage({
           title="Organization overview"
           description="Counts and draft rollups are real database aggregates for this development tenant only."
         />
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <li>
             <SignalCard label="Quotes (all)" value={String(totalInOrg)} hint="Rows in this org." />
           </li>
           <li>
-            <SignalCard label="Draft quotes" value={String(draftCount)} hint="Editable on detail." />
+            <SignalCard label="Draft quotes" value={String(draftCount)} hint="Commercial editing on detail." />
+          </li>
+          <li>
+            <SignalCard label="Sent quotes" value={String(sentCount)} hint="Awaiting acceptance record." />
+          </li>
+          <li>
+            <SignalCard label="Approved quotes" value={String(approvedCount)} hint="Commercial terms accepted." />
           </li>
           <li>
             <SignalCard
@@ -195,11 +207,13 @@ export default async function QuotesPage({
           Quote status (persisted)
         </p>
         <p className="mt-2 text-sm text-foreground-muted">
-          Only Draft and Archived exist in the data model for this phase—no Sent or Approved rows yet.
-          Use the filters below to narrow the list.
+          Draft → Sent (Send quote) → Approved (Mark approved) → Archived. Restore from archive returns to Draft. Use
+          filters below to narrow the list.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <StatusBadge label={formatQuoteStatus("DRAFT")} tone={quoteStatusBadgeTone("DRAFT")} />
+          <StatusBadge label={formatQuoteStatus("SENT")} tone={quoteStatusBadgeTone("SENT")} />
+          <StatusBadge label={formatQuoteStatus("APPROVED")} tone={quoteStatusBadgeTone("APPROVED")} />
           <StatusBadge
             label={formatQuoteStatus("ARCHIVED")}
             tone={quoteStatusBadgeTone("ARCHIVED")}
@@ -241,7 +255,7 @@ export default async function QuotesPage({
         <div className="mt-4">
           <p className={`${fieldLabelClass} mb-2`}>Status</p>
           <div className="flex flex-wrap gap-2">
-            {(["all", "draft", "archived"] as const).map((s) => (
+            {(["all", "draft", "active", "archived"] as const).map((s) => (
               <Link
                 key={s}
                 href={serializeQuotesListHref({ q, status: s, sort })}

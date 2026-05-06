@@ -17,6 +17,35 @@ export const dynamic = "force-dynamic";
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
+function checkpointLabels(kind: QuoteCheckpointKind): {
+  breadcrumbTail: string;
+  title: string;
+  description: string;
+  calloutTitle: string;
+  calloutBody: string;
+} {
+  if (kind === QuoteCheckpointKind.APPROVAL) {
+    return {
+      breadcrumbTail: `Acceptance #`,
+      title: "Recorded acceptance",
+      description:
+        "Staff-only record of the commercial proposal the customer agreed to at this moment. Not a signed PDF vault and not job activation.",
+      calloutTitle: "Commercial acceptance — internal record only",
+      calloutBody:
+        "This row stores what the customer-facing proposal contained when acceptance was recorded. It is not a runtime job plan and does not include internal execution tasks.",
+    };
+  }
+  return {
+    breadcrumbTail: `Send #`,
+    title: "Recorded send",
+    description:
+      "Staff-only record of the commercial proposal as sent at this moment. Not email delivery, not a public link, and not customer approval by itself.",
+    calloutTitle: "Commercial send — internal record only",
+    calloutBody:
+      "No email, SMS, or portal was implied by saving this row. Compare to the live working quote when you need to see what changed since capture.",
+  };
+}
+
 export default async function QuoteCheckpointViewPage({
   params,
 }: {
@@ -30,7 +59,7 @@ export default async function QuoteCheckpointViewPage({
       id: checkpointId,
       quoteId,
       organizationId: org.id,
-      kind: QuoteCheckpointKind.SEND,
+      kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
     },
     select: {
       id: true,
@@ -67,7 +96,7 @@ export default async function QuoteCheckpointViewPage({
         <EmptyState
           icon={FileText}
           title="Checkpoint not found"
-          description="Check the link or open the quote and pick a recorded send from the list."
+          description="Check the link or open the quote and pick a record from the commercial send & acceptance list."
         >
           <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
             Back to quote
@@ -80,6 +109,7 @@ export default async function QuoteCheckpointViewPage({
   const parsed = parseQuoteSendCheckpointSnapshot(checkpoint.schemaVersion, checkpoint.snapshotJson);
   const staff = parseQuoteCheckpointStaffOnly(checkpoint.staffOnlyJson);
   const capturedLabel = new Date(checkpoint.createdAt).toLocaleString();
+  const labels = checkpointLabels(checkpoint.kind);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -88,14 +118,14 @@ export default async function QuoteCheckpointViewPage({
           { label: "Sales" },
           { label: "Quotes", href: "/quotes" },
           { label: "Quote", href: `/quotes/${quoteId}` },
-          { label: `Recorded send #${checkpoint.sequence}` },
+          { label: `${labels.breadcrumbTail}${checkpoint.sequence}` },
         ]}
       />
 
       <PageHeader
         eyebrow="Sales · internal only"
-        title="Recorded send checkpoint"
-        description="Staff-only proof of the proposal projection stored at capture time. This is not delivery, not a public link, and not approval capture."
+        title={labels.title}
+        description={labels.description}
         actions={
           <>
             <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
@@ -112,10 +142,9 @@ export default async function QuoteCheckpointViewPage({
         padding="compact"
         className="mb-6 border border-border border-l-[3px] border-l-accent bg-foreground/[0.02]"
       >
-        <p className="text-sm font-medium text-foreground">Recorded send checkpoint — not proof of external delivery</p>
+        <p className="text-sm font-medium text-foreground">{labels.calloutTitle}</p>
         <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-          Kind: {checkpoint.kind} · Sequence: {checkpoint.sequence} · Captured: {capturedLabel}. No email, SMS, or
-          portal was implied by saving this row.
+          Kind: {checkpoint.kind} · Sequence: {checkpoint.sequence} · Captured: {capturedLabel}. {labels.calloutBody}
         </p>
       </WorkspacePanel>
 

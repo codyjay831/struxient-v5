@@ -56,9 +56,13 @@ After customer **approval / signature**, the sold intent should transition into 
 
 ### Stage (execution grouping)
 
-A **stage** is a **phase-like grouping** of work **under** a line item or within a job context (labels and nesting are product decisions). Stages help humans and crews read **chunks** of work; they may appear in **templates** together with tasks.
+A **stage** is a lightweight **preset / container** that groups tasks under a line item or within a job. Stages help humans and crews read **chunks** of work; they may appear in **templates** together with tasks.
 
-**Responsibility:** organize execution **without** replacing the line item as the commercial anchor unless the product explicitly ties customer-facing presentation to stages (optional).
+> **Canon phrase (I24):** *Stages are presets and containers. Tasks are the execution power layer.*
+
+In MVP, v5 ships a single **default stage preset — Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. A reserved future preset, **Service Work**, will support smaller service execution using the **same** core line-item / stage / task model (no separate task engine). Detailed product framing lives in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
+
+**Responsibility:** organize execution **without** replacing the **line item** as the commercial anchor and **without** becoming the operational power layer themselves. Depth (ownership, ordering, dependencies, blockers, completion truth) lives on **tasks** (and downstream models like payments, approvals, daily logs, and execution records). Stage architecture must remain **preset-flexible** — presets can later be renamed, hidden, merged, specialized, or selected per real contractor usage; **kanban** and **placement** framings are out of bounds.
 
 ### Event / interruption (conceptual)
 
@@ -190,4 +194,5 @@ Canon expects implementations to **avoid duplicate conflicting sources of truth*
 
 *Canon update (2026-05-05): Authentication vs permissions; account creation and permission modeling patterns; glossary alignment.*  
 *Canon update (2026-05-05): Customer signals vs user tags; payment schedule as money truth (pointer to domains-and-boundaries).*  
-*Canon update (2026-05-06): Quote section — **working record** vs **checkpoints** pointer to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*
+*Canon update (2026-05-06): Quote section — **working record** vs **checkpoints** pointer to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
+*Canon update (2026-05-06): Stage entry rewritten as **preset / container** per **I24** canon phrase; default MVP preset **Standard Project** named; reserved future preset **Service Work** noted (same core model, no separate task engine). Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*

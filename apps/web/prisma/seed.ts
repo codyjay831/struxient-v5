@@ -1,4 +1,13 @@
-import { Prisma, PrismaClient, LeadSource, LeadStatus, QuoteStatus } from "@prisma/client";
+import {
+  ExecutionStageKey,
+  LineItemTemplateTaskSource,
+  Prisma,
+  PrismaClient,
+  LeadSource,
+  LeadStatus,
+  QuoteStatus,
+  TaskTemplateCategory,
+} from "@prisma/client";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -261,6 +270,103 @@ async function main() {
   await prisma.quoteLineItem.deleteMany({
     where: { quoteId: "dev-quote-acme-with-lines" },
   });
+  const devTaskTemplateSeeds = [
+    {
+      id: "dev-task-template-seed-panel-photos",
+      title: "[dev seed] Photo existing main panel",
+      stageKey: ExecutionStageKey.site_visit,
+      category: TaskTemplateCategory.PHOTO_EVIDENCE,
+      instructions: "Wide shot of the panel interior and label; note any visible defects.",
+    },
+    {
+      id: "dev-task-template-seed-permit-intake",
+      title: "[dev seed] Submit permit application",
+      stageKey: ExecutionStageKey.permitting,
+      category: TaskTemplateCategory.PERMIT,
+      instructions: "Use jurisdiction checklist; attach site photos and single-line when required.",
+    },
+    {
+      id: "dev-task-template-seed-closeout-walk",
+      title: "[dev seed] Customer walkthrough",
+      stageKey: ExecutionStageKey.closeout,
+      category: TaskTemplateCategory.CUSTOMER_COMMUNICATION,
+      instructions: null as string | null,
+    },
+  ] as const;
+
+  for (const row of devTaskTemplateSeeds) {
+    await prisma.taskTemplate.upsert({
+      where: { id: row.id },
+      update: {
+        organizationId: devOrg.id,
+        title: row.title,
+        stageKey: row.stageKey,
+        category: row.category,
+        instructions: row.instructions,
+        archivedAt: null,
+      },
+      create: {
+        id: row.id,
+        organizationId: devOrg.id,
+        title: row.title,
+        stageKey: row.stageKey,
+        category: row.category,
+        instructions: row.instructions,
+      },
+    });
+  }
+
+  const devLineTemplateWithExecutionId = "dev-line-template-seed-with-execution";
+  await prisma.lineItemTemplateTask.deleteMany({
+    where: { lineItemTemplateId: devLineTemplateWithExecutionId },
+  });
+  await prisma.lineItemTemplate.upsert({
+    where: { id: devLineTemplateWithExecutionId },
+    update: {
+      organizationId: devOrg.id,
+      description: "[dev seed] Sample saved line item with default execution",
+      defaultQuantity: new Prisma.Decimal("1"),
+      defaultUnitAmountCents: 500_00,
+      defaultInternalNotes: "[dev seed] Two default tasks below (one from reusable, one custom).",
+      archivedAt: null,
+    },
+    create: {
+      id: devLineTemplateWithExecutionId,
+      organizationId: devOrg.id,
+      description: "[dev seed] Sample saved line item with default execution",
+      defaultQuantity: new Prisma.Decimal("1"),
+      defaultUnitAmountCents: 500_00,
+      defaultInternalNotes: "[dev seed] Two default tasks below (one from reusable, one custom).",
+    },
+  });
+  await prisma.lineItemTemplateTask.createMany({
+    data: [
+      {
+        id: "dev-line-template-task-from-reusable",
+        lineItemTemplateId: devLineTemplateWithExecutionId,
+        sourceType: LineItemTemplateTaskSource.TASK_TEMPLATE,
+        sourceTaskTemplateId: "dev-task-template-seed-panel-photos",
+        title: "[dev seed] Photo existing main panel",
+        stageKey: ExecutionStageKey.site_visit,
+        category: TaskTemplateCategory.PHOTO_EVIDENCE,
+        instructions:
+          "Wide shot of the panel interior and label; note any visible defects.",
+        sortOrder: 0,
+      },
+      {
+        id: "dev-line-template-task-custom",
+        lineItemTemplateId: devLineTemplateWithExecutionId,
+        sourceType: LineItemTemplateTaskSource.CUSTOM,
+        sourceTaskTemplateId: null,
+        title: "[dev seed] Confirm roof access ladder location",
+        stageKey: ExecutionStageKey.intake_review,
+        category: TaskTemplateCategory.GENERAL,
+        instructions: "Office calls ahead; note any HOA gate codes in internal notes.",
+        sortOrder: 0,
+      },
+    ],
+  });
+
   await prisma.quoteLineItem.createMany({
     data: [
       {
@@ -284,6 +390,24 @@ async function main() {
         internalNotes: null,
       },
     ],
+  });
+
+  await prisma.quoteLineExecutionTask.deleteMany({
+    where: { quoteLineItemId: "dev-line-acme-roof" },
+  });
+  await prisma.quoteLineExecutionTask.create({
+    data: {
+      id: "dev-quote-line-exec-acme-roof",
+      quoteLineItemId: "dev-line-acme-roof",
+      sourceLineItemTemplateTaskId: null,
+      sourceTaskTemplateId: null,
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+      title: "[dev seed] Confirm roof access for estimator",
+      stageKey: ExecutionStageKey.intake_review,
+      category: TaskTemplateCategory.GENERAL,
+      instructions: "Optional dev seed row for quote-line draft execution.",
+      sortOrder: 0,
+    },
   });
 
   console.log("[dev seed] Completed (idempotent upserts).");

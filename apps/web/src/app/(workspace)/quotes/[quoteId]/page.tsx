@@ -12,6 +12,12 @@ import type {
   QuoteLineItemPayload,
   QuoteSendCheckpointSummary,
 } from "@/lib/quote-display";
+import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
+import { quoteStatusAllowsExecutionEdits } from "@/lib/quote-status-workflow";
+import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
+import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
+import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
+import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import { FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +44,27 @@ export default async function QuoteDetailPage({
       lead: {
         select: { id: true, title: true, organizationId: true },
       },
+      job: {
+        select: { id: true, organizationId: true },
+      },
       lineItems: {
         orderBy: { sortOrder: "asc" },
+        include: {
+          draftExecutionTasks: {
+            orderBy: [{ sortOrder: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              stageKey: true,
+              category: true,
+              instructions: true,
+              sortOrder: true,
+              sourceType: true,
+              sourceTaskTemplateId: true,
+              sourceLineItemTemplateTaskId: true,
+            },
+          },
+        },
       },
     },
   });
@@ -92,20 +117,58 @@ export default async function QuoteDetailPage({
       ? { id: row.lead.id, title: row.lead.title }
       : null;
 
-  const lineItems: QuoteLineItemPayload[] = row.lineItems.map((line) => ({
-    id: line.id,
-    sortOrder: line.sortOrder,
-    description: line.description,
-    customerScopeTitle: line.customerScopeTitle,
-    customerScopeDescription: line.customerScopeDescription,
-    customerIncludedNotes: line.customerIncludedNotes,
-    customerExcludedNotes: line.customerExcludedNotes,
-    customerPresentationGroup: line.customerPresentationGroup,
-    quantityDisplay: line.quantity.toString(),
-    unitAmountCents: line.unitAmountCents,
-    lineTotalCents: line.lineTotalCents,
-    internalNotes: line.internalNotes,
-  }));
+  const workOrderOrderedIds = [...row.lineItems]
+    .sort((a, b) => {
+      if (a.executionOrder !== b.executionOrder) {
+        return a.executionOrder - b.executionOrder;
+      }
+      if (a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+      return a.id.localeCompare(b.id);
+    })
+    .map((l) => l.id);
+  const workOrderRank = new Map(workOrderOrderedIds.map((id, i) => [id, i + 1]));
+  const workOrderTotal = workOrderOrderedIds.length;
+
+  const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
+  for (const line of row.lineItems) {
+    draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      stageKey: t.stageKey,
+      category: t.category,
+      instructions: t.instructions,
+      sortOrder: t.sortOrder,
+      sourceType: t.sourceType,
+      sourceTaskTemplateId: t.sourceTaskTemplateId,
+      sourceLineItemTemplateTaskId: t.sourceLineItemTemplateTaskId,
+    }));
+  }
+
+  const lineItems: QuoteLineItemPayload[] = row.lineItems.map((line) => {
+    const exec = buildDefaultExecutionSummaryLine(line.draftExecutionTasks);
+    return {
+      id: line.id,
+      sortOrder: line.sortOrder,
+      description: line.description,
+      customerScopeTitle: line.customerScopeTitle,
+      customerScopeDescription: line.customerScopeDescription,
+      customerIncludedNotes: line.customerIncludedNotes,
+      customerExcludedNotes: line.customerExcludedNotes,
+      customerPresentationGroup: line.customerPresentationGroup,
+      quantityDisplay: line.quantity.toString(),
+      unitAmountCents: line.unitAmountCents,
+      lineTotalCents: line.lineTotalCents,
+      internalNotes: line.internalNotes,
+      executionSummary: { taskCount: exec.taskCount, summaryLine: exec.summaryLine },
+      executionReviewStatus: line.executionReviewStatus,
+      executionMergeMode: line.executionMergeMode,
+      executionOrder: line.executionOrder,
+      workOrderPosition: workOrderRank.get(line.id) ?? 1,
+      workOrderTotal,
+    };
+  });
 
   const quote: QuoteDetailPayload = {
     id: row.id,
@@ -179,20 +242,73 @@ export default async function QuoteDetailPage({
     quoteUpdatedAtAtCapture: c.quoteUpdatedAtAtCapture,
   }));
 
-  const latestSend =
-    sendCheckpoints.length > 0 ? sendCheckpoints[sendCheckpoints.length - 1] : null;
-  const workspaceDiffersFromLastSend = Boolean(
-    latestSend &&
-      row.status === QuoteStatus.DRAFT &&
-      row.updatedAt.getTime() > latestSend.createdAt.getTime(),
+  const approvalCheckpointRows = await db.quoteCheckpoint.findMany({
+    where: {
+      organizationId: org.id,
+      quoteId: row.id,
+      kind: QuoteCheckpointKind.APPROVAL,
+    },
+    orderBy: { sequence: "asc" },
+    select: {
+      id: true,
+      sequence: true,
+      createdAt: true,
+      quoteUpdatedAtAtCapture: true,
+    },
+  });
+
+  const approvalCheckpoints: QuoteSendCheckpointSummary[] = approvalCheckpointRows.map((c) => ({
+    id: c.id,
+    sequence: c.sequence,
+    createdAt: c.createdAt,
+    quoteUpdatedAtAtCapture: c.quoteUpdatedAtAtCapture,
+  }));
+
+  const latestCommercialProof = await db.quoteCheckpoint.findFirst({
+    where: {
+      organizationId: org.id,
+      quoteId: row.id,
+      kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+
+  const workspaceDiffersFromLastCommercialProof = Boolean(
+    latestCommercialProof &&
+      row.status !== QuoteStatus.ARCHIVED &&
+      row.updatedAt.getTime() > latestCommercialProof.createdAt.getTime(),
   );
+
+  const activatedJobId =
+    row.job && row.job.organizationId === org.id ? row.job.id : null;
+
+  const isExecutionEditable = quoteStatusAllowsExecutionEdits(row.status);
+  const reusableTaskOptions: ReusableTaskPickerOption[] = isExecutionEditable
+    ? (
+        await db.taskTemplate.findMany({
+          where: { organizationId: org.id, archivedAt: null },
+          orderBy: { title: "asc" },
+          select: { id: true, title: true, stageKey: true, category: true },
+        })
+      ).map((r) => ({
+        id: r.id,
+        title: r.title,
+        stageLabel: getExecutionStageLabel(r.stageKey),
+        categoryLabel: getTaskTemplateCategoryLabel(r.category),
+      }))
+    : [];
 
   return (
     <QuoteWorkspaceShell
       quote={quote}
       lineItemTemplates={lineItemTemplates}
       sendCheckpoints={sendCheckpoints}
-      workspaceDiffersFromLastSend={workspaceDiffersFromLastSend}
+      approvalCheckpoints={approvalCheckpoints}
+      workspaceDiffersFromLastCommercialProof={workspaceDiffersFromLastCommercialProof}
+      activatedJobId={activatedJobId}
+      draftTasksByLineId={draftTasksByLineId}
+      reusableTaskOptions={reusableTaskOptions}
     />
   );
 }

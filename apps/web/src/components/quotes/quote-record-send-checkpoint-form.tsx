@@ -33,8 +33,11 @@ export function QuoteRecordSendCheckpointForm({ quoteId }: { quoteId: string }) 
     <form action={formAction} className="space-y-3">
       {state.error ? <FormError message={state.error} /> : null}
       <button type="submit" className={primaryButtonClass} disabled={isPending}>
-        {isPending ? "Recording…" : "Record send checkpoint"}
+        {isPending ? "Sending…" : "Send quote"}
       </button>
+      <p className="text-[0.7rem] leading-relaxed text-foreground-subtle">
+        Stores internal commercial proof and marks the quote Sent. Does not email customers or create jobs.
+      </p>
     </form>
   );
 }

@@ -55,7 +55,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 |--------|---------|
 | `draft` | Editable; not customer-visible. |
 | `sent` | Customer-facing link active; still editable only per product rules (prefer explicit **send update** / supersede flows over silent drift; checkpoints capture sends—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md)). |
-| `approved` | Customer commitment recorded; triggers **job activation** path. |
+| `approved` | Customer commitment recorded for **sold scope/price**; internal **Execution Review** then **job activation** materialize runtime work (exact UX/state names are implementation). |
 | `declined` | Customer declined or company voided. |
 | `expired` | Past validity without approval. |
 | `superseded` | Replaced by a newer quote revision for same opportunity. |
@@ -72,6 +72,10 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | `cancelled` | Job will not be executed (void after sold—rare; use events + CO where possible). |
 
 **Note:** Exact DB enum strings may vary; **semantic** equivalence to this table is required unless canon is revised.
+
+**v5 app (current slice):** persisted `QuoteStatus` uses **`DRAFT`**, **`SENT`**, **`APPROVED`**, **`ARCHIVED`**. Commercial checkpoints use **`SEND`** (proposal as sent) and **`APPROVAL`** (commercial acceptance proof; staff-recorded until e-sign). Declined / expired / superseded are not separate statuses yet.
+
+**v5 app (Job runtime V1):** persisted **`JobStatus`** uses **`ACTIVE`**, **`ARCHIVED`**. **One job per quote** (`Job.quoteId` unique). **`JobStage.blockType`** = **`SHARED`** | **`SEPARATE_LINE_ITEM`**. **`JobTaskStatus`** = **`TODO`** | **`IN_PROGRESS`** | **`DONE`**. Scheduled / on hold / complete / closed / cancelled per the table above are not separate statuses yet.
 
 ---
 

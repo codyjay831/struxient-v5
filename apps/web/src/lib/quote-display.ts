@@ -1,4 +1,8 @@
-import type { QuoteStatus } from "@prisma/client";
+import type {
+  QuoteLineExecutionMergeMode,
+  QuoteLineExecutionReviewStatus,
+  QuoteStatus,
+} from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 
 /** Serializable quote row for list views (server-fetched, org-scoped). */
@@ -35,6 +39,18 @@ export type QuoteLineItemPayload = {
   unitAmountCents: number;
   lineTotalCents: number;
   internalNotes: string | null;
+  /** Optional internal draft execution — not customer-facing. */
+  executionSummary: {
+    taskCount: number;
+    summaryLine: string | null;
+  };
+  /** Internal execution planning — not customer-facing. */
+  executionReviewStatus: QuoteLineExecutionReviewStatus;
+  executionMergeMode: QuoteLineExecutionMergeMode;
+  executionOrder: number;
+  /** 1-based position after sorting by execution order on the quote. */
+  workOrderPosition: number;
+  workOrderTotal: number;
 };
 
 /** Minimal SEND checkpoint row for quote detail (staff-only list; not a version manager). */
@@ -65,6 +81,8 @@ export type QuoteDetailPayload = {
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
   DRAFT: "Draft",
+  SENT: "Sent",
+  APPROVED: "Approved",
   ARCHIVED: "Archived",
 };
 
@@ -91,6 +109,10 @@ export function quoteStatusBadgeTone(status: QuoteStatus): StatusBadgeTone {
   switch (status) {
     case "ARCHIVED":
       return "neutral";
+    case "APPROVED":
+      return "approved";
+    case "SENT":
+      return "sent";
     default:
       return "draft";
   }

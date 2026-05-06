@@ -13,7 +13,7 @@ type QuoteCheckpointRecordedBodyProps = {
 };
 
 /**
- * Renders a stored proposal projection from a SEND checkpoint payload (staff-only proof).
+ * Renders a stored commercial proposal projection from a SEND or APPROVAL checkpoint payload (staff-only).
  * Must not be fed raw Prisma rows — only parsed {@link QuoteCustomerPreviewDocument}.
  */
 export function QuoteCheckpointRecordedBody({

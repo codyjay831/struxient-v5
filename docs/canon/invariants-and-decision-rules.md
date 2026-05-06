@@ -13,6 +13,10 @@ The **baseline for what was sold** at activation time is defined by the **approv
 - **Must not:** silently discard sold line structure on activation without user-visible reconciliation.  
 - **Must:** support a **customer-facing projection** distinct from internal operational detail.
 
+**v5 app slice:** after **`APPROVED`** (commercial acceptance recorded), **internal** quote-line draft execution may still be edited until **job activation** exists—commercial checkpoints and customer projections remain **commercial-only** (no internal execution leakage).
+
+**v5 app slice (Job runtime V1):** **activation** is the boundary at which execution becomes runtime: `Job` / `JobStage` / `JobTask` rows are **copies** of the quote's draft execution at activation time. Later quote / template edits **must not** mutate already-activated job tasks—runtime rows preserve lineage (`sourceQuoteLineItemId`, `sourceQuoteLineExecutionTaskId`, `sourceTaskTemplateId`) but never live-read from the source.
+
 ## I3 — No manual rebuild as the default activation path
 
 After customer **approval / signature**, the system **must** provide a **direct materialization** of executable work aligned to the approved quote intent.
@@ -83,7 +87,7 @@ The product **must** support:
 
 ## I15 — Post-sign workflow refinement
 
-After customer **approval / signature**, users **must** be able to **edit the job’s executable workflow** (tasks/stages, assignments, ordering, additions) as **normal operations**. Quote-time execution drafts **may** carry forward but **must not** create a canonically “locked” internal graph that can only be changed by rebuilding the sold quote, except through explicit **change-order / recommit** flows that affect **sold scope**.
+After customer **approval / signature**, users **must** be able to refine the internal execution plan—during **Execution Review** (pre-activation) and again on the **job** after activation (tasks/stages, assignments, ordering, additions)—as **normal operations**. Quote-time execution drafts **may** carry forward but **must not** create a canonically “locked” internal graph that can only be changed by rebuilding the sold quote, except through explicit **change-order / recommit** flows that affect **sold scope**.
 
 ## I16 — Construction issues and events: guided, always actionable
 
@@ -152,6 +156,25 @@ Struxient v5 supports both light and dark appearance modes. The design system sh
 - **Light mode** should stay **clean and legible**—professional neutrals, sufficient contrast, **not** toy-like or novelty styling.  
 - **Dark mode** should stay **polished and high-contrast** where it matters for text, borders, and focus—without crushing hierarchy or hiding state semantics.
 
+## I24 — Stages are presets and containers; tasks are the execution power layer
+
+> **Canon phrase:** Stages are presets and containers. Tasks are the execution power layer.
+
+MVP execution planning ships **default stage containers** so users do not have to design stages from scratch. The real operational power in v5 lives in **line items, tasks, payments / payment gates, activity history, approvals, execution records, daily logs, and customer / job changes**—not in stage architecture.
+
+The **default MVP stage preset** is **Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. A reserved **future** preset for smaller service execution is **Service Work** (candidate wordings: **Prepare / Perform Work / Wrap Up** or **Before Visit / On Site / Complete**)—same core line-item / stage / task model, smaller preset.
+
+- **Must:** treat stages as **lightweight default containers / presets** that group tasks for legibility; depth and ordering live on **tasks** (and downstream models), not on stages.  
+- **Must:** route MVP UI through the **Standard Project** preset so users can **quote** and **plan** without first designing a workflow.  
+- **Must:** keep the implementation **preset-flexible**—presets must be able to be **renamed, hidden, merged, specialized, or selected** per real contractor usage later (e.g., the future **Service Work** preset). Hard-coding the five **Standard Project** labels as the **only** model anywhere in code or canon is a violation.  
+- **Must not:** introduce **kanban** language (no “board / column / swimlane” framing for stages).  
+- **Must not:** introduce **placement** language (stages do not “place” line items or tasks).  
+- **Must not:** require users to design custom workflows / stage architecture **before** they can quote or plan work.  
+- **Must not:** ship a separate **task engine** for service execution; service work uses the same model with a smaller preset when that preset lands.  
+- **Must not:** push expressive depth (custom workflow design, kanban-style operations, stage-level dependencies, placement semantics) into stages in MVP.
+
+Detailed product framing and the do/do-not list live in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
+
 ---
 
 ## Default decision rules (when product is ambiguous)
@@ -182,4 +205,5 @@ When product decisions contradict prior canon:
 *Canon update (2026-05-05): Added I22 — engineering delivery standards.*
 
 *Canon update (2026-05-06): Added I23 — light and dark appearance (shell / design system).*  
-*Canon update (2026-05-06): I2 + I20 — **working quote** vs **checkpoint** / approved baseline wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*
+*Canon update (2026-05-06): I2 + I20 — **working quote** vs **checkpoint** / approved baseline wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
+*Canon update (2026-05-06): Added I24 — Stages are presets and containers; tasks are the execution power layer. Default MVP preset **Standard Project**; reserved future preset **Service Work**. Architecture must stay preset-flexible. Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*

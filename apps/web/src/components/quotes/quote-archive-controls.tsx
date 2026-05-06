@@ -39,7 +39,7 @@ export function QuoteDraftArchivePanel({ quoteId }: { quoteId: string }) {
     <WorkspacePanel padding="compact" className="mb-6 border-border">
       <SectionHeading
         title="Archive quote"
-        description="Sets status to Archived: title, notes, and line items can no longer be changed on this page. Nothing is deleted; restore to draft brings editing back when you are ready."
+        description="Sets status to Archived: commercial fields and line items can no longer be changed on this page. Nothing is deleted; restore to draft brings commercial editing back when you are ready."
       />
       <form action={formAction} className="mt-3 space-y-3">
         {state.error ? <FormError message={state.error} /> : null}

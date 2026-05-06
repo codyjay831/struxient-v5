@@ -1,80 +1,157 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-} from "@/components/ui/handoff-panel";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { PageHeader } from "@/components/ui/page-header";
+import { JobStatus } from "@prisma/client";
+import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { jobDetailPath } from "@/lib/job-path";
+import { formatJobStatus, jobStatusBadgeTone } from "@/lib/job-display";
 import { EmptyState } from "@/components/ui/empty-state";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { PlaceholderButton } from "@/components/ui/placeholder-button";
+import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { FolderKanban } from "lucide-react";
+import { SignalCard } from "@/components/ui/signal-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { Briefcase } from "lucide-react";
 
-export default function JobsRecordPage() {
+export const dynamic = "force-dynamic";
+
+const listLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+export default async function JobsPage() {
+  const org = await getDevOrganizationOrThrow();
+
+  const [jobs, totalCount, activeCount, archivedCount] = await Promise.all([
+    db.job.findMany({
+      where: { organizationId: org.id },
+      orderBy: [{ activatedAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        activatedAt: true,
+        quoteId: true,
+        quote: { select: { id: true, title: true, organizationId: true } },
+        customer: { select: { id: true, displayName: true, organizationId: true } },
+        lead: { select: { id: true, title: true, organizationId: true } },
+        _count: { select: { tasks: true, stages: true } },
+      },
+    }),
+    db.job.count({ where: { organizationId: org.id } }),
+    db.job.count({ where: { organizationId: org.id, status: JobStatus.ACTIVE } }),
+    db.job.count({ where: { organizationId: org.id, status: JobStatus.ARCHIVED } }),
+  ]);
+
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[{ label: "Work" }, { label: "Jobs" }]}
-      />
+      <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Jobs" }]} />
       <PageHeader
         eyebrow="Work"
         title="Jobs"
-        description="Reserved workspace for future job records—filters, columns, and detail routes are not wired. This is the Work planning shell, not the Workstation attention strip and not automatically linked from quotes yet."
-        actions={
-          <>
-            <PlaceholderButton title="No job store in this build">
-              New job (not wired)
-            </PlaceholderButton>
-            <PlaceholderButton title="No import pipeline in this build">
-              Import (not wired)
-            </PlaceholderButton>
-          </>
-        }
+        description="Runtime jobs activated from approved quotes in this organization. Each job has stages and tasks copied at activation—later quote edits do not change tasks already on the job."
       />
 
-      <HandoffPanel
-        title="Work connection"
-        description="Jobs are expected to become execution records once persistence and explicit quote-to-job handoffs exist—not created from this placeholder. Schedule, issues, and Workstation feeds are likewise deferred. This page is only the reserved catalog shell."
-      >
-        <Link href="/schedule" className={handoffMutedLinkClass}>
-          Go to Schedule
-        </Link>
-        <Link href="/workstation/jobs" className={handoffMutedLinkClass}>
-          Open Workstation jobs lens
-        </Link>
-        <Link href="/payments" className={handoffMutedLinkClass}>
-          Payments (reserved)
-        </Link>
-      </HandoffPanel>
+      <section className="mb-8">
+        <SectionHeading
+          title="Organization overview"
+          description={`Real database counts for ${org.name}.`}
+        />
+        <ul className="grid gap-3 sm:grid-cols-3">
+          <li>
+            <SignalCard label="Jobs (all)" value={String(totalCount)} hint="Rows in this org." />
+          </li>
+          <li>
+            <SignalCard label="Active jobs" value={String(activeCount)} hint="Activated, not archived." />
+          </li>
+          <li>
+            <SignalCard label="Archived jobs" value={String(archivedCount)} hint="Read-only here." />
+          </li>
+        </ul>
+      </section>
 
-      <WorkspacePanel className="mb-8" padding="compact">
-        <p className="text-sm text-foreground-muted">
-          <span className="font-medium text-foreground">Workstation vs this page:</span>{" "}
-          Use{" "}
-          <Link
-            href="/workstation/jobs"
-            className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+      {totalCount === 0 ? (
+        <WorkspacePanel>
+          <EmptyState
+            icon={Briefcase}
+            title="No jobs yet"
+            description="Jobs are created by activating an approved quote from its execution preview. Approve a quote and review its draft execution to enable activation."
           >
-            Workstation → Jobs lens
-          </Link>{" "}
-          for a reserved “job attention” slice (static today). Use this route when you
-          want the job catalog placeholder.
-        </p>
-      </WorkspacePanel>
-
-      <SectionHeading
-        title="All jobs"
-        description="Search, saved views, and pagination will map to org-scoped queries. Row actions will open `/jobs/{id}` for the Work record shell—not the Workstation lens."
-      />
-
-      <EmptyState
-        icon={FolderKanban}
-        title="No jobs to show yet"
-        description="When a real job store exists, this grid will list org-scoped rows. Until then, nothing is fabricated; `/jobs/[id]` is a static shell from the URL only."
-      >
-        <PlaceholderButton>Open first job (not wired)</PlaceholderButton>
-      </EmptyState>
+            <Link href="/quotes" className={listLinkClass}>
+              Open quotes
+            </Link>
+          </EmptyState>
+        </WorkspacePanel>
+      ) : (
+        <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+          {jobs.map((job) => {
+            const activated = new Date(job.activatedAt).toLocaleString();
+            const safeQuote =
+              job.quote && job.quote.organizationId === org.id ? job.quote : null;
+            const safeCustomer =
+              job.customer && job.customer.organizationId === org.id ? job.customer : null;
+            const safeLead =
+              job.lead && job.lead.organizationId === org.id ? job.lead : null;
+            const contextBits: string[] = [];
+            if (safeCustomer) {
+              contextBits.push(`Customer: ${safeCustomer.displayName}`);
+            }
+            if (safeLead) {
+              contextBits.push(`Lead: ${safeLead.title}`);
+            }
+            if (contextBits.length === 0) {
+              contextBits.push("No customer or lead linked");
+            }
+            return (
+              <li key={job.id} className="px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={jobDetailPath(job.id)}
+                      className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {job.title}
+                    </Link>
+                    <p className="mt-1 text-xs text-foreground-muted">{contextBits.join(" · ")}</p>
+                    {safeQuote ? (
+                      <p className="mt-1 text-xs text-foreground-muted">
+                        From quote:{" "}
+                        <Link
+                          href={`/quotes/${safeQuote.id}`}
+                          className="underline decoration-border underline-offset-4 hover:decoration-foreground"
+                        >
+                          {safeQuote.title}
+                        </Link>
+                      </p>
+                    ) : null}
+                    <dl className="mt-2 grid gap-1 text-xs text-foreground-muted sm:grid-cols-3">
+                      <div>
+                        <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                          Activated
+                        </dt>
+                        <dd className="mt-0.5 text-foreground">{activated}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                          Stages
+                        </dt>
+                        <dd className="mt-0.5 text-foreground">{job._count.stages}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                          Tasks
+                        </dt>
+                        <dd className="mt-0.5 text-foreground">{job._count.tasks}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className="shrink-0">
+                    <StatusBadge label={formatJobStatus(job.status)} tone={jobStatusBadgeTone(job.status)} />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

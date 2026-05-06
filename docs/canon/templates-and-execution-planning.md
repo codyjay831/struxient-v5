@@ -55,13 +55,13 @@ When **tasks and stages** are attached **during quoting**, systems often blur:
 
 ### Canon stance for Struxient v5
 
-1. **Commercial truth vs execution plan** — The **approved quote** anchors **what was sold** (line items, customer-facing disclosures, payment expectations). The **executable workflow** (tasks/stages on the job) is **operational** and must remain **editable** through normal delivery **without** rewriting sold scope unless a **controlled** change path (e.g., change order) says so.
+1. **Commercial truth vs execution plan** — The **approved quote** anchors **what was sold** (line items, customer-facing disclosures, payment expectations)—typically proven by **quote checkpoints** focused on commercial disclosure and commitment. The **executable workflow** is **operational**: teams refine it through an **Execution Review** step **after** customer signing and **before** **job activation** materializes runtime job stages/tasks; after activation, the **job** remains editable for real-world operations **without** rewriting sold scope unless a **controlled** change path (e.g., change order) says so. **Execution confirmation** at activation may later get its own **checkpoint / proof** row—separate from “what the customer saw,” same hidden-receipt posture as other checkpoints.
 
 2. **Draft semantics on quotes** — Execution structure on a **pre-approval quote** should be treatable as **planning intent** or **draft**: useful for speed (templates) and for internal rehearsal, but **not** treated as immutable customer commitment unless explicitly exposed to the customer (which canon discourages for internal tasks by default).
 
-3. **Clean handoff, messy-free default** — Activation should **materialize** a job workflow that is **coherent** for the Workstation: inherit draft structure when present, **without** trapping users in a state where post-sign edits require painful workarounds. If the quote carried **no** execution draft, activation still produces a **usable** job container ready for planning.
+3. **Clean handoff, messy-free default** — **Execution Review** (post-sign, pre-activation) should produce a **coherent** internal plan; **activation** then **materializes** runtime job work for the Workstation. Inherit draft structure when present, **without** trapping users in painful workarounds. If the quote carried **no** execution draft, the review + activation path still produces a **usable** job container ready for planning.
 
-4. **Post-sign editing is normal** — Refining assignments, order, dependencies, adding tasks for mobilization, inspections, or punch—after sign—is **expected behavior**, not an exception. Early planning on the quote should **accelerate** post-sign work, not **cement** a wrong plan.
+4. **Post-sign refinement is normal; post-activation ops edits are normal** — Refining the internal execution plan **after customer sign** during **Execution Review**, then refining assignments, order, dependencies, and adding mobilization / inspection / punch tasks **on the job after activation**, is **expected**—not an exception. Early planning on the quote should **accelerate** delivery planning, not **cement** a wrong plan.
 
 *(Exact UX mechanics—e.g., explicit “draft” toggles, separate tabs, copy-on-activate behaviors—are implementation; **canon** requires the **outcomes** above.)*
 
@@ -93,4 +93,78 @@ Over time, organizations **tend to reuse** more **templates** (line-item-only an
 
 ---
 
-*Canon update (2026-05-05): Clarified template granularities (line-item-only vs line item + stages/tasks), quote-time vs post-sign execution planning, draft-vs-sold separation intent, and template maturity curve.*
+## 6. Stage presets and the execution power layer (MVP stance)
+
+### Canon phrase
+
+> **Stages are presets and containers. Tasks are the execution power layer.**
+
+Use this sentence when a feature, prompt, or design discussion needs to settle the question *“how heavy should stages be?”*. Stages are **lightweight default containers** that group work so users don't have to design phase architecture from scratch; they are **not** where v5 builds its operational power.
+
+### Core model (MVP)
+
+| Concept | Role in MVP execution planning |
+|---------|--------------------------------|
+| **Line item** | What was sold / scoped — the commercial anchor. |
+| **Stage** | Lightweight default **container / preset** that groups tasks for legibility. |
+| **Task** | The real **executable detail** — ownership, state, ordering, dependencies, blockers. |
+
+### Default MVP stage preset — **Standard Project**
+
+The MVP ships with **one** named stage preset. The five containers must appear in this order:
+
+1. **Pre-Construction**
+2. **Engineering & Permits**
+3. **Materials**
+4. **Installation**
+5. **Final Inspection & Closeout**
+
+This preset is the default **on quote-line draft execution and on post-activation jobs** in MVP. Adding a task is a per-stage action — there is no “pick a stage from a freeform list” design step required to start planning work.
+
+### Future possible preset — **Service Work** (not in MVP)
+
+Reserved for smaller / shorter service execution. Two candidate wordings; the product decision between them is deferred to real usage:
+
+- **Service Work** (working name): **Prepare** → **Perform Work** → **Wrap Up**
+- **Alternative if it tests better**: **Before Visit** → **On Site** → **Complete**
+
+Service work **must use the same core line item / stage / task model**. v5 **must not** introduce a separate task engine for service execution — the smaller preset is the only required adjustment.
+
+### Where the operational power lives
+
+Stages **must not** become the main power layer. The real operational power in v5 stays in:
+
+- **Line items** (commercial anchor)
+- **Tasks** (executable detail)
+- **Payments / payment gates**
+- **Activity history**
+- **Approvals**
+- **Execution records**
+- **Daily logs**
+- **Customer / job changes**
+
+Features that would push expressive depth into stages (custom workflow designers, stage-level dependencies, kanban-style stage operations, placement semantics) **must not** ship in MVP.
+
+### MVP rules (do / do not)
+
+- **Do** ship the **Standard Project** preset as the default container set so users don't design stages before they can quote or plan work.
+- **Do** make adding tasks a **per-stage** action so the stage stays a lightweight container, not a dropdown the user has to reason about per task.
+- **Do not** introduce **kanban** language anywhere in stage UX or canon.
+- **Do not** introduce **placement** language (stages do not “place” line items or tasks).
+- **Do not** force users to design workflows before they can **quote** or **plan** work.
+- **Do not** split **service execution** into a separate task engine — use the same model with the smaller preset when it ships.
+- **Do not** treat the five **Standard Project** stage labels as a forever model. MVP UI may show only these five today, but the **architecture must remain flexible** enough that presets can later be **renamed**, **hidden**, **merged**, **specialized**, or **selected** per real contractor usage. Code that hard-codes the five names without a preset abstraction is a canon violation.
+
+### Relationship to existing canon
+
+- §1 still allows **composite templates** that save line items together with stages and tasks. The MVP stance here narrows **stage architecture authoring** (we ship a default preset rather than a workflow designer), not template composition.
+- §2 still requires both planning postures (**plan during quote** and **defer to post-sign**) as first-class. Default stage containers serve **both** postures — the preset is available on the quote and on the activated job.
+- I3 / I4 / I8 / I13 / I14 / I15 still apply: post-sign execution refinement remains normal operations, and template instance independence is unchanged.
+
+---
+
+*Canon update (2026-05-05): Clarified template granularities (line-item-only vs line item + stages/tasks), quote-time vs post-sign execution planning, draft-vs-sold separation intent, and template maturity curve.*  
+*Canon update (2026-05-06): Execution Review as post-sign / pre-activation gate; commercial checkpoints vs future execution/activation proof; post-activation job edits remain normal operations.*  
+*Canon update (2026-05-06): After commercial **Approved**, internal quote-line execution planning may still be edited until **job activation**—per product rules; commercial checkpoints remain commercial-only.*  
+*Canon update (2026-05-06): Activation copies execution into `Job` / `JobStage` / `JobTask` runtime rows (one job per quote); later quote/template edits do not mutate already-activated job tasks. Templates remain copy-forward, never live-linked into runtime.*  
+*Canon update (2026-05-06): §6 — MVP stage-preset stance. Canon phrase: **“Stages are presets and containers. Tasks are the execution power layer.”** Default MVP preset **Standard Project** (Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout). Reserved future preset **Service Work** for smaller service execution (same core model; no separate task engine). Architecture must stay preset-flexible; no kanban or placement language; no workflow designer before users can quote or plan.*

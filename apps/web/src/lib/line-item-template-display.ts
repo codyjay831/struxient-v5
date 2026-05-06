@@ -21,4 +21,9 @@ export type LineItemTemplateLibraryRow = {
   defaultCustomerExcludedNotes: string | null;
   defaultCustomerPresentationGroup: string | null;
   hasCustomerProposalDefaults: boolean;
+  /** Optional default execution — summary only on list cards. */
+  executionSummary: {
+    taskCount: number;
+    summaryLine: string | null;
+  };
 };

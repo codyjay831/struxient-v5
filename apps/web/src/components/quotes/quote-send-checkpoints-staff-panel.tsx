@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { QuoteStatus } from "@prisma/client";
+import { QuoteMarkApprovedForm } from "@/components/quotes/quote-mark-approved-form";
 import { QuoteRecordSendCheckpointForm } from "@/components/quotes/quote-record-send-checkpoint-form";
+import { quoteExecutionReviewPreviewPath } from "@/lib/quote-execution-review-path";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import type { QuoteSendCheckpointSummary } from "@/lib/quote-display";
@@ -8,51 +11,95 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 /**
- * Staff-only list of SEND checkpoints — not a quote version manager.
- * QuoteCheckpoint rows are internal proof; SEND is not an execution or delivery signal.
+ * Staff-only commercial proof: SEND (proposal as sent) and APPROVAL (customer acceptance).
+ * Not a version browser; payloads stay customer-commercial only (no internal execution planning).
  */
 export function QuoteSendCheckpointsStaffPanel({
   quoteId,
-  isDraft,
+  quoteStatus,
   sendCheckpoints,
+  approvalCheckpoints,
 }: {
   quoteId: string;
-  isDraft: boolean;
+  quoteStatus: QuoteStatus;
   sendCheckpoints: QuoteSendCheckpointSummary[];
+  approvalCheckpoints: QuoteSendCheckpointSummary[];
 }) {
-  const latest = sendCheckpoints.length > 0 ? sendCheckpoints[sendCheckpoints.length - 1] : null;
-  const lastRecordedLabel = latest ? new Date(latest.createdAt).toLocaleString() : null;
+  const isArchived = quoteStatus === QuoteStatus.ARCHIVED;
+  const canSendQuote = quoteStatus === QuoteStatus.DRAFT;
+  const canMarkApproved = quoteStatus === QuoteStatus.SENT;
+  const isApproved = quoteStatus === QuoteStatus.APPROVED;
+
+  const latestSend = sendCheckpoints.length > 0 ? sendCheckpoints[sendCheckpoints.length - 1] : null;
+  const lastSendLabel = latestSend ? new Date(latestSend.createdAt).toLocaleString() : null;
+
+  const latestApproval =
+    approvalCheckpoints.length > 0 ? approvalCheckpoints[approvalCheckpoints.length - 1] : null;
+  const lastApprovalLabel = latestApproval ? new Date(latestApproval.createdAt).toLocaleString() : null;
 
   return (
     <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
       <SectionHeading
-        title="Recorded send checkpoints"
-        description="Staff-only hidden checkpoints: proof of optional proposal wording from the quote at each capture moment. Not email, SMS, a portal link, or approval. The live proposal preview elsewhere always follows the current working quote."
+        title="Commercial send & acceptance"
+        description="Internal records only—not email, not a customer portal, and not job activation. Send captures the proposal as sent; approval captures commercial acceptance (staff-recorded until e-sign exists)."
       />
 
-      {isDraft ? (
-        <>
-          <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
-            Recording a checkpoint stores internal proof from the quote as it is now. It does not email, text, or publish
-            an external link. Edit the working quote freely; record again when you want a new proof row.
+      {!isArchived && canSendQuote ? (
+        <div className="mb-6 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
+          <p className="text-xs font-medium text-foreground">Send this quote</p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            When you are ready to treat this proposal as sent to the customer, use Send quote. Commercial fields stay
+            editable only while Draft—after send, scope and pricing lock here until a future revision flow exists.
           </p>
-          <QuoteRecordSendCheckpointForm quoteId={quoteId} />
-        </>
-      ) : (
-        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
-          This quote is archived and read-only. You cannot record new sends; existing checkpoints below remain
-          historical proof only.
-        </p>
-      )}
+          <div className="mt-3">
+            <QuoteRecordSendCheckpointForm quoteId={quoteId} />
+          </div>
+        </div>
+      ) : null}
 
-      {latest && lastRecordedLabel ? (
-        <p className="mt-4 text-xs font-medium text-foreground">
-          Last recorded checkpoint: <time dateTime={latest.createdAt.toISOString()}>{lastRecordedLabel}</time>
-          {latest.quoteUpdatedAtAtCapture ? (
+      {!isArchived && canMarkApproved ? (
+        <div className="mb-6 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
+          <p className="text-xs font-medium text-foreground">Customer accepted commercially</p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            This quote is Sent. When the customer has agreed to scope and price, record approval here. Internal draft
+            execution can still be edited afterward until activation exists.
+          </p>
+          <div className="mt-3">
+            <QuoteMarkApprovedForm quoteId={quoteId} />
+          </div>
+        </div>
+      ) : null}
+
+      {!isArchived && isApproved ? (
+        <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
+          <p className="text-xs font-medium text-foreground">Next: review execution before activation</p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            Commercial terms are approved. Review the internal draft execution on this quote and activate it into a
+            job when planning is ready.
+          </p>
+          <div className="mt-3">
+            <Link href={quoteExecutionReviewPreviewPath(quoteId)} className={listLinkClass}>
+              Review execution
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {isArchived ? (
+        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
+          This quote is archived and read-only. Existing rows below stay historical; restore to draft to change status
+          or commercial fields again.
+        </p>
+      ) : null}
+
+      {latestSend && lastSendLabel ? (
+        <p className="mt-2 text-xs font-medium text-foreground">
+          Last send record: <time dateTime={latestSend.createdAt.toISOString()}>{lastSendLabel}</time>
+          {latestSend.quoteUpdatedAtAtCapture ? (
             <span className="mt-1 block font-normal text-foreground-muted">
-              Workspace last updated at capture:{" "}
-              <time dateTime={latest.quoteUpdatedAtAtCapture.toISOString()}>
-                {new Date(latest.quoteUpdatedAtAtCapture).toLocaleString()}
+              Quote last updated at capture:{" "}
+              <time dateTime={latestSend.quoteUpdatedAtAtCapture.toISOString()}>
+                {new Date(latestSend.quoteUpdatedAtAtCapture).toLocaleString()}
               </time>
             </span>
           ) : null}
@@ -64,20 +111,46 @@ export function QuoteSendCheckpointsStaffPanel({
           {sendCheckpoints.map((cp) => (
             <li key={cp.id} className="flex flex-wrap items-baseline justify-between gap-2">
               <span>
-                Checkpoint #{cp.sequence} ·{" "}
-                <time dateTime={cp.createdAt.toISOString()}>{new Date(cp.createdAt).toLocaleString()}</time>
+                Send #{cp.sequence} · <time dateTime={cp.createdAt.toISOString()}>{new Date(cp.createdAt).toLocaleString()}</time>
               </span>
               <Link href={`/quotes/${quoteId}/checkpoints/${cp.id}`} className={listLinkClass}>
-                Open checkpoint
+                Open record
               </Link>
             </li>
           ))}
         </ul>
       ) : (
         <p className="mt-4 border-t border-border pt-4 text-xs text-foreground-muted">
-          No send checkpoints yet — the working quote is the only live copy until you record one.
+          No send records yet—use Send quote while the quote is still a draft.
         </p>
       )}
+
+      <div className="mt-6 border-t border-border pt-4">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">Acceptance records</p>
+        {latestApproval && lastApprovalLabel ? (
+          <p className="mt-2 text-xs font-medium text-foreground">
+            Last acceptance record:{" "}
+            <time dateTime={latestApproval.createdAt.toISOString()}>{lastApprovalLabel}</time>
+          </p>
+        ) : null}
+        {approvalCheckpoints.length > 0 ? (
+          <ul className="mt-3 space-y-2 text-xs text-foreground-muted">
+            {approvalCheckpoints.map((cp) => (
+              <li key={cp.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                <span>
+                  Acceptance #{cp.sequence} ·{" "}
+                  <time dateTime={cp.createdAt.toISOString()}>{new Date(cp.createdAt).toLocaleString()}</time>
+                </span>
+                <Link href={`/quotes/${quoteId}/checkpoints/${cp.id}`} className={listLinkClass}>
+                  Open record
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-foreground-muted">No acceptance records yet.</p>
+        )}
+      </div>
     </WorkspacePanel>
   );
 }

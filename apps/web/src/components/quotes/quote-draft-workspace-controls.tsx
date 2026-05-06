@@ -25,7 +25,12 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { QuoteLineItemScanBlock } from "@/components/quotes/quote-line-item-display";
+import {
+  QuoteLineDraftExecutionSummary,
+  QuoteLineItemScanBlock,
+} from "@/components/quotes/quote-line-item-display";
+import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
+import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import {
   CustomerProposalOptionalFields,
   LINE_PROPOSAL_NAMES,
@@ -217,8 +222,8 @@ function QuoteLineTemplateApplyList({
       <div className="mt-5">
         <EmptyState
           icon={Library}
-          title="No line presets yet"
-          description="Use Add line item above for one-off rows, or create reusable presets in Sales → Scope Library. Copying a preset always adds a new line with duplicated values."
+          title="No saved line items yet"
+          description="Use Add line item above for one-off rows, or create saved line items in Sales → Scope Library. Copying adds a new line with duplicated commercial fields and copies default draft execution when the saved line item has it."
         />
       </div>
     );
@@ -227,7 +232,7 @@ function QuoteLineTemplateApplyList({
   return (
     <div className="mt-5 space-y-2">
       <p className="text-xs leading-relaxed text-foreground-muted">
-        Newest presets first. Hiding a preset removes it from this list only—lines already on quotes
+        Newest saved line items first. Hiding one removes it from this list only—lines already on quotes
         stay unchanged.
       </p>
       <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
@@ -239,7 +244,7 @@ function QuoteLineTemplateApplyList({
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{t.description}</p>
             <p className="mt-1 text-xs text-foreground-muted">
-              Preset defaults: {t.defaultQuantityDisplay} × {formatMoneyCents(t.defaultUnitAmountCents)}{" "}
+              Defaults: {t.defaultQuantityDisplay} × {formatMoneyCents(t.defaultUnitAmountCents)}{" "}
               unit
               {t.hasCustomerProposalDefaults ? (
                 <span className="mt-1 block text-foreground-subtle">
@@ -296,9 +301,9 @@ function ArchiveTemplateForm({ quoteId, templateId }: { quoteId: string; templat
         type="submit"
         className={secondaryButtonClass}
         disabled={isPending}
-        title="Hide this preset from the picker. Lines you already copied onto quotes are not changed."
+        title="Hide this saved line item from the picker. Lines you already copied onto quotes are not changed."
       >
-        {isPending ? "Hiding…" : "Hide preset"}
+        {isPending ? "Hiding…" : "Hide from picker"}
       </button>
     </form>
   );
@@ -425,6 +430,8 @@ export type QuoteDraftWorkspaceControlsProps = {
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
   lineItemTemplates: LineItemTemplatePickerRow[];
+  draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
+  reusableTaskOptions: ReusableTaskPickerOption[];
 };
 
 export function QuoteDraftWorkspaceControls({
@@ -436,6 +443,8 @@ export function QuoteDraftWorkspaceControls({
   totalCents,
   lineItems,
   lineItemTemplates,
+  draftTasksByLineId,
+  reusableTaskOptions,
 }: QuoteDraftWorkspaceControlsProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const lineCount = lineItems.length;
@@ -452,7 +461,7 @@ export function QuoteDraftWorkspaceControls({
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Line items"
-          description="Each row is part of the current working quote: staff scope and pricing here, optional proposal wording per line (internal preview only), and staff-only line notes. Subtotal and total are stored rollups on the quote row."
+          description="Each row is commercial scope and pricing first. Internal draft execution and light planning (shared stages vs separate scope, work order) stay under each line—not on the customer proposal. Subtotal and total are rollups on the quote row."
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <SignalCard
@@ -479,7 +488,7 @@ export function QuoteDraftWorkspaceControls({
             <EmptyState
               icon={ListOrdered}
               title="No line items on this quote yet"
-              description="Use Add line item above for a one-off row, or scroll to Line presets to copy a reusable row from your Scope Library. Either path adds a normal line to this working quote."
+              description="Use Add line item above for a one-off row, or scroll to Saved line items to copy a reusable row from your Scope Library. Either path adds a normal line to this working quote."
             >
               <Link href="/scope-library" className={secondaryButtonClass}>
                 Open Scope Library
@@ -491,7 +500,16 @@ export function QuoteDraftWorkspaceControls({
             {lineItems.map((line) => (
               <li key={line.id} className="px-4 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <QuoteLineItemScanBlock line={line} />
+                  <div className="min-w-0 flex-1">
+                    <QuoteLineItemScanBlock line={line} />
+                    <QuoteLineDraftExecutionSummary
+                      quoteId={quoteId}
+                      line={line}
+                      isExecutionEditable
+                      draftTasks={draftTasksByLineId[line.id] ?? []}
+                      reusableOptions={reusableTaskOptions}
+                    />
+                  </div>
                   <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
                     {editingLineId === line.id ? null : (
                       <>
@@ -521,11 +539,11 @@ export function QuoteDraftWorkspaceControls({
 
         <div className="mt-8 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 sm:p-5">
           <SectionHeading
-            title="Line presets"
-            description="Copy reusable quote rows from your organization Scope Library. Presets only store commercial defaults. Copying inserts a new line with duplicated values; lines are not live-linked back to the library."
+            title="Saved line items"
+            description="Copy reusable quote rows from your Scope Library. Commercial fields always copy; when a saved line item has default execution, those tasks copy as independent draft execution on the new quote line."
           />
           <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
-            Manage presets in{" "}
+            Manage saved line items in{" "}
             <Link
               href="/scope-library"
               className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"

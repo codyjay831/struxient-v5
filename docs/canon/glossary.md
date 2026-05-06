@@ -31,10 +31,10 @@
 | **Lead** | Early-stage opportunity or inquiry; may auto-create from a channel or be manual; may or may not yet map cleanly to a customer. |
 | **Customer** | Durable business relationship record; may exist with or without a preceding lead. |
 | **Tag / label / metadata** | Non-exclusive signals describing origin, lifecycle state, or segmentation. **User tags** are manual/company-specific; **system-derived lifecycle signals** (e.g. has approved job, import provenance) should be modeled separately when the product already knows them—see [domains-and-boundaries.md](./domains-and-boundaries.md) (Customer graph). |
-| **Quote** | **Working record** where the team defines **what is for sale**; may carry operational hints for later execution. **Commitment** and **immutable proof** at send/approve/activate are captured in **checkpoints**, not by turning the quote into a user-managed version tree—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). |
+| **Quote** | **Working record** where the team defines **what is for sale**; may carry operational hints for later execution. **Commitment** and **immutable proof** at send/approve/activate are captured in **checkpoints**, not by turning the quote into a user-managed version tree—see [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). **v5 persistence (near-term):** `DRAFT` → `SENT` → `APPROVED` → `ARCHIVED`. |
 | **Line item** | A row on a quote representing a sellable/billable unit; may carry tasks, resources, dependencies, and disclosure variants. |
-| **Approval / signature** | Customer commitment boundary; triggers **activation** into executable work. |
-| **Checkpoint** | **Hidden proof record** created at **commitment moments** (e.g. quote sent, approval/signature, job activation, approved customer-facing change) so the system can preserve **what was true** without making users manage “versions” as daily work—[quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). |
+| **Approval / signature** | Customer commitment boundary for **sold scope and price**; followed by internal **Execution Review**, then **job activation** into runtime executable work. |
+| **Checkpoint** | **Hidden proof record** created at **commitment moments** (e.g. quote sent, approval/signature, job activation, approved customer-facing change) so the system can preserve **what was true** without making users manage “versions” as daily work—[quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). **v5 kinds (commercial):** `SEND` (proposal as sent), `APPROVAL` (commercial acceptance proof; staff-recorded until e-sign). Commercial checkpoint payloads are **customer-facing projections only**—no internal execution planning. |
 | **Change order (CO)** | Post-approval **append** of commercial scope/price (and linked tasks); does **not** silently rewrite **approved baseline truth** (checkpoint / execution rules)—[locked-decisions-v1.md](./locked-decisions-v1.md) §7. |
 | **Job collaborator** | Subcontractor (or guest) **job-scoped** access grant; see **Subcontractor** in locked decisions §1. |
 | **Construction issue** | Typed operational problem (delay, defect, inspection fail, payment block, …); **guided event** with required fields and optional **spawned tasks** — [locked-decisions-v1.md](./locked-decisions-v1.md) §10. **Must not** be only unstructured note when execution is affected (I16). **MVP lifecycle:** open → triaged/in_progress → resolved (optional cancelled/misfiled); task completion does not silently close the issue unless explicitly defined. |
@@ -43,8 +43,11 @@
 
 | Term | Definition |
 |------|------------|
-| **Task** | Actionable unit with ownership and state; may exist in lead prep, quote prep, or job execution contexts. |
-| **Stage** | Phase-like **grouping** of work (often under a line item or within a job); may ship inside **composite templates** with tasks. |
+| **Task** | Actionable unit with ownership and state; may exist in lead prep, quote prep, or job execution contexts. **Tasks are the execution power layer** in v5 (I24). |
+| **Stage** | Lightweight **preset / container** that groups tasks under a line item (or within a job) for legibility. **Not** the place v5 builds operational depth—canon phrase per **I24**: *Stages are presets and containers. Tasks are the execution power layer.* May ship inside **composite templates** with tasks. |
+| **Stage preset** | Named ordered set of default stage containers (e.g. **Standard Project**) the product offers so users do not design stage architecture from scratch. Architecture must allow presets to be **renamed, hidden, merged, specialized, or selected** later (I24); MVP UI ships the **Standard Project** preset only. |
+| **Standard Project (default stage preset)** | MVP default preset: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. Used on quote-line draft execution and on activated jobs unless / until other presets ship. |
+| **Service Work (reserved preset)** | **Future** smaller preset for service execution; not in MVP. Candidate wordings: **Prepare / Perform Work / Wrap Up** *or* **Before Visit / On Site / Complete**. Same core line-item / stage / task model—**no** separate task engine. |
 | **Draft execution plan (quote-time)** | Stages/tasks attached **before approval** to rehearse or accelerate delivery; **internal operational intent**, not by default customer commitment. May be **partial** or **rich**. |
 | **Job** (canonical umbrella) | Post-approval **executable container** for delivering sold work; name in UI may vary. |
 | **Dependency** | Constraint where one piece of work requires completion or readiness of another (or of an external condition). |
@@ -87,8 +90,12 @@
 - Prefer **job** / **task** language in execution contexts; prefer **quote** / **line item** language in commercial contexts.  
 - Avoid calling the Workstation a “portal”; **portal** implies customer audience.  
 - Use **projection** when discussing customer-visible subsets of internal data.  
-- Prefer **checkpoint** / **approval record** for preserved commitment truth; reserve **snapshot** for implementation innards (e.g. serialized payload inside a checkpoint), not primary UX copy.
+- Prefer **checkpoint** / **approval record** for preserved commitment truth; reserve **snapshot** for implementation innards (e.g. serialized payload inside a checkpoint), not primary UX copy.  
+- **Stages** are **presets / containers**; do **not** describe stage UX with **kanban** (board / column / swimlane) or **placement** language (I24). Stage operations are not the power story—tasks are.
 
 ---
 
-*Canon update (2026-05-06): Glossary — **Quote**, **Checkpoint**, **CO** rows aligned with [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); usage note on snapshot wording.*
+*Canon update (2026-05-06): Glossary — **Quote**, **Checkpoint**, **CO** rows aligned with [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); usage note on snapshot wording.*  
+*Canon update (2026-05-06): Quote status path and `SEND` / `APPROVAL` checkpoint kinds; commercial-only payloads.*  
+*Canon update (2026-05-06): Job runtime models (`Job`, `JobStage`, `JobTask`) introduced — one job per quote; stages carry `blockType` (`SHARED` vs `SEPARATE_LINE_ITEM`). Activation copies execution forward; later quote edits do not mutate activated job rows.*  
+*Canon update (2026-05-06): Stage entry rewritten as **preset / container**; added **Stage preset**, **Standard Project (default stage preset)**, **Service Work (reserved preset)**; usage note bans **kanban** and **placement** language for stages (I24).*

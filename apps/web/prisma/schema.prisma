@@ -32,13 +32,80 @@ enum LeadSource {
 
 enum QuoteStatus {
   DRAFT
+  SENT
+  APPROVED
   ARCHIVED
 }
 
 /// Hidden proof records at commitment moments — not a user-managed version system.
-/// SEND checkpoints capture the customer-safe proposal projection; they are not execution or task sources.
+/// SEND captures commercial proposal as sent; APPROVAL captures commercial acceptance (no e-sign integration in v1).
+/// Checkpoints are not execution or task sources.
 enum QuoteCheckpointKind {
   SEND
+  APPROVAL
+}
+
+/// V1 canonical execution phases — fixed keys for predictable merge later; no freeform stage names on templates yet.
+enum ExecutionStageKey {
+  intake_review
+  site_visit
+  pre_install
+  permitting
+  materials
+  installation
+  inspection
+  corrections
+  closeout
+}
+
+/// Lightweight task meaning for library entries — categories inform UX only until behavior is earned later.
+enum TaskTemplateCategory {
+  GENERAL
+  PERMIT
+  INSPECTION
+  MATERIAL
+  PAYMENT
+  CUSTOMER_COMMUNICATION
+  PHOTO_EVIDENCE
+  SCHEDULING
+}
+
+/// How a default execution row on a saved line item was created — copied from library vs custom one-off.
+enum LineItemTemplateTaskSource {
+  TASK_TEMPLATE
+  CUSTOM
+}
+
+/// Staff-facing execution readiness on a quote line — separate from whether draft tasks exist (derived from task rows).
+enum QuoteLineExecutionReviewStatus {
+  UNREVIEWED
+  NO_EXECUTION_NEEDED
+}
+
+/// How this quoted scope should land in a future job plan (V1 planning only; no runtime merge here).
+enum QuoteLineExecutionMergeMode {
+  MERGE_INTO_JOB_STAGES
+  KEEP_SEPARATE_BLOCK
+}
+
+/// Runtime job lifecycle (V1 minimal — no scheduling, holds, or financial closeout yet).
+enum JobStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// V1 stage grouping inside a job: SHARED merges across quote lines using canonical phases;
+/// SEPARATE_LINE_ITEM keeps one quote line's stages as their own block (one work block per source line).
+enum JobStageBlockType {
+  SHARED
+  SEPARATE_LINE_ITEM
+}
+
+/// V1 minimal task progression — no assignments, dependencies, or schedule wiring in this build.
+enum JobTaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
 }
 
 model Organization {
@@ -52,7 +119,9 @@ model Organization {
   leads                 Lead[]
   quotes                Quote[]
   lineItemTemplates     LineItemTemplate[]
+  taskTemplates         TaskTemplate[]
   quoteCheckpoints      QuoteCheckpoint[]
+  jobs                  Job[]
   publicRequestSettings PublicRequestSettings?
 }
 
@@ -85,6 +154,7 @@ model Customer {
   updatedAt      DateTime     @updatedAt
   leads          Lead[]
   quotes         Quote[]
+  jobs           Job[]
 
   @@index([organizationId])
 }
@@ -107,6 +177,7 @@ model Lead {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   quotes         Quote[]
+  jobs           Job[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -132,6 +203,7 @@ model Quote {
   updatedAt          DateTime       @updatedAt
   lineItems          QuoteLineItem[]
   checkpoints        QuoteCheckpoint[]
+  job                Job?
 
   @@index([organizationId])
   @@index([customerId])
@@ -139,9 +211,9 @@ model Quote {
   @@index([status])
 }
 
-/// Immutable staff-only proof of what the customer-facing proposal contained at a send moment.
-/// Quote remains the editable working record; QuoteStatus is unchanged by recording a checkpoint.
-/// Future runtime tasks and jobs must materialize from approved checkpoints + execution planning — not from SEND rows.
+/// Immutable staff-only proof of what the customer-facing proposal contained at a commitment moment (send, acceptance).
+/// Quote status advances with Send (→ SENT) and staff-recorded approval (→ APPROVED) in v1; checkpoints store commercial projection only.
+/// Future runtime jobs materialize from approved commercial baseline plus internal execution planning — not from checkpoint rows alone.
 model QuoteCheckpoint {
   id                        String              @id @default(cuid())
   organizationId          String
@@ -181,9 +253,51 @@ model LineItemTemplate {
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   quoteLineItems         QuoteLineItem[]
+  defaultExecutionTasks  LineItemTemplateTask[]
 
   @@index([organizationId])
   @@index([organizationId, archivedAt])
+}
+
+/// Org-scoped reusable task presets (library). Quote/job rows copy fields from templates when applied — not live-linked.
+model TaskTemplate {
+  id               String               @id @default(cuid())
+  organizationId   String
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title              String
+  stageKey           ExecutionStageKey
+  category           TaskTemplateCategory
+  instructions       String?
+  archivedAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  lineItemTemplateTasks LineItemTemplateTask[]
+  quoteLineExecutionTasks QuoteLineExecutionTask[]
+  jobTaskCopies      JobTask[]
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt])
+}
+
+/// Optional default execution on a saved line item — snapshot fields; not live-linked to [TaskTemplate] or quotes.
+model LineItemTemplateTask {
+  id                   String                     @id @default(cuid())
+  lineItemTemplateId   String
+  lineItemTemplate     LineItemTemplate           @relation(fields: [lineItemTemplateId], references: [id], onDelete: Cascade)
+  sourceType           LineItemTemplateTaskSource
+  sourceTaskTemplateId String?
+  sourceTaskTemplate   TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
+  title                String
+  stageKey             ExecutionStageKey
+  category             TaskTemplateCategory
+  instructions         String?
+  sortOrder            Int                        @default(0)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  quoteLineCopies      QuoteLineExecutionTask[]
+
+  @@index([lineItemTemplateId, stageKey, sortOrder])
+  @@index([lineItemTemplateId, sortOrder])
 }
 
 /// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
@@ -205,9 +319,124 @@ model QuoteLineItem {
   internalNotes               String?
   sourceLineItemTemplateId String?
   sourceLineItemTemplate   LineItemTemplate?  @relation(fields: [sourceLineItemTemplateId], references: [id], onDelete: SetNull)
+  /// Internal planning: whether this line still needs execution review vs explicitly commercial-only.
+  executionReviewStatus QuoteLineExecutionReviewStatus @default(UNREVIEWED)
+  /// How this scope should group when a job exists — planning metadata only in this build.
+  executionMergeMode    QuoteLineExecutionMergeMode   @default(MERGE_INTO_JOB_STAGES)
+  /// Work order among lines on this quote for future job sequencing (normalized with peers).
+  executionOrder        Int                           @default(0)
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
+  draftExecutionTasks      QuoteLineExecutionTask[]
+  jobStageCopies           JobStage[]
+  jobTaskCopies            JobTask[]
 
   @@index([quoteId])
+  @@index([quoteId, executionOrder])
   @@index([sourceLineItemTemplateId])
+}
+
+/// Draft internal execution tasks for a quote line — independent from [LineItemTemplateTask] and [TaskTemplate] after copy.
+model QuoteLineExecutionTask {
+  id                           String                     @id @default(cuid())
+  quoteLineItemId              String
+  quoteLineItem                QuoteLineItem              @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplateTaskId String?
+  sourceLineItemTemplateTask   LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id], onDelete: SetNull)
+  sourceTaskTemplateId         String?
+  sourceTaskTemplate           TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
+  sourceType                   LineItemTemplateTaskSource
+  title                        String
+  stageKey                     ExecutionStageKey
+  category                     TaskTemplateCategory
+  instructions                 String?
+  sortOrder                    Int                        @default(0)
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
+  jobTaskCopies                JobTask[]
+
+  @@index([quoteLineItemId, stageKey, sortOrder])
+  @@index([quoteLineItemId, sortOrder])
+}
+
+/// Runtime job materialized from an APPROVED [Quote] at activation time.
+/// Job rows are independent copies — later quote/template edits do not mutate stages or tasks here.
+/// One job per quote in V1 (enforced by [@@unique] on [quoteId]).
+model Job {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  quoteId        String       @unique
+  quote          Quote        @relation(fields: [quoteId], references: [id])
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  leadId         String?
+  lead           Lead?        @relation(fields: [leadId], references: [id])
+  title          String
+  status         JobStatus    @default(ACTIVE)
+  activatedAt    DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  stages         JobStage[]
+  tasks          JobTask[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([customerId])
+  @@index([leadId])
+}
+
+/// Stage on a job — either a SHARED canonical phase merging tasks from many quote lines,
+/// or a SEPARATE_LINE_ITEM block scoped to one source quote line. V1 has no nested groups.
+model JobStage {
+  id                    String            @id @default(cuid())
+  jobId                 String
+  job                   Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  blockType             JobStageBlockType
+  stageKey              ExecutionStageKey
+  title                 String
+  /// Position within the job — shared stages first by canonical stage order, then separate blocks; ties broken by block order then stage order.
+  sortOrder             Int               @default(0)
+  /// SHARED: null. SEPARATE_LINE_ITEM: source quote line id at activation; SetNull if the line is later removed.
+  sourceQuoteLineItemId String?
+  sourceQuoteLineItem   QuoteLineItem?    @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
+  /// Stable label for separate-line-item blocks (line description at activation); null for shared stages.
+  blockTitle            String?
+  /// Position of the parent block among separate blocks (work order at activation); 0 for shared.
+  blockSortOrder        Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  tasks                 JobTask[]
+
+  @@index([jobId])
+  @@index([jobId, sortOrder])
+  @@index([sourceQuoteLineItemId])
+}
+
+/// Runtime task on a job — copied from a quote line execution task at activation; later quote edits do not mutate this row.
+/// Lineage fields use SetNull so source deletes do not orphan the runtime row.
+model JobTask {
+  id                             String                     @id @default(cuid())
+  jobId                          String
+  job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobStageId                     String
+  jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
+  sourceQuoteLineItemId          String?
+  sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
+  sourceQuoteLineExecutionTaskId String?
+  sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id], onDelete: SetNull)
+  sourceTaskTemplateId           String?
+  sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
+  sourceType                     LineItemTemplateTaskSource
+  title                          String
+  category                       TaskTemplateCategory
+  stageKey                       ExecutionStageKey
+  instructions                   String?
+  status                         JobTaskStatus              @default(TODO)
+  sortOrder                      Int                        @default(0)
+  createdAt                      DateTime                   @default(now())
+  updatedAt                      DateTime                   @updatedAt
+
+  @@index([jobId])
+  @@index([jobStageId, sortOrder])
 }
