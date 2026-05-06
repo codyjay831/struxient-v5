@@ -4,7 +4,8 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
-import { SectionHeader } from "@/components/shell/section-header";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,18 +19,18 @@ const listLinkClass =
 
 export default function WorkstationTasksLensPage() {
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Workstation · Tasks lens"
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Workstation", href: "/workstation" }, { label: "Tasks" }]}
+      />
+      <PageHeader
         title="Tasks"
         description="Reserved cross-cutting attention layout—not where you author tasks, run an engine, or browse a catalog. No task queries or mutations exist in this build."
       />
 
-      <WorkspacePanel padding="compact">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Tasks lens vs authoring and engines
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+      <div className="space-y-6">
+        <WorkspacePanel padding="compact">
+          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           <span className="font-medium text-foreground">/workstation/tasks</span> will
           highlight assigned, blocked, review-needed, and ready-next items once a model
           exists. It is <span className="font-medium text-foreground">not</span> quote or
@@ -126,6 +127,7 @@ export default function WorkstationTasksLensPage() {
           Schedule
         </Link>
       </HandoffPanel>
+    </div>
     </div>
   );
 }

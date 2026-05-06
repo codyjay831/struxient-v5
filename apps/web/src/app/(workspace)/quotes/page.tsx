@@ -170,7 +170,6 @@ export default async function QuotesPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Quotes" }]} />
       <PageHeader
-        eyebrow="Sales"
         title="Quotes"
         description="Working quote records for this organization—list and detail reads are org-scoped. Draft quotes are editable; Send quote and Mark approved advance lifecycle on the quote detail page. Live proposal preview and commercial checkpoints are internal staff tools."
         actions={

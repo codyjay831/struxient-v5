@@ -45,7 +45,6 @@ export default async function JobsPage() {
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Jobs" }]} />
       <PageHeader
-        eyebrow="Work"
         title="Jobs"
         description="Runtime jobs activated from approved quotes in this organization. Each job has stages and tasks copied at activation—later quote edits do not change tasks already on the job."
       />

@@ -21,7 +21,6 @@ export default function PersonalSettingsPage() {
         ]}
       />
       <PageHeader
-        eyebrow="Settings"
         title="Personal"
         description="Future per-user preferences—display, notifications, and where you land after sign-in. No account system yet, so nothing saves."
         actions={

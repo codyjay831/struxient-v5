@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { QuoteStatus } from "@prisma/client";
 import { QuoteReadinessPanel } from "@/components/quotes/quote-readiness-panel";
 import {
   QuoteArchivedRestorePanel,
@@ -10,16 +9,11 @@ import {
   QuoteDraftWorkspaceControls,
 } from "@/components/quotes/quote-draft-workspace-controls";
 import { QuoteSendCheckpointsStaffPanel } from "@/components/quotes/quote-send-checkpoints-staff-panel";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import {
@@ -31,8 +25,6 @@ import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-l
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import {
   formatMoneyCents,
-  formatQuoteStatus,
-  quoteStatusBadgeTone,
   type QuoteDetailPayload,
   type QuoteSendCheckpointSummary,
 } from "@/lib/quote-display";
@@ -44,7 +36,6 @@ import {
   quoteStatusIsArchived,
 } from "@/lib/quote-status-workflow";
 import {
-  Briefcase,
   ListOrdered,
   Wallet,
   Wrench,
@@ -63,7 +54,6 @@ export type QuoteWorkspaceShellProps = {
   lineItemTemplates: LineItemTemplatePickerRow[];
   sendCheckpoints: QuoteSendCheckpointSummary[];
   approvalCheckpoints: QuoteSendCheckpointSummary[];
-  workspaceDiffersFromLastCommercialProof: boolean;
   /** Set when the approved quote has been activated into a runtime job. */
   activatedJobId: string | null;
   /** Pre-fetched draft execution tasks keyed by line item id (used by inline editor). */
@@ -78,7 +68,6 @@ function QuoteDetailShell({
   lineItemTemplates,
   sendCheckpoints,
   approvalCheckpoints,
-  workspaceDiffersFromLastCommercialProof,
   activatedJobId,
   draftTasksByLineId,
   reusableTaskOptions,
@@ -103,9 +92,8 @@ function QuoteDetailShell({
         ]}
       />
       <PageHeader
-        eyebrow="Sales · Internal quote workspace"
         title={quote.title}
-        description="The Quote detail page is your commercial workspace for this opportunity. Readiness is derived from commercial and execution state."
+        description="Review pricing, scope, customer links, and execution readiness before sending or activating this quote."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
             {activatedJobId ? (

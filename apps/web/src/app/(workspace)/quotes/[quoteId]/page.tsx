@@ -18,7 +18,6 @@ import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import {
   evaluateQuoteJobActivationReadiness,
-  quoteActivationOnlyBlockedByApproval,
 } from "@/lib/quote-job-activation-readiness";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
@@ -347,7 +346,6 @@ export default async function QuoteDetailPage({
       lineItemTemplates={lineItemTemplates}
       sendCheckpoints={sendCheckpoints}
       approvalCheckpoints={approvalCheckpoints}
-      workspaceDiffersFromLastCommercialProof={workspaceDiffersFromLastCommercialProof}
       activatedJobId={activatedJobId}
       draftTasksByLineId={draftTasksByLineId}
       reusableTaskOptions={reusableTaskOptions}

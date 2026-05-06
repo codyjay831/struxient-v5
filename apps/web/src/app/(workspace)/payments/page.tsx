@@ -24,7 +24,6 @@ export default function PaymentsPage() {
         items={[{ label: "Reserved" }, { label: "Payments" }]}
       />
       <PageHeader
-        eyebrow="Reserved"
         title="Payments"
         description="Planning surface for future operational money tracking—not a live processor, ledger, or accounting system, and not automatically fed from quotes yet."
         actions={

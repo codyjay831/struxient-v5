@@ -4,7 +4,8 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
-import { SectionHeader } from "@/components/shell/section-header";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,18 +19,18 @@ const listLinkClass =
 
 export default function WorkstationScheduleLensPage() {
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Workstation · Schedule lens"
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Workstation", href: "/workstation" }, { label: "Schedule" }]}
+      />
+      <PageHeader
         title="Schedule"
         description="Schedule-related attention: conflicts, slips, confirmations, and access risk—not a calendar grid, not dispatch, and not the planning surface. For browse and future calendar density, use Work → Schedule."
       />
 
-      <WorkspacePanel padding="compact">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Schedule lens vs planning calendar
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+      <div className="space-y-6">
+        <WorkspacePanel padding="compact">
+          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           <span className="font-medium text-foreground">/workstation/schedule</span> will
           surface what needs a human decision soon—double-books, missed confirmations,
           customer access problems, and risky changes.{" "}
@@ -128,6 +129,7 @@ export default function WorkstationScheduleLensPage() {
           Workstation home
         </Link>
       </HandoffPanel>
+    </div>
     </div>
   );
 }

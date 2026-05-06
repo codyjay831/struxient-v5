@@ -18,7 +18,6 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb items={[{ label: "Settings" }]} />
       <PageHeader
-        eyebrow="Configuration"
         title="Settings"
         description="Where company defaults and personal preferences will live once accounts and persistence exist. This is a shell—not an admin console, payroll desk, or security center yet."
       />

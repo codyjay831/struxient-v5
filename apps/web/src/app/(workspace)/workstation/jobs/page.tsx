@@ -4,7 +4,8 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
-import { SectionHeader } from "@/components/shell/section-header";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,18 +19,18 @@ const listLinkClass =
 
 export default function WorkstationJobsLensPage() {
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Workstation · Jobs lens"
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[{ label: "Workstation", href: "/workstation" }, { label: "Jobs" }]}
+      />
+      <PageHeader
         title="Jobs"
         description="Reserved job-attention layout—no signals loaded. For the job directory placeholder and detail shell, use Work → Jobs."
       />
 
-      <WorkspacePanel padding="compact">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Jobs lens vs job records
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+      <div className="space-y-6">
+        <WorkspacePanel padding="compact">
+          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           <span className="font-medium text-foreground">/workstation/jobs</span> surfaces
           what needs eyes on work in motion.{" "}
           <span className="font-medium text-foreground">/jobs</span> stays the browse and
@@ -118,6 +119,7 @@ export default function WorkstationJobsLensPage() {
           Workstation home
         </Link>
       </HandoffPanel>
+    </div>
     </div>
   );
 }

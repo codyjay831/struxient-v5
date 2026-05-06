@@ -142,9 +142,8 @@ export function LeadWorkspaceShell({
         ]}
       />
       <PageHeader
-        eyebrow="Sales"
         title={lead.title}
-        description="Commercial workspace for this opportunity. Commercial Progress below summarizes where things stand across the lead and any related quotes; lead status, customer link, and notes still live on this page as separate explicit actions."
+        description="Track this opportunity from lead intake through quote, approval, and job creation."
         actions={
           <>
             <Link href="/leads" className={listLinkClass}>

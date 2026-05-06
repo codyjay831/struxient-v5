@@ -98,7 +98,6 @@ export default async function CustomerDetailPage({
           ]}
         />
         <PageHeader
-          eyebrow="Relationships"
           title="Customer"
           description="No customer exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
@@ -181,7 +180,6 @@ export default async function CustomerDetailPage({
         ]}
       />
       <PageHeader
-        eyebrow="Relationships"
         title={customer.displayName}
         description="Durable relationship record—not Sales-only. A customer can exist without any leads; leads you link or create from intake appear in Linked leads below. Linked quotes are read-only from the database for this organization; jobs, schedule, and payments stay out of scope here. Identity and contact fields are edited on the separate edit route; this view stays read-first."
         actions={

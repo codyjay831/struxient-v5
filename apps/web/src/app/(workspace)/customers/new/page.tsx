@@ -21,7 +21,6 @@ export default function NewCustomerPage() {
         ]}
       />
       <PageHeader
-        eyebrow="Relationships"
         title="New customer"
         description="Create a durable relationship record in your development organization. Required: display name. Other fields are optional and stored only on this customer row."
         actions={

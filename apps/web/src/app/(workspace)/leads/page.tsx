@@ -91,7 +91,6 @@ export default async function LeadsPage() {
         items={[{ label: "Sales" }, { label: "Leads" }]}
       />
       <PageHeader
-        eyebrow="Sales"
         title="Leads"
         description="Capture, review, and move new sales opportunities toward quotes. New leads from website forms, email, phone calls, texts, and manual entry can land here for review—match each lead to a customer, follow up, and move qualified work toward a quote."
         actions={

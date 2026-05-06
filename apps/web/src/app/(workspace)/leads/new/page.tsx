@@ -21,7 +21,6 @@ export default function NewLeadPage() {
         ]}
       />
       <PageHeader
-        eyebrow="Sales"
         title="New lead"
         description="Create an intake record in your development organization. Required: title. Status defaults to Open. After save you go to the lead detail page, where you can link an existing customer or create one from the lead, then start a draft quote from that lead when you are ready."
         actions={

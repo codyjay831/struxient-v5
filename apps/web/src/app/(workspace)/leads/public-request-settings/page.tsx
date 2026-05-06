@@ -47,9 +47,8 @@ export default async function PublicRequestSettingsPage() {
         ]}
       />
       <PageHeader
-        eyebrow="Leads"
         title="Public Request Settings"
-        description="Configure your Public Request Link and Public Intake Form copy. This is not a form builder — core lead fields stay fixed so every submission becomes a structured lead in Struxient."
+        description="Configure your Public Request Link and Public Intake Form copy. These settings apply to the public-facing intake surface for this organization."
         actions={
           <Link href="/leads" className={listLinkClass}>
             ← Back to Leads

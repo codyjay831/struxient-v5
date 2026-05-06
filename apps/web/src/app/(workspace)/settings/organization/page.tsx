@@ -21,7 +21,6 @@ export default function OrganizationSettingsPage() {
         ]}
       />
       <PageHeader
-        eyebrow="Settings"
         title="Organization"
         description="Future company-level profile and defaults—not an admin engine. No persistence, no invitations, and no role or billing tools in this shell."
         actions={

@@ -30,7 +30,6 @@ export default async function ScopeLibraryTasksPage() {
         items={[{ label: "Sales" }, { label: "Scope Library", href: "/scope-library" }, { label: "Reusable tasks" }]}
       />
       <PageHeader
-        eyebrow="Sales · Scope Library"
         title="Reusable tasks"
         description="Internal task templates with fixed execution stages—library only; quotes and jobs will copy from here when execution planning ships."
       />

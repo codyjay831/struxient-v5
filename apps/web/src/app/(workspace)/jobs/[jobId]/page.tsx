@@ -128,7 +128,6 @@ export default async function JobDetailPage({
         ]}
       />
       <PageHeader
-        eyebrow="Work · Runtime job"
         title={job.title}
         description="Stages and tasks were copied from the source quote at activation. Editing the source quote does not change tasks already on this job."
         actions={

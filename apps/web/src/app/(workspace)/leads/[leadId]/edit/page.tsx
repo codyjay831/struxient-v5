@@ -39,7 +39,6 @@ export default async function EditLeadPage({
           ]}
         />
         <PageHeader
-          eyebrow="Sales"
           title="Edit lead"
           description="No lead exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
@@ -78,7 +77,6 @@ export default async function EditLeadPage({
         ]}
       />
       <PageHeader
-        eyebrow="Sales"
         title={`Edit ${lead.title}`}
         description="Update intake fields for your development organization only. Status and customer link are not editable here yet. Organization cannot be changed from this form."
         actions={

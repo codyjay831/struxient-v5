@@ -30,7 +30,6 @@ export default function ScheduleRecordPage() {
         items={[{ label: "Work" }, { label: "Schedule" }]}
       />
       <PageHeader
-        eyebrow="Work"
         title="Schedule"
         description="Reserved planning surface for timing—not a live calendar or schedule engine. When data exists, it could coordinate job timing, customer access windows, and field capacity; Workstation remains a separate static lens."
         actions={

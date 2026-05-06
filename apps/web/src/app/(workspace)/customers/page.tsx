@@ -46,7 +46,6 @@ export default async function CustomersPage() {
         items={[{ label: "Relationships" }, { label: "Customers" }]}
       />
       <PageHeader
-        eyebrow="Relationships"
         title="Customers"
         description="Relationship records for this organization—identity and contact live here; linked intake appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
         actions={

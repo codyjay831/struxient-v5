@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export type PageHeaderProps = {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description?: ReactNode;
   /** Optional right-aligned actions (toolbar buttons, etc.). */
@@ -20,9 +20,11 @@ export function PageHeader({
   return (
     <header className="mb-10 flex flex-col gap-6 border-b border-border pb-10 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
-        <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
-          {eyebrow}
-        </p>
+        {eyebrow ? (
+          <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
+            {eyebrow}
+          </p>
+        ) : null}
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">
           {title}
         </h1>

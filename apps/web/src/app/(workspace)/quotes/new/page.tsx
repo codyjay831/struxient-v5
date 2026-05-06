@@ -113,7 +113,6 @@ export default async function NewQuotePage({
         ]}
       />
       <PageHeader
-        eyebrow="Sales"
         title="New quote"
         description="Create a draft working quote in your development organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, live proposal preview from the saved record, and staff-only recorded send checkpoints when you want proof—not delivery or approval."
         actions={

@@ -4,6 +4,8 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -35,12 +37,16 @@ export default async function WorkstationTodayLensPage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <WorkspacePanel padding="compact">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          This surface
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb items={[{ label: "Workstation" }]} />
+      <PageHeader
+        title="Workstation Today"
+        description="Reserved command surface for cross-area signals and future runtime execution orchestration."
+      />
+
+      <div className="space-y-6">
+        <WorkspacePanel padding="compact">
+          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           Workstation is a reserved command surface: layout for future cross-area signals,
           not a quote dashboard and not orchestrating runtime execution. Only the lead
           counts below read the database; everything else on this page is an honest
@@ -200,6 +206,7 @@ export default async function WorkstationTodayLensPage() {
           Payments (reserved)
         </Link>
       </HandoffPanel>
+    </div>
     </div>
   );
 }
