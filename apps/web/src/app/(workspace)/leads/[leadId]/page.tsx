@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
 import { LeadWorkspaceShell } from "@/components/shells/lead-workspace-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -6,6 +7,10 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { findCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import type { LeadDetailPayload } from "@/lib/lead-display";
+import {
+  getLeadCommercialProgress,
+  type LeadProgressQuoteInput,
+} from "@/lib/lead-commercial-progress";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { Inbox } from "lucide-react";
 import {
@@ -124,8 +129,75 @@ export default async function LeadDetailPage({
       status: true,
       totalCents: true,
       updatedAt: true,
+      _count: { select: { lineItems: true } },
+      job: { select: { id: true, status: true, organizationId: true } },
     },
   });
+
+  const progressQuoteInputs: LeadProgressQuoteInput[] = linkedQuotes.map((q) => ({
+    id: q.id,
+    title: q.title,
+    status: q.status,
+    totalCents: q.totalCents,
+    lineItemCount: q._count.lineItems,
+    updatedAt: q.updatedAt,
+    job:
+      q.job && q.job.organizationId === org.id
+        ? { id: q.job.id, status: q.job.status }
+        : null,
+  }));
+
+  const provisionalProgress = getLeadCommercialProgress({
+    lead: {
+      status: row.status,
+      customerId: row.customerId,
+      email: row.email,
+      phone: row.phone,
+    },
+    quotes: progressQuoteInputs,
+  });
+
+  let revisionDriftSinceLastProof = false;
+  if (
+    provisionalProgress.activeQuote &&
+    (provisionalProgress.state === "SENT_AWAITING_CUSTOMER" ||
+      provisionalProgress.state === "APPROVED_READY_TO_ACTIVATE") &&
+    provisionalProgress.activeQuote.status !== QuoteStatus.ARCHIVED
+  ) {
+    const latestProof = await db.quoteCheckpoint.findFirst({
+      where: {
+        organizationId: org.id,
+        quoteId: provisionalProgress.activeQuote.id,
+        kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    revisionDriftSinceLastProof = Boolean(
+      latestProof &&
+        provisionalProgress.activeQuote.updatedAt.getTime() >
+          latestProof.createdAt.getTime(),
+    );
+  }
+
+  const commercialProgress = getLeadCommercialProgress({
+    lead: {
+      status: row.status,
+      customerId: row.customerId,
+      email: row.email,
+      phone: row.phone,
+    },
+    quotes: progressQuoteInputs,
+    revisionDriftSinceLastProof,
+  });
+
+  const linkedQuotesForShell = linkedQuotes.map((q) => ({
+    id: q.id,
+    title: q.title,
+    status: q.status,
+    totalCents: q.totalCents,
+    updatedAt: q.updatedAt,
+  }));
 
   if (showLinkForm) {
     const customers = await db.customer.findMany({
@@ -153,7 +225,8 @@ export default async function LeadDetailPage({
     <LeadWorkspaceShell
       lead={lead}
       updateStatusAction={updateLeadStatusAction.bind(null, row.id)}
-      linkedQuotes={linkedQuotes}
+      linkedQuotes={linkedQuotesForShell}
+      commercialProgress={commercialProgress}
       {...(showLinkForm
         ? {
             customersForLink,

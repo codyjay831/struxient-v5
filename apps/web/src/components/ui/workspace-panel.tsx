@@ -4,10 +4,12 @@ export function WorkspacePanel({
   children,
   className = "",
   padding = "comfortable",
+  id,
 }: {
   children: ReactNode;
   className?: string;
   padding?: "comfortable" | "compact" | "none";
+  id?: string;
 }) {
   const pad =
     padding === "none"
@@ -18,6 +20,7 @@ export function WorkspacePanel({
 
   return (
     <div
+      id={id}
       className={[
         "rounded-xl border border-border bg-surface shadow-sm",
         pad,

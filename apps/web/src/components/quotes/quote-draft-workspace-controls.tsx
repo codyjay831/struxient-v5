@@ -135,7 +135,7 @@ function QuoteDraftDetailsForm({
   );
 }
 
-function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
+function QuoteLineAddForm({ quoteId, onCancel }: { quoteId: string; onCancel: () => void }) {
   const [state, formAction, isPending] = useActionState(
     addQuoteLineItemAction.bind(null, quoteId),
     initialActionState,
@@ -143,9 +143,18 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-4">
-      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-        Add line item
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+          Add line item
+        </p>
+        <button
+          type="button"
+          className="text-[0.65rem] font-medium text-foreground-subtle hover:text-foreground"
+          onClick={onCancel}
+        >
+          Close
+        </button>
+      </div>
       <p className="text-xs leading-relaxed text-foreground-muted">
         Enter staff scope and pricing first. Optional proposal wording lives in the collapsible section
         below—it does not appear on this list until you expand it. Line total is computed on the server from
@@ -203,9 +212,14 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
         </label>
       </div>
       <CustomerProposalOptionalFields names={LINE_PROPOSAL_NAMES} variant="line" />
-      <button type="submit" className={primaryButtonClass} disabled={isPending}>
-        {isPending ? "Adding…" : "Add line item"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+          {isPending ? "Adding…" : "Add line item"}
+        </button>
+        <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={isPending}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
@@ -422,6 +436,7 @@ function QuoteLineDeleteForm({ quoteId, lineId }: { quoteId: string; lineId: str
 }
 
 export type QuoteDraftWorkspaceControlsProps = {
+  id?: string;
   quoteId: string;
   initialTitle: string;
   initialInternalNotes: string | null;
@@ -435,6 +450,7 @@ export type QuoteDraftWorkspaceControlsProps = {
 };
 
 export function QuoteDraftWorkspaceControls({
+  id,
   quoteId,
   initialTitle,
   initialInternalNotes,
@@ -447,6 +463,7 @@ export function QuoteDraftWorkspaceControls({
   reusableTaskOptions,
 }: QuoteDraftWorkspaceControlsProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const lineCount = lineItems.length;
 
   return (
@@ -458,10 +475,21 @@ export function QuoteDraftWorkspaceControls({
         initialCustomerDocumentTitle={initialCustomerDocumentTitle}
       />
 
-      <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+      <WorkspacePanel id={id} className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Line items"
           description="Each row is commercial scope and pricing first. Internal draft execution and light planning (shared stages vs separate scope, work order) stay under each line—not on the customer proposal. Subtotal and total are rollups on the quote row."
+          actions={
+            !isAddFormOpen ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => setIsAddFormOpen(true)}
+              >
+                Add line item
+              </button>
+            ) : null
+          }
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <SignalCard
@@ -481,7 +509,11 @@ export function QuoteDraftWorkspaceControls({
           />
         </div>
 
-        <QuoteLineAddForm quoteId={quoteId} />
+        {isAddFormOpen ? (
+          <div className="mb-6">
+            <QuoteLineAddForm quoteId={quoteId} onCancel={() => setIsAddFormOpen(false)} />
+          </div>
+        ) : null}
 
         {lineCount === 0 ? (
           <div className="mt-6">
@@ -490,9 +522,18 @@ export function QuoteDraftWorkspaceControls({
               title="No line items on this quote yet"
               description="Use Add line item above for a one-off row, or scroll to Saved line items to copy a reusable row from your Scope Library. Either path adds a normal line to this working quote."
             >
-              <Link href="/scope-library" className={secondaryButtonClass}>
-                Open Scope Library
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  onClick={() => setIsAddFormOpen(true)}
+                >
+                  Add line item
+                </button>
+                <Link href="/scope-library" className={secondaryButtonClass}>
+                  Open Scope Library
+                </Link>
+              </div>
             </EmptyState>
           </div>
         ) : (

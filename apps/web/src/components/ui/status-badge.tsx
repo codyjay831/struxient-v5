@@ -11,16 +11,21 @@ const toneClass: Record<StatusBadgeTone, string> = {
 export function StatusBadge({
   label,
   tone = "neutral",
+  className,
 }: {
   label: string;
   tone?: StatusBadgeTone;
+  className?: string;
 }) {
   return (
     <span
       className={[
         "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
         toneClass[tone],
-      ].join(" ")}
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {label}
     </span>

@@ -1,9 +1,4 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -12,11 +7,13 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-progress-panel";
 import { LeadCreateCustomerFromLeadForm } from "@/components/leads/lead-create-customer-from-lead-form";
 import { LeadLinkCustomerForm } from "@/components/leads/lead-link-customer-form";
 import { LeadStatusForm } from "@/components/leads/lead-status-form";
 import type { LeadFormState } from "@/app/(workspace)/leads/lead-form-actions";
 import type { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
+import type { LeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import {
   formatLeadSource,
   formatLeadStatus,
@@ -29,7 +26,7 @@ import {
   quoteStatusBadgeTone,
   type QuoteLinkedSummary,
 } from "@/lib/quote-display";
-import { AlertTriangle, ClipboardList, FileText, MessageSquare } from "lucide-react";
+import { AlertTriangle, ClipboardList, MessageSquare } from "lucide-react";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -64,16 +61,15 @@ function LeadRecordPanel({
           tone={leadStatusBadgeTone(lead.status)}
         />
         <span className="text-xs text-foreground-muted">
-          Status is manual for now—you set it here. It does not change when you link or create a
-          customer; linking is a separate explicit step.
+          Lead status is set manually here. It is independent from the derived
+          Commercial Progress shown above.
         </span>
       </div>
       {showConvertedWithoutCustomerHelper ? (
         <p className="mt-3 rounded-lg border border-border border-l-[3px] border-l-accent bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
           <span className="font-medium text-foreground">Converted without a linked customer.</span>{" "}
-          That is allowed in this phase. When you link or create a customer from this lead, the
-          relationship updates separately—status stays whatever you choose until you change it
-          again.
+          That is allowed. Linking or creating a customer from this lead is a
+          separate explicit step.
         </p>
       ) : null}
       <LeadStatusForm currentStatus={lead.status} formAction={updateStatusAction} />
@@ -122,6 +118,8 @@ export type LeadWorkspaceShellProps = {
   ) => Promise<LeadFormState>;
   /** Quotes in this org that reference this lead (read-only). */
   linkedQuotes?: QuoteLinkedSummary[];
+  /** Derived commercial progress story; computed server-side per request. */
+  commercialProgress: LeadCommercialProgress;
 };
 
 export function LeadWorkspaceShell({
@@ -132,6 +130,7 @@ export function LeadWorkspaceShell({
   matchHints,
   createFromLeadAction,
   linkedQuotes = [],
+  commercialProgress,
 }: LeadWorkspaceShellProps) {
   return (
     <div className="mx-auto max-w-5xl">
@@ -145,7 +144,7 @@ export function LeadWorkspaceShell({
       <PageHeader
         eyebrow="Sales"
         title={lead.title}
-        description="Intake for this organization. A lead does not require a customer; a customer does not require a lead. Match hints are warn-only. Linking and create-from-lead are explicit actions. Status is manual on this page. Unlink is not implemented yet."
+        description="Commercial workspace for this opportunity. Commercial Progress below summarizes where things stand across the lead and any related quotes; lead status, customer link, and notes still live on this page as separate explicit actions."
         actions={
           <>
             <Link href="/leads" className={listLinkClass}>
@@ -156,6 +155,12 @@ export function LeadWorkspaceShell({
             </Link>
           </>
         }
+      />
+
+      <LeadCommercialProgressPanel
+        progress={commercialProgress}
+        leadId={lead.id}
+        manualLeadStatus={lead.status}
       />
 
       <LeadRecordPanel lead={lead} updateStatusAction={updateStatusAction} />
@@ -292,7 +297,10 @@ export function LeadWorkspaceShell({
               <LeadCreateCustomerFromLeadForm lead={lead} formAction={createFromLeadAction} />
             </div>
           ) : null}
-          <div className="mt-4 rounded-lg border border-border bg-foreground/[0.02] px-4 py-4">
+          <div
+            id="customer-link"
+            className="mt-4 scroll-mt-24 rounded-lg border border-border bg-foreground/[0.02] px-4 py-4"
+          >
             <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
               Customer link
             </p>
@@ -383,13 +391,23 @@ export function LeadWorkspaceShell({
 
         <WorkspacePanel className="mb-6">
           <SectionHeading
-            title="Linked quotes"
-            description="Read-only: quotes in this organization that reference this lead by id. Create and edit quote actions are not implemented yet."
+            title="Related quotes"
+            description="All quotes for this lead in this organization, newest first. Commercial Progress above tracks the most recent active quote; older or archived ones stay listed here as history."
+            actions={
+              linkedQuotes.length > 0 ? (
+                <Link
+                  href={`/quotes/new?leadId=${encodeURIComponent(lead.id)}`}
+                  className={listLinkClass}
+                >
+                  New quote from this lead
+                </Link>
+              ) : null
+            }
           />
           {linkedQuotes.length === 0 ? (
             <p className="text-sm text-foreground-muted">
-              No quotes reference this lead yet. When quote authoring ships, you will be able to
-              start from this intake without fabricating history here.
+              No quotes reference this lead yet. Use the Commercial Progress action above to start
+              one when ready.
             </p>
           ) : (
             <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
@@ -421,41 +439,6 @@ export function LeadWorkspaceShell({
           )}
         </WorkspacePanel>
 
-        {/* Quote readiness / next step */}
-        <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
-          <SectionHeading
-            title="Quote readiness"
-            description="When customer, scope, and timing context are solid enough, continue in Quotes—line items become the commercial anchor there. Nothing on this card sends or approves a quote."
-            actions={
-              <>
-                <Link
-                  href={`/quotes/new?leadId=${encodeURIComponent(lead.id)}`}
-                  className={handoffPrimaryLinkClass}
-                >
-                  Create quote from this lead
-                </Link>
-                <Link href="/quotes/new" className={listLinkClass}>
-                  New quote without prefill
-                </Link>
-              </>
-            }
-          />
-          <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            Customer link and lead status are explicit on this page—they do not change quote
-            records automatically. Linked quotes above are read from the database for this
-            organization only.
-          </p>
-          <EmptyState
-            icon={FileText}
-            title="Authoring is still a shell"
-            description="List and detail views load real quotes, but save, send, and approval are deferred. Use Quotes in the nav to browse what already exists for this org."
-          >
-            <Link href="/quotes" className={listLinkClass}>
-              Browse quotes
-            </Link>
-          </EmptyState>
-        </WorkspacePanel>
-
         {/* Notes & activity */}
         <WorkspacePanel padding="compact">
           <SectionHeading
@@ -475,18 +458,6 @@ export function LeadWorkspaceShell({
             description="No fabricated events—timeline shows real history once logging ships."
           />
         </WorkspacePanel>
-
-        <HandoffPanel
-          title="Intake → Quotes"
-          description="Leads collect context; the quote workspace carries sold scope and money. Linked quotes above are org-scoped reads only."
-        >
-          <Link href="/leads" className={handoffMutedLinkClass}>
-            Leads list
-          </Link>
-          <Link href="/quotes" className={handoffPrimaryLinkClass}>
-            View quotes
-          </Link>
-        </HandoffPanel>
       </div>
     </div>
   );

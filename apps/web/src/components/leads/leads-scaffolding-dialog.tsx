@@ -49,32 +49,26 @@ export function LeadsScaffoldingDialog() {
           </div>
           <div className="overflow-y-auto px-5 py-4">
             <p className="text-sm leading-relaxed text-foreground-muted">
-              Development-only notes for unfinished lead intake wiring. These are not
+              Development-only notes for the lead intake area. These are not
               customer-facing UI.
             </p>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-foreground-muted">
               <li>
-                Auth/tenant scoping is still using the development tenant until real auth/org
+                Auth/tenant scoping still uses the development tenant until real auth/org
                 context is connected.
               </li>
               <li>
                 Public Request Link (`/request/[companySlug]`) creates leads with source{" "}
-                <span className="font-mono text-[0.7rem]">PUBLIC_REQUEST_LINK</span>; other
-                channels are still planned.
+                <span className="font-mono text-[0.7rem]">PUBLIC_REQUEST_LINK</span>. Other
+                channels (email, phone, SMS, imports) are still planned.
               </li>
               <li>
-                Customer matching is planned so leads can attach to existing customers or
-                create new ones.
-              </li>
-              <li>Sales handoff actions still need real workflow wiring.</li>
-              <li>
-                Persistence/model wiring should stay verified, but should not be explained in the
-                main UI.
+                Channel integrations are not connected; the &quot;Channel setup&quot; and
+                &quot;CSV import&quot; placeholders intentionally do nothing in this build.
               </li>
               <li>
-                On each lead&apos;s detail page, warn-only possible matches appear when the lead
-                has an email or phone—same organization, exact normalized match, never auto-link
-                or merge. The list view stays lightweight.
+                Notes &amp; activity timelines are not wired yet—event logging will surface
+                here when real history exists.
               </li>
             </ul>
           </div>

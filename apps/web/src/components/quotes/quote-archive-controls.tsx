@@ -29,14 +29,14 @@ function FormError({ message }: { message: string }) {
   );
 }
 
-export function QuoteDraftArchivePanel({ quoteId }: { quoteId: string }) {
+export function QuoteDraftArchivePanel({ id, quoteId }: { id?: string; quoteId: string }) {
   const [state, formAction, isPending] = useActionState(
     archiveQuoteAction.bind(null, quoteId),
     initialActionState,
   );
 
   return (
-    <WorkspacePanel padding="compact" className="mb-6 border-border">
+    <WorkspacePanel id={id} padding="compact" className="mb-6 border-border">
       <SectionHeading
         title="Archive quote"
         description="Sets status to Archived: commercial fields and line items can no longer be changed on this page. Nothing is deleted; restore to draft brings commercial editing back when you are ready."
@@ -56,14 +56,14 @@ export function QuoteDraftArchivePanel({ quoteId }: { quoteId: string }) {
   );
 }
 
-export function QuoteArchivedRestorePanel({ quoteId }: { quoteId: string }) {
+export function QuoteArchivedRestorePanel({ id, quoteId }: { id?: string; quoteId: string }) {
   const [state, formAction, isPending] = useActionState(
     restoreQuoteToDraftAction.bind(null, quoteId),
     initialActionState,
   );
 
   return (
-    <WorkspacePanel padding="compact" className="mb-6 border-border-strong">
+    <WorkspacePanel id={id} padding="compact" className="mb-6 border-border-strong">
       <SectionHeading
         title="Restore to draft"
         description="Only action that mutates an archived quote here: status returns to Draft so your team can edit title, internal notes, and line items again. Stored totals and customer/lead links are unchanged."

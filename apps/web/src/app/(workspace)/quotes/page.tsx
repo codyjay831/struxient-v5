@@ -13,6 +13,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SignalCard } from "@/components/ui/signal-card";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { getQuoteReadiness } from "@/lib/quote-readiness";
+import { QuoteReadinessIconStrip } from "@/components/quotes/quote-readiness-panel";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -95,7 +97,7 @@ export default async function QuotesPage({
   const orderBy = quoteListOrderBy(sort);
 
   const [
-    quotes,
+    rows,
     matchingCount,
     totalInOrg,
     draftCount,
@@ -110,6 +112,8 @@ export default async function QuotesPage({
       include: {
         customer: { select: { id: true, displayName: true, companyName: true } },
         lead: { select: { id: true, title: true, contactName: true } },
+        job: { select: { id: true, status: true, organizationId: true } },
+        _count: { select: { lineItems: true } },
       },
     }),
     db.quote.count({ where: listWhere }),
@@ -125,6 +129,27 @@ export default async function QuotesPage({
   ]);
 
   const draftValueCents = draftTotalsAgg._sum.totalCents ?? 0;
+  const quotes = rows.map((r) => {
+    const readiness = getQuoteReadiness({
+      quote: {
+        status: r.status,
+        lineItemCount: r._count.lineItems,
+        subtotalCents: r.subtotalCents,
+        totalCents: r.totalCents,
+      },
+      job:
+        r.job && r.job.organizationId === org.id
+          ? { id: r.job.id, status: r.job.status }
+          : null,
+      activationReadiness: null, // Skip expensive activation check on list
+      revisionDriftSinceLastProof: false, // Skip expensive drift check on list
+    });
+
+    return {
+      ...r,
+      readiness,
+    };
+  });
   const hasActiveListFilters =
     q.length > 0 || status !== "all" || sort !== QUOTE_LIST_DEFAULT_SORT;
 
@@ -367,7 +392,12 @@ export default async function QuotesPage({
                         <p className="mt-1 text-xs text-foreground-muted">
                           <span className="break-words">{contextLine}</span>
                         </p>
-                        <dl className="mt-2 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
+                        <QuoteReadinessIconStrip
+                          stepIndex={row.readiness.stepIndex}
+                          isTerminal={row.readiness.isTerminal}
+                          className="mt-3"
+                        />
+                        <dl className="mt-3 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
                           <div>
                             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
                               Created
@@ -383,10 +413,17 @@ export default async function QuotesPage({
                         </dl>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-                        <StatusBadge
-                          label={formatQuoteStatus(row.status)}
-                          tone={quoteStatusBadgeTone(row.status)}
-                        />
+                        <div className="flex flex-col items-end gap-1">
+                          <StatusBadge
+                            label={row.readiness.label}
+                            tone={row.readiness.badgeTone}
+                          />
+                          <StatusBadge
+                            label={formatQuoteStatus(row.status)}
+                            tone={quoteStatusBadgeTone(row.status)}
+                            className="h-4 px-1 text-[9px]"
+                          />
+                        </div>
                         <span className="text-sm font-medium tabular-nums text-foreground">
                           {formatMoneyCents(row.totalCents)}
                         </span>

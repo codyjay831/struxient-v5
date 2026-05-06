@@ -19,6 +19,11 @@ import {
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
   DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
 } from "../src/lib/public-request-settings-defaults";
+import {
+  QUOTE_LINE_LOCKED_STAGE_LABELS,
+  seedTradeLineItemPresets,
+} from "./seeds/trade-line-item-presets";
+import { seedKitchenRemodelDemoQuote } from "./seeds/demo-quote-kitchen-remodel";
 
 const prisma = new PrismaClient();
 
@@ -409,6 +414,28 @@ async function main() {
       sortOrder: 0,
     },
   });
+
+  const tradeSeedResult = await seedTradeLineItemPresets(prisma, devOrg.id);
+  console.log(
+    `[dev seed] Trade presets: ${tradeSeedResult.tradesSeeded} trades, ` +
+      `${tradeSeedResult.lineItemsSeeded} line items, ` +
+      `${tradeSeedResult.tasksSeeded} default execution tasks.`,
+  );
+  for (const [bucketId, count] of Object.entries(tradeSeedResult.stageDistribution)) {
+    const label = QUOTE_LINE_LOCKED_STAGE_LABELS[
+      bucketId as keyof typeof QUOTE_LINE_LOCKED_STAGE_LABELS
+    ];
+    console.log(`[dev seed]   - ${label}: ${count} task${count === 1 ? "" : "s"}`);
+  }
+
+  const demoQuoteResult = await seedKitchenRemodelDemoQuote(
+    prisma,
+    devOrg.id,
+    "dev-customer-acme",
+  );
+  console.log(
+    `[dev seed] Demo quote: "${demoQuoteResult.quoteId}" created with ${demoQuoteResult.lineCount} lines.`,
+  );
 
   console.log("[dev seed] Completed (idempotent upserts).");
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { QuoteStatus } from "@prisma/client";
+import { QuoteReadinessPanel } from "@/components/quotes/quote-readiness-panel";
 import {
   QuoteArchivedRestorePanel,
   QuoteDraftArchivePanel,
@@ -55,6 +56,8 @@ import {
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
+import { type QuoteReadiness } from "@/lib/quote-readiness";
+
 export type QuoteWorkspaceShellProps = {
   quote: QuoteDetailPayload;
   lineItemTemplates: LineItemTemplatePickerRow[];
@@ -67,6 +70,7 @@ export type QuoteWorkspaceShellProps = {
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   /** Reusable task picker options for the org (empty when execution is not editable). */
   reusableTaskOptions: ReusableTaskPickerOption[];
+  quoteReadiness: QuoteReadiness;
 };
 
 function QuoteDetailShell({
@@ -78,6 +82,7 @@ function QuoteDetailShell({
   activatedJobId,
   draftTasksByLineId,
   reusableTaskOptions,
+  quoteReadiness,
 }: QuoteWorkspaceShellProps) {
   const isArchived = quoteStatusIsArchived(quote.status);
   const isCommercialEditable = quoteStatusAllowsCommercialEdits(quote.status);
@@ -100,15 +105,7 @@ function QuoteDetailShell({
       <PageHeader
         eyebrow="Sales · Internal quote workspace"
         title={quote.title}
-        description={
-          isArchived
-            ? "Archived read-only view in your development organization. Restore to draft to edit commercial fields again; totals and links stay as stored."
-            : quote.status === QuoteStatus.DRAFT
-              ? "Draft quote—commercial fields and line items are editable below. Send quote records internal commercial proof and moves to Sent. Live proposal preview follows the saved quote."
-              : quote.status === QuoteStatus.SENT
-                ? "Sent quote—commercial scope and pricing are read-only here until a future revision flow. Record customer acceptance when they agree. Internal draft execution can still be edited."
-                : "Approved quote—commercial terms are accepted. Internal execution planning stays editable until job activation exists."
-        }
+        description="The Quote detail page is your commercial workspace for this opportunity. Readiness is derived from commercial and execution state."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
             {activatedJobId ? (
@@ -126,77 +123,32 @@ function QuoteDetailShell({
         }
       />
 
-      <WorkspacePanel padding="compact" className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Working quote record
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-          {isCommercialEditable
-            ? "Single current-state row—what you save on draft is what persists until you send, approve, or archive."
-            : isArchived
-              ? "Frozen read-only row; restore to draft to change commercial fields again."
-              : "Commercial fields on this row are locked; internal execution planning may still change until activation."}
-        </p>
-        <p className="mt-2 break-all font-mono text-xs text-foreground-muted">{quote.id}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge
-            label={formatQuoteStatus(quote.status)}
-            tone={quoteStatusBadgeTone(quote.status)}
-          />
-          <span className="text-xs text-foreground-muted">
-            {isCommercialEditable
-              ? "Subtotal and total are stored rollups (cents) on the quote row; they are recomputed from line totals after each line change."
-              : "Subtotal and total are stored rollups on the quote row."}
-          </span>
-        </div>
-        <dl className="mt-4 grid gap-2 text-xs text-foreground-muted sm:grid-cols-2">
-          <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Created</dt>
-            <dd className="mt-0.5 text-foreground">{createdLabel}</dd>
-          </div>
-          <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Updated</dt>
-            <dd className="mt-0.5 text-foreground">{updatedLabel}</dd>
-          </div>
-        </dl>
-      </WorkspacePanel>
+      <QuoteReadinessPanel
+        quoteId={quote.id}
+        quoteStatus={quote.status}
+        readiness={quoteReadiness}
+      />
 
-      {activatedJobId ? (
-        <WorkspacePanel className="mb-6 border-l-[3px] border-l-success/60 bg-success/[0.04]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex gap-3">
-              <Briefcase className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
-              <div>
-                <p className="text-sm font-semibold text-foreground">Job created from approved quote</p>
-                <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                  A runtime job exists for this quote. Editing draft execution here does not change tasks already on
-                  the job.
-                </p>
-              </div>
+      <WorkspacePanel padding="compact" className="mb-6 bg-foreground/[0.01]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+              Record ID
+            </p>
+            <code className="rounded bg-foreground/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-foreground-muted">
+              {quote.id}
+            </code>
+          </div>
+          <div className="flex items-center gap-6 text-[10px] text-foreground-muted">
+            <div>
+              <span className="font-bold uppercase tracking-wider text-foreground-subtle">Created:</span> {createdLabel}
             </div>
-            <Link
-              href={jobDetailPath(activatedJobId)}
-              className="inline-flex shrink-0 items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
-            >
-              Open job
-            </Link>
+            <div>
+              <span className="font-bold uppercase tracking-wider text-foreground-subtle">Updated:</span> {updatedLabel}
+            </div>
           </div>
-        </WorkspacePanel>
-      ) : null}
-
-      {!isArchived && workspaceDiffersFromLastCommercialProof ? (
-        <WorkspacePanel
-          padding="compact"
-          className="mb-6 border border-border border-l-[3px] border-l-danger/60 bg-danger/[0.03]"
-        >
-          <p className="text-sm font-medium text-foreground">Quote changed after last commercial record</p>
-          <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            The saved quote has been edited since the latest send or acceptance record. Review the live proposal preview
-            and your internal notes—when a new commercial milestone matters, use the appropriate action in Commercial
-            send & acceptance (where available). This is not a customer-facing version list.
-          </p>
-        </WorkspacePanel>
-      ) : null}
+        </div>
+      </WorkspacePanel>
 
       <div className="space-y-6">
         <WorkspacePanel>
@@ -270,6 +222,7 @@ function QuoteDetailShell({
 
         {isCommercialEditable ? (
           <QuoteDraftWorkspaceControls
+            id="line-items"
             quoteId={quote.id}
             initialTitle={quote.title}
             initialInternalNotes={quote.internalNotes}
@@ -282,7 +235,7 @@ function QuoteDetailShell({
             reusableTaskOptions={reusableTaskOptions}
           />
         ) : (
-          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+          <WorkspacePanel id="line-items" className="border-border-strong shadow-md ring-1 ring-ring/30">
             <SectionHeading
               title="Line items"
               description={
@@ -337,9 +290,10 @@ function QuoteDetailShell({
           </WorkspacePanel>
         )}
 
-        {!isArchived ? <QuoteDraftArchivePanel quoteId={quote.id} /> : null}
+        {!isArchived ? <QuoteDraftArchivePanel id="archive-restore" quoteId={quote.id} /> : null}
 
         <QuoteSendCheckpointsStaffPanel
+          id="commercial-send-acceptance"
           quoteId={quote.id}
           quoteStatus={quote.status}
           sendCheckpoints={sendCheckpoints}
@@ -428,15 +382,6 @@ function QuoteDetailShell({
             description="Nothing logged on this quote yet."
           />
         </WorkspacePanel>
-
-        <HandoffPanel
-          title="Quote workspace scope"
-          description="Draft, sent, approved, and archived states for the commercial quote record. Send and acceptance rows are staff-only internal records—not a customer portal. Execution preview is internal planning before activation."
-        >
-          <Link href="/quotes" className={handoffMutedLinkClass}>
-            Quotes list
-          </Link>
-        </HandoffPanel>
       </div>
     </div>
   );

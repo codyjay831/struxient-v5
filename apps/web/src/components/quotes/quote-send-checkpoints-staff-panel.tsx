@@ -15,11 +15,13 @@ const listLinkClass =
  * Not a version browser; payloads stay customer-commercial only (no internal execution planning).
  */
 export function QuoteSendCheckpointsStaffPanel({
+  id,
   quoteId,
   quoteStatus,
   sendCheckpoints,
   approvalCheckpoints,
 }: {
+  id?: string;
   quoteId: string;
   quoteStatus: QuoteStatus;
   sendCheckpoints: QuoteSendCheckpointSummary[];
@@ -38,7 +40,7 @@ export function QuoteSendCheckpointsStaffPanel({
   const lastApprovalLabel = latestApproval ? new Date(latestApproval.createdAt).toLocaleString() : null;
 
   return (
-    <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
+    <WorkspacePanel id={id} className="border border-border border-l-[3px] border-l-accent">
       <SectionHeading
         title="Commercial send & acceptance"
         description="Internal records only—not email, not a customer portal, and not job activation. Send captures the proposal as sent; approval captures commercial acceptance (staff-recorded until e-sign exists)."

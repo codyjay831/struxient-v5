@@ -16,6 +16,11 @@ import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execu
 import { quoteStatusAllowsExecutionEdits } from "@/lib/quote-status-workflow";
 import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
+import {
+  evaluateQuoteJobActivationReadiness,
+  quoteActivationOnlyBlockedByApproval,
+} from "@/lib/quote-job-activation-readiness";
+import { getQuoteReadiness } from "@/lib/quote-readiness";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import { FileText } from "lucide-react";
@@ -45,7 +50,7 @@ export default async function QuoteDetailPage({
         select: { id: true, title: true, organizationId: true },
       },
       job: {
-        select: { id: true, organizationId: true },
+        select: { id: true, status: true, organizationId: true },
       },
       lineItems: {
         orderBy: { sortOrder: "asc" },
@@ -283,6 +288,43 @@ export default async function QuoteDetailPage({
   const activatedJobId =
     row.job && row.job.organizationId === org.id ? row.job.id : null;
 
+  const activationReadiness = evaluateQuoteJobActivationReadiness({
+    status: row.status,
+    lines: row.lineItems.map((l) => ({
+      id: l.id,
+      description: l.description,
+      executionReviewStatus: l.executionReviewStatus,
+      executionMergeMode: l.executionMergeMode,
+      taskCount: l.draftExecutionTasks.length,
+    })),
+  });
+
+  const quoteReadiness = getQuoteReadiness({
+    quote: {
+      status: row.status,
+      lineItemCount: row.lineItems.length,
+      subtotalCents: row.subtotalCents,
+      totalCents: row.totalCents,
+    },
+    job:
+      row.job && row.job.organizationId === org.id
+        ? { id: row.job.id, status: row.job.status }
+        : null,
+    activationReadiness: {
+      ready: activationReadiness.ready,
+      totalTasksToActivate: activationReadiness.totalTasksToActivate,
+      needsAttentionLineCount: activationReadiness.blockReasons.find(
+        (r) => r.code === "LINE_NEEDS_EXECUTION_REVIEW",
+      )?.lines.length ?? 0,
+      anomalyLineCount: activationReadiness.blockReasons.find(
+        (r) => r.code === "LINE_COMMERCIAL_ONLY_HAS_TASKS",
+      )?.lines.length ?? 0,
+    },
+    latestSendAt: sendCheckpoints[sendCheckpoints.length - 1]?.createdAt,
+    latestApprovalAt: approvalCheckpoints[approvalCheckpoints.length - 1]?.createdAt,
+    revisionDriftSinceLastProof: workspaceDiffersFromLastCommercialProof,
+  });
+
   const isExecutionEditable = quoteStatusAllowsExecutionEdits(row.status);
   const reusableTaskOptions: ReusableTaskPickerOption[] = isExecutionEditable
     ? (
@@ -309,6 +351,7 @@ export default async function QuoteDetailPage({
       activatedJobId={activatedJobId}
       draftTasksByLineId={draftTasksByLineId}
       reusableTaskOptions={reusableTaskOptions}
+      quoteReadiness={quoteReadiness}
     />
   );
 }

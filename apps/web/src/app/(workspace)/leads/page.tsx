@@ -18,6 +18,7 @@ import {
   formatLeadStatus,
   leadStatusBadgeTone,
 } from "@/lib/lead-display";
+import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { Inbox } from "lucide-react";
@@ -43,8 +44,46 @@ export default async function LeadsPage() {
     orderBy: { createdAt: "desc" },
     include: {
       customer: { select: { id: true, displayName: true } },
+      quotes: {
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          totalCents: true,
+          updatedAt: true,
+          _count: { select: { lineItems: true } },
+          job: { select: { id: true, status: true, organizationId: true } },
+        },
+      },
     },
   });
+
+  const leadProgressById = new Map(
+    leads.map((lead) => [
+      lead.id,
+      getLeadCommercialProgress({
+        lead: {
+          status: lead.status,
+          customerId: lead.customerId,
+          email: lead.email,
+          phone: lead.phone,
+        },
+        quotes: lead.quotes.map((q) => ({
+          id: q.id,
+          title: q.title,
+          status: q.status,
+          totalCents: q.totalCents,
+          lineItemCount: q._count.lineItems,
+          updatedAt: q.updatedAt,
+          job:
+            q.job && q.job.organizationId === org.id
+              ? { id: q.job.id, status: q.job.status }
+              : null,
+        })),
+      }),
+    ]),
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -107,60 +146,72 @@ export default async function LeadsPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[42rem] text-left text-sm">
+                  <table className="w-full min-w-[48rem] text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                         <th className="px-4 pb-3 pt-4 font-medium">Lead</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Follow-up</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Commercial progress</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Status</th>
                         <th className="pr-4 pb-3 pt-4 font-medium">Lead source</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Match to customer</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Contact</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Customer</th>
                         <th className="pb-3 pt-4 font-medium">Created</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {leads.map((lead) => (
-                        <tr
-                          key={lead.id}
-                          className="border-b border-border/50 last:border-0"
-                        >
-                          <td className="px-4 py-4">
-                            <Link href={`/leads/${lead.id}`} className={rowLinkClass}>
-                              <div className="font-medium text-foreground transition-colors group-hover:text-foreground group-hover:underline">
-                                {lead.title}
-                              </div>
-                            </Link>
-                          </td>
-                          <td className="py-4 pr-4 align-top">
-                            <StatusBadge
-                              label={formatLeadStatus(lead.status)}
-                              tone={leadStatusBadgeTone(lead.status)}
-                            />
-                          </td>
-                          <td className="py-4 pr-4 text-foreground-muted">
-                            {formatLeadSource(lead.source)}
-                          </td>
-                          <td className="py-4 pr-4 align-top">
-                            {lead.customer ? (
-                              <Link
-                                href={`/customers/${lead.customer.id}`}
-                                className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                              >
-                                {lead.customer.displayName}
+                      {leads.map((lead) => {
+                        const progress = leadProgressById.get(lead.id);
+                        return (
+                          <tr
+                            key={lead.id}
+                            className="border-b border-border/50 last:border-0"
+                          >
+                            <td className="px-4 py-4 align-top">
+                              <Link href={`/leads/${lead.id}`} className={rowLinkClass}>
+                                <div className="font-medium text-foreground transition-colors group-hover:text-foreground group-hover:underline">
+                                  {lead.title}
+                                </div>
+                                <div className="mt-1 text-xs text-foreground-subtle">
+                                  {lead.email || lead.phone || "No contact yet"}
+                                </div>
                               </Link>
-                            ) : (
-                              <span className="text-sm text-foreground-subtle">No match yet</span>
-                            )}
-                          </td>
-                          <td className="py-4 pr-4">
-                            <div className="text-foreground-muted">{lead.email || "—"}</div>
-                            <div className="text-xs text-foreground-subtle">{lead.phone || "—"}</div>
-                          </td>
-                          <td className="py-4 pr-4 text-foreground-subtle">
-                            {new Date(lead.createdAt).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="py-4 pr-4 align-top">
+                              {progress ? (
+                                <StatusBadge
+                                  label={progress.label}
+                                  tone={progress.badgeTone}
+                                />
+                              ) : (
+                                <span className="text-xs text-foreground-subtle">—</span>
+                              )}
+                            </td>
+                            <td className="py-4 pr-4 align-top">
+                              <StatusBadge
+                                label={formatLeadStatus(lead.status)}
+                                tone={leadStatusBadgeTone(lead.status)}
+                              />
+                            </td>
+                            <td className="py-4 pr-4 align-top text-foreground-muted">
+                              {formatLeadSource(lead.source)}
+                            </td>
+                            <td className="py-4 pr-4 align-top">
+                              {lead.customer ? (
+                                <Link
+                                  href={`/customers/${lead.customer.id}`}
+                                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                                >
+                                  {lead.customer.displayName}
+                                </Link>
+                              ) : (
+                                <span className="text-sm text-foreground-subtle">No customer</span>
+                              )}
+                            </td>
+                            <td className="py-4 pr-4 align-top text-foreground-subtle">
+                              {new Date(lead.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
