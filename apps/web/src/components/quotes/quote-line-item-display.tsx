@@ -15,6 +15,27 @@ function lineHasCustomerProposalSurface(line: QuoteLineItemPayload): boolean {
   );
 }
 
+/** Short staff-facing summary of which optional proposal fields are populated. */
+function customerProposalFieldSummary(line: QuoteLineItemPayload): string {
+  const parts: string[] = [];
+  if (line.customerScopeTitle) {
+    parts.push("display title");
+  }
+  if (line.customerScopeDescription) {
+    parts.push("scope description");
+  }
+  if (line.customerIncludedNotes) {
+    parts.push("included notes");
+  }
+  if (line.customerExcludedNotes) {
+    parts.push("excluded notes");
+  }
+  if (line.customerPresentationGroup) {
+    parts.push("presentation group");
+  }
+  return parts.join(" · ");
+}
+
 /**
  * Read-only line body for internal customer preview — same numeric layout as {@link QuoteLineItemScanBlock}
  * without internal notes (DTO never carries staff-only fields).
@@ -67,14 +88,13 @@ export function QuoteCustomerPreviewLineBlock({ line }: { line: QuoteCustomerPre
 export function QuoteLineItemScanBlock({ line }: { line: QuoteLineItemPayload }) {
   const hasCustomerProposal = lineHasCustomerProposalSurface(line);
   return (
-    <div className="min-w-0 flex-1">
-      <p className="text-sm font-medium text-foreground">{line.description}</p>
-      {hasCustomerProposal ? (
-        <p className="mt-1 text-[0.65rem] text-foreground-subtle">
-          Customer proposal text is set for this line—see preview.
-        </p>
-      ) : null}
-      <dl className="mt-2 grid gap-3 text-xs sm:grid-cols-3 sm:gap-4">
+    <div className="min-w-0 flex-1 space-y-3">
+      <div>
+        <p className={lineMetricLabelClass}>Staff scope (internal description)</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{line.description}</p>
+      </div>
+
+      <dl className="grid gap-3 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3 text-xs sm:grid-cols-3 sm:gap-4">
         <div>
           <dt className={lineMetricLabelClass}>Quantity</dt>
           <dd className="mt-0.5 tabular-nums text-foreground">{line.quantityDisplay}</dd>
@@ -92,9 +112,25 @@ export function QuoteLineItemScanBlock({ line }: { line: QuoteLineItemPayload })
           </dd>
         </div>
       </dl>
+
+      <div className="rounded-md border border-border bg-surface/80 px-3 py-2">
+        <p className={lineMetricLabelClass}>Customer proposal wording (optional)</p>
+        {hasCustomerProposal ? (
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            <span className="font-medium text-foreground-subtle">Set: </span>
+            {customerProposalFieldSummary(line)}. Shapes the internal proposal preview only.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            Not set on this line. Expand <span className="font-medium text-foreground-subtle">Edit</span> to add
+            optional customer-facing title, scope text, notes, or a presentation group.
+          </p>
+        )}
+      </div>
+
       {line.internalNotes ? (
-        <p className="mt-3 rounded-md border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-          <span className="font-medium text-foreground-subtle">Internal: </span>
+        <p className="rounded-md border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+          <span className="font-medium text-foreground-subtle">Staff-only line notes: </span>
           {line.internalNotes}
         </p>
       ) : null}

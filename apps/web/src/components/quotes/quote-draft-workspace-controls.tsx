@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import {
   addQuoteLineItemAction,
   applyLineItemTemplateToQuoteAction,
   archiveLineItemTemplateAction,
-  createLineItemTemplateAction,
   deleteQuoteLineItemAction,
   updateDraftQuoteDetailsAction,
   updateQuoteLineItemAction,
@@ -14,7 +14,6 @@ import {
 import {
   QUOTE_FIELD_LIMITS,
   QUOTE_LINE_FIELD_LIMITS,
-  QUOTE_PROPOSAL_FIELD_LIMITS,
 } from "@/app/(workspace)/quotes/quote-field-limits";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import {
@@ -27,126 +26,24 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QuoteLineItemScanBlock } from "@/components/quotes/quote-line-item-display";
+import {
+  CustomerProposalOptionalFields,
+  LINE_PROPOSAL_NAMES,
+  workspaceFormControlClass,
+  workspaceFormDangerButtonClass,
+  workspaceFormFieldLabelClass,
+  workspaceFormPrimaryButtonClass,
+  workspaceFormSecondaryButtonClass,
+} from "@/components/line-item-templates/line-item-template-form-fields";
 import { Library, ListOrdered } from "lucide-react";
 
-const fieldLabelClass =
-  "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
-const controlClass =
-  "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
-const secondaryButtonClass =
-  "inline-flex items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60";
-const dangerButtonClass =
-  "inline-flex items-center justify-center rounded-lg border border-danger/40 bg-surface px-3 py-2 text-xs font-medium text-danger transition-colors hover:border-danger hover:bg-danger/[0.04] disabled:cursor-not-allowed disabled:opacity-60";
-
-const proposalOptionalDetailsClass =
-  "mt-3 rounded-lg border border-dashed border-border bg-surface/80 px-3 py-2";
+const fieldLabelClass = workspaceFormFieldLabelClass;
+const controlClass = workspaceFormControlClass;
+const primaryButtonClass = workspaceFormPrimaryButtonClass;
+const secondaryButtonClass = workspaceFormSecondaryButtonClass;
+const dangerButtonClass = workspaceFormDangerButtonClass;
 
 const initialActionState: QuoteFormState = {};
-
-type CustomerProposalFieldNames = {
-  scopeTitle: string;
-  scopeDescription: string;
-  includedNotes: string;
-  excludedNotes: string;
-  presentationGroup: string;
-};
-
-const LINE_PROPOSAL_NAMES: CustomerProposalFieldNames = {
-  scopeTitle: "customerScopeTitle",
-  scopeDescription: "customerScopeDescription",
-  includedNotes: "customerIncludedNotes",
-  excludedNotes: "customerExcludedNotes",
-  presentationGroup: "customerPresentationGroup",
-};
-
-const TEMPLATE_PROPOSAL_NAMES: CustomerProposalFieldNames = {
-  scopeTitle: "defaultCustomerScopeTitle",
-  scopeDescription: "defaultCustomerScopeDescription",
-  includedNotes: "defaultCustomerIncludedNotes",
-  excludedNotes: "defaultCustomerExcludedNotes",
-  presentationGroup: "defaultCustomerPresentationGroup",
-};
-
-function CustomerProposalOptionalFields({
-  names,
-  defaults,
-  variant = "line",
-}: {
-  names: CustomerProposalFieldNames;
-  defaults?: Partial<Record<keyof CustomerProposalFieldNames, string | null>>;
-  variant?: "line" | "template";
-}) {
-  const d = defaults ?? {};
-  const helperCopy =
-    variant === "template"
-      ? "Separate from internal preset description and internal notes. Defaults are copied into each new quote line when you apply this preset—lines are not live-linked back to the library."
-      : "Separate from internal description and internal notes. Shown on the internal proposal preview; customer scope title falls back to internal description for the line title when left blank.";
-  return (
-    <details className={proposalOptionalDetailsClass}>
-      <summary className="cursor-pointer select-none text-xs font-medium text-foreground-muted">
-        Customer proposal text (optional)
-      </summary>
-      <p className="mt-2 text-xs leading-relaxed text-foreground-muted">{helperCopy}</p>
-      <div className="mt-3 space-y-3 pb-1">
-        <label className="block">
-          <span className={fieldLabelClass}>Customer scope title</span>
-          <input
-            name={names.scopeTitle}
-            type="text"
-            maxLength={QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle}
-            defaultValue={d.scopeTitle ?? ""}
-            className={controlClass}
-            autoComplete="off"
-          />
-        </label>
-        <label className="block">
-          <span className={fieldLabelClass}>Customer scope description</span>
-          <textarea
-            name={names.scopeDescription}
-            rows={3}
-            maxLength={QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription}
-            defaultValue={d.scopeDescription ?? ""}
-            className={controlClass}
-          />
-        </label>
-        <label className="block">
-          <span className={fieldLabelClass}>Included notes</span>
-          <textarea
-            name={names.includedNotes}
-            rows={2}
-            maxLength={QUOTE_PROPOSAL_FIELD_LIMITS.customerIncludedNotes}
-            defaultValue={d.includedNotes ?? ""}
-            className={controlClass}
-          />
-        </label>
-        <label className="block">
-          <span className={fieldLabelClass}>Excluded notes</span>
-          <textarea
-            name={names.excludedNotes}
-            rows={2}
-            maxLength={QUOTE_PROPOSAL_FIELD_LIMITS.customerExcludedNotes}
-            defaultValue={d.excludedNotes ?? ""}
-            className={controlClass}
-          />
-        </label>
-        <label className="block">
-          <span className={fieldLabelClass}>Presentation group</span>
-          <input
-            name={names.presentationGroup}
-            type="text"
-            maxLength={QUOTE_PROPOSAL_FIELD_LIMITS.customerPresentationGroup}
-            defaultValue={d.presentationGroup ?? ""}
-            placeholder="Display-only label for proposal grouping"
-            className={controlClass}
-            autoComplete="off"
-          />
-        </label>
-      </div>
-    </details>
-  );
-}
 
 function FormError({ message }: { message: string }) {
   return (
@@ -180,7 +77,7 @@ function QuoteDraftDetailsForm({
     <WorkspacePanel className="mb-6">
       <SectionHeading
         title="Draft details"
-        description="Workspace title and internal notes are for your team. Optional customer proposal document title appears on the internal proposal preview when set; otherwise the workspace title is used there."
+        description="Staff workspace fields: title and internal notes stay here on the working quote. Optional customer proposal document title is separate—it only shapes the internal proposal preview when set (otherwise the workspace title is used there)."
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
@@ -245,12 +142,14 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
         Add line item
       </p>
       <p className="text-xs leading-relaxed text-foreground-muted">
-        Line total is computed on the server from quantity × unit price when you add the line. Quote subtotal and total update in the same request.
+        Enter staff scope and pricing first. Optional customer proposal wording lives in the collapsible section
+        below—it does not appear on this list until you expand it. Line total is computed on the server from
+        quantity × unit price; quote subtotal and total update in the same request.
       </p>
       {state.error ? <FormError message={state.error} /> : null}
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Internal description</span>
+          <span className={fieldLabelClass}>Staff scope (internal description)</span>
           <input
             name="description"
             type="text"
@@ -289,7 +188,7 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
       </div>
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Line internal notes (optional)</span>
+          <span className={fieldLabelClass}>Staff-only line notes (optional)</span>
           <textarea
             name="internalNotes"
             rows={2}
@@ -301,86 +200,6 @@ function QuoteLineAddForm({ quoteId }: { quoteId: string }) {
       <CustomerProposalOptionalFields names={LINE_PROPOSAL_NAMES} variant="line" />
       <button type="submit" className={primaryButtonClass} disabled={isPending}>
         {isPending ? "Adding…" : "Add line item"}
-      </button>
-    </form>
-  );
-}
-
-function QuoteLineTemplateCreateForm({ quoteId }: { quoteId: string }) {
-  const [state, formAction, isPending] = useActionState(
-    createLineItemTemplateAction.bind(null, quoteId),
-    initialActionState,
-  );
-
-  return (
-    <form
-      action={formAction}
-      className="mt-5 space-y-3 rounded-lg border border-border bg-surface px-4 py-4"
-    >
-      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-        New preset
-      </p>
-      <p className="text-xs leading-relaxed text-foreground-muted">
-        Saves commercial defaults (description, quantity, unit price, optional internal notes, optional
-        customer proposal defaults) to your organization library. Applying a preset always inserts a{" "}
-        <span className="font-medium text-foreground">new copied line</span> with duplicated values—lines
-        are never live-linked back to the preset.
-      </p>
-      {state.error ? <FormError message={state.error} /> : null}
-      <div>
-        <label className="block">
-          <span className={fieldLabelClass}>Internal description (preset)</span>
-          <input
-            name="description"
-            type="text"
-            required
-            maxLength={QUOTE_LINE_FIELD_LIMITS.description}
-            className={controlClass}
-            autoComplete="off"
-          />
-        </label>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className={fieldLabelClass}>Default quantity</span>
-          <input
-            name="quantity"
-            type="text"
-            required
-            inputMode="decimal"
-            placeholder="e.g. 1 or 4"
-            className={controlClass}
-            autoComplete="off"
-          />
-        </label>
-        <label className="block">
-          <span className={fieldLabelClass}>Default unit price (USD)</span>
-          <input
-            name="unitAmountDollars"
-            type="text"
-            required
-            inputMode="decimal"
-            placeholder="e.g. 150 or 150.50"
-            className={controlClass}
-            autoComplete="off"
-          />
-        </label>
-      </div>
-      <div>
-        <label className="block">
-          <span className={fieldLabelClass}>Template internal notes (optional)</span>
-          <textarea
-            name="defaultInternalNotes"
-            rows={2}
-            maxLength={QUOTE_LINE_FIELD_LIMITS.internalNotes}
-            className={controlClass}
-            placeholder="Copied to the quote line as internal notes when applied—not shown in customer preview."
-          />
-        </label>
-      </div>
-      <CustomerProposalOptionalFields names={TEMPLATE_PROPOSAL_NAMES} variant="template" />
-      <button type="submit" className={secondaryButtonClass} disabled={isPending}>
-        {isPending ? "Saving…" : "Save preset to library"}
       </button>
     </form>
   );
@@ -398,8 +217,8 @@ function QuoteLineTemplateApplyList({
       <div className="mt-5">
         <EmptyState
           icon={Library}
-          title="No saved presets yet"
-          description="This section is optional. Use Add line item for one-off rows, or save a preset below when you reuse the same scope and pricing often. Copying a preset always adds a new line with duplicated values."
+          title="No line presets yet"
+          description="Use Add line item above for one-off rows, or create reusable presets in Sales → Scope Library. Copying a preset always adds a new line with duplicated values."
         />
       </div>
     );
@@ -424,7 +243,7 @@ function QuoteLineTemplateApplyList({
               unit
               {t.hasCustomerProposalDefaults ? (
                 <span className="mt-1 block text-foreground-subtle">
-                  Includes default customer proposal text (copied into new lines only).
+                  Includes default proposal wording (copied into new lines only).
                 </span>
               ) : null}
             </p>
@@ -504,7 +323,7 @@ function QuoteLineEditBlock({
       {state.error ? <FormError message={state.error} /> : null}
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Internal description</span>
+          <span className={fieldLabelClass}>Staff scope (internal description)</span>
           <input
             name="description"
             type="text"
@@ -544,7 +363,7 @@ function QuoteLineEditBlock({
       </div>
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Line internal notes (optional)</span>
+          <span className={fieldLabelClass}>Staff-only line notes (optional)</span>
           <textarea
             name="internalNotes"
             rows={2}
@@ -633,7 +452,7 @@ export function QuoteDraftWorkspaceControls({
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
           title="Line items"
-          description="Internal commercial scope rows (description and notes) stay on this workspace. Optional customer proposal text is edited below per line and only shapes the internal proposal preview until send exists. Subtotal and total are rollups on the quote row."
+          description="Each row is part of the current working quote: staff scope and pricing here, optional customer proposal wording per line (internal preview only), and staff-only line notes. Subtotal and total are stored rollups on the quote row."
         />
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <SignalCard
@@ -659,14 +478,18 @@ export function QuoteDraftWorkspaceControls({
           <div className="mt-6">
             <EmptyState
               icon={ListOrdered}
-              title="Add your first line item"
-              description="Use Add line item above for internal description, quantity, and unit price. Optional internal notes and optional customer proposal text stay separated—proposal copy opens in a collapsed section so the fast path stays quick."
-            />
+              title="No line items on this quote yet"
+              description="Use Add line item above for a one-off row, or scroll to Line presets to copy a reusable row from your Scope Library. Either path adds a normal line to this working quote."
+            >
+              <Link href="/scope-library" className={secondaryButtonClass}>
+                Open Scope Library
+              </Link>
+            </EmptyState>
           </div>
         ) : (
           <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-surface">
             {lineItems.map((line) => (
-              <li key={line.id} className="px-4 py-4">
+              <li key={line.id} className="px-4 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <QuoteLineItemScanBlock line={line} />
                   <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
@@ -698,10 +521,19 @@ export function QuoteDraftWorkspaceControls({
 
         <div className="mt-8 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 sm:p-5">
           <SectionHeading
-            title="Reusable line presets"
-            description="Optional accelerators for your organization—skip entirely if you prefer typing each line. Presets only store commercial defaults (no tasks or stages). Copying a preset inserts a new line with duplicated values; it does not stay linked to the preset."
+            title="Line presets"
+            description="Copy reusable quote rows from your organization Scope Library. Presets only store commercial defaults. Copying inserts a new line with duplicated values; lines are not live-linked back to the library."
           />
-          <QuoteLineTemplateCreateForm quoteId={quoteId} />
+          <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
+            Manage presets in{" "}
+            <Link
+              href="/scope-library"
+              className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+            >
+              Sales → Scope Library
+            </Link>
+            .
+          </p>
           <QuoteLineTemplateApplyList quoteId={quoteId} templates={lineItemTemplates} />
         </div>
       </WorkspacePanel>

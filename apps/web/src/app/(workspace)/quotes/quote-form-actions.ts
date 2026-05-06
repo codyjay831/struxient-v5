@@ -203,6 +203,73 @@ function parseTemplateDefaultProposalFieldsFromForm(
   };
 }
 
+/** Parsed fields shared by create / update line preset (library or quote-bound flows). */
+type LineItemTemplateParsedUpsert = {
+  description: string;
+  defaultQuantity: Prisma.Decimal;
+  defaultUnitAmountCents: number;
+  defaultInternalNotes: string | null;
+} & TemplateDefaultProposalFields;
+
+/**
+ * Validates preset form fields for create/update. Returns `{ data }` on success or `{ error }`.
+ */
+function parseLineItemTemplateUpsertForm(
+  formData: FormData,
+): QuoteFormState | { data: LineItemTemplateParsedUpsert } {
+  const description = trimRequired(formData.get("description"));
+  if (!description) {
+    return { error: "Internal preset description is required." };
+  }
+  const descErr = enforceMaxLength(
+    "Internal preset description",
+    description,
+    QUOTE_LINE_FIELD_LIMITS.description,
+  );
+  if (descErr) {
+    return descErr;
+  }
+
+  const quantityRaw = trimRequired(formData.get("quantity"));
+  const qtyParsed = parsePositiveQuantityString(quantityRaw);
+  if (!qtyParsed.ok) {
+    return { error: qtyParsed.error };
+  }
+
+  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
+  const unitParsed = parseUsdStringToCents(unitRaw);
+  if (!unitParsed.ok) {
+    return { error: unitParsed.error };
+  }
+
+  const defaultInternalNotes = trimOrNull(formData.get("defaultInternalNotes"));
+  if (defaultInternalNotes) {
+    const notesErr = enforceMaxLength(
+      "Preset internal notes",
+      defaultInternalNotes,
+      QUOTE_LINE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return notesErr;
+    }
+  }
+
+  const templateProposalParsed = parseTemplateDefaultProposalFieldsFromForm(formData);
+  if (!templateProposalParsed.ok) {
+    return { error: templateProposalParsed.error };
+  }
+
+  return {
+    data: {
+      description,
+      defaultQuantity: qtyParsed.decimal,
+      defaultUnitAmountCents: unitParsed.cents,
+      defaultInternalNotes,
+      ...templateProposalParsed.data,
+    },
+  };
+}
+
 function defaultTitleFromContext(params: {
   lead: { title: string } | null;
   customer: { displayName: string } | null;
@@ -714,46 +781,9 @@ export async function createLineItemTemplateAction(
     return { error: "Missing return quote id." };
   }
 
-  const description = trimRequired(formData.get("description"));
-  if (!description) {
-    return { error: "Internal preset description is required." };
-  }
-  const descErr = enforceMaxLength(
-    "Internal preset description",
-    description,
-    QUOTE_LINE_FIELD_LIMITS.description,
-  );
-  if (descErr) {
-    return descErr;
-  }
-
-  const quantityRaw = trimRequired(formData.get("quantity"));
-  const qtyParsed = parsePositiveQuantityString(quantityRaw);
-  if (!qtyParsed.ok) {
-    return { error: qtyParsed.error };
-  }
-
-  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
-  const unitParsed = parseUsdStringToCents(unitRaw);
-  if (!unitParsed.ok) {
-    return { error: unitParsed.error };
-  }
-
-  const defaultInternalNotes = trimOrNull(formData.get("defaultInternalNotes"));
-  if (defaultInternalNotes) {
-    const notesErr = enforceMaxLength(
-      "Preset internal notes",
-      defaultInternalNotes,
-      QUOTE_LINE_FIELD_LIMITS.internalNotes,
-    );
-    if (notesErr) {
-      return notesErr;
-    }
-  }
-
-  const templateProposalParsed = parseTemplateDefaultProposalFieldsFromForm(formData);
-  if (!templateProposalParsed.ok) {
-    return { error: templateProposalParsed.error };
+  const parsed = parseLineItemTemplateUpsertForm(formData);
+  if (!("data" in parsed)) {
+    return parsed;
   }
 
   const org = await getDevOrganizationOrThrow();
@@ -772,15 +802,109 @@ export async function createLineItemTemplateAction(
   await db.lineItemTemplate.create({
     data: {
       organizationId: org.id,
-      description,
-      defaultQuantity: qtyParsed.decimal,
-      defaultUnitAmountCents: unitParsed.cents,
-      defaultInternalNotes,
-      ...templateProposalParsed.data,
+      ...parsed.data,
     },
   });
 
   redirect(`/quotes/${rid}`);
+}
+
+/**
+ * Org-scoped preset create from Sales → Scope Library (no draft quote context).
+ */
+export async function createLineItemTemplateFromScopeLibraryAction(
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const parsed = parseLineItemTemplateUpsertForm(formData);
+  if (!("data" in parsed)) {
+    return parsed;
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  await db.lineItemTemplate.create({
+    data: {
+      organizationId: org.id,
+      ...parsed.data,
+    },
+  });
+
+  redirect("/scope-library");
+}
+
+/**
+ * `templateId` must be supplied via `.bind(null, template.id)`.
+ */
+export async function updateLineItemTemplateFromScopeLibraryAction(
+  templateId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const tid = templateId.trim();
+  if (!tid) {
+    return { error: "Missing template id." };
+  }
+
+  const parsed = parseLineItemTemplateUpsertForm(formData);
+  if (!("data" in parsed)) {
+    return parsed;
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const result = await db.lineItemTemplate.updateMany({
+    where: {
+      id: tid,
+      organizationId: org.id,
+      archivedAt: null,
+    },
+    data: parsed.data,
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This preset could not be updated. It may be hidden, missing, or outside your organization.",
+    };
+  }
+
+  redirect("/scope-library");
+}
+
+/**
+ * `templateId` must be supplied via `.bind(null, template.id)`.
+ */
+export async function archiveLineItemTemplateFromScopeLibraryAction(
+  templateId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const tid = templateId.trim();
+  if (!tid) {
+    return { error: "Missing template id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const result = await db.lineItemTemplate.updateMany({
+    where: {
+      id: tid,
+      organizationId: org.id,
+      archivedAt: null,
+    },
+    data: { archivedAt: new Date() },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This preset could not be hidden. It may already be hidden, missing, or outside your organization.",
+    };
+  }
+
+  redirect("/scope-library");
 }
 
 /**

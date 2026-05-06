@@ -302,8 +302,8 @@ function QuoteDetailShell({
         title={quote.title}
         description={
           isDraft
-            ? "Draft in your development organization: edit the current quote below. Totals come from line items and are recomputed on the server. Archive freezes edits and is reversible. Use Recorded proposal sends to store internal proof checkpoints — not customer delivery. Approvals, payments, and job activation stay future work."
-            : "Archived in your development organization: read-only view of this page. Restore to draft when you need to edit again; totals and links stay as stored. Existing send checkpoints remain historical proof; only restore performs a state change here."
+            ? "This is the current working quote in your development organization—edits below save to this record. Line totals roll up to the quote; archive freezes edits (restore brings it back). Recorded proposal sends are staff-only proof rows, not delivery or approval. Payments and job activation stay out of scope for this build."
+            : "Archived read-only view in your development organization. Restore to draft to edit again; totals and links stay as stored. Existing recorded sends remain internal proof; restore is the only state change from here."
         }
         actions={
           <Link href="/quotes" className={listLinkClass}>
@@ -314,9 +314,12 @@ function QuoteDetailShell({
 
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Quote record
+          Working quote record
         </p>
-        <p className="mt-1 break-all font-mono text-xs text-foreground-muted">{quote.id}</p>
+        <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+          Single current-state row for this quote—what you edit on draft is what persists until you archive.
+        </p>
+        <p className="mt-2 break-all font-mono text-xs text-foreground-muted">{quote.id}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge
             label={formatQuoteStatus(quote.status)}
@@ -347,8 +350,9 @@ function QuoteDetailShell({
         >
           <p className="text-sm font-medium text-foreground">Workspace differs from last recorded send</p>
           <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            The current quote has changed since your latest send checkpoint. Review the live proposal preview, then
-            record another send when you want updated internal proof — this is not a customer-facing version system.
+            The working quote has changed since your latest recorded send. Review the live proposal preview, then
+            record another send when you want updated staff-only proof. This is not customer delivery and not a list
+            of editable versions.
           </p>
         </WorkspacePanel>
       ) : null}
@@ -538,12 +542,12 @@ function QuoteDetailShell({
         <WorkspacePanel>
           <SectionHeading
             title="Preview & approval"
-            description="Live internal preview of the current workspace quote. PDF, e-sign, and approval capture stay deferred."
+            description="Live internal preview always reflects the current saved quote. PDF, e-sign, and approval capture stay deferred."
           />
           <EmptyState
             icon={Eye}
             title="See the quote as your customer would"
-            description="Opens the live proposal preview from the current quote. Recorded send checkpoints are separate internal proof rows — use Recorded proposal sends above."
+            description="Opens the proposal preview built from this working quote as it exists now. Recorded sends below are separate staff-only proof—not a second editable copy."
           >
             <Link href={`/quotes/${quote.id}/preview`} className={listLinkClass}>
               Preview as customer

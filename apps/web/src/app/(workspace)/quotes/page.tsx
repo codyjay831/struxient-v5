@@ -163,7 +163,7 @@ export default async function QuotesPage({
 
       <section className="mb-8">
         <SectionHeading
-          title="Organization snapshot"
+          title="Organization overview"
           description="Counts and draft rollups are real database aggregates for this development tenant only."
         />
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

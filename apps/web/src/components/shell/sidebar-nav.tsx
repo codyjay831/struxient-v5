@@ -8,6 +8,7 @@ import {
   FileText,
   FolderKanban,
   LayoutDashboard,
+  Library,
   Settings2,
   UserCircle,
   Users,
@@ -25,6 +26,7 @@ const workstationEntry: NavItem[] = [
 const salesNav: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/scope-library", label: "Scope Library", icon: Library },
 ];
 
 /** Durable people/company records; Customers is the first surface—more types later. */

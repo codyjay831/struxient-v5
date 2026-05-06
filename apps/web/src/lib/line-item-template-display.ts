@@ -6,3 +6,19 @@ export type LineItemTemplatePickerRow = {
   defaultUnitAmountCents: number;
   hasCustomerProposalDefaults: boolean;
 };
+
+/** Staff-only Scope Library row for editing presets (org-scoped, non-archived). */
+export type LineItemTemplateLibraryRow = {
+  id: string;
+  description: string;
+  defaultQuantityDisplay: string;
+  defaultUnitAmountCents: number;
+  defaultUnitAmountDollars: string;
+  defaultInternalNotes: string | null;
+  defaultCustomerScopeTitle: string | null;
+  defaultCustomerScopeDescription: string | null;
+  defaultCustomerIncludedNotes: string | null;
+  defaultCustomerExcludedNotes: string | null;
+  defaultCustomerPresentationGroup: string | null;
+  hasCustomerProposalDefaults: boolean;
+};

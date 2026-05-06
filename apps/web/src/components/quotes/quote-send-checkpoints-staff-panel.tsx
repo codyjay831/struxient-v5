@@ -27,14 +27,14 @@ export function QuoteSendCheckpointsStaffPanel({
     <WorkspacePanel className="border border-border border-l-[3px] border-l-accent">
       <SectionHeading
         title="Recorded proposal sends"
-        description="Hidden checkpoints — proof of the customer-safe proposal at each send moment. This is not email, SMS, a portal link, or approval."
+        description="Staff-only hidden checkpoints: proof of what the customer-safe proposal looked like at each send moment. Not email, SMS, a portal link, or approval. The live preview elsewhere always follows the current working quote."
       />
 
       {isDraft ? (
         <>
           <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
-            Records a hidden proof copy of the current customer proposal. This does not email, text, or publish a
-            customer portal link yet.
+            Recording a send stores internal proof from the quote as it is now. It does not email, text, or publish a
+            customer link. Edit the working quote freely; record again when you want a new proof row.
           </p>
           <QuoteRecordSendCheckpointForm quoteId={quoteId} />
         </>
