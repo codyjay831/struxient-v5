@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { LeadsScaffoldingDialog } from "@/components/leads/leads-scaffolding-dialog";
 import {
   formatLeadSource,
   formatLeadStatus,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/lead-display";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
-import { Inbox, AlertTriangle } from "lucide-react";
+import { Inbox } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -45,20 +46,23 @@ export default async function LeadsPage() {
       <PageHeader
         eyebrow="Sales"
         title="Leads"
-        description="Intake for this organization—status and source are stored per lead; link or create a customer from each lead’s detail page. Scoped with the development tenant until auth exists."
+        description="Capture, review, and move new sales opportunities toward quotes. New leads from website forms, email, phone calls, texts, and manual entry can land here for review—match each lead to a customer, follow up, and move qualified work toward a quote."
         actions={
           <>
             <Link href="/leads/new" className={primaryLinkClass}>
               New lead
             </Link>
-            <PlaceholderButton>Connect channel (soon)</PlaceholderButton>
+            <LeadsScaffoldingDialog />
+            <PlaceholderButton title="Channel integrations are planned; not connected in this build.">
+              Channel setup (soon)
+            </PlaceholderButton>
           </>
         }
       />
 
       <HandoffPanel
-        title="Sales handoff"
-        description="When a lead is qualified—customer, rough scope, and timing are clear—Sales continues in Quotes. Nothing moves automatically without explicit flows."
+        title="Ready for a quote?"
+        description="When you have enough detail to price the work, continue in Quotes. Each step stays explicit—nothing moves between leads and quotes automatically yet."
       >
         <Link href="/quotes" className={handoffPrimaryLinkClass}>
           Go to Quotes
@@ -68,29 +72,16 @@ export default async function LeadsPage() {
         </Link>
       </HandoffPanel>
 
-      <WorkspacePanel padding="compact" className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Persistence
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          This route reads <span className="font-medium text-foreground">Lead</span> rows from{" "}
-          <span className="font-medium text-foreground">PostgreSQL</span> via{" "}
-          <span className="font-medium text-foreground">Prisma</span>, scoped with{" "}
-          <span className="font-medium text-foreground">getDevOrganizationOrThrow()</span> (development
-          tenant only — not production org resolution).
-        </p>
-      </WorkspacePanel>
-
       <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,18rem)]">
         <div>
           <SectionHeading
             title="Intake queue"
-            description="Single list, newest first—not a Kanban board. Rows open the lead workspace; customer link is explicit on the detail page."
+            description="New leads appear here, newest first. Open a row to update follow-up, match to a customer, and get ready for a quote."
           />
           <WorkspacePanel padding="none" className="overflow-hidden">
             <div className="border-b border-border bg-foreground/[0.02] px-4 py-2">
               <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                All leads
+                New leads
               </p>
             </div>
             <div className="p-0">
@@ -99,7 +90,7 @@ export default async function LeadsPage() {
                   <EmptyState
                     icon={Inbox}
                     title="Queue is empty"
-                    description="No leads exist for this organization yet. Run the development seed after migration, or create one with New lead."
+                    description="No leads yet. Add one when a call, walk-in, or message comes in—or when you are ready to log the next opportunity."
                   >
                     <Link href="/leads/new" className={primaryLinkClass}>
                       New lead
@@ -112,9 +103,9 @@ export default async function LeadsPage() {
                     <thead>
                       <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                         <th className="px-4 pb-3 pt-4 font-medium">Lead</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Status</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Source</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Customer</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Follow-up</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Lead source</th>
+                        <th className="pr-4 pb-3 pt-4 font-medium">Match to customer</th>
                         <th className="pr-4 pb-3 pt-4 font-medium">Contact</th>
                         <th className="pb-3 pt-4 font-medium">Created</th>
                       </tr>
@@ -129,9 +120,6 @@ export default async function LeadsPage() {
                             <Link href={`/leads/${lead.id}`} className={rowLinkClass}>
                               <div className="font-medium text-foreground transition-colors group-hover:text-foreground group-hover:underline">
                                 {lead.title}
-                              </div>
-                              <div className="break-all font-mono text-xs text-foreground-subtle">
-                                {lead.id}
                               </div>
                             </Link>
                           </td>
@@ -153,7 +141,7 @@ export default async function LeadsPage() {
                                 {lead.customer.displayName}
                               </Link>
                             ) : (
-                              <span className="text-sm text-foreground-subtle">Not linked</span>
+                              <span className="text-sm text-foreground-subtle">No match yet</span>
                             )}
                           </td>
                           <td className="py-4 pr-4">
@@ -173,39 +161,20 @@ export default async function LeadsPage() {
           </WorkspacePanel>
         </div>
 
-        <aside className="space-y-6">
-          <WorkspacePanel padding="compact">
-            <div className="flex gap-2">
-              <AlertTriangle
-                className="mt-0.5 size-4 shrink-0 text-foreground-subtle"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Customer match hints
-                </p>
-                <p className="mt-2 text-sm text-foreground-muted">
-                  On each lead’s detail page, warn-only possible matches appear when the lead has
-                  an email or phone—same organization, exact normalized match, never auto-link or
-                  merge. This list view stays lightweight.
-                </p>
-              </div>
-            </div>
-          </WorkspacePanel>
+        <aside>
           <WorkspacePanel padding="compact">
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              Channels (placeholder)
+              Connected channels
             </p>
             <p className="mt-2 text-sm text-foreground-muted">
-              Phone, email, and partner referrals map to the same intake pipeline; integrations are
-              out of scope for this pass.
+              Website, email, phone, text, and manual entry will land in this queue as
+              integrations roll out. Today you can add leads by hand from the New lead action.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <PlaceholderButton title="No web form intake in this build">
-                Web form (soon)
+              <PlaceholderButton title="Website form intake is not connected in this build.">
+                Website form (soon)
               </PlaceholderButton>
-              <PlaceholderButton title="No CSV import in this build">
+              <PlaceholderButton title="CSV import is not connected in this build.">
                 CSV import (soon)
               </PlaceholderButton>
             </div>
