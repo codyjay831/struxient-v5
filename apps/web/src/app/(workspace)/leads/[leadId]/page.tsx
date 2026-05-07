@@ -207,6 +207,7 @@ export default async function LeadDetailPage({
     status: q.status,
     totalCents: q.totalCents,
     updatedAt: q.updatedAt,
+    lineItemCount: q._count.lineItems,
   }));
 
   if (showLinkForm) {

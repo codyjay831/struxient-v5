@@ -12,14 +12,25 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { LeadsScaffoldingDialog } from "@/components/leads/leads-scaffolding-dialog";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
+import {
+  LeadsListClient,
+  type SerializedLeadRow,
+} from "@/components/leads/leads-list-client";
 import { resolvePublicSiteBaseUrl } from "@/lib/public-site-base-url";
 import {
   formatLeadSource,
   formatLeadStatus,
   leadStatusBadgeTone,
 } from "@/lib/lead-display";
-import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
-import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  getLeadCommercialProgress,
+  resolveLeadCommercialProgressActionHref,
+  type LeadCommercialProgressAction,
+} from "@/lib/lead-commercial-progress";
+import {
+  formatQuoteStatus,
+  quoteStatusBadgeTone,
+} from "@/lib/quote-display";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
@@ -28,9 +39,6 @@ export const dynamic = "force-dynamic";
 
 const primaryLinkClass =
   "inline-flex items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
-
-const rowLinkClass =
-  "group block rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const returnLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -50,6 +58,7 @@ export default async function LeadsPage({
     select: { enabled: true },
   });
   const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
+
   const leads = await db.lead.findMany({
     where: { organizationId: org.id },
     orderBy: { createdAt: "desc" },
@@ -70,31 +79,98 @@ export default async function LeadsPage({
     },
   });
 
-  const leadProgressById = new Map(
-    leads.map((lead) => [
-      lead.id,
-      getLeadCommercialProgress({
-        lead: {
-          status: lead.status,
-          customerId: lead.customerId,
-          email: lead.email,
-          phone: lead.phone,
-        },
-        quotes: lead.quotes.map((q) => ({
+  /* ── Serialize leads for the client component ─────────────────────────── */
+
+  function serializeProgressAction(
+    action: LeadCommercialProgressAction,
+    leadId: string,
+  ): SerializedLeadRow["progressPrimaryAction"] {
+    const href = resolveLeadCommercialProgressActionHref(action, { leadId });
+    const opensQuoteTab =
+      action.kind === "OPEN_DRAFT_QUOTE" ||
+      action.kind === "OPEN_QUOTE" ||
+      action.kind === "START_QUOTE";
+    const opensContactTab =
+      action.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
+      action.kind === "EDIT_CONTACT_INFO";
+    return { href, label: action.label, opensQuoteTab, opensContactTab };
+  }
+
+  const serializedLeads: SerializedLeadRow[] = leads.map((lead) => {
+    const progressQuoteInputs = lead.quotes.map((q) => ({
+      id: q.id,
+      title: q.title,
+      status: q.status,
+      totalCents: q.totalCents,
+      lineItemCount: q._count.lineItems,
+      updatedAt: q.updatedAt,
+      job:
+        q.job && q.job.organizationId === org.id
+          ? { id: q.job.id, status: q.job.status }
+          : null,
+    }));
+
+    const progress = getLeadCommercialProgress({
+      lead: {
+        status: lead.status,
+        customerId: lead.customerId,
+        email: lead.email,
+        phone: lead.phone,
+      },
+      quotes: progressQuoteInputs,
+    });
+
+    const customer = lead.customer;
+
+    return {
+      id: lead.id,
+      title: lead.title,
+      contactName: lead.contactName,
+      email: lead.email,
+      phone: lead.phone,
+      notes: lead.notes,
+      sourceLabel: formatLeadSource(lead.source),
+      statusLabel: formatLeadStatus(lead.status),
+      statusTone: leadStatusBadgeTone(lead.status),
+      customerId: lead.customerId,
+      customerDisplayName: customer?.displayName ?? null,
+      customerHref: customer ? `/customers/${customer.id}` : null,
+      /* Use a fixed locale so the string is identical on server SSR and any
+         client re-render of this prop value. */
+      createdAtLabel: lead.createdAt.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }),
+      progressLabel: progress.label,
+      progressDescription: progress.description,
+      progressTone: progress.badgeTone,
+      progressPrimaryAction: progress.primaryAction
+        ? serializeProgressAction(progress.primaryAction, lead.id)
+        : null,
+      progressSecondaryAction: progress.secondaryAction
+        ? serializeProgressAction(progress.secondaryAction, lead.id)
+        : null,
+      quotes: lead.quotes
+        .filter((q) => q.status !== "ARCHIVED")
+        .map((q) => ({
           id: q.id,
           title: q.title,
-          status: q.status,
+          statusLabel: formatQuoteStatus(q.status),
+          statusTone: quoteStatusBadgeTone(q.status),
           totalCents: q.totalCents,
           lineItemCount: q._count.lineItems,
-          updatedAt: q.updatedAt,
-          job:
-            q.job && q.job.organizationId === org.id
-              ? { id: q.job.id, status: q.job.status }
-              : null,
+          href: `/quotes/${q.id}`,
         })),
-      }),
-    ]),
-  );
+      progressState: progress.state,
+      activeJobId: progress.activeJob?.id ?? null,
+      activeJobStatus: progress.activeJob?.status ?? null,
+      leadHref: `/leads/${lead.id}`,
+      newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(lead.id)}`,
+    };
+  });
+
+  /* ── Render ────────────────────────────────────────────────────────────── */
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -103,7 +179,7 @@ export default async function LeadsPage({
       />
       <PageHeader
         title="Leads"
-        description="Capture, review, and move new sales opportunities toward quotes. New leads from website forms, email, phone calls, texts, and manual entry can land here for review—match each lead to a customer, follow up, and move qualified work toward a quote."
+        description="Capture and move new sales opportunities toward quotes. Open a lead to review intake details, verify the customer, and track its progress."
         actions={
           <>
             {fromWorkstation ? (
@@ -140,101 +216,25 @@ export default async function LeadsPage({
       <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,18rem)]">
         <div>
           <SectionHeading
-            title="Intake queue"
-            description="New leads appear here, newest first. Open a row to update follow-up, match to a customer, and get ready for a quote."
+            title="Leads"
+            description="Open a row to review contact details, track commercial progress, and navigate to customer or quote records."
           />
           <WorkspacePanel padding="none" className="overflow-hidden">
-            <div className="border-b border-border bg-foreground/[0.02] px-4 py-2">
-              <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                New leads
-              </p>
-            </div>
-            <div className="p-0">
-              {leads.length === 0 ? (
-                <div className="p-6">
-                  <EmptyState
-                    icon={Inbox}
-                    title="Queue is empty"
-                    description="No leads yet. Add one when a call, walk-in, or message comes in—or when you are ready to log the next opportunity."
-                  >
-                    <Link href="/leads/new" className={primaryLinkClass}>
-                      New lead
-                    </Link>
-                  </EmptyState>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[48rem] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                        <th className="px-4 pb-3 pt-4 font-medium">Lead</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Commercial progress</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Status</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Lead source</th>
-                        <th className="pr-4 pb-3 pt-4 font-medium">Customer</th>
-                        <th className="pb-3 pt-4 font-medium">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leads.map((lead) => {
-                        const progress = leadProgressById.get(lead.id);
-                        return (
-                          <tr
-                            key={lead.id}
-                            className="border-b border-border/50 last:border-0"
-                          >
-                            <td className="px-4 py-4 align-top">
-                              <Link href={`/leads/${lead.id}`} className={rowLinkClass}>
-                                <div className="font-medium text-foreground transition-colors group-hover:text-foreground group-hover:underline">
-                                  {lead.title}
-                                </div>
-                                <div className="mt-1 text-xs text-foreground-subtle">
-                                  {lead.email || lead.phone || "No contact yet"}
-                                </div>
-                              </Link>
-                            </td>
-                            <td className="py-4 pr-4 align-top">
-                              {progress ? (
-                                <StatusBadge
-                                  label={progress.label}
-                                  tone={progress.badgeTone}
-                                />
-                              ) : (
-                                <span className="text-xs text-foreground-subtle">—</span>
-                              )}
-                            </td>
-                            <td className="py-4 pr-4 align-top">
-                              <StatusBadge
-                                label={formatLeadStatus(lead.status)}
-                                tone={leadStatusBadgeTone(lead.status)}
-                              />
-                            </td>
-                            <td className="py-4 pr-4 align-top text-foreground-muted">
-                              {formatLeadSource(lead.source)}
-                            </td>
-                            <td className="py-4 pr-4 align-top">
-                              {lead.customer ? (
-                                <Link
-                                  href={`/customers/${lead.customer.id}`}
-                                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                                >
-                                  {lead.customer.displayName}
-                                </Link>
-                              ) : (
-                                <span className="text-sm text-foreground-subtle">No customer</span>
-                              )}
-                            </td>
-                            <td className="py-4 pr-4 align-top text-foreground-subtle">
-                              {new Date(lead.createdAt).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            {leads.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  icon={Inbox}
+                  title="Queue is empty"
+                  description="No leads yet. Add one when a call, walk-in, or message comes in—or when you are ready to log the next opportunity."
+                >
+                  <Link href="/leads/new" className={primaryLinkClass}>
+                    New lead
+                  </Link>
+                </EmptyState>
+              </div>
+            ) : (
+              <LeadsListClient leads={serializedLeads} />
+            )}
           </WorkspacePanel>
         </div>
 
