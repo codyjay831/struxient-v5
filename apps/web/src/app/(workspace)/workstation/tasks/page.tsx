@@ -1,23 +1,43 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { ClipboardList } from "lucide-react";
+import { getDevOrganizationOrThrow, db } from "@/lib/db";
+import { queryWorkstationWorkItems } from "@/lib/workstation-query";
+import { AttentionCard } from "@/components/ui/attention-card";
+import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
+import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
+import { WorkstationTaskPanel } from "@/components/workstation/workstation-task-panel";
+import { JobTaskStatus } from "@prisma/client";
 
-const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+export const dynamic = "force-dynamic";
 
-export default function WorkstationTasksLensPage() {
+const continuationLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+export default async function WorkstationTasksLensPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const org = await getDevOrganizationOrThrow();
+  const sp = await searchParams;
+  const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
+
+  const allItems = await queryWorkstationWorkItems(org.id);
+  const taskItems = allItems.filter((i) => i.kind === "task");
+
+  const inProgressCount = taskItems.filter(i => i.status === JobTaskStatus.IN_PROGRESS).length;
+  const todoCount = taskItems.filter(i => i.status === JobTaskStatus.TODO).length;
+
+  const selectedItem = selectedId ? taskItems.find((i) => i.id === selectedId) : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
@@ -25,109 +45,114 @@ export default function WorkstationTasksLensPage() {
       />
       <PageHeader
         title="Tasks"
-        description="Reserved cross-cutting attention layout—not where you author tasks, run an engine, or browse a catalog. No task queries or mutations exist in this build."
+        description="Focused view of all active tasks across your organization's jobs."
       />
 
       <div className="space-y-6">
         <WorkspacePanel padding="compact">
           <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          <span className="font-medium text-foreground">/workstation/tasks</span> will
-          highlight assigned, blocked, review-needed, and ready-next items once a model
-          exists. It is <span className="font-medium text-foreground">not</span> quote or
-          job authoring, not runtime sequencing, and not a replacement for record pages
-          under Sales, Relationships, or Work.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Attention slice" tone="neutral" />
-          <span className="text-xs text-foreground-muted">
-            No task signals or queries in this build
-          </span>
-        </div>
-      </WorkspacePanel>
+            This lens highlights tasks that are ready to start or currently in progress.
+            Use this to work through your daily task list without leaving the Workstation context.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusBadge label="Real-time task data" tone="neutral" />
+            <span className="text-xs text-foreground-muted">
+              Derived from active job records in this organization.
+            </span>
+          </div>
+        </WorkspacePanel>
 
-      <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-        <SectionHeading
-          title="Task attention signals"
-          description="Future aggregation across quote prep, job execution, reviews, and issues—each row should carry ownership and a clear next step. No prioritization engine or RBAC filtering runs here yet."
-          actions={
-            <>
-              <PlaceholderButton title="No lens config in this build">
-                Tune task lens (not wired)
-              </PlaceholderButton>
-              <PlaceholderButton title="No feed wiring in this build">
-                Refresh signals (not wired)
-              </PlaceholderButton>
-            </>
-          }
-        />
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SignalCard
-            label="Assigned action items"
-            value="—"
-            hint="Work with your name on it across jobs."
-          />
-          <SignalCard
-            label="Blocked work"
-            value="—"
-            hint="Future dependency stops—nothing stored."
-          />
-          <SignalCard
-            label="Review needed"
-            value="—"
-            hint="Future evidence or internal review queues."
-          />
-          <SignalCard
-            label="Ready for next step"
-            value="—"
-            hint="Future unblocked work needing a decision."
-          />
-        </div>
-        <EmptyState
-          icon={ClipboardList}
-          title="No task attention signals"
-          description="No fabricated tasks, blockers, or priorities—counts stay at — until persistence and a real task model exist. This page does not create or mutate work."
-        />
-      </WorkspacePanel>
+        {selectedItem && (
+          <div id="selected-item-panel" className="scroll-mt-6">
+            <WorkstationWorkPanel item={selectedItem}>
+              <TaskDetailWrapper taskId={selectedItem.recordId} />
+            </WorkstationWorkPanel>
+          </div>
+        )}
 
-      <WorkspacePanel padding="compact">
-        <SectionHeading
-          title="Connections"
-          description="Jump to where records and planning live—navigation only."
-        />
-        <div className="flex flex-wrap gap-2">
-          <Link href="/workstation" className={handoffPrimaryLinkClass}>
-            Workstation home
-          </Link>
-          <Link href="/jobs" className={listLinkClass}>
-            Job records
-          </Link>
-          <Link href="/quotes" className={listLinkClass}>
-            Quotes
-          </Link>
-          <Link href="/schedule" className={listLinkClass}>
-            Schedule
-          </Link>
-        </div>
-      </WorkspacePanel>
+        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+          <SectionHeading
+            title="Task attention signals"
+            description="Active work items grouped by their current status and priority."
+          />
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <SignalCard
+              label="In progress"
+              value={String(inProgressCount)}
+              hint="Tasks currently being worked on."
+            />
+            <SignalCard
+              label="Ready to start"
+              value={String(todoCount)}
+              hint="Tasks waiting for action."
+            />
+            <SignalCard
+              label="Blocked work"
+              value="0"
+              hint="No explicit blockers in this build."
+            />
+            <SignalCard
+              label="Review needed"
+              value="0"
+              hint="No review signals in this build."
+            />
+          </div>
 
-      <HandoffPanel
-        title="Tasks lens pulls attention from everywhere"
-        description="Reserved for future aggregation across quotes, jobs, timing, and reviews. Authoritative rows still live under Sales, Relationships, and Work—this strip has no live feed yet."
-      >
-        <Link href="/workstation" className={handoffPrimaryLinkClass}>
-          Workstation home
-        </Link>
-        <Link href="/jobs" className={handoffMutedLinkClass}>
-          Jobs
-        </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
-          Quotes
-        </Link>
-        <Link href="/schedule" className={handoffMutedLinkClass}>
-          Schedule
-        </Link>
-      </HandoffPanel>
+          {taskItems.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {taskItems.map((item) => (
+                <AttentionCard
+                  key={item.id}
+                  title={item.title}
+                  eyebrow={item.kind}
+                  recordLabel={item.subtitle || ""}
+                  severity={item.priority === "critical" ? "high" : item.priority}
+                  reason={item.reason}
+                  suggestedAction={item.nextStep}
+                  href={buildWorkstationSelectHref(item.id, item.kind)}
+                  secondaryHref={item.href}
+                  secondaryActionLabel="Open full record"
+                  origin="derived"
+                  isSelected={selectedId === item.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={ClipboardList}
+              title="No active tasks"
+              description="There are no TODO or IN_PROGRESS tasks across your active jobs right now."
+            >
+              <Link href="/quotes" className={continuationLinkClass}>
+                {WORKSTATION_COPY.continuation.openQuotes}
+              </Link>
+              <Link href="/jobs" className={continuationLinkClass}>
+                {WORKSTATION_COPY.continuation.openJobs}
+              </Link>
+              <Link href="/workstation" className={continuationLinkClass}>
+                {WORKSTATION_COPY.continuation.backToToday}
+              </Link>
+            </EmptyState>
+          )}
+        </WorkspacePanel>
+      </div>
     </div>
-    </div>
+  );
+}
+
+async function TaskDetailWrapper({ taskId }: { taskId: string }) {
+  const task = await db.jobTask.findUnique({
+    where: { id: taskId },
+    select: { id: true, status: true, instructions: true },
+  });
+
+  if (!task) return null;
+
+  return (
+    <WorkstationTaskPanel
+      taskId={task.id}
+      initialStatus={task.status}
+      instructions={task.instructions}
+    />
   );
 }

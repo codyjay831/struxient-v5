@@ -6,6 +6,7 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import type {
   QuoteDetailPayload,
@@ -31,10 +32,19 @@ const listLinkClass =
 
 export default async function QuoteDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ quoteId: string }>;
+  searchParams?: Promise<{ from?: string; section?: string }>;
 }) {
-  const { quoteId } = await params;
+  const emptySearchParams: { from?: string; section?: string } = {};
+  const [{ quoteId }, sq] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve(emptySearchParams),
+  ]);
+  const fromWorkstation = sq.from === "workstation";
+  const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
+  const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
   const org = await getDevOrganizationOrThrow();
   const row = await db.quote.findFirst({
     where: {
@@ -350,6 +360,7 @@ export default async function QuoteDetailPage({
       draftTasksByLineId={draftTasksByLineId}
       reusableTaskOptions={reusableTaskOptions}
       quoteReadiness={quoteReadiness}
+      returnHref={returnHref}
     />
   );
 }

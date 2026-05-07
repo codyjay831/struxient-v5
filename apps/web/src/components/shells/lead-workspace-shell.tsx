@@ -53,6 +53,12 @@ export type LeadWorkspaceShellProps = {
   linkedQuotes?: QuoteLinkedSummary[];
   /** Derived commercial progress story; computed server-side per request. */
   commercialProgress: LeadCommercialProgress;
+  /**
+   * Optional return context link — shown as the first header action when the
+   * user arrived from Workstation (or another page that passes `from=workstation`).
+   * Renders a "← Workstation" link before the standard navigation actions.
+   */
+  returnHref?: string;
 };
 
 export function LeadWorkspaceShell({
@@ -64,6 +70,7 @@ export function LeadWorkspaceShell({
   createFromLeadAction,
   linkedQuotes = [],
   commercialProgress,
+  returnHref,
 }: LeadWorkspaceShellProps) {
   const createdFull = new Date(lead.createdAt).toLocaleString();
   const updatedFull = new Date(lead.updatedAt).toLocaleString();
@@ -94,6 +101,11 @@ export function LeadWorkspaceShell({
         description="Track this opportunity from intake through quote, approval, and job creation."
         actions={
           <>
+            {returnHref ? (
+              <Link href={returnHref} className={listLinkClass}>
+                ← Workstation
+              </Link>
+            ) : null}
             <Link href="/leads" className={listLinkClass}>
               ← Leads list
             </Link>

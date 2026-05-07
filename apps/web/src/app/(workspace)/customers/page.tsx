@@ -14,10 +14,21 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { UserCircle } from "lucide-react";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomersPage() {
+const returnLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ from?: string; section?: string }>;
+}) {
+  const sq = await (searchParams ?? Promise.resolve({} as { from?: string; section?: string }));
+  const fromWorkstation = sq.from === "workstation";
+  const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
   const org = await getDevOrganizationOrThrow();
   const [customers, totalLeads, unlinkedLeads, openPipelineLeads] = await Promise.all([
     db.customer.findMany({
@@ -50,6 +61,14 @@ export default async function CustomersPage() {
         description="Relationship records for this organization—identity and contact live here; linked intake appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
         actions={
           <>
+            {fromWorkstation ? (
+              <Link
+                href={workstationReturnHref(returnSection)}
+                className={returnLinkClass}
+              >
+                ← Workstation
+              </Link>
+            ) : null}
             <Link href="/customers/new" className={handoffPrimaryLinkClass}>
               New customer
             </Link>

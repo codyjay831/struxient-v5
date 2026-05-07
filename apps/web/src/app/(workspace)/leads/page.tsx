@@ -21,6 +21,7 @@ import {
 import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,17 @@ const primaryLinkClass =
 const rowLinkClass =
   "group block rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
-export default async function LeadsPage() {
+const returnLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ from?: string; section?: string }>;
+}) {
+  const sq = await (searchParams ?? Promise.resolve({} as { from?: string; section?: string }));
+  const fromWorkstation = sq["from"] === "workstation";
+  const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
   const org = await getDevOrganizationOrThrow();
   const publicSiteBaseUrl = await resolvePublicSiteBaseUrl();
   const publicRequestGate = await db.publicRequestSettings.findUnique({
@@ -95,6 +106,14 @@ export default async function LeadsPage() {
         description="Capture, review, and move new sales opportunities toward quotes. New leads from website forms, email, phone calls, texts, and manual entry can land here for review—match each lead to a customer, follow up, and move qualified work toward a quote."
         actions={
           <>
+            {fromWorkstation ? (
+              <Link
+                href={workstationReturnHref(returnSection)}
+                className={returnLinkClass}
+              >
+                ← Workstation
+              </Link>
+            ) : null}
             <Link href="/leads/new" className={primaryLinkClass}>
               New lead
             </Link>

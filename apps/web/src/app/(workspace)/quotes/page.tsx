@@ -28,6 +28,7 @@ import {
   type QuoteListSortParam,
   type QuoteListStatusParam,
 } from "@/lib/quote-list-query";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { FileText, Search } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ export default async function QuotesPage({
 }) {
   const sp = await searchParams;
   const { q, status, sort } = parseQuoteListSearchParams(sp);
+  const fromWorkstation = sp["from"] === "workstation";
+  const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const org = await getDevOrganizationOrThrow();
 
   const listWhere = quoteListWhere(org.id, status, q);
@@ -173,6 +176,14 @@ export default async function QuotesPage({
         description="Working quote records for this organization—list and detail reads are org-scoped. Draft quotes are editable; Send quote and Mark approved advance lifecycle on the quote detail page. Live proposal preview and commercial checkpoints are internal staff tools."
         actions={
           <>
+            {fromWorkstation ? (
+              <Link
+                href={workstationReturnHref(returnSection)}
+                className={mutedLinkClass}
+              >
+                ← Workstation
+              </Link>
+            ) : null}
             <Link href="/quotes/new" className={primaryLinkClass}>
               New quote
             </Link>

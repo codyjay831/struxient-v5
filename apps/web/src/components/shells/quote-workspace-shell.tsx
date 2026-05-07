@@ -61,6 +61,12 @@ export type QuoteWorkspaceShellProps = {
   /** Reusable task picker options for the org (empty when execution is not editable). */
   reusableTaskOptions: ReusableTaskPickerOption[];
   quoteReadiness: QuoteReadiness;
+  /**
+   * Optional return context link shown as the first header action when the user
+   * arrived from Workstation. Renders a "← Workstation" link before the
+   * standard navigation actions.
+   */
+  returnHref?: string;
 };
 
 function QuoteDetailShell({
@@ -72,6 +78,7 @@ function QuoteDetailShell({
   draftTasksByLineId,
   reusableTaskOptions,
   quoteReadiness,
+  returnHref,
 }: QuoteWorkspaceShellProps) {
   const isArchived = quoteStatusIsArchived(quote.status);
   const isCommercialEditable = quoteStatusAllowsCommercialEdits(quote.status);
@@ -96,6 +103,11 @@ function QuoteDetailShell({
         description="Review pricing, scope, customer links, and execution readiness before sending or activating this quote."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
+            {returnHref ? (
+              <Link href={returnHref} className={listLinkClass}>
+                ← Workstation
+              </Link>
+            ) : null}
             {activatedJobId ? (
               <Link href={jobDetailPath(activatedJobId)} className={listLinkClass}>
                 Open job

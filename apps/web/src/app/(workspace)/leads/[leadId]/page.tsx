@@ -12,6 +12,7 @@ import {
   type LeadProgressQuoteInput,
 } from "@/lib/lead-commercial-progress";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
 import {
   createCustomerFromLeadAction,
@@ -32,10 +33,19 @@ const listLinkClass =
 
 export default async function LeadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ leadId: string }>;
+  searchParams?: Promise<{ from?: string; section?: string }>;
 }) {
-  const { leadId } = await params;
+  const emptySearchParams: { from?: string; section?: string } = {};
+  const [{ leadId }, sq] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve(emptySearchParams),
+  ]);
+  const fromWorkstation = sq["from"] === "workstation";
+  const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
+  const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
   const org = await getDevOrganizationOrThrow();
   const row = await db.lead.findFirst({
     where: {
@@ -227,6 +237,7 @@ export default async function LeadDetailPage({
       updateStatusAction={updateLeadStatusAction.bind(null, row.id)}
       linkedQuotes={linkedQuotesForShell}
       commercialProgress={commercialProgress}
+      returnHref={returnHref}
       {...(showLinkForm
         ? {
             customersForLink,

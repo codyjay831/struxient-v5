@@ -24,6 +24,7 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
+import { workstationReturnHref } from "@/lib/workstation-return-href";
 import {
   Building2,
   CalendarDays,
@@ -75,10 +76,19 @@ function ConnectedRecordSlot({
 
 export default async function CustomerDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ customerId: string }>;
+  searchParams?: Promise<{ from?: string; section?: string }>;
 }) {
-  const { customerId } = await params;
+  const emptySearchParams: { from?: string; section?: string } = {};
+  const [{ customerId }, sq] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve(emptySearchParams),
+  ]);
+  const fromWorkstation = sq.from === "workstation";
+  const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
+  const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
   const org = await getDevOrganizationOrThrow();
   const customer = await db.customer.findFirst({
     where: {
@@ -101,9 +111,16 @@ export default async function CustomerDetailPage({
           title="Customer"
           description="No customer exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
-            <Link href="/customers" className={listLinkClass}>
-              ← Customers list
-            </Link>
+            <>
+              {returnHref ? (
+                <Link href={returnHref} className={listLinkClass}>
+                  ← Workstation
+                </Link>
+              ) : null}
+              <Link href="/customers" className={listLinkClass}>
+                ← Customers list
+              </Link>
+            </>
           }
         />
         <WorkspacePanel padding="compact" className="mb-6">
@@ -184,6 +201,11 @@ export default async function CustomerDetailPage({
         description="Durable relationship record—not Sales-only. A customer can exist without any leads; leads you link or create from intake appear in Linked leads below. Linked quotes are read-only from the database for this organization; jobs, schedule, and payments stay out of scope here. Identity and contact fields are edited on the separate edit route; this view stays read-first."
         actions={
           <>
+            {returnHref ? (
+              <Link href={returnHref} className={listLinkClass}>
+                ← Workstation
+              </Link>
+            ) : null}
             <Link href="/customers" className={listLinkClass}>
               ← Customers list
             </Link>

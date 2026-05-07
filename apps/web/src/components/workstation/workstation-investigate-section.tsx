@@ -1,7 +1,6 @@
-import Link from "next/link";
 import {
-  ArrowRight,
   Briefcase,
+  ChevronRight,
   CircleAlert,
   CreditCard,
   FileText,
@@ -12,9 +11,11 @@ import {
 } from "lucide-react";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { AttentionCard } from "@/components/ui/attention-card";
+import { WORKSTATION_COPY } from "@/lib/workstation-copy";
+import { buildWorkstationHref } from "@/lib/workstation-return-href";
 import {
   type WorkstationInvestigateRecordType,
-  type WorkstationInvestigateSeverity,
   type WorkstationInvestigateSignal,
 } from "@/lib/workstation-investigate-signals";
 
@@ -36,154 +37,108 @@ const RECORD_LABELS: Record<WorkstationInvestigateRecordType, string> = {
   activity: "Activity",
 };
 
-const SEVERITY_PILL_CLASS: Record<WorkstationInvestigateSeverity, string> = {
-  high: "border-danger/30 bg-danger/10 text-danger",
-  medium: "border-border-strong bg-foreground/[0.04] text-foreground",
-  low: "border-border bg-foreground/[0.02] text-foreground-muted",
-};
-
-const SEVERITY_LABEL: Record<WorkstationInvestigateSeverity, string> = {
-  high: "High",
-  medium: "Medium",
-  low: "Low",
-};
-
-const primaryActionClass =
-  "inline-flex items-center gap-1.5 rounded-lg border border-border bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
-
-const secondaryActionClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
-
-const cardClass =
-  "rounded-lg border border-border bg-foreground/[0.015] px-4 py-3 transition-colors hover:border-border-strong hover:bg-foreground/[0.03]";
-
-function WorkstationInvestigateCard({
+function InvestigateAttentionCard({
   signal,
 }: {
   signal: WorkstationInvestigateSignal;
 }) {
-  const RecordIcon = RECORD_ICONS[signal.recordType];
-  const isPreview = signal.origin === "preview";
+  // Derived signals get return context so destination pages can surface a
+  // "Back to Workstation" link. Preview signals point to illustrative targets
+  // only; apply context to those too for consistency.
+  const contextHref = buildWorkstationHref(signal.href, "investigate");
+  const contextSecondaryHref = signal.secondaryHref
+    ? buildWorkstationHref(signal.secondaryHref, "investigate")
+    : undefined;
 
   return (
-    <article className={cardClass}>
-      <div className="flex items-start gap-3">
-        <div
-          className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-foreground-subtle"
-          aria-hidden
-        >
-          <RecordIcon className="size-3.5" strokeWidth={1.5} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-              {RECORD_LABELS[signal.recordType]}
-            </span>
-            <span
-              className={[
-                "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide",
-                SEVERITY_PILL_CLASS[signal.severity],
-              ].join(" ")}
-              title="Investigate severity"
-            >
-              {SEVERITY_LABEL[signal.severity]}
-            </span>
-            {isPreview ? (
-              <span
-                className="inline-flex items-center rounded-md border border-dashed border-border px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle"
-                title="Illustrative preview — not derived from live data yet"
-              >
-                Preview
-              </span>
-            ) : null}
-          </div>
-          <h3 className="mt-1 text-sm font-semibold text-foreground">
-            {signal.title}
-          </h3>
-          <p className="mt-0.5 truncate text-xs text-foreground-muted">
-            {signal.recordLabel}
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-            {signal.reason}
-          </p>
-          <p className="mt-1 text-xs text-foreground-subtle">
-            <span className="font-medium text-foreground-muted">Suggested:</span>{" "}
-            {signal.suggestedAction}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={signal.href} className={primaryActionClass}>
-              {signal.primaryActionLabel}
-              <ArrowRight className="size-3.5" />
-            </Link>
-            {signal.secondaryHref && signal.secondaryActionLabel ? (
-              <Link href={signal.secondaryHref} className={secondaryActionClass}>
-                {signal.secondaryActionLabel}
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </article>
+    <AttentionCard
+      title={signal.title}
+      eyebrow={RECORD_LABELS[signal.recordType]}
+      icon={RECORD_ICONS[signal.recordType]}
+      recordLabel={signal.recordLabel}
+      severity={signal.severity}
+      reason={signal.reason}
+      suggestedAction={signal.suggestedAction}
+      href={contextHref}
+      secondaryHref={contextSecondaryHref}
+      secondaryActionLabel={signal.secondaryActionLabel}
+      origin={signal.origin}
+    />
   );
 }
 
 export type WorkstationInvestigateSectionProps = {
   derivedSignals: readonly WorkstationInvestigateSignal[];
   previewSignals: readonly WorkstationInvestigateSignal[];
+  /** Optional id to make the section scroll-anchor-able from a SummaryStrip. */
+  id?: string;
 };
 
 export function WorkstationInvestigateSection({
   derivedSignals,
   previewSignals,
+  id,
 }: WorkstationInvestigateSectionProps) {
   const hasDerived = derivedSignals.length > 0;
   const hasPreview = previewSignals.length > 0;
 
   return (
-    <WorkspacePanel padding="compact" className="border-border-strong">
+    <WorkspacePanel id={id} padding="compact" className="border-border-strong scroll-mt-6">
       <SectionHeading
-        title="Investigate"
-        description="Records that look unclear, risky, or missing context—review them before they become tasks."
+        title={WORKSTATION_COPY.investigate.sectionTitle}
+        description={WORKSTATION_COPY.investigate.sectionDescription}
       />
 
+      {/* Live derived signals */}
       {hasDerived ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {derivedSignals.map((signal) => (
-            <WorkstationInvestigateCard key={signal.id} signal={signal} />
+            <InvestigateAttentionCard key={signal.id} signal={signal} />
           ))}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-border bg-surface/50 px-4 py-5">
           <p className="text-sm font-medium text-foreground">
-            No investigation signals right now.
+            {WORKSTATION_COPY.investigate.emptyTitle}
           </p>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-            Struxient will surface unclear, risky, or missing-context items here before
-            they become tasks. Only org-scoped lead linkage is wired today.
+            {WORKSTATION_COPY.investigate.emptyDescription}
           </p>
         </div>
       )}
 
+      {/* Preview signals — collapsed by default when live signals exist so they
+          don't compete for attention. Open by default when there are no live
+          signals so the section doesn't look empty. */}
       {hasPreview ? (
-        <div className="mt-5 border-t border-border pt-4">
-          <div className="mb-3 flex items-start gap-2">
+        <details
+          open={!hasDerived}
+          className="group mt-5 border-t border-border pt-4"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-foreground-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              className="size-3.5 shrink-0 transition-transform group-open:rotate-90"
+              aria-hidden
+            />
+            <span>{WORKSTATION_COPY.investigate.previewSectionTitle}</span>
             <CircleAlert
-              className="mt-0.5 size-3.5 shrink-0 text-foreground-subtle"
+              className="ml-0.5 size-3 shrink-0 text-foreground-subtle"
               strokeWidth={1.5}
               aria-hidden
             />
-            <p className="text-xs leading-relaxed text-foreground-subtle">
-              Preview cards illustrate the categories the Investigate lane will surface
-              once duplicate detection, quote readiness scans, payment, and activity
-              feeds are wired. Not derived from live records.
+          </summary>
+
+          <div className="mt-3">
+            <p className="mb-3 text-xs leading-relaxed text-foreground-subtle">
+              {WORKSTATION_COPY.investigate.previewSectionLead}
             </p>
+            <div className="space-y-2">
+              {previewSignals.map((signal) => (
+                <InvestigateAttentionCard key={signal.id} signal={signal} />
+              ))}
+            </div>
           </div>
-          <div className="space-y-2">
-            {previewSignals.map((signal) => (
-              <WorkstationInvestigateCard key={signal.id} signal={signal} />
-            ))}
-          </div>
-        </div>
+        </details>
       ) : null}
     </WorkspacePanel>
   );
