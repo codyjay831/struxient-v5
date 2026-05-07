@@ -83,6 +83,9 @@ export default async function JobDetailPage({
     job.customer && job.customer.organizationId === org.id ? job.customer : null;
   const safeLead = job.lead && job.lead.organizationId === org.id ? job.lead : null;
 
+  const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
+  const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
+
   const sharedStages = job.stages.filter((s) => s.blockType === JobStageBlockType.SHARED);
 
   const separateStages = job.stages.filter(
@@ -124,11 +127,22 @@ export default async function JobDetailPage({
         items={[
           { label: "Work" },
           { label: "Jobs", href: "/jobs" },
-          { label: job.title },
+          { label: primaryIdentity },
         ]}
       />
       <PageHeader
-        title={job.title}
+        title={primaryIdentity}
+        eyebrow={
+          secondaryIdentity ? (
+            <span className="flex items-center gap-2">
+              <span>Runtime job</span>
+              <span className="text-foreground-subtle/50">·</span>
+              <span className="text-foreground-subtle">Job title: {secondaryIdentity}</span>
+            </span>
+          ) : (
+            "Runtime job"
+          )
+        }
         description="Stages and tasks were copied from the source quote at activation. Editing the source quote does not change tasks already on this job."
         actions={
           <div className="flex flex-wrap justify-end gap-2">

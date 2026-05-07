@@ -2,7 +2,6 @@ import Link from "next/link";
 import { QuoteStatus } from "@prisma/client";
 import {
   HandoffPanel,
-  handoffMutedLinkClass,
 } from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
@@ -173,7 +172,7 @@ export default async function QuotesPage({
       <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Quotes" }]} />
       <PageHeader
         title="Quotes"
-        description="Working quote records for this organization—list and detail reads are org-scoped. Draft quotes are editable; Send quote and Mark approved advance lifecycle on the quote detail page. Live proposal preview and commercial checkpoints are internal staff tools."
+        description="Commercial documents for this organization. Quotes carry pricing, scope, and rollups. For the full sales pipeline and opportunity context, use the Leads/Opportunities workspace."
         actions={
           <>
             {fromWorkstation ? (
@@ -184,20 +183,22 @@ export default async function QuotesPage({
                 ← Workstation
               </Link>
             ) : null}
+            <Link href="/leads" className={mutedLinkClass}>
+              ← Opportunities
+            </Link>
             <Link href="/quotes/new" className={primaryLinkClass}>
               New quote
             </Link>
-            <PlaceholderButton>Templates (soon)</PlaceholderButton>
           </>
         }
       />
 
       <HandoffPanel
-        title="Commercial handoff"
-        description="Quotes are the working commercial record—line items carry scope and rollups here. This list is org-scoped and does not imply external delivery, runtime execution, or automatic handoff to jobs or payments."
+        title="Commercial documents"
+        description="Quotes are document-centric records. They are typically created as a step within a sales opportunity. Use the Opportunities workspace to manage the overall customer relationship and sales flow."
       >
-        <Link href="/leads" className={handoffMutedLinkClass}>
-          Go to Leads
+        <Link href="/leads" className={primaryLinkClass}>
+          Go to Opportunities
         </Link>
       </HandoffPanel>
 
@@ -372,6 +373,10 @@ export default async function QuotesPage({
               {quotes.map((row) => {
                 const updated = new Date(row.updatedAt).toLocaleString();
                 const created = new Date(row.createdAt).toLocaleString();
+                
+                const primaryIdentity = row.lead?.title || row.customer?.displayName || row.title;
+                const secondaryIdentity = row.title !== primaryIdentity ? row.title : null;
+
                 const contextBits: string[] = [];
                 if (row.customer) {
                   const c = row.customer.displayName;
@@ -392,12 +397,19 @@ export default async function QuotesPage({
                   <li key={row.id} className="px-4 py-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/quotes/${row.id}`}
-                          className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                        >
-                          {row.title}
-                        </Link>
+                        <div className="flex flex-col">
+                          <Link
+                            href={`/quotes/${row.id}`}
+                            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                          >
+                            {primaryIdentity}
+                          </Link>
+                          {secondaryIdentity && (
+                            <span className="text-[10px] font-medium uppercase tracking-tight text-foreground-subtle">
+                              Quote title: {secondaryIdentity}
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-1 text-xs text-foreground-muted">
                           <span className="break-words">{contextLine}</span>
                         </p>

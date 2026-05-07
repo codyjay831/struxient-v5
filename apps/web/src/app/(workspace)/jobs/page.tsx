@@ -89,6 +89,10 @@ export default async function JobsPage() {
               job.customer && job.customer.organizationId === org.id ? job.customer : null;
             const safeLead =
               job.lead && job.lead.organizationId === org.id ? job.lead : null;
+            
+            const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
+            const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
+
             const contextBits: string[] = [];
             if (safeCustomer) {
               contextBits.push(`Customer: ${safeCustomer.displayName}`);
@@ -103,12 +107,19 @@ export default async function JobsPage() {
               <li key={job.id} className="px-4 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <Link
-                      href={jobDetailPath(job.id)}
-                      className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                    >
-                      {job.title}
-                    </Link>
+                    <div className="flex flex-col">
+                      <Link
+                        href={jobDetailPath(job.id)}
+                        className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        {primaryIdentity}
+                      </Link>
+                      {secondaryIdentity && (
+                        <span className="text-[10px] font-medium uppercase tracking-tight text-foreground-subtle">
+                          Job title: {secondaryIdentity}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-xs text-foreground-muted">{contextBits.join(" · ")}</p>
                     {safeQuote ? (
                       <p className="mt-1 text-xs text-foreground-muted">

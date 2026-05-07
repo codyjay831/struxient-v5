@@ -11,8 +11,6 @@ export type JobTaskActionState = {
 export async function updateJobTaskStatusAction(
   taskId: string,
   status: JobTaskStatus,
-  _prevState: JobTaskActionState,
-  _formData: FormData,
 ): Promise<JobTaskActionState> {
   const org = await getDevOrganizationOrThrow();
 

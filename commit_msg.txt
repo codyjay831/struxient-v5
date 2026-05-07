@@ -1,9 +1,0 @@
-web: real-data workstation with interactive work panels and inline actions
-
-- Workstation: transform from placeholder link-hub to active decision surface; implement real data aggregation across leads, quotes, jobs, and tasks with organization scoping.
-- UX: replace "Work in Workstation" buttons with interactive clickable cards using a stretched-link pattern and URL-driven selection state (?selectedId=...).
-- Work Panels: introduce a focused side-drawer (WorkstationWorkPanel) for selected items, featuring context-specific details and inline actions (e.g., task status updates, lead qualification).
-- Navigation: implement return-context pattern ("← Workstation" links) on destination pages for leads, customers, and quotes.
-- Components: add SummaryStrip for real-time counts, AttentionCard interactive state, and specialized panels for tasks, jobs, leads, and quotes.
-
-Co-authored-by: Cursor <cursoragent@cursor.com>

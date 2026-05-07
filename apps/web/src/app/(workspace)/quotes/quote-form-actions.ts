@@ -527,6 +527,71 @@ export async function updateDraftQuoteDetailsAction(
 }
 
 /**
+ * Appends lead intake notes to internal quote notes.
+ * `quoteId` must be supplied via `.bind(null, quote.id)`.
+ */
+export async function copyLeadIntakeToQuoteNotesAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  try {
+    await db.$transaction(async (tx) => {
+      const quote = await tx.quote.findFirst({
+        where: { id, organizationId: org.id, status: QuoteStatus.DRAFT },
+        select: { internalNotes: true, lead: { select: { notes: true } } },
+      });
+
+      if (!quote) {
+        throw new Error("QUOTE_NOT_FOUND");
+      }
+
+      if (!quote.lead?.notes) {
+        throw new Error("NO_LEAD_NOTES");
+      }
+
+      const leadNotes = quote.lead.notes;
+      const existingNotes = quote.internalNotes ?? "";
+      const separator = existingNotes ? "\n\nCopied from lead intake:\n" : "Copied from lead intake:\n";
+      const newNotes = `${existingNotes}${separator}${leadNotes}`;
+
+      if (newNotes.length > QUOTE_FIELD_LIMITS.internalNotes) {
+        throw new Error("NOTES_TOO_LONG");
+      }
+
+      await tx.quote.update({
+        where: { id },
+        data: { internalNotes: newNotes },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Error) {
+      if (e.message === "QUOTE_NOT_FOUND") {
+        return { error: "Quote not found or not a draft." };
+      }
+      if (e.message === "NO_LEAD_NOTES") {
+        return { error: "No intake notes found on the linked lead." };
+      }
+      if (e.message === "NOTES_TOO_LONG") {
+        return { error: `Resulting notes would exceed the ${QUOTE_FIELD_LIMITS.internalNotes} character limit.` };
+      }
+    }
+    throw e;
+  }
+
+  revalidatePath(`/quotes/${id}`);
+  return {};
+}
+
+/**
  * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
  */
 export async function addQuoteLineItemAction(

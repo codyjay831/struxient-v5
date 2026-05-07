@@ -56,7 +56,16 @@ export default async function QuoteDetailPage({
         select: { id: true, displayName: true, organizationId: true },
       },
       lead: {
-        select: { id: true, title: true, organizationId: true },
+        select: {
+          id: true,
+          title: true,
+          organizationId: true,
+          notes: true,
+          source: true,
+          contactName: true,
+          email: true,
+          phone: true,
+        },
       },
       job: {
         select: { id: true, status: true, organizationId: true },
@@ -128,7 +137,15 @@ export default async function QuoteDetailPage({
       : null;
   const lead =
     row.lead && row.lead.organizationId === org.id
-      ? { id: row.lead.id, title: row.lead.title }
+      ? {
+          id: row.lead.id,
+          title: row.lead.title,
+          notes: row.lead.notes,
+          source: row.lead.source,
+          contactName: row.lead.contactName,
+          email: row.lead.email,
+          phone: row.lead.phone,
+        }
       : null;
 
   const workOrderOrderedIds = [...row.lineItems]

@@ -74,7 +74,7 @@ export default async function NewQuotePage({
       validatedCustomerId = customer.id;
       contextLines.push({ label: "Lead", value: lead.title });
       contextLines.push({ label: "Customer", value: customer.displayName });
-      defaultTitle = `Quote — ${customer.displayName}`;
+      defaultTitle = customer.displayName;
     }
   } else if (lead && !rawCustomer) {
     validatedLeadId = lead.id;
@@ -90,17 +90,17 @@ export default async function NewQuotePage({
           label: "Customer (from lead)",
           value: `${linked.displayName} — this quote will attach to both the lead and that customer because the lead already references them.`,
         });
-        defaultTitle = `Quote — ${linked.displayName}`;
+        defaultTitle = linked.displayName;
       } else {
-        defaultTitle = `Quote — ${lead.title}`;
+        defaultTitle = lead.title;
       }
     } else {
-      defaultTitle = `Quote — ${lead.title}`;
+      defaultTitle = lead.title;
     }
   } else if (customer && !rawLead) {
     validatedCustomerId = customer.id;
     contextLines.push({ label: "Customer", value: customer.displayName });
-    defaultTitle = `Quote — ${customer.displayName}`;
+    defaultTitle = customer.displayName;
   }
 
   return (

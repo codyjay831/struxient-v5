@@ -4,11 +4,10 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import {
   addQuoteLineItemAction,
-  applyLineItemTemplateToQuoteAction,
-  archiveLineItemTemplateAction,
   deleteQuoteLineItemAction,
   updateDraftQuoteDetailsAction,
   updateQuoteLineItemAction,
+  copyLeadIntakeToQuoteNotesAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
@@ -29,6 +28,7 @@ import {
   QuoteLineDraftExecutionSummary,
   QuoteLineItemScanBlock,
 } from "@/components/quotes/quote-line-item-display";
+import { SavedLineItemPickerDialog } from "@/components/quotes/saved-line-item-picker-dialog";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import {
@@ -40,7 +40,7 @@ import {
   workspaceFormPrimaryButtonClass,
   workspaceFormSecondaryButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
-import { Library, ListOrdered } from "lucide-react";
+import { ListOrdered } from "lucide-react";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -67,14 +67,21 @@ function QuoteDraftDetailsForm({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
+  hasLeadNotes,
 }: {
   quoteId: string;
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
+  hasLeadNotes: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateDraftQuoteDetailsAction.bind(null, quoteId),
+    initialActionState,
+  );
+
+  const [copyState, copyAction, isCopyPending] = useActionState(
+    copyLeadIntakeToQuoteNotesAction.bind(null, quoteId),
     initialActionState,
   );
 
@@ -82,13 +89,13 @@ function QuoteDraftDetailsForm({
     <WorkspacePanel className="mb-6">
       <SectionHeading
         title="Draft details"
-        description="Staff workspace fields: title and internal notes stay here on the working quote. Optional proposal document title is separate—it only shapes the live proposal preview when set (otherwise the workspace title is used there)."
+        description="Staff workspace fields: title and internal notes stay here on the working quote. Optional proposal document title is separate—it shapes the live proposal preview and customer-facing document."
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
         <div>
           <label className="block">
-            <span className={fieldLabelClass}>Workspace title</span>
+            <span className={fieldLabelClass}>Quote workspace title</span>
             <input
               name="title"
               type="text"
@@ -102,7 +109,24 @@ function QuoteDraftDetailsForm({
         </div>
         <div>
           <label className="block">
-            <span className={fieldLabelClass}>Internal notes (optional)</span>
+            <div className="flex items-center justify-between">
+              <span className={fieldLabelClass}>Internal quote notes (staff-only)</span>
+              {hasLeadNotes && (
+                <div className="flex items-center gap-2">
+                  <button
+                    formAction={copyAction}
+                    disabled={isCopyPending}
+                    className="text-[10px] font-medium text-foreground-subtle underline decoration-border underline-offset-2 hover:decoration-foreground disabled:opacity-50"
+                    title="Append lead intake notes to this field. Does not overwrite existing text."
+                  >
+                    {isCopyPending ? "Copying..." : "Copy intake into quote notes"}
+                  </button>
+                  {copyState.error && (
+                    <span className="text-[10px] text-danger">{copyState.error}</span>
+                  )}
+                </div>
+              )}
+            </div>
             <textarea
               name="internalNotes"
               rows={4}
@@ -113,24 +137,24 @@ function QuoteDraftDetailsForm({
             />
           </label>
         </div>
-        <div>
-          <label className="block">
-            <span className={fieldLabelClass}>Proposal document title (optional)</span>
-            <input
-              name="customerDocumentTitle"
-              type="text"
-              maxLength={QUOTE_FIELD_LIMITS.customerDocumentTitle}
-              defaultValue={initialCustomerDocumentTitle ?? ""}
-              placeholder="Shown on live proposal preview instead of workspace title when set"
-              className={controlClass}
-              autoComplete="off"
-            />
-          </label>
-        </div>
-        <button type="submit" className={primaryButtonClass} disabled={isPending}>
-          {isPending ? "Saving…" : "Save quote details"}
-        </button>
-      </form>
+          <div>
+            <label className="block">
+              <span className={fieldLabelClass}>Proposal document title (customer-facing)</span>
+              <input
+                name="customerDocumentTitle"
+                type="text"
+                maxLength={QUOTE_FIELD_LIMITS.customerDocumentTitle}
+                defaultValue={initialCustomerDocumentTitle ?? ""}
+                placeholder="Shown on live proposal preview instead of workspace title when set"
+                className={controlClass}
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <button type="submit" className={primaryButtonClass} disabled={isPending}>
+            {isPending ? "Saving…" : "Save quote details"}
+          </button>
+        </form>
     </WorkspacePanel>
   );
 }
@@ -220,105 +244,6 @@ function QuoteLineAddForm({ quoteId, onCancel }: { quoteId: string; onCancel: ()
           Cancel
         </button>
       </div>
-    </form>
-  );
-}
-
-function QuoteLineTemplateApplyList({
-  quoteId,
-  templates,
-}: {
-  quoteId: string;
-  templates: LineItemTemplatePickerRow[];
-}) {
-  if (templates.length === 0) {
-    return (
-      <div className="mt-5">
-        <EmptyState
-          icon={Library}
-          title="No saved line items yet"
-          description="Use Add line item above for one-off rows, or create saved line items in Sales → Scope Library. Copying adds a new line with duplicated commercial fields and copies default draft execution when the saved line item has it."
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-5 space-y-2">
-      <p className="text-xs leading-relaxed text-foreground-muted">
-        Newest saved line items first. Hiding one removes it from this list only—lines already on quotes
-        stay unchanged.
-      </p>
-      <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-      {templates.map((t) => (
-        <li
-          key={t.id}
-          className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">{t.description}</p>
-            <p className="mt-1 text-xs text-foreground-muted">
-              Defaults: {t.defaultQuantityDisplay} × {formatMoneyCents(t.defaultUnitAmountCents)}{" "}
-              unit
-              {t.hasCustomerProposalDefaults ? (
-                <span className="mt-1 block text-foreground-subtle">
-                  Includes default proposal wording (copied into new lines only).
-                </span>
-              ) : null}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ApplyTemplateForm quoteId={quoteId} templateId={t.id} />
-            <ArchiveTemplateForm quoteId={quoteId} templateId={t.id} />
-          </div>
-        </li>
-      ))}
-      </ul>
-    </div>
-  );
-}
-
-function ApplyTemplateForm({ quoteId, templateId }: { quoteId: string; templateId: string }) {
-  const [state, formAction, isPending] = useActionState(
-    applyLineItemTemplateToQuoteAction.bind(null, quoteId, templateId),
-    initialActionState,
-  );
-
-  return (
-    <form action={formAction} className="inline">
-      {state.error ? (
-        <p className="mb-1 text-xs text-danger" role="alert">
-          {state.error}
-        </p>
-      ) : null}
-      <button type="submit" className={secondaryButtonClass} disabled={isPending}>
-        {isPending ? "Copying…" : "Copy line to quote"}
-      </button>
-    </form>
-  );
-}
-
-function ArchiveTemplateForm({ quoteId, templateId }: { quoteId: string; templateId: string }) {
-  const [state, formAction, isPending] = useActionState(
-    archiveLineItemTemplateAction.bind(null, quoteId, templateId),
-    initialActionState,
-  );
-
-  return (
-    <form action={formAction} className="inline">
-      {state.error ? (
-        <p className="mb-1 text-xs text-danger" role="alert">
-          {state.error}
-        </p>
-      ) : null}
-      <button
-        type="submit"
-        className={secondaryButtonClass}
-        disabled={isPending}
-        title="Hide this saved line item from the picker. Lines you already copied onto quotes are not changed."
-      >
-        {isPending ? "Hiding…" : "Hide from picker"}
-      </button>
     </form>
   );
 }
@@ -441,6 +366,7 @@ export type QuoteDraftWorkspaceControlsProps = {
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
+  hasLeadNotes: boolean;
   subtotalCents: number;
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
@@ -455,6 +381,7 @@ export function QuoteDraftWorkspaceControls({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
+  hasLeadNotes,
   subtotalCents,
   totalCents,
   lineItems,
@@ -473,6 +400,7 @@ export function QuoteDraftWorkspaceControls({
         initialTitle={initialTitle}
         initialInternalNotes={initialInternalNotes}
         initialCustomerDocumentTitle={initialCustomerDocumentTitle}
+        hasLeadNotes={hasLeadNotes}
       />
 
       <WorkspacePanel id={id} className="border-border-strong shadow-md ring-1 ring-ring/30">
@@ -520,7 +448,7 @@ export function QuoteDraftWorkspaceControls({
             <EmptyState
               icon={ListOrdered}
               title="No line items on this quote yet"
-              description="Use Add line item above for a one-off row, or scroll to Saved line items to copy a reusable row from your Scope Library. Either path adds a normal line to this working quote."
+              description="Use Add line item above for a one-off row, or browse your Scope Library to copy a reusable row. Either path adds a normal line to this working quote."
             >
               <div className="flex flex-wrap gap-2">
                 <button
@@ -578,23 +506,7 @@ export function QuoteDraftWorkspaceControls({
           </ul>
         )}
 
-        <div className="mt-8 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 sm:p-5">
-          <SectionHeading
-            title="Saved line items"
-            description="Copy reusable quote rows from your Scope Library. Commercial fields always copy; when a saved line item has default execution, those tasks copy as independent draft execution on the new quote line."
-          />
-          <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
-            Manage saved line items in{" "}
-            <Link
-              href="/scope-library"
-              className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
-            >
-              Sales → Scope Library
-            </Link>
-            .
-          </p>
-          <QuoteLineTemplateApplyList quoteId={quoteId} templates={lineItemTemplates} />
-        </div>
+        <SavedLineItemPickerDialog quoteId={quoteId} templates={lineItemTemplates} />
       </WorkspacePanel>
     </>
   );

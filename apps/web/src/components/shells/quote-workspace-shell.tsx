@@ -89,23 +89,42 @@ function QuoteDetailShell({
   const hasLead = quote.lead != null;
   const lineCount = quote.lineItems.length;
 
+  const primaryIdentity = quote.lead?.title || quote.customer?.displayName || quote.title;
+  const secondaryIdentity = quote.title !== primaryIdentity ? quote.title : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
           { label: "Quotes", href: "/quotes" },
-          { label: quote.title },
+          { label: primaryIdentity },
         ]}
       />
       <PageHeader
-        title={quote.title}
+        title={primaryIdentity}
+        eyebrow={
+          secondaryIdentity ? (
+            <span className="flex items-center gap-2">
+              <span>Commercial quote</span>
+              <span className="text-foreground-subtle/50">·</span>
+              <span className="text-foreground-subtle">Quote title: {secondaryIdentity}</span>
+            </span>
+          ) : (
+            "Commercial quote"
+          )
+        }
         description="Review pricing, scope, customer links, and execution readiness before sending or activating this quote."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
             {returnHref ? (
               <Link href={returnHref} className={listLinkClass}>
                 ← Workstation
+              </Link>
+            ) : null}
+            {quote.lead ? (
+              <Link href={`/leads/${quote.lead.id}`} className={listLinkClass}>
+                ← Back to opportunity
               </Link>
             ) : null}
             {activatedJobId ? (
@@ -157,6 +176,7 @@ function QuoteDetailShell({
             description="Optional links for your team—neither is required. When both are set, they should match your org’s lead–customer rules. Open the record for more context."
           />
           {hasCustomer || hasLead ? (
+          <div className="space-y-4">
             <div className="rounded-lg border border-border bg-surface px-4 py-5">
               <dl className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -195,7 +215,73 @@ function QuoteDetailShell({
                 </div>
               </dl>
             </div>
-          ) : (
+
+            {quote.lead && (
+              <div className="rounded-lg border border-border bg-foreground/[0.01] px-4 py-5">
+                <h4 className="mb-4 text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
+                  Lead intake context
+                </h4>
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-4">
+                    <div>
+                      <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                        Opportunity
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium text-foreground">
+                        <Link
+                          href={`/leads/${quote.lead.id}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {quote.lead.title}
+                        </Link>
+                      </dd>
+                    </div>
+                    {quote.lead.source && (
+                      <div>
+                        <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                          Source
+                        </dt>
+                        <dd className="mt-1 text-sm text-foreground">
+                          {quote.lead.source}
+                        </dd>
+                      </div>
+                    )}
+                    {(quote.lead.contactName || quote.lead.email || quote.lead.phone) && (
+                      <div>
+                        <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                          Contact info
+                        </dt>
+                        <dd className="mt-1 space-y-0.5 text-sm text-foreground">
+                          {quote.lead.contactName && <p>{quote.lead.contactName}</p>}
+                          {quote.lead.email && (
+                            <p className="text-foreground-muted">{quote.lead.email}</p>
+                          )}
+                          {quote.lead.phone && (
+                            <p className="text-foreground-muted">{quote.lead.phone}</p>
+                          )}
+                        </dd>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                      Lead intake notes
+                    </dt>
+                    <dd className="mt-2">
+                      {quote.lead.notes ? (
+                        <div className="rounded border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-foreground">
+                          {quote.lead.notes}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-foreground-muted italic">No intake notes provided.</p>
+                      )}
+                    </dd>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
             <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-8 text-center sm:py-10">
               <UserRound
                 className="mx-auto mb-3 size-9 text-foreground-subtle opacity-70"
@@ -227,6 +313,7 @@ function QuoteDetailShell({
             initialTitle={quote.title}
             initialInternalNotes={quote.internalNotes}
             initialCustomerDocumentTitle={quote.customerDocumentTitle}
+            hasLeadNotes={Boolean(quote.lead?.notes)}
             subtotalCents={quote.subtotalCents}
             totalCents={quote.totalCents}
             lineItems={quote.lineItems}

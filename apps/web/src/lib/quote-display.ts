@@ -75,7 +75,15 @@ export type QuoteDetailPayload = {
   customerId: string | null;
   leadId: string | null;
   customer: { id: string; displayName: string } | null;
-  lead: { id: string; title: string } | null;
+  lead: {
+    id: string;
+    title: string;
+    notes: string | null;
+    source: string;
+    contactName: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   lineItems: QuoteLineItemPayload[];
 };
 

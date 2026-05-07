@@ -35,10 +35,10 @@ export const WORKSTATION_COPY = {
   summaryStrip: {
     investigateLabel: "Investigate",
     investigateHint: "Records flagged for review.",
-    openPipelineLabel: "Open pipeline",
-    openPipelineHint: "Leads in Open or Qualifying.",
+    openPipelineLabel: "Sales pipeline",
+    openPipelineHint: "Opportunities in Open or Qualifying.",
     unlinkedLabel: "Unlinked",
-    unlinkedHint: "Leads with no customer linked yet.",
+    unlinkedHint: "Opportunities with no customer linked yet.",
   },
 
   /** Reserved-lens footer that replaces the always-on Future Attention Feed. */

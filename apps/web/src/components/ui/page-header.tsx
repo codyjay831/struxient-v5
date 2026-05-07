@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export type PageHeaderProps = {
-  eyebrow?: string;
+  eyebrow?: ReactNode;
   title: string;
   description?: ReactNode;
   /** Optional right-aligned actions (toolbar buttons, etc.). */

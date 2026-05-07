@@ -57,11 +57,17 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   // 1. Leads
   const leads = await db.lead.findMany({
     where: { organizationId, status: { in: [LeadStatus.OPEN, LeadStatus.QUALIFYING] } },
-    include: { customer: true },
+    include: { customer: true, quotes: { where: { status: { not: QuoteStatus.ARCHIVED } } } },
   });
 
   for (const lead of leads) {
     const isUnlinked = lead.customerId === null;
+    const hasActiveQuote = lead.quotes.length > 0;
+    
+    // If it has an active quote, we might want to skip the generic lead signal
+    // unless it's missing a customer (which is critical).
+    if (hasActiveQuote && !isUnlinked) continue;
+
     items.push({
       id: `lead-${lead.id}`,
       kind: "lead",
@@ -70,7 +76,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       status: lead.status,
       priority: isUnlinked ? "high" : "medium",
       group: isUnlinked ? "investigate" : "ready",
-      reason: isUnlinked ? "Lead has no linked customer." : "New sales opportunity.",
+      reason: isUnlinked ? "Opportunity has no linked customer." : "New sales opportunity.",
       nextStep: isUnlinked ? "Link or create a customer." : "Review and qualify.",
       recordId: lead.id,
       href: `/leads/${lead.id}`,
@@ -137,11 +143,19 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       priority = "high";
     }
 
+    const primaryIdentity = quote.lead?.title || quote.customer?.displayName || quote.title;
+    const secondaryIdentity = quote.title !== primaryIdentity ? quote.title : null;
+
+    const parentLabel = quote.customer?.displayName || quote.lead?.title || undefined;
+    const subtitle = secondaryIdentity 
+      ? `Quote: ${secondaryIdentity}`
+      : (quote.customer?.displayName || undefined);
+
     items.push({
       id: `quote-${quote.id}`,
       kind: "quote",
-      title: quote.title,
-      subtitle: quote.customer?.displayName || quote.lead?.title || undefined,
+      title: primaryIdentity,
+      subtitle,
       status: quote.status,
       priority,
       group,
@@ -149,8 +163,9 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       nextStep: readiness.primaryAction?.label || "Review quote.",
       recordId: quote.id,
       parentRecordId: quote.customerId || quote.leadId || undefined,
-      parentLabel: quote.customer?.displayName || quote.lead?.title || undefined,
-      href: `/quotes/${quote.id}`,
+      parentLabel,
+      // Point to the lead/opportunity page if linked, as it's the main workspace now
+      href: quote.leadId ? `/leads/${quote.leadId}` : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
     });
   }
@@ -173,11 +188,14 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     // The requirement says "Active jobs with next task / task count / stage count".
     
     for (const task of job.tasks) {
+      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+      const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+
       items.push({
         id: `task-${task.id}`,
         kind: "task",
         title: task.title,
-        subtitle: `${job.title} · ${task.jobStage.title}`,
+        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""} · ${task.jobStage.title}`,
         status: task.status,
         priority: task.status === JobTaskStatus.IN_PROGRESS ? "high" : "medium",
         group: "active",
@@ -185,7 +203,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         nextStep: task.status === JobTaskStatus.IN_PROGRESS ? "Complete the task." : "Start the task.",
         recordId: task.id,
         parentRecordId: job.id,
-        parentLabel: job.title,
+        parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`, // Detail panel will handle specific task view
         updatedAt: task.updatedAt,
       });
@@ -193,11 +211,14 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
 
     // If job has no active tasks, maybe it needs attention?
     if (job.tasks.length === 0) {
+      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+      const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+
       items.push({
         id: `job-${job.id}`,
         kind: "job",
-        title: job.title,
-        subtitle: job.customer?.displayName || job.lead?.title || undefined,
+        title: primaryJobIdentity,
+        subtitle: secondaryJobIdentity || job.customer?.displayName || undefined,
         status: job.status,
         priority: "medium",
         group: "investigate",
@@ -205,7 +226,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         nextStep: "Review job completion or add tasks.",
         recordId: job.id,
         parentRecordId: job.customerId || job.leadId || undefined,
-        parentLabel: job.customer?.displayName || job.lead?.title || undefined,
+        parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
       });

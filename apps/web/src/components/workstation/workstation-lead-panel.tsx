@@ -33,7 +33,7 @@ export function WorkstationLeadPanel({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Contact Info
+            Opportunity Context
           </h4>
           <div className="mt-1 text-sm text-foreground">
             {contactName && <p className="font-medium">{contactName}</p>}
