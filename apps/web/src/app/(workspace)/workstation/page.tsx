@@ -12,17 +12,28 @@ import { SummaryStrip, type SummaryStripItem } from "@/components/ui/summary-str
 import { getDevOrganizationOrThrow } from "@/lib/db";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
-import { queryWorkstationWorkItems, getWorkstationSummary, type WorkstationWorkItem } from "@/lib/workstation-query";
+import {
+  queryWorkstationWorkItems,
+  getWorkstationSummary,
+  compareWorkstationSalesIntakeOrder,
+  type WorkstationWorkItem,
+} from "@/lib/workstation-query";
 import { AttentionCard } from "@/components/ui/attention-card";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { WorkstationTaskPanel } from "@/components/workstation/workstation-task-panel";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import { WorkstationLeadPanel } from "@/components/workstation/workstation-lead-panel";
-import { WorkstationQuotePanel } from "@/components/workstation/workstation-quote-panel";
+import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
+import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { db } from "@/lib/db";
 import { JobTaskStatus } from "@prisma/client";
-import { getQuoteReadiness } from "@/lib/quote-readiness";
-import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
+import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
+import {
+  formatLeadSource,
+  formatLeadStatus,
+  leadStatusBadgeTone,
+} from "@/lib/lead-display";
+import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +57,10 @@ export default async function WorkstationTodayLensPage({
   const attentionItems = allItems.filter((i) => i.priority === "critical" || i.priority === "high");
 
   const selectedItem = selectedId ? allItems.find((i) => i.id === selectedId) : null;
+
+  const salesIntakeItems = allItems
+    .filter((i) => i.kind === "lead" || i.kind === "quote")
+    .sort(compareWorkstationSalesIntakeOrder);
 
   const summaryItems: SummaryStripItem[] = [
     {
@@ -92,6 +107,31 @@ export default async function WorkstationTodayLensPage({
 
       <div className="space-y-6">
         <SummaryStrip items={summaryItems} />
+
+        <WorkspacePanel id="sales-intake" padding="compact" className="scroll-mt-6">
+          <SectionHeading
+            title="Sales intake"
+            description="Open leads and quotes in one place — urgency matches the Investigate / Ready / Waiting lanes below."
+          />
+          {salesIntakeItems.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {salesIntakeItems.map((item) => (
+                <WorkItemAttentionCard
+                  key={item.id}
+                  item={item}
+                  isSelected={selectedId === item.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-surface/50 px-4 py-5">
+              <p className="text-sm font-medium text-foreground">No open leads or quotes</p>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+                When drafts, sent quotes, or qualifying leads exist for this organization, they land here and in the sections below.
+              </p>
+            </div>
+          )}
+        </WorkspacePanel>
 
         {selectedItem && (
           <div id="selected-item-panel" className="scroll-mt-6">
@@ -165,7 +205,7 @@ export default async function WorkstationTodayLensPage({
             />
             <div className="space-y-3">
               {readyItems.length > 0 ? (
-                readyItems.slice(0, 5).map((item) => (
+                readyItems.slice(0, 10).map((item) => (
                   <WorkItemAttentionCard 
                     key={item.id} 
                     item={item} 
@@ -175,10 +215,10 @@ export default async function WorkstationTodayLensPage({
               ) : (
                 <p className="text-sm text-foreground-muted italic">No items ready to work.</p>
               )}
-              {readyItems.length > 5 && (
-                <Link href="/workstation/tasks" className="block text-center text-xs font-medium text-foreground-subtle hover:text-foreground transition-colors">
-                  View all {readyItems.length} ready items →
-                </Link>
+              {readyItems.length > 10 && (
+                <p className="text-center text-xs text-foreground-muted">
+                  Showing 10 of {readyItems.length} ready items — see Sales intake for the full lead and quote list.
+                </p>
               )}
             </div>
           </WorkspacePanel>
@@ -220,6 +260,25 @@ export default async function WorkstationTodayLensPage({
           </div>
           {allItems.filter(i => i.kind === "job").length === 0 && (
             <p className="text-sm text-foreground-muted italic">No active jobs found.</p>
+          )}
+        </WorkspacePanel>
+
+        <WorkspacePanel id="sales-intake" padding="compact" className="scroll-mt-6">
+          <SectionHeading
+            title="Sales intake"
+            description="Leads and quotes currently being processed."
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {allItems.filter(i => i.kind === "lead" || i.kind === "quote").map(item => (
+               <WorkItemAttentionCard 
+                 key={item.id} 
+                 item={item} 
+                 isSelected={selectedId === item.id}
+               />
+            ))}
+          </div>
+          {allItems.filter(i => i.kind === "lead" || i.kind === "quote").length === 0 && (
+            <p className="text-sm text-foreground-muted italic">No active leads or quotes found.</p>
           )}
         </WorkspacePanel>
 
@@ -265,6 +324,7 @@ function WorkItemAttentionCard({ item, isSelected }: { item: WorkstationWorkItem
     <AttentionCard
       title={item.title}
       eyebrow={item.kind}
+      statusLabel={item.workflow?.statusLabel}
       recordLabel={item.subtitle || ""}
       severity={item.priority === "critical" ? "high" : item.priority}
       reason={item.reason}
@@ -324,74 +384,132 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
   );
 }
 
+const WORKSTATION_CUSTOMER_LINK_FETCH_CAP = 500;
+
 async function LeadDetailWrapper({ leadId }: { leadId: string }) {
-  const lead = await db.lead.findUnique({
-    where: { id: leadId },
-    select: { id: true, status: true, contactName: true, email: true, phone: true, customerId: true },
+  const org = await getDevOrganizationOrThrow();
+
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, organizationId: org.id },
+    select: {
+      id: true,
+      status: true,
+      title: true,
+      contactName: true,
+      email: true,
+      phone: true,
+      notes: true,
+      source: true,
+      customerId: true,
+      createdAt: true,
+      customer: { select: { id: true, displayName: true } },
+    },
   });
 
   if (!lead) return null;
 
+  const linkedQuotes = await db.quote.findMany({
+    where: { leadId: lead.id, organizationId: org.id },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      totalCents: true,
+      updatedAt: true,
+      _count: { select: { lineItems: true } },
+      job: { select: { id: true, status: true, organizationId: true } },
+    },
+  });
+
+  const progress = getLeadCommercialProgress({
+    lead: {
+      status: lead.status,
+      customerId: lead.customerId,
+      email: lead.email,
+      phone: lead.phone,
+    },
+    quotes: linkedQuotes.map((q) => ({
+      id: q.id,
+      title: q.title,
+      status: q.status,
+      totalCents: q.totalCents,
+      lineItemCount: q._count.lineItems,
+      updatedAt: q.updatedAt,
+      job: q.job && q.job.organizationId === org.id ? { id: q.job.id, status: q.job.status } : null,
+    })),
+  });
+
+  const hasCustomer = lead.customerId !== null;
+  let customersForLink: { id: string; displayName: string }[] | undefined;
+  if (!hasCustomer) {
+    const rows = await db.customer.findMany({
+      where: { organizationId: org.id },
+      orderBy: { displayName: "asc" },
+      take: WORKSTATION_CUSTOMER_LINK_FETCH_CAP,
+      select: { id: true, displayName: true },
+    });
+    customersForLink = rows.map((c) => ({ id: c.id, displayName: c.displayName }));
+  }
+
+  const surfaceQuotes = linkedQuotes
+    .filter((q) => q.status !== "ARCHIVED")
+    .map((q) => ({
+      id: q.id,
+      title: q.title,
+      statusLabel: formatQuoteStatus(q.status),
+      statusTone: quoteStatusBadgeTone(q.status),
+      totalCents: q.totalCents,
+      lineItemCount: q._count.lineItems,
+      href: `/quotes/${q.id}`,
+    }));
+
+  /* Embed QuoteWorkSurface(standard) inside the Lead Quote tab when an active
+   * quote exists. Same loader used by the Workstation quote drawer + full
+   * Quote page so all containers see identical readiness state. */
+  const activeQuoteId = progress.activeQuote?.id ?? null;
+  const activeQuoteWorkSurface = activeQuoteId
+    ? await loadQuoteWorkSurface(activeQuoteId, org.id)
+    : null;
+
   return (
     <WorkstationLeadPanel
       leadId={lead.id}
-      initialStatus={lead.status}
+      leadTitle={lead.title}
       contactName={lead.contactName}
       email={lead.email}
       phone={lead.phone}
-      hasCustomer={lead.customerId !== null}
+      notes={lead.notes}
+      statusValue={lead.status}
+      statusLabel={formatLeadStatus(lead.status)}
+      statusTone={leadStatusBadgeTone(lead.status)}
+      sourceLabel={formatLeadSource(lead.source)}
+      createdAtLabel={lead.createdAt.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })}
+      customerId={lead.customerId}
+      customerDisplayName={lead.customer?.displayName ?? null}
+      customerHref={lead.customer ? `/customers/${lead.customer.id}` : null}
+      customersForLink={customersForLink}
+      linkedQuotes={surfaceQuotes}
+      progress={progress}
+      activeQuoteWorkSurface={activeQuoteWorkSurface}
     />
   );
 }
 
 async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {
-  const quote = await db.quote.findUnique({
-    where: { id: quoteId },
-    include: {
-      job: true,
-      lineItems: {
-        include: {
-          draftExecutionTasks: true,
-        },
-      },
-    },
-  });
-
-  if (!quote) return null;
-
-  const activationReadiness = evaluateQuoteJobActivationReadiness({
-    status: quote.status,
-    lines: quote.lineItems.map((l) => ({
-      id: l.id,
-      description: l.description,
-      executionReviewStatus: l.executionReviewStatus,
-      executionMergeMode: l.executionMergeMode,
-      taskCount: l.draftExecutionTasks.length,
-    })),
-  });
-
-  const readiness = getQuoteReadiness({
-    quote: {
-      status: quote.status,
-      lineItemCount: quote.lineItems.length,
-      subtotalCents: quote.subtotalCents,
-      totalCents: quote.totalCents,
-    },
-    job: quote.job,
-    activationReadiness: {
-      ready: activationReadiness.ready,
-      totalTasksToActivate: activationReadiness.totalTasksToActivate,
-      needsAttentionLineCount: activationReadiness.blockReasons.filter(r => r.code === "LINE_NEEDS_EXECUTION_REVIEW").length,
-      anomalyLineCount: activationReadiness.blockReasons.filter(r => r.code === "LINE_COMMERCIAL_ONLY_HAS_TASKS").length,
-    },
-  });
+  const org = await getDevOrganizationOrThrow();
+  const result = await loadQuoteWorkSurface(quoteId, org.id);
+  if (!result) return null;
 
   return (
-    <WorkstationQuotePanel
-      quoteId={quote.id}
-      initialStatus={quote.status}
-      totalCents={quote.totalCents}
-      readinessLabel={readiness.label}
+    <QuoteWorkSurface
+      mode="compact"
+      quote={result.quote}
+      readiness={result.readiness}
     />
   );
 }

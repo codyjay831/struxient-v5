@@ -48,6 +48,8 @@ export type AttentionCardProps = {
   title: string;
   /** Short uppercase eyebrow label (e.g. "Lead", "Quote", "Future signal"). */
   eyebrow: string;
+  /** Readiness headline from shared workflow (e.g. quote/lead progress label). */
+  statusLabel?: string;
   /** Optional Lucide icon shown alongside the eyebrow. */
   icon?: LucideIcon;
   /** One-line context under the title (record name / status / count). */
@@ -87,6 +89,7 @@ export type AttentionCardProps = {
 export function AttentionCard({
   title,
   eyebrow,
+  statusLabel,
   icon: Icon,
   recordLabel,
   severity,
@@ -156,6 +159,11 @@ export function AttentionCard({
         {/* Issue title — the loudest element on the card */}
         <h3 className="mt-2 text-sm font-bold leading-snug text-foreground">{title}</h3>
         <p className="mt-0.5 truncate text-xs text-foreground-muted">{recordLabel}</p>
+        {statusLabel ? (
+          <p className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+            {statusLabel}
+          </p>
+        ) : null}
 
         {/* Labeled content: why + next */}
         <dl className="mt-3 space-y-2">

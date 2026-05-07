@@ -8,11 +8,14 @@ import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
-import type {
-  QuoteDetailPayload,
-  QuoteLineItemPayload,
-  QuoteSendCheckpointSummary,
+import {
+  formatQuoteStatus,
+  quoteStatusBadgeTone,
+  type QuoteDetailPayload,
+  type QuoteLineItemPayload,
+  type QuoteSendCheckpointSummary,
 } from "@/lib/quote-display";
+import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
 import { quoteStatusAllowsExecutionEdits } from "@/lib/quote-status-workflow";
 import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
@@ -351,6 +354,45 @@ export default async function QuoteDetailPage({
     revisionDriftSinceLastProof: workspaceDiffersFromLastCommercialProof,
   });
 
+  /* QuoteWorkSurfaceData — same shape Workstation drawer + Lead embed use,
+   * built from the data already loaded above (no extra Prisma calls). */
+  const dateOpts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  };
+  const surfacePrimaryTitle =
+    lead?.title || customer?.displayName || row.title;
+  const surfaceSubtitle =
+    row.title !== surfacePrimaryTitle ? row.title : null;
+  const quoteWorkSurface: QuoteWorkSurfaceData = {
+    id: row.id,
+    title: row.title,
+    primaryTitle: surfacePrimaryTitle,
+    subtitle: surfaceSubtitle,
+    status: row.status,
+    statusLabel: formatQuoteStatus(row.status),
+    statusTone: quoteStatusBadgeTone(row.status),
+    customerId: customer?.id ?? null,
+    customerDisplayName: customer?.displayName ?? null,
+    customerHref: customer ? `/customers/${customer.id}` : null,
+    leadId: lead?.id ?? null,
+    leadTitle: lead?.title ?? null,
+    leadHref: lead ? `/leads/${lead.id}` : null,
+    totalCents: row.totalCents,
+    subtotalCents: row.subtotalCents,
+    lineItemCount: row.lineItems.length,
+    createdAtLabel: row.createdAt.toLocaleDateString("en-US", dateOpts),
+    updatedAtLabel: row.updatedAt.toLocaleDateString("en-US", dateOpts),
+    activatedJobId:
+      row.job && row.job.organizationId === org.id ? row.job.id : null,
+    activatedJobStatus:
+      row.job && row.job.organizationId === org.id ? row.job.status : null,
+    quoteHref: `/quotes/${row.id}`,
+    proposalPreviewHref: `/quotes/${row.id}/preview`,
+    executionReviewHref: `/quotes/${row.id}/execution-review`,
+  };
+
   const isExecutionEditable = quoteStatusAllowsExecutionEdits(row.status);
   const reusableTaskOptions: ReusableTaskPickerOption[] = isExecutionEditable
     ? (
@@ -377,6 +419,7 @@ export default async function QuoteDetailPage({
       draftTasksByLineId={draftTasksByLineId}
       reusableTaskOptions={reusableTaskOptions}
       quoteReadiness={quoteReadiness}
+      quoteWorkSurface={quoteWorkSurface}
       returnHref={returnHref}
     />
   );

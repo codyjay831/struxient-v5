@@ -82,8 +82,8 @@ export type QuoteReadiness = {
     totalCents: number;
     needsExecutionReviewLineCount: number;
     activationTaskCount: number;
-    latestSendAt: Date | null;
-    latestApprovalAt: Date | null;
+    latestSendAt: string | null;
+    latestApprovalAt: string | null;
     activatedJobId: string | null;
   };
 };
@@ -254,8 +254,8 @@ function mapSignals(input: QuoteReadinessInput): QuoteReadiness["signals"] {
     totalCents: input.quote.totalCents,
     needsExecutionReviewLineCount: input.activationReadiness?.needsAttentionLineCount ?? 0,
     activationTaskCount: input.activationReadiness?.totalTasksToActivate ?? 0,
-    latestSendAt: input.latestSendAt ?? null,
-    latestApprovalAt: input.latestApprovalAt ?? null,
+    latestSendAt: input.latestSendAt?.toISOString() ?? null,
+    latestApprovalAt: input.latestApprovalAt?.toISOString() ?? null,
     activatedJobId: input.job?.id ?? null,
   };
 }

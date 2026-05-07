@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import type { LeadFormState } from "@/app/(workspace)/leads/lead-form-actions";
+import type { WorkspaceFormState } from "@/app/(workspace)/leads/leads-workspace-actions";
+import { linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/leads-workspace-actions";
 import { EmptyState } from "@/components/ui/empty-state";
 import { handoffPrimaryLinkClass } from "@/components/ui/handoff-panel";
 import { UserRound } from "lucide-react";
@@ -64,6 +66,96 @@ export function LeadLinkCustomerForm({
           <span className={fieldLabelClass}>Customer</span>
           <select
             id="lead-link-customer-select"
+            name="customerId"
+            required
+            className={controlClass}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              Select a customer…
+            </option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={isPending}
+          aria-busy={isPending}
+          className={primaryButtonClass}
+        >
+          {isPending ? "Linking…" : "Link to customer"}
+        </button>
+        <Link href="/customers" className={mutedLinkClass}>
+          Browse customers
+        </Link>
+      </div>
+    </form>
+  );
+}
+
+const initialWorkspaceState: WorkspaceFormState = {};
+
+/**
+ * Same flow as {@link LeadLinkCustomerForm} but uses workspace-safe action + `onSuccess`
+ * (e.g. `router.refresh()`) instead of redirecting after link.
+ */
+export function LeadLinkCustomerWorkspaceForm({
+  leadId,
+  customers,
+  onSuccess,
+}: {
+  leadId: string;
+  customers: { id: string; displayName: string }[];
+  onSuccess: () => void;
+}) {
+  const boundAction = linkLeadToCustomerWorkspaceAction.bind(null, leadId);
+  const [state, formAction, isPending] = useActionState(boundAction, initialWorkspaceState);
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  if (customers.length === 0) {
+    return (
+      <EmptyState
+        icon={UserRound}
+        title="No customer records yet"
+        description="Create a relationship record in Customers first, then return here to link it to this lead."
+      >
+        <Link href="/customers/new" className={handoffPrimaryLinkClass}>
+          New customer
+        </Link>
+        <Link href="/customers" className={mutedLinkClass}>
+          Browse customers
+        </Link>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <form action={formAction} className="space-y-4">
+      {state.error ? (
+        <p
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+          role="alert"
+          aria-live="polite"
+        >
+          {state.error}
+        </p>
+      ) : null}
+
+      <div>
+        <label className="block" htmlFor="lead-link-customer-workspace-select">
+          <span className={fieldLabelClass}>Customer</span>
+          <select
+            id="lead-link-customer-workspace-select"
             name="customerId"
             required
             className={controlClass}

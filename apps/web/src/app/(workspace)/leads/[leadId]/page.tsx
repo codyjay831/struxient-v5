@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { findCustomerMatchHints } from "@/lib/lead-customer-match-hints";
+import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import type { LeadDetailPayload } from "@/lib/lead-display";
 import {
   getLeadCommercialProgress,
@@ -210,6 +211,14 @@ export default async function LeadDetailPage({
     lineItemCount: q._count.lineItems,
   }));
 
+  /* Pre-load active-quote QuoteWorkSurface payload so the Lead Quote tab
+   * embeds <QuoteWorkSurface mode="standard" /> with the same readiness state
+   * the Quote full page sees. */
+  const activeQuoteId = commercialProgress.activeQuote?.id ?? null;
+  const activeQuoteWorkSurface = activeQuoteId
+    ? await loadQuoteWorkSurface(activeQuoteId, org.id)
+    : null;
+
   if (showLinkForm) {
     const customers = await db.customer.findMany({
       where: { organizationId: org.id },
@@ -239,6 +248,7 @@ export default async function LeadDetailPage({
       linkedQuotes={linkedQuotesForShell}
       commercialProgress={commercialProgress}
       returnHref={returnHref}
+      activeQuoteWorkSurface={activeQuoteWorkSurface}
       {...(showLinkForm
         ? {
             customersForLink,

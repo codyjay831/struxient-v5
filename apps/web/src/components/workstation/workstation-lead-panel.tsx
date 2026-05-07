@@ -1,95 +1,147 @@
 "use client";
 
-import { useActionState } from "react";
-import { LeadStatus } from "@prisma/client";
-import { updateLeadStatusAction } from "@/app/(workspace)/leads/lead-form-actions";
-import { Loader2, UserPlus, CheckCircle2 } from "lucide-react";
-import Link from "next/link";
+/**
+ * WorkstationLeadPanel — thin loader-and-bindings wrapper around
+ * `LeadWorkSurface(mode="compact")`. Workstation now hosts the same Lead UX as
+ * the Leads popup and Lead full page; this file only adapts the inputs.
+ */
+
+import {
+  LeadWorkSurface,
+  type LeadWorkSurfaceActiveQuotePayload,
+  type LeadWorkSurfaceData,
+  type LeadWorkSurfaceProgressAction,
+  type LeadWorkSurfaceQuote,
+} from "@/components/work-surfaces/lead-work-surface";
+import {
+  type LeadCommercialProgress,
+  type LeadCommercialProgressAction,
+  resolveLeadCommercialProgressActionHref,
+} from "@/lib/lead-commercial-progress";
+import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import type { LeadStatus } from "@prisma/client";
+
+export type WorkstationLeadPanelQuote = {
+  id: string;
+  title: string;
+  statusLabel: string;
+  statusTone: StatusBadgeTone;
+  totalCents: number;
+  lineItemCount: number;
+  href: string;
+};
 
 export type WorkstationLeadPanelProps = {
   leadId: string;
-  initialStatus: LeadStatus;
+  leadTitle: string;
   contactName?: string | null;
   email?: string | null;
   phone?: string | null;
-  hasCustomer: boolean;
+  notes: string | null;
+  /** Manual `LeadStatus` enum value (not the derived progress state). */
+  statusValue: LeadStatus;
+  statusLabel: string;
+  statusTone: StatusBadgeTone;
+  sourceLabel: string;
+  createdAtLabel: string;
+  customerId: string | null;
+  customerDisplayName?: string | null;
+  customerHref?: string | null;
+  /** Org-scoped customers for optional "link existing"; omitted when lead already has a customer. */
+  customersForLink?: { id: string; displayName: string }[];
+  /** Non-archived linked quotes, newest first. */
+  linkedQuotes: WorkstationLeadPanelQuote[];
+  progress: LeadCommercialProgress;
+  /** Pre-loaded active-quote QuoteWorkSurface payload (Phase 2 embed). */
+  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
 };
+
+function serializeProgressAction(
+  action: LeadCommercialProgressAction | null,
+  ctx: { leadId: string },
+): LeadWorkSurfaceProgressAction | null {
+  if (!action) return null;
+  const href = resolveLeadCommercialProgressActionHref(action, ctx);
+  const opensQuoteTab =
+    action.kind === "OPEN_DRAFT_QUOTE" ||
+    action.kind === "OPEN_QUOTE" ||
+    action.kind === "START_QUOTE";
+  const opensContactTab =
+    action.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
+    action.kind === "EDIT_CONTACT_INFO";
+  return { href, label: action.label, opensQuoteTab, opensContactTab };
+}
 
 export function WorkstationLeadPanel({
   leadId,
-  initialStatus,
+  leadTitle,
   contactName,
   email,
   phone,
-  hasCustomer,
+  notes,
+  statusValue,
+  statusLabel,
+  statusTone,
+  sourceLabel,
+  createdAtLabel,
+  customerId,
+  customerDisplayName,
+  customerHref,
+  customersForLink,
+  linkedQuotes,
+  progress,
+  activeQuoteWorkSurface,
 }: WorkstationLeadPanelProps) {
-  const [state, formAction, isPending] = useActionState(
-    updateLeadStatusAction.bind(null, leadId),
-    {},
-  );
+  const data: LeadWorkSurfaceData = {
+    id: leadId,
+    title: leadTitle,
+    contactName: contactName ?? null,
+    email: email ?? null,
+    phone: phone ?? null,
+    notes,
+    sourceLabel,
+    statusLabel,
+    statusTone,
+    statusValue,
+    customerId,
+    customerDisplayName: customerDisplayName ?? null,
+    customerHref: customerHref ?? null,
+    createdAtLabel,
+    leadHref: `/leads/${leadId}`,
+    editHref: `/leads/${leadId}/edit`,
+    newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(leadId)}`,
+    progressLabel: progress.label,
+    progressDescription: progress.description,
+    progressTone: progress.badgeTone,
+    progressState: progress.state,
+    progressPrimaryAction: serializeProgressAction(progress.primaryAction, {
+      leadId,
+    }),
+    progressSecondaryAction: serializeProgressAction(progress.secondaryAction, {
+      leadId,
+    }),
+    activeQuoteId: progress.activeQuote?.id ?? null,
+    activeJobId: progress.activeJob?.id ?? null,
+    activeJobStatus: progress.activeJob?.status ?? null,
+  };
+
+  const surfaceQuotes: LeadWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
+    id: q.id,
+    title: q.title,
+    statusLabel: q.statusLabel,
+    statusTone: q.statusTone,
+    totalCents: q.totalCents,
+    lineItemCount: q.lineItemCount,
+    href: q.href,
+  }));
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Opportunity Context
-          </h4>
-          <div className="mt-1 text-sm text-foreground">
-            {contactName && <p className="font-medium">{contactName}</p>}
-            {email && <p>{email}</p>}
-            {phone && <p>{phone}</p>}
-            {!contactName && !email && !phone && <p className="italic text-foreground-muted">No contact info provided.</p>}
-          </div>
-        </div>
-        <div>
-          <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Customer Link
-          </h4>
-          <div className="mt-1">
-            {hasCustomer ? (
-              <div className="flex items-center gap-1.5 text-sm text-success font-medium">
-                <CheckCircle2 className="size-4" />
-                Linked to customer
-              </div>
-            ) : (
-              <Link
-                href={`/leads/${leadId}#customer-link`}
-                className="inline-flex items-center gap-1.5 text-sm text-accent font-medium hover:underline"
-              >
-                <UserPlus className="size-4" />
-                Link or create customer
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {initialStatus === LeadStatus.OPEN && (
-          <form action={formAction}>
-            <input type="hidden" name="status" value={LeadStatus.QUALIFYING} />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="size-4" />
-              )}
-              Mark as qualifying
-            </button>
-          </form>
-        )}
-      </div>
-
-      {state.error && (
-        <p className="text-xs font-medium text-danger">
-          {state.error}
-        </p>
-      )}
-    </div>
+    <LeadWorkSurface
+      mode="compact"
+      lead={data}
+      linkedQuotes={surfaceQuotes}
+      customersForLink={customersForLink}
+      activeQuoteWorkSurface={activeQuoteWorkSurface}
+    />
   );
 }

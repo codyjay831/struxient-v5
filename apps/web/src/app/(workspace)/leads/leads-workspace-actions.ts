@@ -10,14 +10,33 @@
  * server-component data.
  */
 
+import { LeadStatus } from "@prisma/client";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import {
+  getLeadCommercialProgress,
+  type LeadProgressQuoteInput,
+} from "@/lib/lead-commercial-progress";
+import {
+  loadQuoteWorkSurface,
+  type QuoteWorkSurfaceLoaderResult,
+} from "@/lib/quote-work-surface-loader";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
+
+const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
 
 export type WorkspaceFormState = {
   error?: string;
   success?: boolean;
 };
+
+/**
+ * Result type for {@link loadLeadActiveQuoteWorkSurfaceAction}.
+ * Read-only loader; never throws across the action boundary.
+ */
+export type LoadLeadActiveQuoteWorkSurfaceResult =
+  | { ok: true; payload: QuoteWorkSurfaceLoaderResult | null }
+  | { ok: false; error: string };
 
 class WorkspaceTxError extends Error {
   constructor(message: string) {
@@ -105,6 +124,130 @@ export async function createCustomerFromLeadWorkspaceAction(
   return { success: true };
 }
 
+function trimRequired(value: FormDataEntryValue | null): string {
+  if (value == null || typeof value !== "string") return "";
+  return value.trim();
+}
+
+/**
+ * Links an org-scoped customer to a lead with `customerId` null.
+ * Returns `{ success: true }` instead of redirecting — caller should `router.refresh()`.
+ * `leadId` must be supplied via `.bind(null, lead.id)`.
+ */
+export async function linkLeadToCustomerWorkspaceAction(
+  leadId: string,
+  _prevState: WorkspaceFormState,
+  formData: FormData,
+): Promise<WorkspaceFormState> {
+  const id = leadId.trim();
+  if (!id) return { error: "Missing lead record id." };
+
+  const customerIdRaw = trimRequired(formData.get("customerId"));
+  if (!customerIdRaw) {
+    return { error: "Choose a customer to link, or create one first." };
+  }
+
+  const org = await getDevOrganizationOrThrow();
+
+  const customer = await db.customer.findFirst({
+    where: { id: customerIdRaw, organizationId: org.id },
+    select: { id: true },
+  });
+  if (!customer) {
+    return {
+      error: "That customer was not found in your organization. It may belong to another tenant.",
+    };
+  }
+
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: org.id },
+    select: { customerId: true },
+  });
+  if (!lead) {
+    return {
+      error:
+        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+    };
+  }
+  if (lead.customerId != null) {
+    return { error: "This lead is already linked to a customer. Unlinking is not available yet." };
+  }
+
+  const convertedAt = new Date();
+  const result = await db.lead.updateMany({
+    where: { id, organizationId: org.id, customerId: null },
+    data: { customerId: customer.id, convertedAt },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+    };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Updates only `status` for an org-scoped lead (same rules as `updateLeadStatusAction` in
+ * `lead-form-actions.ts`) but returns `{ success: true }` instead of redirecting.
+ * `leadId` must be supplied via `.bind(null, lead.id)`.
+ */
+export async function updateLeadStatusWorkspaceAction(
+  leadId: string,
+  _prevState: WorkspaceFormState,
+  formData: FormData,
+): Promise<WorkspaceFormState> {
+  const id = leadId.trim();
+  if (!id) {
+    return { error: "Missing lead record id." };
+  }
+
+  const rawStatus = formData.get("status");
+  if (rawStatus == null || typeof rawStatus !== "string") {
+    return { error: "Choose a status, then try again." };
+  }
+  const v = rawStatus.trim();
+  if (!v || !LEAD_STATUS_SET.has(v)) {
+    return {
+      error:
+        "That status is not valid. Choose Open, Qualifying, Converted, Lost, or Archived.",
+    };
+  }
+  const status = v as LeadStatus;
+
+  const org = await getDevOrganizationOrThrow();
+
+  const exists = await db.lead.findFirst({
+    where: { id, organizationId: org.id },
+    select: { id: true },
+  });
+  if (!exists) {
+    return {
+      error:
+        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+    };
+  }
+
+  const result = await db.lead.updateMany({
+    where: {
+      id,
+      organizationId: org.id,
+    },
+    data: { status },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+    };
+  }
+
+  return { success: true };
+}
+
 /**
  * Updates a lead's contact fields (name, email, phone) in-place.
  * Returns `{ success: true }` on success instead of redirecting.
@@ -154,4 +297,88 @@ export async function updateLeadContactWorkspaceAction(
   }
 
   return { success: true };
+}
+
+/**
+ * Read-only loader for the Leads list popup Quote tab.
+ *
+ * Lazily produces a `QuoteWorkSurface` payload for the selected lead's active
+ * linked quote *without* preloading readiness for every lead row. Containers
+ * that already have the payload server-side (Workstation lead drawer, Lead
+ * full page) do not need this — they pass `activeQuoteWorkSurface` directly.
+ *
+ * Security:
+ *   - org-scoped via `getDevOrganizationOrThrow`
+ *   - never trusts a client-supplied quote id; the active quote is derived
+ *     server-side from the lead's quotes using the same
+ *     `getLeadCommercialProgress` logic the other containers use
+ *   - read-only — no mutations, no `revalidatePath`, no `redirect`
+ *   - `loadQuoteWorkSurface` re-validates the quote's organization scope
+ *
+ * Returns `{ ok: true, payload: null }` when the lead has no active quote
+ * (e.g. only archived quotes or no quotes at all).
+ */
+export async function loadLeadActiveQuoteWorkSurfaceAction(
+  leadId: string,
+): Promise<LoadLeadActiveQuoteWorkSurfaceResult> {
+  const id = leadId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+
+  const org = await getDevOrganizationOrThrow();
+
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: org.id },
+    select: {
+      status: true,
+      customerId: true,
+      email: true,
+      phone: true,
+      quotes: {
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          totalCents: true,
+          updatedAt: true,
+          _count: { select: { lineItems: true } },
+          job: { select: { id: true, status: true, organizationId: true } },
+        },
+      },
+    },
+  });
+
+  if (!lead) {
+    return { ok: false, error: "Lead not found in your organization." };
+  }
+
+  const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+    id: q.id,
+    title: q.title,
+    status: q.status,
+    totalCents: q.totalCents,
+    lineItemCount: q._count.lineItems,
+    updatedAt: q.updatedAt,
+    job:
+      q.job && q.job.organizationId === org.id
+        ? { id: q.job.id, status: q.job.status }
+        : null,
+  }));
+
+  const progress = getLeadCommercialProgress({
+    lead: {
+      status: lead.status,
+      customerId: lead.customerId,
+      email: lead.email,
+      phone: lead.phone,
+    },
+    quotes: progressQuoteInputs,
+  });
+
+  if (!progress.activeQuote) {
+    return { ok: true, payload: null };
+  }
+
+  const result = await loadQuoteWorkSurface(progress.activeQuote.id, org.id);
+  return { ok: true, payload: result };
 }

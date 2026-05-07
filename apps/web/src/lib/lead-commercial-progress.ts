@@ -32,6 +32,7 @@ export type LeadCommercialProgressActionKind =
   | "EDIT_CONTACT_INFO"
   | "ATTACH_OR_CREATE_CUSTOMER"
   | "START_QUOTE"
+  | "QUALIFY_LEAD"
   | "OPEN_DRAFT_QUOTE"
   | "OPEN_QUOTE"
   | "OPEN_EXECUTION_REVIEW"
@@ -363,6 +364,27 @@ export function getLeadCommercialProgress(
 
   const hasContact = Boolean(lead.email) || Boolean(lead.phone);
 
+  if (lead.status === ("OPEN" as LeadStatus)) {
+    return {
+      state: "ADD_CONTACT_INFO",
+      label: "New lead — needs qualification",
+      description: hasContact
+        ? "Contact info is available. Qualify this lead to move it forward."
+        : "Add contact info and qualify this lead to move it forward.",
+      primaryAction: { kind: "QUALIFY_LEAD", label: "Mark as qualifying" },
+      secondaryAction: hasContact
+        ? { kind: "ATTACH_OR_CREATE_CUSTOMER", label: "Attach or create customer" }
+        : { kind: "EDIT_CONTACT_INFO", label: "Add contact info" },
+      activeQuote: null,
+      activeJob: null,
+      stepIndex: 0,
+      totalSteps: TOTAL_STEPS,
+      isTerminal: false,
+      badgeTone: "draft",
+      showsRevisionDrift: false,
+    };
+  }
+
   if (hasContact) {
     return {
       state: "NEEDS_CUSTOMER",
@@ -432,6 +454,8 @@ export function resolveLeadCommercialProgressActionHref(
       return `/leads/${ctx.leadId}/edit`;
     case "ATTACH_OR_CREATE_CUSTOMER":
       return `/leads/${ctx.leadId}#customer-link`;
+    case "QUALIFY_LEAD":
+      return `/leads/${ctx.leadId}`;
     case "START_QUOTE":
       return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
     case "OPEN_DRAFT_QUOTE":

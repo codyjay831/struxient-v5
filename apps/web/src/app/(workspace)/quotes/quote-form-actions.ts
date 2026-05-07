@@ -1185,16 +1185,10 @@ export async function applyLineItemTemplateToQuoteAction(
 }
 
 /**
- * Sends a draft quote: records a hidden SEND checkpoint (commercial proposal projection only) and sets status to SENT.
- * Does not email customers, does not include internal execution planning in the checkpoint payload, and does not create jobs.
- * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ * Org-scoped send checkpoint + status → SENT. No redirect — for Workstation and
+ * for composition into {@link recordQuoteSendCheckpointAction}.
  */
-export async function recordQuoteSendCheckpointAction(
-  quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
+export async function performQuoteSendCheckpoint(quoteId: string): Promise<QuoteFormState> {
   const id = quoteId.trim();
   if (!id) {
     return { error: "Missing quote record id." };
@@ -1298,6 +1292,25 @@ export async function recordQuoteSendCheckpointAction(
     throw e;
   }
 
+  return {};
+}
+
+/**
+ * Sends a draft quote: records a hidden SEND checkpoint (commercial proposal projection only) and sets status to SENT.
+ * Does not email customers, does not include internal execution planning in the checkpoint payload, and does not create jobs.
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ */
+export async function recordQuoteSendCheckpointAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const result = await performQuoteSendCheckpoint(quoteId);
+  if (result.error) {
+    return result;
+  }
+  const id = quoteId.trim();
   revalidatePath(`/quotes/${id}`);
   revalidatePath(`/quotes/${id}/execution-review`);
   revalidatePath("/quotes");
@@ -1305,16 +1318,10 @@ export async function recordQuoteSendCheckpointAction(
 }
 
 /**
- * Staff-recorded customer acceptance of the commercial proposal (no e-sign provider in this build).
- * Creates an APPROVAL checkpoint with the same commercial projection shape as SEND, then sets status to APPROVED.
- * SENT-only. Does not create jobs or freeze internal execution planning.
+ * Org-scoped approval checkpoint + status → APPROVED. No redirect — for Workstation
+ * and for composition into {@link markQuoteApprovedAction}.
  */
-export async function markQuoteApprovedAction(
-  quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
+export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFormState> {
   const id = quoteId.trim();
   if (!id) {
     return { error: "Missing quote record id." };
@@ -1418,6 +1425,25 @@ export async function markQuoteApprovedAction(
     throw e;
   }
 
+  return {};
+}
+
+/**
+ * Staff-recorded customer acceptance of the commercial proposal (no e-sign provider in this build).
+ * Creates an APPROVAL checkpoint with the same commercial projection shape as SEND, then sets status to APPROVED.
+ * SENT-only. Does not create jobs or freeze internal execution planning.
+ */
+export async function markQuoteApprovedAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const result = await performQuoteMarkApproved(quoteId);
+  if (result.error) {
+    return result;
+  }
+  const id = quoteId.trim();
   revalidatePath(`/quotes/${id}`);
   revalidatePath(`/quotes/${id}/execution-review`);
   revalidatePath("/quotes");

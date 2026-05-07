@@ -71,30 +71,33 @@ export function WorkstationWorkPanel({
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="space-y-8">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div>
-                  <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                    Why it matters
-                  </h4>
-                  <p className="mt-1.5 text-sm italic leading-relaxed text-foreground-muted">
-                    {item.reason}
-                  </p>
+              {!children ? (
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                      Why it matters
+                    </h4>
+                    <p className="mt-1.5 text-sm italic leading-relaxed text-foreground-muted">
+                      {item.reason}
+                    </p>
+                    {item.workflow ? (
+                      <p className="mt-2 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                        {item.workflow.statusLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                      Next step
+                    </h4>
+                    <p className="mt-1.5 text-sm font-medium text-foreground">
+                      {item.nextStep}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                    Next step
-                  </h4>
-                  <p className="mt-1.5 text-sm font-medium text-foreground">
-                    {item.nextStep}
-                  </p>
-                </div>
-              </div>
+              ) : null}
 
-              {children && (
-                <div className="border-t border-border pt-8">
-                  {children}
-                </div>
-              )}
+              {children ? <div>{children}</div> : null}
             </div>
           </div>
 
@@ -106,7 +109,7 @@ export function WorkstationWorkPanel({
                   href={item.href}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
                 >
-                  Open full record
+                  {item.kind === "quote" ? "Open quote record" : item.kind === "lead" ? "Open lead workspace" : "Open full record"}
                   <ArrowRight className="size-4" />
                 </Link>
               )}

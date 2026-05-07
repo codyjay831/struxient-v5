@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { QuoteReadinessPanel } from "@/components/quotes/quote-readiness-panel";
+import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import {
   QuoteWorkspacePageClient,
   type QuoteWorkspacePageClientProps,
@@ -17,6 +17,7 @@ import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import { type QuoteReadiness } from "@/lib/quote-readiness";
+import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -33,6 +34,8 @@ export type QuoteWorkspaceShellProps = {
   /** Reusable task picker options for the org (empty when execution is not editable). */
   reusableTaskOptions: ReusableTaskPickerOption[];
   quoteReadiness: QuoteReadiness;
+  /** Pre-built QuoteWorkSurface payload (same shape used by Workstation drawer + Lead embed). */
+  quoteWorkSurface: QuoteWorkSurfaceData;
   /**
    * Optional return context link shown as the first header action when the user
    * arrived from Workstation.
@@ -49,6 +52,7 @@ function QuoteDetailShell({
   draftTasksByLineId,
   reusableTaskOptions,
   quoteReadiness,
+  quoteWorkSurface,
   returnHref,
 }: QuoteWorkspaceShellProps) {
   const locale = "en-US";
@@ -126,10 +130,10 @@ function QuoteDetailShell({
         </div>
       </div>
 
-      {/* ── Readiness / next step panel ────────────────────────────────── */}
-      <QuoteReadinessPanel
-        quoteId={quote.id}
-        quoteStatus={quote.status}
+      {/* ── Quote work surface — same UX as Workstation drawer + Lead embed ─ */}
+      <QuoteWorkSurface
+        mode="full"
+        quote={quoteWorkSurface}
         readiness={quoteReadiness}
       />
 

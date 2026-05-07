@@ -11,6 +11,10 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SignalCard } from "@/components/ui/signal-card";
+import {
+  QuotesListClient,
+  type SerializedQuoteListRow,
+} from "@/components/quotes/quotes-list-client";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import {
@@ -130,7 +134,14 @@ export default async function QuotesPage({
   ]);
 
   const draftValueCents = draftTotalsAgg._sum.totalCents ?? 0;
-  const quotes = rows.map((r) => {
+
+  /**
+   * Build the serialized rows for `QuotesListClient`. Readiness is derived
+   * from the cheap inputs available on the list query (no per-row activation
+   * check, no per-row checkpoint queries) — the popup lazy-loads the full
+   * QuoteWorkSurfaceData on open via `loadQuoteWorkSurfaceAction`.
+   */
+  const serializedQuotes: SerializedQuoteListRow[] = rows.map((r) => {
     const readiness = getQuoteReadiness({
       quote: {
         status: r.status,
@@ -146,9 +157,43 @@ export default async function QuotesPage({
       revisionDriftSinceLastProof: false, // Skip expensive drift check on list
     });
 
+    const primaryIdentity =
+      r.lead?.title || r.customer?.displayName || r.title;
+    const secondaryIdentity =
+      r.title !== primaryIdentity ? r.title : null;
+
+    const contextBits: string[] = [];
+    if (r.customer) {
+      const c = r.customer.displayName;
+      const co = r.customer.companyName?.trim();
+      contextBits.push(co ? `${c} · ${co}` : c);
+    }
+    if (r.lead) {
+      const leadBits = [`Lead: ${r.lead.title}`];
+      const cn = r.lead.contactName?.trim();
+      if (cn) leadBits.push(cn);
+      contextBits.push(leadBits.join(" · "));
+    }
+    const contextLine =
+      contextBits.length > 0
+        ? contextBits.join(" · ")
+        : "No customer or lead linked";
+
     return {
-      ...r,
-      readiness,
+      id: r.id,
+      primaryIdentity,
+      secondaryIdentity,
+      contextLine,
+      totalCents: r.totalCents,
+      totalLabel: formatMoneyCents(r.totalCents),
+      status: r.status,
+      statusLabel: formatQuoteStatus(r.status),
+      statusTone: quoteStatusBadgeTone(r.status),
+      readinessLabel: readiness.label,
+      readinessTone: readiness.badgeTone,
+      createdLabel: new Date(r.createdAt).toLocaleString(),
+      updatedLabel: new Date(r.updatedAt).toLocaleString(),
+      href: `/quotes/${r.id}`,
     };
   });
   const hasActiveListFilters =
@@ -369,86 +414,7 @@ export default async function QuotesPage({
               </Link>
             </EmptyState>
           ) : (
-            <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-              {quotes.map((row) => {
-                const updated = new Date(row.updatedAt).toLocaleString();
-                const created = new Date(row.createdAt).toLocaleString();
-                
-                const primaryIdentity = row.lead?.title || row.customer?.displayName || row.title;
-                const secondaryIdentity = row.title !== primaryIdentity ? row.title : null;
-
-                const contextBits: string[] = [];
-                if (row.customer) {
-                  const c = row.customer.displayName;
-                  const co = row.customer.companyName?.trim();
-                  contextBits.push(co ? `${c} · ${co}` : c);
-                }
-                if (row.lead) {
-                  const leadBits = [`Lead: ${row.lead.title}`];
-                  const cn = row.lead.contactName?.trim();
-                  if (cn) {
-                    leadBits.push(cn);
-                  }
-                  contextBits.push(leadBits.join(" · "));
-                }
-                const contextLine =
-                  contextBits.length > 0 ? contextBits.join(" · ") : "No customer or lead linked";
-                return (
-                  <li key={row.id} className="px-4 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col">
-                          <Link
-                            href={`/quotes/${row.id}`}
-                            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                          >
-                            {primaryIdentity}
-                          </Link>
-                          {secondaryIdentity && (
-                            <span className="text-[10px] font-medium uppercase tracking-tight text-foreground-subtle">
-                              Quote title: {secondaryIdentity}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-xs text-foreground-muted">
-                          <span className="break-words">{contextLine}</span>
-                        </p>
-                        <dl className="mt-3 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
-                          <div>
-                            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                              Created
-                            </dt>
-                            <dd className="mt-0.5 text-foreground">{created}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                              Updated
-                            </dt>
-                            <dd className="mt-0.5 text-foreground">{updated}</dd>
-                          </div>
-                        </dl>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-                        <div className="flex flex-col items-end gap-1">
-                          <StatusBadge
-                            label={row.readiness.label}
-                            tone={row.readiness.badgeTone}
-                          />
-                          <StatusBadge
-                            label={formatQuoteStatus(row.status)}
-                            tone={quoteStatusBadgeTone(row.status)}
-                            className="h-4 px-1 text-[9px]"
-                          />
-                        </div>
-                        <span className="text-sm font-medium tabular-nums text-foreground">
-                          {formatMoneyCents(row.totalCents)}
-                        </span>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <QuotesListClient quotes={serializedQuotes} />
           )}
         </div>
         <WorkspacePanel padding="compact">

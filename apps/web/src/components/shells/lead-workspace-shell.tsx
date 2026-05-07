@@ -22,6 +22,7 @@ import {
   quoteStatusBadgeTone,
   type QuoteLinkedSummary,
 } from "@/lib/quote-display";
+import type { LeadWorkSurfaceActiveQuotePayload } from "@/components/work-surfaces/lead-work-surface";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -61,6 +62,8 @@ export type LeadWorkspaceShellProps = {
    * user arrived from Workstation.
    */
   returnHref?: string;
+  /** Pre-loaded QuoteWorkSurface payload for the active linked quote. */
+  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
 };
 
 export function LeadWorkspaceShell({
@@ -72,6 +75,7 @@ export function LeadWorkspaceShell({
   linkedQuotes = [],
   commercialProgress,
   returnHref,
+  activeQuoteWorkSurface,
 }: LeadWorkspaceShellProps) {
   /* ── Date formatting (server-side for SSR consistency) ─────────────────── */
   const locale = "en-US";
@@ -223,6 +227,7 @@ export function LeadWorkspaceShell({
         customersForLink={customersForLink}
         linkLeadAction={linkLeadAction}
         matchHints={matchHints}
+        activeQuoteWorkSurface={activeQuoteWorkSurface}
       />
     </div>
   );

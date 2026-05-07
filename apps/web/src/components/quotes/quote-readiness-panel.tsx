@@ -1,18 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import type { QuoteStatus } from "@prisma/client";
+import type { LucideIcon } from "lucide-react";
+import { RecordActionPanel } from "@/components/ui/record-action-panel";
 import {
   type QuoteReadiness,
   QUOTE_READINESS_STEPS,
   resolveQuoteReadinessActionHref,
+  type QuoteReadinessAction,
 } from "@/lib/quote-readiness";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { SignalCard } from "@/components/ui/signal-card";
-import { formatMoneyCents, formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
+import { formatMoneyCents } from "@/lib/quote-display";
 import {
-  AlertCircle,
   ArrowRight,
   CheckCircle2,
   FileText,
@@ -73,11 +72,9 @@ interface QuoteReadinessPanelProps {
 
 export function QuoteReadinessPanel({
   quoteId,
-  quoteStatus,
   readiness,
 }: QuoteReadinessPanelProps) {
   const {
-    state,
     label,
     description,
     primaryAction,
@@ -90,116 +87,67 @@ export function QuoteReadinessPanel({
     isTerminal,
   } = readiness;
 
-  // Only show the derived readiness label if it adds meaning beyond the base QuoteStatus
-  const showReadinessChip = ![
-    "DRAFT_IN_PROGRESS",
-    "SENT_AWAITING_CUSTOMER",
-    "ARCHIVED",
-  ].includes(state);
+  const mapAction = (action: QuoteReadinessAction | null) => {
+    if (!action) return undefined;
 
-  const steps = QUOTE_READINESS_STEPS.slice(0, totalSteps);
+    const iconMap: Record<string, LucideIcon> = {
+      SEND_QUOTE: Send,
+      MARK_APPROVED: ThumbsUp,
+      OPEN_EXECUTION_REVIEW: Wrench,
+      ACTIVATE_JOB: Briefcase,
+      OPEN_JOB: Briefcase,
+      ADD_LINE_ITEM: FileText,
+      CONTINUE_EDITING: FileText,
+    };
+
+    return {
+      label: action.label,
+      href: resolveQuoteReadinessActionHref(action, { quoteId }),
+      icon: iconMap[action.kind] || ArrowRight,
+    };
+  };
+
+  const requiredItems = [];
+  if (signals.lineItemCount === 0) {
+    requiredItems.push({ label: "Line items", satisfied: false });
+  }
+  if (signals.needsExecutionReviewLineCount > 0) {
+    requiredItems.push({
+      label: `${signals.needsExecutionReviewLineCount} lines need review`,
+      satisfied: false,
+    });
+  }
+
+  const satisfiedItems = [];
+  if (signals.lineItemCount > 0) {
+    satisfiedItems.push({ label: "Line items added" });
+  }
+  if (signals.latestSendAt) {
+    satisfiedItems.push({ label: "Quote sent" });
+  }
+  if (signals.latestApprovalAt) {
+    satisfiedItems.push({ label: "Quote approved" });
+  }
 
   return (
-    <WorkspacePanel className="mb-6 border-border-strong shadow-sm ring-1 ring-ring/5">
-      {/* ── Status + action row ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-              Next step
-            </span>
-            <StatusBadge
-              label={formatQuoteStatus(quoteStatus)}
-              tone={quoteStatusBadgeTone(quoteStatus)}
-            />
-          </div>
-
-          {showReadinessChip && (
-            <StatusBadge label={label} tone={badgeTone} className="bg-foreground/[0.02]" />
-          )}
-
-          {showsRevisionDrift && (
-            <div className="flex items-center gap-1.5 rounded-full bg-danger/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight text-danger">
-              <AlertCircle className="size-3" />
-              Edits since last proof
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {secondaryAction && (
-            <Link
-              href={resolveQuoteReadinessActionHref(secondaryAction, { quoteId })}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/[0.03]"
-            >
-              {secondaryAction.label}
-            </Link>
-          )}
-
-          {primaryAction && (
-            <Link
-              href={resolveQuoteReadinessActionHref(primaryAction, { quoteId })}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-contrast transition-all hover:bg-accent/90 active:scale-[0.98]"
-            >
-              {primaryAction.label}
-              <ArrowRight className="size-4" />
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* ── Description text ───────────────────────────────────────────── */}
-      <p className="mt-3 text-sm leading-relaxed text-foreground-muted">{description}</p>
-
-      {/* ── Step progress ──────────────────────────────────────────────── */}
-      <div className="mt-5 pt-4 border-t border-border">
-        {isTerminal ? (
-          <p className="text-xs text-foreground-subtle">
-            This quote is archived — no further commercial steps expected.
-          </p>
-        ) : (
-          <ol className="flex items-stretch gap-2" aria-label="Quote progress">
-            {steps.map((step, index) => {
-              const isCompleted = index < stepIndex;
-              const isCurrent = index === stepIndex;
-              return (
-                <li
-                  key={step.key}
-                  className="flex min-w-0 flex-1 flex-col gap-1.5"
-                  aria-current={isCurrent ? "step" : undefined}
-                >
-                  <span
-                    className={[
-                      "h-1.5 rounded-full transition-colors",
-                      isCompleted
-                        ? "bg-foreground"
-                        : isCurrent
-                          ? "bg-foreground/70"
-                          : "bg-foreground/15",
-                    ].join(" ")}
-                    aria-hidden
-                  />
-                  <span
-                    className={[
-                      "truncate text-[0.65rem] font-medium uppercase tracking-wide",
-                      isCurrent
-                        ? "text-foreground"
-                        : isCompleted
-                          ? "text-foreground-muted"
-                          : "text-foreground-subtle",
-                    ].join(" ")}
-                  >
-                    {step.label}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </div>
-
-      {/* ── Signal cards ───────────────────────────────────────────────── */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+    <RecordActionPanel
+      kind="quote"
+      status={{ label, tone: badgeTone }}
+      reason={showsRevisionDrift ? "Quote revised since last send" : undefined}
+      description={description}
+      primaryAction={mapAction(primaryAction)}
+      secondaryAction={mapAction(secondaryAction)}
+      requiredItems={requiredItems}
+      satisfiedItems={satisfiedItems}
+      progress={{
+        stepIndex,
+        totalSteps,
+        steps: QUOTE_READINESS_STEPS,
+        isTerminal,
+      }}
+      className="mb-6"
+    >
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <SignalCard
           label="Lines"
           value={String(signals.lineItemCount)}
@@ -209,13 +157,21 @@ export function QuoteReadinessPanel({
         <SignalCard
           label="Sent"
           value={signals.latestSendAt ? "Yes" : "No"}
-          hint={signals.latestSendAt ? new Date(signals.latestSendAt).toLocaleDateString() : "Not sent yet"}
+          hint={
+            signals.latestSendAt
+              ? new Date(signals.latestSendAt).toLocaleDateString()
+              : "Not sent yet"
+          }
           icon={Send}
         />
         <SignalCard
           label="Approved"
           value={signals.latestApprovalAt ? "Yes" : "No"}
-          hint={signals.latestApprovalAt ? new Date(signals.latestApprovalAt).toLocaleDateString() : "Awaiting approval"}
+          hint={
+            signals.latestApprovalAt
+              ? new Date(signals.latestApprovalAt).toLocaleDateString()
+              : "Awaiting approval"
+          }
           icon={ThumbsUp}
         />
         <SignalCard
@@ -239,6 +195,6 @@ export function QuoteReadinessPanel({
           tone={signals.activatedJobId ? "success" : "neutral"}
         />
       </div>
-    </WorkspacePanel>
+    </RecordActionPanel>
   );
 }
