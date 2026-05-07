@@ -13,8 +13,6 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
-import { formatLeadStatus, leadStatusBadgeTone } from "@/lib/lead-display";
-import type { LeadStatus } from "@prisma/client";
 
 const primaryActionClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
@@ -188,33 +186,22 @@ function ActiveJobCard({
 export function LeadCommercialProgressPanel({
   progress,
   leadId,
-  manualLeadStatus,
 }: {
   progress: LeadCommercialProgress;
   leadId: string;
-  manualLeadStatus: LeadStatus;
 }) {
   const hasCards = progress.activeQuote != null || progress.activeJob != null;
 
   return (
     <WorkspacePanel
       padding="comfortable"
-      className="mb-6 border-border-strong shadow-md ring-1 ring-ring/30"
+      className="mb-5 border-border-strong shadow-md ring-1 ring-ring/30"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-            Commercial Progress
-          </h2>
-          <StatusBadge label={progress.label} tone={progress.badgeTone} />
-        </div>
-        <div className="flex items-center gap-2 text-xs text-foreground-subtle">
-          <span>Manual lead status</span>
-          <StatusBadge
-            label={formatLeadStatus(manualLeadStatus)}
-            tone={leadStatusBadgeTone(manualLeadStatus)}
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          Lead progress
+        </h2>
+        <StatusBadge label={progress.label} tone={progress.badgeTone} />
       </div>
 
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-foreground-muted">

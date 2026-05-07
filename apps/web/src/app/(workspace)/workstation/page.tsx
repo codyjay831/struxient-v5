@@ -12,8 +12,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { WorkstationInvestigateSection } from "@/components/workstation/workstation-investigate-section";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import {
+  WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS,
+  buildWorkstationInvestigateDerivedSignals,
+  sortWorkstationInvestigateSignals,
+} from "@/lib/workstation-investigate-signals";
 import { Activity, CalendarDays, ClipboardList, FolderKanban } from "lucide-react";
 
 const listLinkClass =
@@ -35,6 +41,13 @@ export default async function WorkstationTodayLensPage() {
     }),
     db.lead.count({ where: { organizationId: org.id } }),
   ]);
+
+  const investigateDerivedSignals = sortWorkstationInvestigateSignals(
+    buildWorkstationInvestigateDerivedSignals({ unlinkedLeads }),
+  );
+  const investigatePreviewSignals = sortWorkstationInvestigateSignals(
+    WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS,
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -87,6 +100,11 @@ export default async function WorkstationTodayLensPage() {
           </Link>
         </div>
       </WorkspacePanel>
+
+      <WorkstationInvestigateSection
+        derivedSignals={investigateDerivedSignals}
+        previewSignals={investigatePreviewSignals}
+      />
 
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading

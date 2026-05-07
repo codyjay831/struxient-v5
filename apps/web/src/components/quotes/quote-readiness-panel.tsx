@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { QuoteStatus } from "@prisma/client";
 import {
   type QuoteReadiness,
   resolveQuoteReadinessActionHref,
@@ -65,7 +66,7 @@ export function QuoteReadinessIconStrip({
 
 interface QuoteReadinessPanelProps {
   quoteId: string;
-  quoteStatus: any; // QuoteStatus enum
+  quoteStatus: QuoteStatus;
   readiness: QuoteReadiness;
 }
 

@@ -14,7 +14,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { SignalCard } from "@/components/ui/signal-card";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
-import { QuoteReadinessIconStrip } from "@/components/quotes/quote-readiness-panel";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -286,7 +285,7 @@ export default async function QuotesPage({
                 className={status === s ? pillActive : pillIdle}
                 aria-current={status === s ? "page" : undefined}
               >
-                {s === "all" ? "All" : s === "draft" ? "Draft" : "Archived"}
+                {s === "all" ? "All" : s === "draft" ? "Draft" : s === "active" ? "Active" : "Archived"}
               </Link>
             ))}
           </div>
@@ -391,11 +390,6 @@ export default async function QuotesPage({
                         <p className="mt-1 text-xs text-foreground-muted">
                           <span className="break-words">{contextLine}</span>
                         </p>
-                        <QuoteReadinessIconStrip
-                          stepIndex={row.readiness.stepIndex}
-                          isTerminal={row.readiness.isTerminal}
-                          className="mt-3"
-                        />
                         <dl className="mt-3 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
                           <div>
                             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
