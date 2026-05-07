@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { QuoteStatus } from "@prisma/client";
 import {
   type QuoteReadiness,
+  QUOTE_READINESS_STEPS,
   resolveQuoteReadinessActionHref,
 } from "@/lib/quote-readiness";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -78,11 +79,15 @@ export function QuoteReadinessPanel({
   const {
     state,
     label,
+    description,
     primaryAction,
     secondaryAction,
     badgeTone,
     showsRevisionDrift,
     signals,
+    stepIndex,
+    totalSteps,
+    isTerminal,
   } = readiness;
 
   // Only show the derived readiness label if it adds meaning beyond the base QuoteStatus
@@ -92,13 +97,16 @@ export function QuoteReadinessPanel({
     "ARCHIVED",
   ].includes(state);
 
+  const steps = QUOTE_READINESS_STEPS.slice(0, totalSteps);
+
   return (
     <WorkspacePanel className="mb-6 border-border-strong shadow-sm ring-1 ring-ring/5">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2.5">
+      {/* ── Status + action row ────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-              Quote Status
+              Next step
             </span>
             <StatusBadge
               label={formatQuoteStatus(quoteStatus)}
@@ -118,11 +126,11 @@ export function QuoteReadinessPanel({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {secondaryAction && (
             <Link
               href={resolveQuoteReadinessActionHref(secondaryAction, { quoteId })}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/[0.03]"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/[0.03]"
             >
               {secondaryAction.label}
             </Link>
@@ -131,7 +139,7 @@ export function QuoteReadinessPanel({
           {primaryAction && (
             <Link
               href={resolveQuoteReadinessActionHref(primaryAction, { quoteId })}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast transition-all hover:bg-accent/90 active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-contrast transition-all hover:bg-accent/90 active:scale-[0.98]"
             >
               {primaryAction.label}
               <ArrowRight className="size-4" />
@@ -140,7 +148,58 @@ export function QuoteReadinessPanel({
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+      {/* ── Description text ───────────────────────────────────────────── */}
+      <p className="mt-3 text-sm leading-relaxed text-foreground-muted">{description}</p>
+
+      {/* ── Step progress ──────────────────────────────────────────────── */}
+      <div className="mt-5 pt-4 border-t border-border">
+        {isTerminal ? (
+          <p className="text-xs text-foreground-subtle">
+            This quote is archived — no further commercial steps expected.
+          </p>
+        ) : (
+          <ol className="flex items-stretch gap-2" aria-label="Quote progress">
+            {steps.map((step, index) => {
+              const isCompleted = index < stepIndex;
+              const isCurrent = index === stepIndex;
+              return (
+                <li
+                  key={step.key}
+                  className="flex min-w-0 flex-1 flex-col gap-1.5"
+                  aria-current={isCurrent ? "step" : undefined}
+                >
+                  <span
+                    className={[
+                      "h-1.5 rounded-full transition-colors",
+                      isCompleted
+                        ? "bg-foreground"
+                        : isCurrent
+                          ? "bg-foreground/70"
+                          : "bg-foreground/15",
+                    ].join(" ")}
+                    aria-hidden
+                  />
+                  <span
+                    className={[
+                      "truncate text-[0.65rem] font-medium uppercase tracking-wide",
+                      isCurrent
+                        ? "text-foreground"
+                        : isCompleted
+                          ? "text-foreground-muted"
+                          : "text-foreground-subtle",
+                    ].join(" ")}
+                  >
+                    {step.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
+
+      {/* ── Signal cards ───────────────────────────────────────────────── */}
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <SignalCard
           label="Lines"
           value={String(signals.lineItemCount)}
