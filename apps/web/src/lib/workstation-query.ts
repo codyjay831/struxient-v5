@@ -3,6 +3,9 @@ import {
   JobTaskStatus,
   LeadStatus,
   QuoteStatus,
+  JobIssueSeverity,
+  JobIssueStatus,
+  JobPaymentRequirementStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -339,6 +342,96 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         updatedAt: job.updatedAt,
       });
     }
+  }
+
+  // 4. Job Issues (Blocking)
+  const issues = await db.jobIssue.findMany({
+    where: {
+      organizationId,
+      status: JobIssueStatus.OPEN,
+      severity: JobIssueSeverity.BLOCKS_WORK,
+    },
+    include: {
+      job: {
+        include: {
+          customer: true,
+          lead: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  for (const issue of issues) {
+    const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
+    const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
+
+    items.push({
+      id: `issue-${issue.id}`,
+      kind: "investigate",
+      title: issue.title,
+      subtitle: `Issue: ${issue.type.replace(/_/g, " ")} · ${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+      status: issue.status,
+      priority: "high",
+      group: "investigate",
+      reason: issue.description || "Blocking issue needs resolution.",
+      nextStep: "Review and resolve issue.",
+      recordId: issue.id,
+      parentRecordId: issue.jobId,
+      parentLabel: primaryJobIdentity,
+      href: `/jobs/${issue.jobId}`,
+      updatedAt: issue.updatedAt,
+    });
+  }
+
+  // 5. Job Payment Requirements (Due)
+  const duePayments = await db.jobPaymentRequirement.findMany({
+    where: {
+      organizationId,
+      status: JobPaymentRequirementStatus.DUE,
+    },
+    include: {
+      job: {
+        include: {
+          customer: true,
+          lead: true,
+        },
+      },
+      requiredBeforeStage: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  for (const payment of duePayments) {
+    const primaryJobIdentity = payment.job.lead?.title || payment.job.customer?.displayName || payment.job.title;
+    const secondaryJobIdentity = payment.job.title !== primaryJobIdentity ? payment.job.title : null;
+
+    const amountLabel = payment.amountCents
+      ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+          payment.amountCents / 100,
+        )
+      : null;
+
+    items.push({
+      id: `payment-${payment.id}`,
+      kind: "investigate",
+      title: payment.title,
+      subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}${amountLabel ? ` · ${amountLabel}` : ""}`,
+      status: payment.status,
+      priority: "high",
+      group: "investigate",
+      reason: payment.requiredBeforeStage
+        ? `Payment required before ${payment.requiredBeforeStage.title}.`
+        : "Payment is due.",
+      nextStep: "Record payment or waive requirement.",
+      recordId: payment.id,
+      parentRecordId: payment.jobId,
+      parentLabel: primaryJobIdentity,
+      href: `/jobs/${payment.jobId}`,
+      updatedAt: payment.updatedAt,
+    });
   }
 
   return items;

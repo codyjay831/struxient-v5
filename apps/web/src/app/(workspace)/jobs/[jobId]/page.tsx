@@ -16,6 +16,10 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { Briefcase, Layers, ListOrdered } from "lucide-react";
+import { JobIssueManager } from "@/components/jobs/job-issue-manager";
+import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
+import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
+import { JobIssueStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +52,29 @@ export default async function JobDetailPage({
       quote: { select: { id: true, title: true, organizationId: true } },
       customer: { select: { id: true, displayName: true, organizationId: true } },
       lead: { select: { id: true, title: true, organizationId: true } },
+      issues: {
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          severity: true,
+          status: true,
+          description: true,
+          resolutionNote: true,
+          resolvedAt: true,
+          createdAt: true,
+          jobStage: { select: { title: true } },
+          jobTask: { select: { title: true } },
+          followUpTask: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            },
+          },
+        },
+      },
       stages: {
         orderBy: [{ sortOrder: "asc" }],
         select: {
@@ -69,6 +96,33 @@ export default async function JobDetailPage({
               sourceQuoteLineItemId: true,
             },
           },
+        },
+      },
+      paymentRequirements: {
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          status: true,
+          notes: true,
+          requiredBeforeStageId: true,
+          requiredBeforeStage: { select: { title: true } },
+          paidAt: true,
+          waivedAt: true,
+          canceledAt: true,
+        },
+      },
+      activities: {
+        orderBy: [{ createdAt: "desc" }],
+        take: 50,
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          details: true,
+          createdAt: true,
+          actorUser: { select: { name: true, email: true } },
         },
       },
     },
@@ -214,6 +268,20 @@ export default async function JobDetailPage({
           </li>
         </ul>
       </section>
+      
+      <JobIssueManager
+        jobId={job.id}
+        initialIssues={job.issues}
+        stages={job.stages}
+      />
+
+      <JobPaymentManager
+        jobId={job.id}
+        initialRequirements={job.paymentRequirements}
+        stages={job.stages}
+      />
+
+      <JobActivityFeed activities={job.activities} />
 
       {totalTasks === 0 ? (
         <WorkspacePanel>

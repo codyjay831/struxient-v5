@@ -6,12 +6,14 @@ import {
   LeadSource,
   LeadStatus,
   QuoteStatus,
+  StaffRole,
   TaskTemplateCategory,
 } from "@prisma/client";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
   DEV_ORGANIZATION_SLUG,
+  DEV_USER_ID,
 } from "../src/lib/dev-organization";
 import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
@@ -42,6 +44,35 @@ async function main() {
   });
 
   console.log(`[dev seed] Organization: ${devOrg.name} (${devOrg.id})`);
+
+  const devUser = await prisma.user.upsert({
+    where: { id: DEV_USER_ID },
+    update: { email: "dev@struxient.local", name: "Dev User" },
+    create: {
+      id: DEV_USER_ID,
+      email: "dev@struxient.local",
+      name: "Dev User",
+    },
+  });
+
+  console.log(`[dev seed] User: ${devUser.name} (${devUser.id})`);
+
+  const devMembership = await prisma.membership.upsert({
+    where: {
+      userId_organizationId: {
+        userId: devUser.id,
+        organizationId: devOrg.id,
+      },
+    },
+    update: { role: StaffRole.OWNER },
+    create: {
+      userId: devUser.id,
+      organizationId: devOrg.id,
+      role: StaffRole.OWNER,
+    },
+  });
+
+  console.log(`[dev seed] Membership: ${devMembership.role} in ${devOrg.name}`);
 
   const existingPublicSettings = await prisma.publicRequestSettings.findUnique({
     where: { organizationId: devOrg.id },

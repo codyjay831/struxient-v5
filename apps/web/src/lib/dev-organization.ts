@@ -7,3 +7,6 @@ export const DEV_ORGANIZATION_ID = "dev-org-id" as const;
 export const DEV_ORGANIZATION_NAME = "Development Organization" as const;
 /** Public `/request/[companySlug]` handle for the development tenant (lowercase). */
 export const DEV_ORGANIZATION_SLUG = "demo-co" as const;
+
+/** Fixed identifier for the local development user. */
+export const DEV_USER_ID = "dev-user-id" as const;

@@ -1,10 +1,12 @@
-export type StatusBadgeTone = "draft" | "sent" | "approved" | "neutral";
+export type StatusBadgeTone = "draft" | "sent" | "approved" | "neutral" | "danger" | "warning";
 
 const toneClass: Record<StatusBadgeTone, string> = {
   draft: "border-border bg-foreground/[0.02] text-foreground-muted",
   sent: "border-border-strong bg-foreground/[0.03] text-foreground",
   approved: "border-success/40 bg-success/10 text-success",
   neutral: "border-border bg-surface text-foreground-subtle",
+  danger: "border-danger/40 bg-danger/10 text-danger",
+  warning: "border-warning/40 bg-warning/10 text-warning",
 };
 
 /** Visual label only — wire to persisted state when the data layer exists. */

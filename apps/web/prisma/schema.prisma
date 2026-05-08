@@ -115,6 +115,8 @@ model Organization {
   slug                  String?                @unique
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  memberships           Membership[]
+  jobIssues             JobIssue[]
   customers             Customer[]
   leads                 Lead[]
   quotes                Quote[]
@@ -122,6 +124,8 @@ model Organization {
   taskTemplates         TaskTemplate[]
   quoteCheckpoints      QuoteCheckpoint[]
   jobs                  Job[]
+  jobPaymentRequirements JobPaymentRequirement[]
+  jobActivities         JobActivity[]
   publicRequestSettings PublicRequestSettings?
 }
 
@@ -157,6 +161,41 @@ model Customer {
   jobs           Job[]
 
   @@index([organizationId])
+}
+
+enum StaffRole {
+  OWNER
+  ADMIN
+  OFFICE
+  FIELD
+  VIEWER
+  SUBCONTRACTOR
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?
+  memberships   Membership[]
+  jobIssues     JobIssue[]
+  jobActivities JobActivity[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           StaffRole    @default(FIELD)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
 }
 
 model Lead {
@@ -379,6 +418,9 @@ model Job {
   updatedAt      DateTime     @updatedAt
   stages         JobStage[]
   tasks          JobTask[]
+  issues         JobIssue[]
+  paymentRequirements JobPaymentRequirement[]
+  activities     JobActivity[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -407,6 +449,8 @@ model JobStage {
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   tasks                 JobTask[]
+  issues                JobIssue[]
+  paymentRequirements   JobPaymentRequirement[]
 
   @@index([jobId])
   @@index([jobId, sortOrder])
@@ -436,7 +480,130 @@ model JobTask {
   sortOrder                      Int                        @default(0)
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt
+  issues                         JobIssue[]
+  sourceJobIssueId               String?                    @unique
+  sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id], onDelete: SetNull)
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
+}
+
+model JobIssue {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId           String
+  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobStageId      String?
+  jobStage        JobStage?        @relation(fields: [jobStageId], references: [id], onDelete: SetNull)
+  jobTaskId       String?
+  jobTask         JobTask?         @relation(fields: [jobTaskId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdByUser   User?            @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  type            JobIssueType
+  severity        JobIssueSeverity @default(BLOCKS_WORK)
+  status          JobIssueStatus   @default(OPEN)
+  title           String
+  description     String?
+  resolutionNote  String?
+  resolvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  followUpTask    JobTask?         @relation("IssueFollowUpTask")
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+  @@index([jobTaskId])
+  @@index([jobStageId])
+}
+
+enum JobIssueType {
+  INSPECTION_FAIL
+  MATERIAL_DELAY
+  SITE_CONDITION
+  CUSTOMER_CHANGE
+  WEATHER
+  SCHEDULE_SLIP
+  PAYMENT_BLOCK
+  SCOPE_CLARIFICATION
+  INTERNAL_ERROR
+  OTHER
+}
+
+enum JobIssueSeverity {
+  BLOCKS_WORK
+  DOES_NOT_BLOCK
+}
+
+enum JobIssueStatus {
+  OPEN
+  RESOLVED
+  CANCELLED
+}
+
+enum JobPaymentRequirementStatus {
+  PENDING
+  DUE
+  PAID
+  WAIVED
+  CANCELED
+}
+
+enum JobActivityType {
+  ISSUE_CREATED
+  ISSUE_RESOLVED
+  ISSUE_FOLLOW_UP_TASK_CREATED
+  PAYMENT_REQUIREMENT_CREATED
+  PAYMENT_REQUIREMENT_PAID
+  PAYMENT_REQUIREMENT_WAIVED
+  PAYMENT_REQUIREMENT_CANCELED
+}
+
+model JobActivity {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId          String
+  job            Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actorUserId    String?
+  actorUser      User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  type           JobActivityType
+  title          String
+  details        String?
+  entityType     String?
+  entityId       String?
+  metadataJson   Json?
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, createdAt])
+  @@index([jobId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model JobPaymentRequirement {
+  id                    String                      @id @default(cuid())
+  organizationId        String
+  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId                 String
+  job                   Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  title                 String
+  amountCents           Int?
+  status                JobPaymentRequirementStatus @default(PENDING)
+  requiredBeforeStageId String?
+  requiredBeforeStage   JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id], onDelete: SetNull)
+  paidAt                DateTime?
+  waivedAt              DateTime?
+  canceledAt            DateTime?
+  notes                 String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, status])
+  @@index([requiredBeforeStageId])
 }

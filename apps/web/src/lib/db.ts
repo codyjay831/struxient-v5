@@ -1,8 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, StaffRole } from "@prisma/client";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
   DEV_ORGANIZATION_SLUG,
+  DEV_USER_ID,
 } from "./dev-organization";
 import {
   effectivePublicRequestSettingsFromRow,
@@ -69,6 +70,41 @@ export async function getDevOrganizationOrThrow() {
       id: DEV_ORGANIZATION_ID,
       name: DEV_ORGANIZATION_NAME,
       slug: DEV_ORGANIZATION_SLUG,
+    },
+  });
+}
+
+/**
+ * Development-only helper to ensure a dev user and membership exist.
+ * Gated by NODE_ENV !== "production".
+ */
+export async function ensureDevUserAndMembership() {
+  if (process.env.NODE_ENV === "production") return;
+
+  const org = await getDevOrganizationOrThrow();
+
+  const devUser = await db.user.upsert({
+    where: { id: DEV_USER_ID },
+    update: { email: "dev@struxient.local", name: "Dev User" },
+    create: {
+      id: DEV_USER_ID,
+      email: "dev@struxient.local",
+      name: "Dev User",
+    },
+  });
+
+  await db.membership.upsert({
+    where: {
+      userId_organizationId: {
+        userId: devUser.id,
+        organizationId: org.id,
+      },
+    },
+    update: { role: StaffRole.OWNER },
+    create: {
+      userId: devUser.id,
+      organizationId: org.id,
+      role: StaffRole.OWNER,
     },
   });
 }
