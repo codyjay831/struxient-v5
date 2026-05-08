@@ -2,16 +2,22 @@
 
 /**
  * Workstation-safe quote actions: same commercial rules as `quote-form-actions`
- * send/approve flows, but return `{ success: true }` instead of `redirect()` so
- * the Workstation drawer can stay open. Full quote pages keep using
- * `recordQuoteSendCheckpointAction` / `markQuoteApprovedAction`.
+ * send/approve/line-item flows, but return structured `{ success } | { error }`
+ * state instead of `redirect()` so the Quotes popup, Workstation drawer, and
+ * Lead Quote tab can stay open after a mutation. Full quote pages still use
+ * the redirecting form variants when convenient.
  */
 
 import { revalidatePath } from "next/cache";
 import {
+  performAddQuoteLineItem,
+  performApplyLineItemTemplateToQuote,
+  performDeleteQuoteLineItem,
   performQuoteMarkApproved,
   performQuoteSendCheckpoint,
+  performUpdateQuoteLineItem,
 } from "@/app/(workspace)/quotes/quote-form-actions";
+import { parseQuoteLineFormDataInput } from "@/lib/quote-line-form-input";
 
 export type QuoteWorkspaceActionState = {
   error?: string;
@@ -62,5 +68,108 @@ export async function approveQuoteWorkspaceAction(
     return { success: false, error: result.error };
   }
   revalidateQuoteCommercialSurfaces(quoteId);
+  return { success: true };
+}
+
+/**
+ * Adds a draft-quote line item. Org-scoped, validated, no redirect.
+ * Bind `quoteId` before passing to `useActionState`.
+ */
+export async function addQuoteLineItemWorkspaceAction(
+  quoteId: string,
+  _prevState: QuoteWorkspaceActionState,
+  formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { success: false, error: "Missing quote record id." };
+  }
+  const parsed = parseQuoteLineFormDataInput(formData);
+  if (!parsed.ok) {
+    return { success: false, error: parsed.error };
+  }
+  const result = await performAddQuoteLineItem(id, parsed.input);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(id);
+  return { success: true };
+}
+
+/**
+ * Updates a draft-quote line item. Org-scoped, validated, no redirect.
+ * Bind `quoteId, lineItemId` before passing to `useActionState`.
+ */
+export async function updateQuoteLineItemWorkspaceAction(
+  quoteId: string,
+  lineItemId: string,
+  _prevState: QuoteWorkspaceActionState,
+  formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { success: false, error: "Missing quote or line item id." };
+  }
+  const parsed = parseQuoteLineFormDataInput(formData);
+  if (!parsed.ok) {
+    return { success: false, error: parsed.error };
+  }
+  const result = await performUpdateQuoteLineItem(qid, lid, parsed.input);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(qid);
+  return { success: true };
+}
+
+/**
+ * Deletes a draft-quote line item. Org-scoped, no redirect.
+ * Bind `quoteId, lineItemId` before passing to `useActionState`.
+ */
+export async function deleteQuoteLineItemWorkspaceAction(
+  quoteId: string,
+  lineItemId: string,
+  _prevState: QuoteWorkspaceActionState,
+  _formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  void _formData;
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { success: false, error: "Missing quote or line item id." };
+  }
+  const result = await performDeleteQuoteLineItem(qid, lid);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(qid);
+  return { success: true };
+}
+
+/**
+ * Applies a Scope Library template to a draft quote — copies commercial
+ * fields onto a new line item plus any default execution tasks. Org-scoped,
+ * no redirect.
+ *
+ * Bind `quoteId, templateId` before passing to `useActionState`.
+ */
+export async function applyLineItemTemplateToQuoteWorkspaceAction(
+  quoteId: string,
+  templateId: string,
+  _prevState: QuoteWorkspaceActionState,
+  _formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  void _formData;
+  const qid = quoteId.trim();
+  const tid = templateId.trim();
+  if (!qid || !tid) {
+    return { success: false, error: "Missing quote or template id." };
+  }
+  const result = await performApplyLineItemTemplateToQuote(qid, tid);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(qid);
   return { success: true };
 }

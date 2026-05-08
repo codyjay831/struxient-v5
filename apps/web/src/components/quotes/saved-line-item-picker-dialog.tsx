@@ -1,29 +1,47 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useActionState } from "react";
 import { Search, X, Library, Plus } from "lucide-react";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import { formatMoneyCents } from "@/lib/quote-display";
-import { useActionState } from "react";
 import {
   applyLineItemTemplateToQuoteAction,
   archiveLineItemTemplateAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
+  applyLineItemTemplateToQuoteWorkspaceAction,
+  type QuoteWorkspaceActionState,
+} from "@/app/(workspace)/workstation/quote-workspace-actions";
+import {
   workspaceFormSecondaryButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
 
 const initialActionState: QuoteFormState = {};
+const initialWorkspaceState: QuoteWorkspaceActionState = {};
 
 interface SavedLineItemPickerDialogProps {
   quoteId: string;
   templates: LineItemTemplatePickerRow[];
+  /**
+   * Optional callback for workspace-safe application. When provided, the
+   * picker uses `applyLineItemTemplateToQuoteWorkspaceAction` (no redirect)
+   * and calls this after success.
+   */
+  onApplied?: () => void;
+  /**
+   * Optional variant for the trigger button.
+   * 'standard' (default) - large dashed box with description
+   * 'compact' - simple secondary button
+   */
+  triggerVariant?: "standard" | "compact";
 }
 
 export function SavedLineItemPickerDialog({
   quoteId,
   templates,
+  onApplied,
+  triggerVariant = "standard",
 }: SavedLineItemPickerDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,24 +69,35 @@ export function SavedLineItemPickerDialog({
 
   return (
     <>
-      <div className="mt-8 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="max-w-md">
-            <h3 className="text-sm font-semibold text-foreground">Add from Scope Library</h3>
-            <p className="mt-1 text-xs text-foreground-muted">
-              Copy reusable quote rows from your Scope Library. Commercial fields and default execution tasks always copy together.
-            </p>
+      {triggerVariant === "standard" ? (
+        <div className="mt-8 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-md">
+              <h3 className="text-sm font-semibold text-foreground">Add from Scope Library</h3>
+              <p className="mt-1 text-xs text-foreground-muted">
+                Copy reusable quote rows from your Scope Library. Commercial fields and default execution tasks always copy together.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={open}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-border-strong hover:bg-foreground/[0.02]"
+            >
+              <Library className="size-4" />
+              Browse Scope Library
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={open}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-border-strong hover:bg-foreground/[0.02]"
-          >
-            <Library className="size-4" />
-            Browse Scope Library
-          </button>
         </div>
-      </div>
+      ) : (
+        <button
+          type="button"
+          onClick={open}
+          className={workspaceFormSecondaryButtonClass}
+        >
+          <Library className="mr-1.5 size-3.5" strokeWidth={2} />
+          Add from Scope Library
+        </button>
+      )}
 
       <dialog
         ref={dialogRef}
@@ -153,7 +182,18 @@ export function SavedLineItemPickerDialog({
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <ApplyTemplateForm quoteId={quoteId} templateId={t.id} />
+                        {onApplied ? (
+                          <ApplyTemplateWorkspaceForm
+                            quoteId={quoteId}
+                            templateId={t.id}
+                            onSuccess={() => {
+                              close();
+                              onApplied();
+                            }}
+                          />
+                        ) : (
+                          <ApplyTemplateForm quoteId={quoteId} templateId={t.id} />
+                        )}
                         <ArchiveTemplateForm quoteId={quoteId} templateId={t.id} />
                       </div>
                     </div>
@@ -188,6 +228,43 @@ function ApplyTemplateForm({ quoteId, templateId }: { quoteId: string; templateI
     applyLineItemTemplateToQuoteAction.bind(null, quoteId, templateId),
     initialActionState,
   );
+
+  return (
+    <form action={formAction}>
+      {state.error ? (
+        <p className="mb-1 text-[10px] text-danger" role="alert">
+          {state.error}
+        </p>
+      ) : null}
+      <button
+        type="submit"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
+        disabled={isPending}
+      >
+        <Plus className="size-3.5" />
+        {isPending ? "Adding…" : "Add to quote"}
+      </button>
+    </form>
+  );
+}
+
+function ApplyTemplateWorkspaceForm({
+  quoteId,
+  templateId,
+  onSuccess,
+}: {
+  quoteId: string;
+  templateId: string;
+  onSuccess: () => void;
+}) {
+  const [state, formAction, isPending] = useActionState(
+    applyLineItemTemplateToQuoteWorkspaceAction.bind(null, quoteId, templateId),
+    initialWorkspaceState,
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
 
   return (
     <form action={formAction}>

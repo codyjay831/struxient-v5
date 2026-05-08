@@ -7,6 +7,10 @@ import {
   QuoteLineExecutionReviewStatus,
   QuoteStatus,
 } from "@prisma/client";
+import {
+  getLeadCommercialProgress,
+  type LeadProgressQuoteInput,
+} from "@/lib/lead-commercial-progress";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
@@ -14,6 +18,10 @@ import {
   parsePositiveQuantityString,
   parseUsdStringToCents,
 } from "@/lib/quote-money";
+import {
+  parseQuoteLineFormDataInput,
+  type ParsedQuoteLineInput as ParsedQuoteLineInputLib,
+} from "@/lib/quote-line-form-input";
 import { db, getDevOrganizationOrThrow } from "@/lib/db";
 import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
@@ -73,74 +81,6 @@ function parseOptionalProposalString(
     return { ok: false, error: `${label} is too long (max ${max} characters).` };
   }
   return { ok: true, value: v };
-}
-
-type QuoteLineProposalFields = {
-  customerScopeTitle: string | null;
-  customerScopeDescription: string | null;
-  customerIncludedNotes: string | null;
-  customerExcludedNotes: string | null;
-  customerPresentationGroup: string | null;
-};
-
-function parseQuoteLineProposalFieldsFromForm(
-  formData: FormData,
-): { ok: true; data: QuoteLineProposalFields } | { ok: false; error: string } {
-  const title = parseOptionalProposalString(
-    formData,
-    "customerScopeTitle",
-    "Proposal scope title",
-    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeTitle,
-  );
-  if (!title.ok) {
-    return { ok: false, error: title.error };
-  }
-  const desc = parseOptionalProposalString(
-    formData,
-    "customerScopeDescription",
-    "Proposal scope description",
-    QUOTE_PROPOSAL_FIELD_LIMITS.customerScopeDescription,
-  );
-  if (!desc.ok) {
-    return { ok: false, error: desc.error };
-  }
-  const inc = parseOptionalProposalString(
-    formData,
-    "customerIncludedNotes",
-    "Included notes",
-    QUOTE_PROPOSAL_FIELD_LIMITS.customerIncludedNotes,
-  );
-  if (!inc.ok) {
-    return { ok: false, error: inc.error };
-  }
-  const exc = parseOptionalProposalString(
-    formData,
-    "customerExcludedNotes",
-    "Excluded notes",
-    QUOTE_PROPOSAL_FIELD_LIMITS.customerExcludedNotes,
-  );
-  if (!exc.ok) {
-    return { ok: false, error: exc.error };
-  }
-  const grp = parseOptionalProposalString(
-    formData,
-    "customerPresentationGroup",
-    "Presentation group",
-    QUOTE_PROPOSAL_FIELD_LIMITS.customerPresentationGroup,
-  );
-  if (!grp.ok) {
-    return { ok: false, error: grp.error };
-  }
-  return {
-    ok: true,
-    data: {
-      customerScopeTitle: title.value,
-      customerScopeDescription: desc.value,
-      customerIncludedNotes: inc.value,
-      customerExcludedNotes: exc.value,
-      customerPresentationGroup: grp.value,
-    },
-  };
 }
 
 type TemplateDefaultProposalFields = {
@@ -295,42 +235,56 @@ function defaultTitleFromContext(params: {
   return "";
 }
 
-/**
- * Creates a DRAFT quote for the active development organization.
- * `leadId` / `customerId` in the form are untrusted—revalidated against org scope here.
- */
-export async function createQuoteDraftAction(
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  const org = await getDevOrganizationOrThrow();
+/** Minimal DB surface for draft resolution + insert (plain client or interactive tx). */
+type QuoteDraftDb = Pick<typeof db, "lead" | "customer" | "quote">;
 
-  const formLeadId = trimOrNull(formData.get("leadId"));
-  const formCustomerId = trimOrNull(formData.get("customerId"));
-  let title = trimRequired(formData.get("title"));
-  const internalNotes = trimOrNull(formData.get("internalNotes"));
+type OrgScope = { id: string };
+
+type ResolvedDraftQuoteInsert = {
+  organizationId: string;
+  customerId: string | null;
+  leadId: string | null;
+  title: string;
+  internalNotes: string | null;
+};
+
+async function resolveCreateQuoteDraftFromFormFields(
+  exec: QuoteDraftDb,
+  org: OrgScope,
+  input: {
+    formLeadId: string | null;
+    formCustomerId: string | null;
+    /** Trimmed workspace title — empty string lets the server derive from lead/customer. */
+    title: string;
+    internalNotes: string | null;
+  },
+): Promise<{ ok: false; error: string } | { ok: true; data: ResolvedDraftQuoteInsert }> {
+  const { formLeadId, formCustomerId, internalNotes } = input;
+  let title = input.title;
 
   const lead = formLeadId
-    ? await db.lead.findFirst({
+    ? await exec.lead.findFirst({
         where: { id: formLeadId, organizationId: org.id },
         select: { id: true, title: true, customerId: true },
       })
     : null;
   if (formLeadId && !lead) {
     return {
+      ok: false,
       error:
         "That lead was not found in your organization. Remove stale context or start from Quotes without a lead link.",
     };
   }
 
   const customer = formCustomerId
-    ? await db.customer.findFirst({
+    ? await exec.customer.findFirst({
         where: { id: formCustomerId, organizationId: org.id },
         select: { id: true, displayName: true },
       })
     : null;
   if (formCustomerId && !customer) {
     return {
+      ok: false,
       error:
         "That customer was not found in your organization. Remove stale context or start without a customer link.",
     };
@@ -339,6 +293,7 @@ export async function createQuoteDraftAction(
   if (lead && customer) {
     if (lead.customerId != null && lead.customerId !== customer.id) {
       return {
+        ok: false,
         error:
           "This lead is linked to a different customer than the one submitted. Refresh the page and try again from the lead or customer record.",
       };
@@ -353,7 +308,7 @@ export async function createQuoteDraftAction(
   } else if (lead && !customer) {
     resolvedLeadId = lead.id;
     if (lead.customerId) {
-      const linkedCustomer = await db.customer.findFirst({
+      const linkedCustomer = await exec.customer.findFirst({
         where: { id: lead.customerId, organizationId: org.id },
         select: { id: true },
       });
@@ -367,7 +322,7 @@ export async function createQuoteDraftAction(
 
   let customerForTitle: { displayName: string } | null = customer;
   if (!customerForTitle && resolvedCustomerId) {
-    customerForTitle = await db.customer.findFirst({
+    customerForTitle = await exec.customer.findFirst({
       where: { id: resolvedCustomerId, organizationId: org.id },
       select: { displayName: true },
     });
@@ -381,32 +336,222 @@ export async function createQuoteDraftAction(
   }
 
   if (!title) {
-    return { error: "Title is required when no lead or customer context is attached." };
+    return {
+      ok: false,
+      error: "Title is required when no lead or customer context is attached.",
+    };
   }
 
-  const titleErr = enforceMaxLength("Title", title, QUOTE_FIELD_LIMITS.title);
-  if (titleErr) {
-    return titleErr;
-  }
-  if (internalNotes) {
-    const notesErr = enforceMaxLength(
-      "Internal notes",
-      internalNotes,
-      QUOTE_FIELD_LIMITS.internalNotes,
-    );
-    if (notesErr) {
-      return notesErr;
-    }
-  }
-
-  const quote = await db.quote.create({
+  return {
+    ok: true,
     data: {
       organizationId: org.id,
       customerId: resolvedCustomerId,
       leadId: resolvedLeadId,
-      status: QuoteStatus.DRAFT,
       title,
       internalNotes,
+    },
+  };
+}
+
+function validateResolvedDraftQuoteFields(data: ResolvedDraftQuoteInsert): string | null {
+  const titleErr = enforceMaxLength("Title", data.title, QUOTE_FIELD_LIMITS.title);
+  if (titleErr?.error) {
+    return titleErr.error;
+  }
+  if (data.internalNotes) {
+    const notesErr = enforceMaxLength(
+      "Internal notes",
+      data.internalNotes,
+      QUOTE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr?.error) {
+      return notesErr.error;
+    }
+  }
+  return null;
+}
+
+export type PerformCreateQuoteDraftFromLeadResult =
+  | { ok: true; quoteId: string; reusedExisting: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Org-scoped draft quote creation anchored to a lead — same resolution defaults
+ * as `/quotes/new?leadId=…` and {@link createQuoteDraftAction}, without redirect.
+ *
+ * When {@link getLeadCommercialProgress} already has an active linked quote,
+ * returns that id and does not insert (idempotent for double-clicks / races).
+ *
+ * Uses a serializable transaction so concurrent "Start quote" requests do not
+ * reliably create two active drafts for the same lead window.
+ */
+export async function performCreateQuoteDraftFromLead(
+  leadId: string,
+): Promise<PerformCreateQuoteDraftFromLeadResult> {
+  const org = await getDevOrganizationOrThrow();
+  const id = leadId.trim();
+  if (!id) {
+    return { ok: false, error: "Missing lead record id." };
+  }
+
+  try {
+    return await db.$transaction(
+      async (tx) => {
+        const lead = await tx.lead.findFirst({
+          where: { id, organizationId: org.id },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            customerId: true,
+            email: true,
+            phone: true,
+            quotes: {
+              where: { status: { not: QuoteStatus.ARCHIVED } },
+              orderBy: { updatedAt: "desc" },
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                totalCents: true,
+                updatedAt: true,
+                _count: { select: { lineItems: true } },
+                job: { select: { id: true, status: true, organizationId: true } },
+              },
+            },
+          },
+        });
+
+        if (!lead) {
+          return { ok: false as const, error: "That lead was not found in your organization." };
+        }
+
+        const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+          id: q.id,
+          title: q.title,
+          status: q.status,
+          totalCents: q.totalCents,
+          lineItemCount: q._count.lineItems,
+          updatedAt: q.updatedAt,
+          job:
+            q.job && q.job.organizationId === org.id
+              ? { id: q.job.id, status: q.job.status }
+              : null,
+        }));
+
+        const progress = getLeadCommercialProgress({
+          lead: {
+            status: lead.status,
+            customerId: lead.customerId,
+            email: lead.email,
+            phone: lead.phone,
+          },
+          quotes: progressQuoteInputs,
+        });
+
+        if (progress.isTerminal) {
+          return {
+            ok: false as const,
+            error:
+              "This lead is archived or closed. Open the full lead record if you need to change its status before starting a quote.",
+          };
+        }
+
+        if (progress.activeQuote) {
+          return {
+            ok: true as const,
+            quoteId: progress.activeQuote.id,
+            reusedExisting: true,
+          };
+        }
+
+        const resolved = await resolveCreateQuoteDraftFromFormFields(tx, org, {
+          formLeadId: lead.id,
+          formCustomerId: null,
+          title: "",
+          internalNotes: null,
+        });
+        if (!resolved.ok) {
+          return { ok: false as const, error: resolved.error };
+        }
+
+        const valErr = validateResolvedDraftQuoteFields(resolved.data);
+        if (valErr) {
+          return { ok: false as const, error: valErr };
+        }
+
+        const quote = await tx.quote.create({
+          data: {
+            organizationId: resolved.data.organizationId,
+            customerId: resolved.data.customerId,
+            leadId: resolved.data.leadId,
+            status: QuoteStatus.DRAFT,
+            title: resolved.data.title,
+            internalNotes: resolved.data.internalNotes,
+            subtotalCents: 0,
+            totalCents: 0,
+          },
+        });
+
+        return { ok: true as const, quoteId: quote.id, reusedExisting: false };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 5000,
+        timeout: 15000,
+      },
+    );
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+      return {
+        ok: false,
+        error:
+          "Another change happened at the same moment. Refresh the workspace and try again.",
+      };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Creates a DRAFT quote for the active development organization.
+ * `leadId` / `customerId` in the form are untrusted—revalidated against org scope here.
+ */
+export async function createQuoteDraftAction(
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const org = await getDevOrganizationOrThrow();
+
+  const formLeadId = trimOrNull(formData.get("leadId"));
+  const formCustomerId = trimOrNull(formData.get("customerId"));
+  const title = trimRequired(formData.get("title"));
+  const internalNotes = trimOrNull(formData.get("internalNotes"));
+
+  const resolved = await resolveCreateQuoteDraftFromFormFields(db, org, {
+    formLeadId,
+    formCustomerId,
+    title,
+    internalNotes,
+  });
+  if (!resolved.ok) {
+    return { error: resolved.error };
+  }
+
+  const valErr = validateResolvedDraftQuoteFields(resolved.data);
+  if (valErr) {
+    return { error: valErr };
+  }
+
+  const quote = await db.quote.create({
+    data: {
+      organizationId: resolved.data.organizationId,
+      customerId: resolved.data.customerId,
+      leadId: resolved.data.leadId,
+      status: QuoteStatus.DRAFT,
+      title: resolved.data.title,
+      internalNotes: resolved.data.internalNotes,
       subtotalCents: 0,
       totalCents: 0,
     },
@@ -591,64 +736,24 @@ export async function copyLeadIntakeToQuoteNotesAction(
   return {};
 }
 
+export type PerformQuoteLineItemResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
+
 /**
- * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ * Org-scoped add of a quote line item. No redirect, no revalidate — composable
+ * by both the redirecting full-page action and workspace-safe wrappers used
+ * inside QuoteWorkSurface popup/drawer/lead-tab containers.
  */
-export async function addQuoteLineItemAction(
+export async function performAddQuoteLineItem(
   quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
+  input: ParsedQuoteLineInput,
+): Promise<PerformQuoteLineItemResult> {
   const id = quoteId.trim();
   if (!id) {
-    return { error: "Missing quote record id." };
-  }
-
-  const description = trimRequired(formData.get("description"));
-  if (!description) {
-    return { error: "Internal line description is required." };
-  }
-  const descErr = enforceMaxLength(
-    "Internal line description",
-    description,
-    QUOTE_LINE_FIELD_LIMITS.description,
-  );
-  if (descErr) {
-    return descErr;
-  }
-
-  const quantityRaw = trimRequired(formData.get("quantity"));
-  const qtyParsed = parsePositiveQuantityString(quantityRaw);
-  if (!qtyParsed.ok) {
-    return { error: qtyParsed.error };
-  }
-
-  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
-  const unitParsed = parseUsdStringToCents(unitRaw);
-  if (!unitParsed.ok) {
-    return { error: unitParsed.error };
-  }
-
-  const internalNotes = trimOrNull(formData.get("internalNotes"));
-  if (internalNotes) {
-    const notesErr = enforceMaxLength(
-      "Line internal notes",
-      internalNotes,
-      QUOTE_LINE_FIELD_LIMITS.internalNotes,
-    );
-    if (notesErr) {
-      return notesErr;
-    }
-  }
-
-  const proposalParsed = parseQuoteLineProposalFieldsFromForm(formData);
-  if (!proposalParsed.ok) {
-    return { error: proposalParsed.error };
-  }
-
-  const lineTotal = computeLineTotalCents(qtyParsed.decimal, unitParsed.cents);
-  if (!lineTotal.ok) {
-    return { error: lineTotal.error };
+    return { ok: false, error: "Missing quote record id." };
   }
 
   const org = await getDevOrganizationOrThrow();
@@ -676,12 +781,16 @@ export async function addQuoteLineItemAction(
       data: {
         quoteId: id,
         sortOrder: nextOrder,
-        description,
-        ...proposalParsed.data,
-        quantity: qtyParsed.decimal,
-        unitAmountCents: unitParsed.cents,
-        lineTotalCents: lineTotal.lineTotalCents,
-        internalNotes,
+        description: input.description,
+        customerScopeTitle: input.customerScopeTitle,
+        customerScopeDescription: input.customerScopeDescription,
+        customerIncludedNotes: input.customerIncludedNotes,
+        customerExcludedNotes: input.customerExcludedNotes,
+        customerPresentationGroup: input.customerPresentationGroup,
+        quantity: input.quantity,
+        unitAmountCents: input.unitAmountCents,
+        lineTotalCents: input.lineTotalCents,
+        internalNotes: input.internalNotes,
         sourceLineItemTemplateId: null,
         executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
         executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
@@ -695,9 +804,38 @@ export async function addQuoteLineItemAction(
 
   if (!outcome.ok) {
     return {
+      ok: false,
       error:
         "This line could not be added. The quote may not be a draft, may be archived, missing, or outside your organization.",
     };
+  }
+  return { ok: true };
+}
+
+/**
+ * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
+ *
+ * Redirecting wrapper retained for the full Quote page form pattern. New
+ * workspace-safe call sites should use `addQuoteLineItemWorkspaceAction`.
+ */
+export async function addQuoteLineItemAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const parsed = parseQuoteLineFormDataInput(formData);
+  if (!parsed.ok) {
+    return { error: parsed.error };
+  }
+
+  const result = await performAddQuoteLineItem(id, parsed.input);
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${id}`);
@@ -707,65 +845,19 @@ export async function addQuoteLineItemAction(
 }
 
 /**
- * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ * Org-scoped update of a quote line item. No redirect, no revalidate —
+ * composed by both the redirecting full-page action and the workspace-safe
+ * wrapper.
  */
-export async function updateQuoteLineItemAction(
+export async function performUpdateQuoteLineItem(
   quoteId: string,
   lineItemId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
+  input: ParsedQuoteLineInput,
+): Promise<PerformQuoteLineItemResult> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
-    return { error: "Missing quote or line item id." };
-  }
-
-  const description = trimRequired(formData.get("description"));
-  if (!description) {
-    return { error: "Internal line description is required." };
-  }
-  const descErr = enforceMaxLength(
-    "Internal line description",
-    description,
-    QUOTE_LINE_FIELD_LIMITS.description,
-  );
-  if (descErr) {
-    return descErr;
-  }
-
-  const quantityRaw = trimRequired(formData.get("quantity"));
-  const qtyParsed = parsePositiveQuantityString(quantityRaw);
-  if (!qtyParsed.ok) {
-    return { error: qtyParsed.error };
-  }
-
-  const unitRaw = trimRequired(formData.get("unitAmountDollars"));
-  const unitParsed = parseUsdStringToCents(unitRaw);
-  if (!unitParsed.ok) {
-    return { error: unitParsed.error };
-  }
-
-  const internalNotes = trimOrNull(formData.get("internalNotes"));
-  if (internalNotes) {
-    const notesErr = enforceMaxLength(
-      "Line internal notes",
-      internalNotes,
-      QUOTE_LINE_FIELD_LIMITS.internalNotes,
-    );
-    if (notesErr) {
-      return notesErr;
-    }
-  }
-
-  const proposalParsed = parseQuoteLineProposalFieldsFromForm(formData);
-  if (!proposalParsed.ok) {
-    return { error: proposalParsed.error };
-  }
-
-  const lineTotal = computeLineTotalCents(qtyParsed.decimal, unitParsed.cents);
-  if (!lineTotal.ok) {
-    return { error: lineTotal.error };
+    return { ok: false, error: "Missing quote or line item id." };
   }
 
   const org = await getDevOrganizationOrThrow();
@@ -789,12 +881,16 @@ export async function updateQuoteLineItemAction(
     await tx.quoteLineItem.update({
       where: { id: lid },
       data: {
-        description,
-        ...proposalParsed.data,
-        quantity: qtyParsed.decimal,
-        unitAmountCents: unitParsed.cents,
-        lineTotalCents: lineTotal.lineTotalCents,
-        internalNotes,
+        description: input.description,
+        customerScopeTitle: input.customerScopeTitle,
+        customerScopeDescription: input.customerScopeDescription,
+        customerIncludedNotes: input.customerIncludedNotes,
+        customerExcludedNotes: input.customerExcludedNotes,
+        customerPresentationGroup: input.customerPresentationGroup,
+        quantity: input.quantity,
+        unitAmountCents: input.unitAmountCents,
+        lineTotalCents: input.lineTotalCents,
+        internalNotes: input.internalNotes,
       },
     });
 
@@ -804,9 +900,40 @@ export async function updateQuoteLineItemAction(
 
   if (!outcome.ok) {
     return {
+      ok: false,
       error:
         "This line could not be updated. It may not belong to this draft quote, the quote may be archived, or it is outside your organization.",
     };
+  }
+  return { ok: true };
+}
+
+/**
+ * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ *
+ * Redirecting wrapper retained for the full Quote page form pattern. New
+ * workspace-safe call sites should use `updateQuoteLineItemWorkspaceAction`.
+ */
+export async function updateQuoteLineItemAction(
+  quoteId: string,
+  lineItemId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item id." };
+  }
+
+  const parsed = parseQuoteLineFormDataInput(formData);
+  if (!parsed.ok) {
+    return { error: parsed.error };
+  }
+
+  const result = await performUpdateQuoteLineItem(qid, lid, parsed.input);
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${qid}`);
@@ -816,20 +943,16 @@ export async function updateQuoteLineItemAction(
 }
 
 /**
- * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ * Org-scoped delete of a quote line item. No redirect, no revalidate.
  */
-export async function deleteQuoteLineItemAction(
+export async function performDeleteQuoteLineItem(
   quoteId: string,
   lineItemId: string,
-  prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void prevState;
-  void formData;
+): Promise<PerformQuoteLineItemResult> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
-    return { error: "Missing quote or line item id." };
+    return { ok: false, error: "Missing quote or line item id." };
   }
 
   const org = await getDevOrganizationOrThrow();
@@ -861,9 +984,37 @@ export async function deleteQuoteLineItemAction(
 
   if (!outcome.ok) {
     return {
+      ok: false,
       error:
         "This line could not be removed. It may not belong to this draft quote, the quote may be archived, or it is outside your organization.",
     };
+  }
+  return { ok: true };
+}
+
+/**
+ * `quoteId` and `lineItemId` must be supplied via `.bind(null, quote.id, line.id)`.
+ *
+ * Redirecting wrapper retained for the full Quote page form pattern. New
+ * workspace-safe call sites should use `deleteQuoteLineItemWorkspaceAction`.
+ */
+export async function deleteQuoteLineItemAction(
+  quoteId: string,
+  lineItemId: string,
+  prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void prevState;
+  void formData;
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item id." };
+  }
+
+  const result = await performDeleteQuoteLineItem(qid, lid);
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${qid}`);
@@ -1060,20 +1211,22 @@ export async function archiveLineItemTemplateAction(
 }
 
 /**
- * `quoteId` and `templateId` must be supplied via `.bind(null, quote.id, template.id)`.
- * Copies commercial fields onto a new line; does not mutate the template.
+ * Org-scoped apply of a Scope Library template to a draft quote. No redirect,
+ * no revalidate — composed by both the redirecting full-page action and the
+ * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/lead-tab.
+ *
+ * Copies the template's commercial fields onto a new quote line item, copies
+ * any default execution tasks onto the new line, and recalculates quote
+ * rollups. The template itself is never mutated.
  */
-export async function applyLineItemTemplateToQuoteAction(
+export async function performApplyLineItemTemplateToQuote(
   quoteId: string,
   templateId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
+): Promise<PerformQuoteLineItemResult> {
   const qid = quoteId.trim();
   const tid = templateId.trim();
   if (!qid || !tid) {
-    return { error: "Missing quote or template id." };
+    return { ok: false, error: "Missing quote or template id." };
   }
 
   const org = await getDevOrganizationOrThrow();
@@ -1170,12 +1323,40 @@ export async function applyLineItemTemplateToQuoteAction(
 
   if (!outcome.ok) {
     if (outcome.message) {
-      return { error: outcome.message };
+      return { ok: false, error: outcome.message };
     }
     return {
+      ok: false,
       error:
         "This saved line item could not be copied to the quote. The quote may not be a draft, the saved line item may be hidden, or the record is outside your organization.",
     };
+  }
+  return { ok: true };
+}
+
+/**
+ * `quoteId` and `templateId` must be supplied via `.bind(null, quote.id, template.id)`.
+ * Copies commercial fields onto a new line; does not mutate the template.
+ *
+ * Redirecting wrapper retained for the full Quote page form pattern. New
+ * workspace-safe call sites should use `applyLineItemTemplateToQuoteWorkspaceAction`.
+ */
+export async function applyLineItemTemplateToQuoteAction(
+  quoteId: string,
+  templateId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const qid = quoteId.trim();
+  const tid = templateId.trim();
+  if (!qid || !tid) {
+    return { error: "Missing quote or template id." };
+  }
+
+  const result = await performApplyLineItemTemplateToQuote(qid, tid);
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${qid}`);

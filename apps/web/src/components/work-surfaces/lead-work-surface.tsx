@@ -14,7 +14,7 @@
  * The popup at `LeadsListClient` is the visual reference; this component is a
  * faithful extraction of that UX so all three containers share it.
  */
-import { useEffect, useState, useActionState } from "react";
+import { useCallback, useEffect, useRef, useState, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import {
+  createQuoteFromLeadWorkspaceAction,
+  loadLeadActiveQuoteWorkSurfaceAction,
   updateLeadContactWorkspaceAction,
   type WorkspaceFormState,
 } from "@/app/(workspace)/leads/leads-workspace-actions";
@@ -44,15 +46,20 @@ import type { LeadStatus } from "@prisma/client";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type { QuoteReadiness } from "@/lib/quote-readiness";
+import type { QuoteWorkspaceTabData } from "@/lib/quote-workspace-payload";
 
 /**
  * Pre-loaded QuoteWorkSurface payload for the active linked quote. When
  * provided, the Quote tab renders `<QuoteWorkSurface mode="standard" />` for
  * the active quote; falls back to today's simpler quote cards when absent.
+ *
+ * Mirrors `QuoteWorkSurfaceLoaderResult` so the lazy loader path can pipe
+ * straight through.
  */
 export type LeadWorkSurfaceActiveQuotePayload = {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
+  workspaceTabs: QuoteWorkspaceTabData;
 };
 
 /**
@@ -998,6 +1005,10 @@ function QuoteTab({
   isLoadingActiveQuote,
   activeQuoteError,
   onSwitchToContact,
+  onActiveQuoteMutated,
+  isStartQuotePending,
+  startQuoteError,
+  onStartQuote,
 }: {
   mode: LeadWorkSurfaceMode;
   lead: LeadWorkSurfaceData;
@@ -1006,28 +1017,69 @@ function QuoteTab({
   isLoadingActiveQuote: boolean;
   activeQuoteError: string | null;
   onSwitchToContact: () => void;
+  onActiveQuoteMutated?: () => void;
+  isStartQuotePending: boolean;
+  startQuoteError: string | null;
+  onStartQuote: () => void;
 }) {
   const isFull = mode === "full";
 
-  if (linkedQuotes.length === 0) {
-    const canStart = lead.customerId != null;
+  if (linkedQuotes.length === 0 && !activeQuoteWorkSurface) {
+    if (isStartQuotePending) {
+      return (
+        <div
+          className="flex flex-col items-center justify-center py-10 text-center space-y-3"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-sm font-medium text-foreground">Creating quote…</p>
+          <p className="text-xs text-foreground-subtle max-w-xs leading-relaxed">
+            Staying in this workspace. The Quote tab will open the editor when ready.
+          </p>
+        </div>
+      );
+    }
+
+    const hasCustomer = lead.customerId != null;
     return (
       <div className="space-y-4">
         <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
           <p className="text-sm font-medium text-foreground">No quote started</p>
           <p className="text-xs text-foreground-subtle max-w-xs leading-relaxed">
-            {canStart
-              ? isFull
-                ? "Open the quote builder to create a quote for this lead."
-                : "Open the quote builder to create a quote for this lead. You can return to this workspace afterward."
-              : "Link a customer first so the quote is tied to a billing record."}
+            {hasCustomer
+              ? "Start a draft quote for this lead here, or use the full-page builder if you prefer more room."
+              : "Start a draft from this workspace (optional customer — link one on the Contact tab when you want billing anchored)."}
           </p>
-          {canStart ? (
-            <Link href={lead.newQuoteHref} className={primaryBtnClass}>
-              Open quote builder
-              <ArrowUpRight className="w-3.5 h-3.5 opacity-70" strokeWidth={1.5} />
-            </Link>
-          ) : (
+          <button
+            type="button"
+            onClick={onStartQuote}
+            disabled={isStartQuotePending}
+            aria-busy={isStartQuotePending}
+            className={primaryBtnClass}
+          >
+            Start quote
+            <ArrowRight className="w-3.5 h-3.5 opacity-70" strokeWidth={2} />
+          </button>
+
+          {startQuoteError ? (
+            <p
+              className="max-w-sm rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
+              role="alert"
+              aria-live="polite"
+            >
+              {startQuoteError}
+            </p>
+          ) : null}
+
+          <Link
+            href={lead.newQuoteHref}
+            className="inline-flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            Create quote on full page
+            <ArrowUpRight className="w-3 h-3" strokeWidth={1.5} />
+          </Link>
+
+          {!hasCustomer ? (
             <button
               type="button"
               onClick={onSwitchToContact}
@@ -1035,21 +1087,8 @@ function QuoteTab({
             >
               Go to Contact tab to link or create a customer
             </button>
-          )}
+          ) : null}
         </div>
-
-        {!canStart && (
-          <div className="rounded-xl border border-border bg-surface px-4 py-3 text-xs text-foreground-muted leading-relaxed">
-            You can also start a quote without {isFull ? "a" : "linking a"} customer
-            {isFull ? "" : " by opening the full quote builder"}.{" "}
-            <Link
-              href={lead.newQuoteHref}
-              className="underline underline-offset-2 hover:text-foreground transition-colors"
-            >
-              Open quote builder anyway
-            </Link>
-          </div>
-        )}
       </div>
     );
   }
@@ -1079,6 +1118,8 @@ function QuoteTab({
           mode="standard"
           quote={activeQuoteWorkSurface.quote}
           readiness={activeQuoteWorkSurface.readiness}
+          workspaceTabs={activeQuoteWorkSurface.workspaceTabs}
+          onWorkSurfaceMutated={onActiveQuoteMutated}
         />
       ) : isLoadingActiveQuote ? (
         <div
@@ -1201,6 +1242,10 @@ export function LeadWorkSurface({
 }: LeadWorkSurfaceProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<LeadWorkSurfaceTab>(initialTab);
+  const [postCreateActiveQuote, setPostCreateActiveQuote] =
+    useState<LeadWorkSurfaceActiveQuotePayload | null>(null);
+  const [isStartQuotePending, setIsStartQuotePending] = useState(false);
+  const [startQuoteError, setStartQuoteError] = useState<string | null>(null);
   const isCompact = mode === "compact";
   const isFull = mode === "full";
 
@@ -1213,58 +1258,126 @@ export function LeadWorkSurface({
    * The state is hoisted here so switching tabs back to Quote does not
    * refetch. The whole surface remounts (via key={lead.id} on the popup
    * container) when the user opens a different lead, which resets this state.
+   *
+   * Also re-callable after a workspace-safe quote mutation so the Lead
+   * Quote tab can refresh embedded quote scope/readiness without forcing
+   * the user to re-open the lead. Older responses are dropped via
+   * `loadIdRef` so they cannot overwrite newer state.
    */
   const [activeQuoteState, setActiveQuoteState] = useState<ActiveQuoteLazyState>({
     kind: "idle",
   });
+  const loadIdRef = useRef(0);
 
   const parentProvidedActiveQuote = activeQuoteWorkSurface !== undefined;
 
   useEffect(() => {
-    if (activeTab !== "quote") return;
-    if (parentProvidedActiveQuote) return;
-    if (!loadActiveQuoteWorkSurface) return;
-    if (linkedQuotes.length === 0) return;
-
-    let cancelled = false;
     void Promise.resolve().then(() => {
-      if (!cancelled) setActiveQuoteState({ kind: "loading" });
+      setPostCreateActiveQuote(null);
+      setStartQuoteError(null);
     });
-    void loadActiveQuoteWorkSurface()
-      .then((res) => {
-        if (cancelled) return;
-        if (res.ok) {
-          setActiveQuoteState({ kind: "loaded", payload: res.payload });
-        } else {
-          setActiveQuoteState({ kind: "error", message: res.error });
-        }
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Failed to load quote — try opening the full quote page.";
-        setActiveQuoteState({ kind: "error", message });
+  }, [lead.id]);
+
+  useEffect(() => {
+    if (!activeQuoteWorkSurface) return;
+    void Promise.resolve().then(() => {
+      setPostCreateActiveQuote(null);
+    });
+  }, [activeQuoteWorkSurface]);
+
+  const handleStartQuote = useCallback(async () => {
+    setStartQuoteError(null);
+    setIsStartQuotePending(true);
+    try {
+      const res = await createQuoteFromLeadWorkspaceAction(lead.id);
+      if (!res.success) {
+        setStartQuoteError(res.error);
+        return;
+      }
+      const loaded = await loadLeadActiveQuoteWorkSurfaceAction(lead.id);
+      if (loaded.ok && loaded.payload) {
+        setPostCreateActiveQuote(loaded.payload);
+      }
+      /* Defer refresh so React applies postCreate state before RSC invalidation;
+       * Workstation also keeps the drawer when the lead leaves the feed. */
+      queueMicrotask(() => {
+        router.refresh();
       });
+    } finally {
+      setIsStartQuotePending(false);
+    }
+  }, [lead.id, router]);
 
+  const runActiveQuoteLoad = useCallback(
+    (showSpinner: boolean) => {
+      if (parentProvidedActiveQuote) return;
+      if (!loadActiveQuoteWorkSurface) return;
+      if (linkedQuotes.length === 0) return;
+
+      loadIdRef.current += 1;
+      const myId = loadIdRef.current;
+      if (showSpinner) {
+        /* Defer the loading-spinner setState so it does not run
+         * synchronously inside the calling effect (React 19 rule). */
+        void Promise.resolve().then(() => {
+          if (myId !== loadIdRef.current) return;
+          setActiveQuoteState({ kind: "loading" });
+        });
+      }
+      void loadActiveQuoteWorkSurface()
+        .then((res) => {
+          if (myId !== loadIdRef.current) return;
+          if (res.ok) {
+            setActiveQuoteState({ kind: "loaded", payload: res.payload });
+          } else {
+            setActiveQuoteState({ kind: "error", message: res.error });
+          }
+        })
+        .catch((err: unknown) => {
+          if (myId !== loadIdRef.current) return;
+          const message =
+            err instanceof Error
+              ? err.message
+              : "Failed to load quote — try opening the full quote page.";
+          setActiveQuoteState({ kind: "error", message });
+        });
+    },
+    [parentProvidedActiveQuote, loadActiveQuoteWorkSurface, linkedQuotes.length],
+  );
+
+  useEffect(() => {
+    if (activeTab !== "quote") return;
+    runActiveQuoteLoad(true);
     return () => {
-      cancelled = true;
+      /* Bumping the loader id ensures any in-flight request for this
+       * mount/tab-open resolves into a no-op once we leave. */
+      loadIdRef.current += 1;
     };
-  }, [
-    activeTab,
-    parentProvidedActiveQuote,
-    loadActiveQuoteWorkSurface,
-    linkedQuotes.length,
-  ]);
+  }, [activeTab, runActiveQuoteLoad]);
 
-  /* Effective payload: parent value (incl. explicit null) wins; otherwise
-   * fall back to whatever the lazy loader produced. */
-  const effectiveActiveQuotePayload = parentProvidedActiveQuote
-    ? activeQuoteWorkSurface
-    : activeQuoteState.kind === "loaded"
-      ? activeQuoteState.payload
-      : null;
+  /* Called after a workspace-safe mutation (e.g. quote line item add/edit/
+   * delete inside the embedded QuoteWorkSurface). Re-fetches the lazy
+   * payload (if applicable) and `router.refresh()`s for the SSR-rendered
+   * Lead full page case. */
+  const handleActiveQuoteMutated = useCallback(() => {
+    if (!parentProvidedActiveQuote) {
+      runActiveQuoteLoad(false);
+    }
+    router.refresh();
+  }, [parentProvidedActiveQuote, runActiveQuoteLoad, router]);
+
+  /* Effective payload: explicit non-null parent payload wins; otherwise a
+   * post–Start quote client fetch; otherwise lazy-loaded popup payload. When
+   * the parent passes explicit `null` (no quote yet), post-create payload can
+   * still render until SSR catches up. */
+  const effectiveActiveQuotePayload =
+    activeQuoteWorkSurface != null
+      ? activeQuoteWorkSurface
+      : postCreateActiveQuote != null
+        ? postCreateActiveQuote
+        : !parentProvidedActiveQuote && activeQuoteState.kind === "loaded"
+          ? activeQuoteState.payload
+          : null;
 
   const isLoadingActiveQuote =
     !parentProvidedActiveQuote && activeQuoteState.kind === "loading";
@@ -1335,6 +1448,10 @@ export function LeadWorkSurface({
           isLoadingActiveQuote={isLoadingActiveQuote}
           activeQuoteError={activeQuoteError}
           onSwitchToContact={() => setActiveTab("contact")}
+          onActiveQuoteMutated={handleActiveQuoteMutated}
+          isStartQuotePending={isStartQuotePending}
+          startQuoteError={startQuoteError}
+          onStartQuote={() => void handleStartQuote()}
         />
       )}
     </div>

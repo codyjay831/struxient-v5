@@ -1,5 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+import { performCreateQuoteDraftFromLead } from "@/app/(workspace)/quotes/quote-form-actions";
+
 /**
  * Workspace-safe lead server actions.
  *
@@ -37,6 +40,45 @@ export type WorkspaceFormState = {
 export type LoadLeadActiveQuoteWorkSurfaceResult =
   | { ok: true; payload: QuoteWorkSurfaceLoaderResult | null }
   | { ok: false; error: string };
+
+export type CreateQuoteFromLeadWorkspaceResult =
+  | { success: true; quoteId: string }
+  | { success: false; error: string };
+
+function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string) {
+  const lid = leadId.trim();
+  const qid = quoteId.trim();
+  revalidatePath("/leads");
+  if (lid) {
+    revalidatePath(`/leads/${lid}`);
+  }
+  revalidatePath("/quotes");
+  if (qid) {
+    revalidatePath(`/quotes/${qid}`);
+  }
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/tasks");
+  revalidatePath("/workstation/jobs");
+}
+
+/**
+ * Creates (or reuses) the org-scoped active draft quote for a lead — same rules
+ * as `/quotes/new?leadId=…` without redirecting. Caller should `router.refresh()`
+ * and reload the active quote payload for the embedded {@link QuoteWorkSurface}.
+ *
+ * `leadId` must be supplied from a trusted server-rendered surface (bound in
+ * the client), never from an arbitrary org id.
+ */
+export async function createQuoteFromLeadWorkspaceAction(
+  leadId: string,
+): Promise<CreateQuoteFromLeadWorkspaceResult> {
+  const result = await performCreateQuoteDraftFromLead(leadId);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateLeadAndQuoteSurfaces(leadId, result.quoteId);
+  return { success: true, quoteId: result.quoteId };
+}
 
 class WorkspaceTxError extends Error {
   constructor(message: string) {

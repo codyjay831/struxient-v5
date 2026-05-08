@@ -32,60 +32,46 @@ function lensActive(pathname: string, href: string) {
 
 export function WorkstationShell() {
   const pathname = usePathname();
+  const activeLens = LENSES.find(l => lensActive(pathname, l.href));
 
   return (
-    <div className="mb-10 space-y-8">
-      <header className="border-b border-border pb-8">
-        <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
-          Workstation
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-          Reserved attention surface
-        </h1>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground-muted">
-          Workstation is a planning shell for how cross-area signals could surface later.
-          It is not connected to quote-to-job handoffs, runtime jobs, tasks, payments, or
-          scheduling yet—browse and edit real records under Sales, Relationships, and
-          Work. Lenses below are layout-only slices for future attention.
-        </p>
-        <p className="mt-2 text-sm text-foreground-subtle">
-          Use{" "}
-          <span className="font-medium text-foreground">Sales</span>,{" "}
-          <span className="font-medium text-foreground">Relationships</span>,{" "}
-          <span className="font-medium text-foreground">Work</span>, and{" "}
-          <span className="font-medium text-foreground">Reserved → Payments</span> in the
-          sidebar for authoritative routes—nothing on this page loads execution or money
-          feeds today.
-        </p>
+    <div className="mb-8 space-y-6">
+      <header className="border-b border-border pb-6">
+        <div className="flex items-baseline justify-between gap-4">
+          <div>
+            <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-foreground-subtle">
+              Workstation
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              {activeLens && activeLens.label !== "Today" ? `Review: ${activeLens.label}` : "Operational Review"}
+            </h1>
+          </div>
+          <nav aria-label="Workstation lenses">
+            <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
+              {LENSES.map(({ href, label, icon: Icon, title }) => {
+                const active = lensActive(pathname, href);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      title={title}
+                      className={[
+                        "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                        active
+                          ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
+                          : "text-foreground-muted hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </div>
       </header>
-
-      <nav aria-label="Workstation lenses">
-        <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
-          Lenses
-        </p>
-        <ul className="flex flex-wrap gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-          {LENSES.map(({ href, label, icon: Icon, title }) => {
-            const active = lensActive(pathname, href);
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  title={title}
-                  className={[
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-surface text-foreground shadow-sm"
-                      : "text-foreground-muted hover:text-foreground",
-                  ].join(" ")}
-                >
-                  <Icon className="size-4 shrink-0 opacity-80" strokeWidth={1.5} aria-hidden />
-                  {label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </div>
   );
 }

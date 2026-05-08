@@ -6,8 +6,28 @@ import {
   evaluateQuoteJobActivationReadiness,
 } from "@/lib/quote-job-activation-readiness";
 import { getQuoteReadiness, type QuoteReadiness } from "@/lib/quote-readiness";
-import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
+import {
+  formatQuoteStatus,
+  quoteStatusBadgeTone,
+  type QuoteLineItemPayload,
+} from "@/lib/quote-display";
+import {
+  quoteStatusAllowsCommercialEdits,
+  quoteStatusAllowsExecutionEdits,
+  quoteStatusIsArchived,
+} from "@/lib/quote-status-workflow";
+import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
+import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
+import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
+import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
+import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
+import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
+import type {
+  QuoteWorkspaceCheckpointPayload,
+  QuoteWorkspaceLeadIntake,
+  QuoteWorkspaceTabData,
+} from "@/lib/quote-workspace-payload";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -18,23 +38,21 @@ const dateOpts: Intl.DateTimeFormatOptions = {
 export type QuoteWorkSurfaceLoaderResult = {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
+  workspaceTabs: QuoteWorkspaceTabData;
 };
 
 /**
- * Org-scoped fetch + derive everything `QuoteWorkSurface` needs.
+ * Org-scoped fetch + derive of everything `QuoteWorkSurface` needs across all
+ * containers (Workstation drawer, Lead Quote tab embed, Quotes list popup,
+ * full Quote page).
  *
- * Used by:
- *   - Workstation quote drawer (compact mode)
- *   - Lead full page / Workstation lead drawer (active-quote standard embed)
+ * The result intentionally bundles three layers:
+ *   - identity / summary  → `QuoteWorkSurfaceData`
+ *   - readiness signals   → `QuoteReadiness`
+ *   - workspace tab data  → `QuoteWorkspaceTabData`
  *
- * The full Quote page (`/quotes/[quoteId]`) keeps its own bespoke loader because
- * it also fetches scope-tab fields (templates, draft tasks, etc). It can call
- * {@link buildQuoteWorkSurfaceFromInputs} below if it wants to share the derive
- * step.
- *
- * Includes the readiness signals that the Workstation drawer was previously
- * missing (latestSendAt / latestApprovalAt / revisionDriftSinceLastProof) so
- * its badges match the full Quote page.
+ * Same loader, same payload — the surface owns the workspace body and stays
+ * identical regardless of container.
  */
 export async function loadQuoteWorkSurface(
   quoteId: string,
@@ -45,23 +63,46 @@ export async function loadQuoteWorkSurface(
     select: {
       id: true,
       title: true,
+      customerDocumentTitle: true,
       status: true,
       subtotalCents: true,
       totalCents: true,
+      internalNotes: true,
       createdAt: true,
       updatedAt: true,
       customerId: true,
       customer: { select: { id: true, displayName: true, organizationId: true } },
       leadId: true,
-      lead: { select: { id: true, title: true, organizationId: true } },
-      job: { select: { id: true, status: true, organizationId: true } },
-      lineItems: {
+      lead: {
         select: {
           id: true,
-          description: true,
-          executionReviewStatus: true,
-          executionMergeMode: true,
-          _count: { select: { draftExecutionTasks: true } },
+          title: true,
+          organizationId: true,
+          notes: true,
+          source: true,
+          contactName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      job: { select: { id: true, status: true, organizationId: true } },
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          draftExecutionTasks: {
+            orderBy: [{ sortOrder: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              stageKey: true,
+              category: true,
+              instructions: true,
+              sortOrder: true,
+              sourceType: true,
+              sourceTaskTemplateId: true,
+              sourceLineItemTemplateTaskId: true,
+            },
+          },
         },
       },
     },
@@ -75,13 +116,22 @@ export async function loadQuoteWorkSurface(
       : null;
   const lead =
     row.lead && row.lead.organizationId === orgId
-      ? { id: row.lead.id, title: row.lead.title }
+      ? {
+          id: row.lead.id,
+          title: row.lead.title,
+          notes: row.lead.notes,
+          source: row.lead.source,
+          contactName: row.lead.contactName,
+          email: row.lead.email,
+          phone: row.lead.phone,
+        }
       : null;
   const job =
     row.job && row.job.organizationId === orgId
       ? { id: row.job.id, status: row.job.status }
       : null;
 
+  /* Activation readiness — same source full Quote page used. */
   const activationReadiness = evaluateQuoteJobActivationReadiness({
     status: row.status,
     lines: row.lineItems.map((l) => ({
@@ -89,45 +139,63 @@ export async function loadQuoteWorkSurface(
       description: l.description,
       executionReviewStatus: l.executionReviewStatus,
       executionMergeMode: l.executionMergeMode,
-      taskCount: l._count.draftExecutionTasks,
+      taskCount: l.draftExecutionTasks.length,
     })),
   });
 
-  const [latestSend, latestApproval, latestProof] = await Promise.all([
-    db.quoteCheckpoint.findFirst({
-      where: {
-        organizationId: orgId,
-        quoteId: row.id,
-        kind: QuoteCheckpointKind.SEND,
-      },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-    db.quoteCheckpoint.findFirst({
-      where: {
-        organizationId: orgId,
-        quoteId: row.id,
-        kind: QuoteCheckpointKind.APPROVAL,
-      },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-    db.quoteCheckpoint.findFirst({
-      where: {
-        organizationId: orgId,
-        quoteId: row.id,
-        kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-  ]);
+  /* Send + approval checkpoints, with full sequence data for the Send & Accept
+   * tab. We intentionally fetch full lists (not just the latest) because the
+   * surface now renders the same list the full Quote page used to render. */
+  const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof] =
+    await Promise.all([
+      db.quoteCheckpoint.findMany({
+        where: {
+          organizationId: orgId,
+          quoteId: row.id,
+          kind: QuoteCheckpointKind.SEND,
+        },
+        orderBy: { sequence: "asc" },
+        select: {
+          id: true,
+          sequence: true,
+          createdAt: true,
+          quoteUpdatedAtAtCapture: true,
+        },
+      }),
+      db.quoteCheckpoint.findMany({
+        where: {
+          organizationId: orgId,
+          quoteId: row.id,
+          kind: QuoteCheckpointKind.APPROVAL,
+        },
+        orderBy: { sequence: "asc" },
+        select: {
+          id: true,
+          sequence: true,
+          createdAt: true,
+          quoteUpdatedAtAtCapture: true,
+        },
+      }),
+      db.quoteCheckpoint.findFirst({
+        where: {
+          organizationId: orgId,
+          quoteId: row.id,
+          kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+    ]);
 
   const revisionDriftSinceLastProof = Boolean(
-    latestProof &&
+    latestCommercialProof &&
       row.status !== QuoteStatus.ARCHIVED &&
-      row.updatedAt.getTime() > latestProof.createdAt.getTime(),
+      row.updatedAt.getTime() > latestCommercialProof.createdAt.getTime(),
   );
+
+  const latestSend = sendCheckpointRows[sendCheckpointRows.length - 1] ?? null;
+  const latestApproval =
+    approvalCheckpointRows[approvalCheckpointRows.length - 1] ?? null;
 
   const readiness = getQuoteReadiness({
     quote: {
@@ -154,6 +222,7 @@ export async function loadQuoteWorkSurface(
     revisionDriftSinceLastProof,
   });
 
+  /* ── QuoteWorkSurfaceData (identity + summary) ────────────────────────── */
   const primaryTitle = lead?.title || customer?.displayName || row.title;
   const subtitle = row.title !== primaryTitle ? row.title : null;
 
@@ -183,5 +252,175 @@ export async function loadQuoteWorkSurface(
     executionReviewHref: `/quotes/${row.id}/execution-review`,
   };
 
-  return { quote, readiness };
+  /* ── Workspace tab data ───────────────────────────────────────────────── */
+
+  /* Work-order ranks — same algorithm the full Quote page used. */
+  const workOrderOrderedIds = [...row.lineItems]
+    .sort((a, b) => {
+      if (a.executionOrder !== b.executionOrder) {
+        return a.executionOrder - b.executionOrder;
+      }
+      if (a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+      return a.id.localeCompare(b.id);
+    })
+    .map((l) => l.id);
+  const workOrderRank = new Map(workOrderOrderedIds.map((id, i) => [id, i + 1]));
+  const workOrderTotal = workOrderOrderedIds.length;
+
+  const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
+  for (const line of row.lineItems) {
+    draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      stageKey: t.stageKey,
+      category: t.category,
+      instructions: t.instructions,
+      sortOrder: t.sortOrder,
+      sourceType: t.sourceType,
+      sourceTaskTemplateId: t.sourceTaskTemplateId,
+      sourceLineItemTemplateTaskId: t.sourceLineItemTemplateTaskId,
+    }));
+  }
+
+  const lineItems: QuoteLineItemPayload[] = row.lineItems.map((line) => {
+    const exec = buildDefaultExecutionSummaryLine(line.draftExecutionTasks);
+    return {
+      id: line.id,
+      sortOrder: line.sortOrder,
+      description: line.description,
+      customerScopeTitle: line.customerScopeTitle,
+      customerScopeDescription: line.customerScopeDescription,
+      customerIncludedNotes: line.customerIncludedNotes,
+      customerExcludedNotes: line.customerExcludedNotes,
+      customerPresentationGroup: line.customerPresentationGroup,
+      quantityDisplay: line.quantity.toString(),
+      unitAmountCents: line.unitAmountCents,
+      lineTotalCents: line.lineTotalCents,
+      internalNotes: line.internalNotes,
+      executionSummary: { taskCount: exec.taskCount, summaryLine: exec.summaryLine },
+      executionReviewStatus: line.executionReviewStatus,
+      executionMergeMode: line.executionMergeMode,
+      executionOrder: line.executionOrder,
+      workOrderPosition: workOrderRank.get(line.id) ?? 1,
+      workOrderTotal,
+    };
+  });
+
+  const isCommercialEditable = quoteStatusAllowsCommercialEdits(row.status);
+  const isExecutionEditable = quoteStatusAllowsExecutionEdits(row.status);
+  const isArchived = quoteStatusIsArchived(row.status);
+
+  /* Line-item templates — only meaningful while DRAFT (saved-line picker). */
+  const lineItemTemplates: LineItemTemplatePickerRow[] = isCommercialEditable
+    ? (
+        await db.lineItemTemplate.findMany({
+          where: { organizationId: orgId, archivedAt: null },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            description: true,
+            defaultQuantity: true,
+            defaultUnitAmountCents: true,
+            defaultCustomerScopeTitle: true,
+            defaultCustomerScopeDescription: true,
+            defaultCustomerIncludedNotes: true,
+            defaultCustomerExcludedNotes: true,
+            defaultCustomerPresentationGroup: true,
+          },
+        })
+      ).map((t) => ({
+        id: t.id,
+        description: t.description,
+        defaultQuantityDisplay: t.defaultQuantity.toString(),
+        defaultUnitAmountCents: t.defaultUnitAmountCents,
+        hasCustomerProposalDefaults: Boolean(
+          t.defaultCustomerScopeTitle ||
+            t.defaultCustomerScopeDescription ||
+            t.defaultCustomerIncludedNotes ||
+            t.defaultCustomerExcludedNotes ||
+            t.defaultCustomerPresentationGroup,
+        ),
+      }))
+    : [];
+
+  /* Reusable task picker — only when execution editing is allowed. */
+  const reusableTaskOptions: ReusableTaskPickerOption[] = isExecutionEditable
+    ? (
+        await db.taskTemplate.findMany({
+          where: { organizationId: orgId, archivedAt: null },
+          orderBy: { title: "asc" },
+          select: { id: true, title: true, stageKey: true, category: true },
+        })
+      ).map((r) => ({
+        id: r.id,
+        title: r.title,
+        stageLabel: getExecutionStageLabel(r.stageKey),
+        categoryLabel: getTaskTemplateCategoryLabel(r.category),
+      }))
+    : [];
+
+  /* Serialize checkpoints — drop `Date` for server-action safety. */
+  function toCheckpointPayload(c: {
+    id: string;
+    sequence: number;
+    createdAt: Date;
+    quoteUpdatedAtAtCapture: Date | null;
+  }): QuoteWorkspaceCheckpointPayload {
+    return {
+      id: c.id,
+      sequence: c.sequence,
+      href: `/quotes/${row!.id}/checkpoints/${c.id}`,
+      createdAtIso: c.createdAt.toISOString(),
+      createdAtLabel: c.createdAt.toLocaleString(),
+      quoteUpdatedAtAtCaptureIso:
+        c.quoteUpdatedAtAtCapture?.toISOString() ?? null,
+      quoteUpdatedAtAtCaptureLabel: c.quoteUpdatedAtAtCapture
+        ? c.quoteUpdatedAtAtCapture.toLocaleString()
+        : null,
+    };
+  }
+
+  const sendCheckpoints = sendCheckpointRows.map(toCheckpointPayload);
+  const approvalCheckpoints = approvalCheckpointRows.map(toCheckpointPayload);
+
+  const leadIntake: QuoteWorkspaceLeadIntake | null = lead
+    ? {
+        id: lead.id,
+        title: lead.title,
+        href: `/leads/${lead.id}`,
+        notes: lead.notes,
+        source: lead.source,
+        contactName: lead.contactName,
+        email: lead.email,
+        phone: lead.phone,
+      }
+    : null;
+
+  const workspaceTabs: QuoteWorkspaceTabData = {
+    isCommercialEditable,
+    isExecutionEditable,
+    isArchived,
+    customerDocumentTitle: row.customerDocumentTitle,
+    internalNotes: row.internalNotes,
+    hasLeadNotes: Boolean(lead?.notes),
+    subtotalCents: row.subtotalCents,
+    totalCents: row.totalCents,
+    lineItems,
+    lineItemTemplates,
+    draftTasksByLineId,
+    reusableTaskOptions,
+    customerName: customer?.displayName ?? null,
+    customerHref: customer ? `/customers/${customer.id}` : null,
+    leadIntake,
+    sendCheckpoints,
+    approvalCheckpoints,
+    createdAtIso: row.createdAt.toISOString(),
+    createdAtLabel: row.createdAt.toLocaleDateString("en-US", dateOpts),
+    updatedAtIso: row.updatedAt.toISOString(),
+    updatedAtLabel: row.updatedAt.toLocaleDateString("en-US", dateOpts),
+  };
+
+  return { quote, readiness, workspaceTabs };
 }

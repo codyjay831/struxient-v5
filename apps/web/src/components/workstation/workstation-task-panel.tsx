@@ -27,30 +27,30 @@ export function WorkstationTaskPanel({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {instructions && (
-        <div>
-          <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Instructions
+        <div className="rounded-xl border border-border bg-foreground/[0.01] p-6">
+          <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+            Task Instructions
           </h4>
-          <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+          <p className="mt-3 text-base leading-relaxed text-foreground-muted">
             {instructions}
           </p>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-4">
         {initialStatus === JobTaskStatus.TODO && (
           <form action={startAction}>
             <button
               type="submit"
               disabled={isStartPending || isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-foreground px-6 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               {isStartPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Play className="size-4" />
+                <Play className="size-4 fill-current" />
               )}
               Start task
             </button>
@@ -62,7 +62,7 @@ export function WorkstationTaskPanel({
             <button
               type="submit"
               disabled={isPending || isStartPending}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-border-strong hover:bg-foreground/[0.02] disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-6 py-2.5 text-sm font-bold text-foreground transition-colors hover:border-border-strong hover:bg-foreground/[0.02] disabled:opacity-50"
             >
               {isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -75,7 +75,7 @@ export function WorkstationTaskPanel({
         )}
 
         {initialStatus === JobTaskStatus.DONE && (
-          <div className="flex items-center gap-2 text-sm font-medium text-success">
+          <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-2 text-sm font-bold text-success">
             <CheckCircle2 className="size-4" />
             Task completed
           </div>
@@ -83,7 +83,7 @@ export function WorkstationTaskPanel({
       </div>
 
       {(state.error || startState.error) && (
-        <p className="text-xs font-medium text-danger">
+        <p className="rounded-lg bg-danger/10 px-4 py-2 text-xs font-bold text-danger">
           {state.error || startState.error}
         </p>
       )}

@@ -4,11 +4,8 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { SummaryStrip, type SummaryStripItem } from "@/components/ui/summary-strip";
 import { getDevOrganizationOrThrow } from "@/lib/db";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
@@ -18,7 +15,6 @@ import {
   compareWorkstationSalesIntakeOrder,
   type WorkstationWorkItem,
 } from "@/lib/workstation-query";
-import { AttentionCard } from "@/components/ui/attention-card";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { WorkstationTaskPanel } from "@/components/workstation/workstation-task-panel";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
@@ -34,6 +30,11 @@ import {
   leadStatusBadgeTone,
 } from "@/lib/lead-display";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
+import { 
+  WorkstationFocusCard, 
+  WorkstationQueueItem, 
+  WorkstationClearedState 
+} from "@/components/workstation/workstation-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -58,231 +59,126 @@ export default async function WorkstationTodayLensPage({
 
   const selectedItem = selectedId ? allItems.find((i) => i.id === selectedId) : null;
 
-  const salesIntakeItems = allItems
-    .filter((i) => i.kind === "lead" || i.kind === "quote")
-    .sort(compareWorkstationSalesIntakeOrder);
-
-  const summaryItems: SummaryStripItem[] = [
-    {
-      id: "investigate",
-      label: "Investigate",
-      value: summary.investigateCount,
-      hint: "Records needing review.",
-      tone: summary.investigateCount > 0 ? "danger" : "neutral",
-      anchorId: "investigate",
-    },
-    {
-      id: "active-jobs",
-      label: "Active jobs",
-      value: summary.activeJobsCount,
-      hint: "Jobs currently in motion.",
-      tone: "neutral",
-      anchorId: "active-jobs",
-    },
-    {
-      id: "open-tasks",
-      label: "Open tasks",
-      value: summary.openTasksCount,
-      hint: "Tasks waiting to be done.",
-      tone: "neutral",
-      anchorId: "ready-to-work",
-    },
-    {
-      id: "sales-intake",
-      label: "Sales intake",
-      value: summary.openLeadsQuotesCount,
-      hint: "Leads and quotes in progress.",
-      tone: "neutral",
-      anchorId: "sales-intake",
-    },
+  // Combine and prioritize for a single flow
+  const prioritizedItems = [
+    ...attentionItems,
+    ...investigateItems.filter(i => !attentionItems.find(a => a.id === i.id)),
+    ...readyItems.filter(i => !attentionItems.find(a => a.id === i.id) && !investigateItems.find(inv => inv.id === i.id)),
   ];
 
+  const focusItem = prioritizedItems[0];
+  const queueItems = prioritizedItems.slice(1);
+
   return (
-    <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Workstation" }]} />
-      <PageHeader
-        title="Workstation Today"
-        description="Your central command surface for prioritized work and decisions across Struxient."
-      />
-
-      <div className="space-y-6">
-        <SummaryStrip items={summaryItems} />
-
-        <WorkspacePanel id="sales-intake" padding="compact" className="scroll-mt-6">
-          <SectionHeading
-            title="Sales intake"
-            description="Open leads and quotes in one place — urgency matches the Investigate / Ready / Waiting lanes below."
-          />
-          {salesIntakeItems.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {salesIntakeItems.map((item) => (
-                <WorkItemAttentionCard
-                  key={item.id}
-                  item={item}
-                  isSelected={selectedId === item.id}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border bg-surface/50 px-4 py-5">
-              <p className="text-sm font-medium text-foreground">No open leads or quotes</p>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-                When drafts, sent quotes, or qualifying leads exist for this organization, they land here and in the sections below.
-              </p>
-            </div>
+    <div className="space-y-12">
+      {/* Calm Today Header */}
+      <div className="flex items-center justify-between border-b border-border pb-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground-subtle">
+          Today
+        </h2>
+        <div className="flex items-center gap-4 text-xs font-medium text-foreground-muted">
+          <span>{summary.investigateCount + summary.openTasksCount + summary.openLeadsQuotesCount} items need review</span>
+          {summary.investigateCount > 0 && (
+            <span className="flex items-center gap-1 text-danger">
+              <span className="size-1.5 rounded-full bg-danger" />
+              {summary.investigateCount} blocking
+            </span>
           )}
-        </WorkspacePanel>
-
-        {selectedItem && (
-          <div id="selected-item-panel" className="scroll-mt-6">
-            <WorkstationWorkPanel item={selectedItem}>
-              {selectedItem.kind === "task" && (
-                <TaskDetailWrapper taskId={selectedItem.recordId} />
-              )}
-              {selectedItem.kind === "job" && (
-                <JobDetailWrapper jobId={selectedItem.recordId} />
-              )}
-              {selectedItem.kind === "lead" && (
-                <LeadDetailWrapper leadId={selectedItem.recordId} />
-              )}
-              {selectedItem.kind === "quote" && (
-                <QuoteDetailWrapper quoteId={selectedItem.recordId} />
-              )}
-            </WorkstationWorkPanel>
-          </div>
-        )}
-
-        {attentionItems.length > 0 && (
-          <WorkspacePanel id="attention" padding="compact" className="border-danger/20 bg-danger/[0.01] scroll-mt-6">
-            <SectionHeading
-              title="Needs attention"
-              description="High-priority items that may block progress or need immediate review."
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {attentionItems.map((item) => (
-                <WorkItemAttentionCard 
-                  key={item.id} 
-                  item={item} 
-                  isSelected={selectedId === item.id}
-                />
-              ))}
-            </div>
-          </WorkspacePanel>
-        )}
-
-        <WorkspacePanel id="investigate" padding="compact" className="border-border-strong scroll-mt-6">
-          <SectionHeading
-            title={WORKSTATION_COPY.investigate.sectionTitle}
-            description={WORKSTATION_COPY.investigate.sectionDescription}
-          />
-          {investigateItems.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {investigateItems.map((item) => (
-                <WorkItemAttentionCard 
-                  key={item.id} 
-                  item={item} 
-                  isSelected={selectedId === item.id}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border bg-surface/50 px-4 py-5">
-              <p className="text-sm font-medium text-foreground">
-                {WORKSTATION_COPY.investigate.emptyTitle}
-              </p>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-                {WORKSTATION_COPY.investigate.emptyDescription}
-              </p>
-            </div>
-          )}
-        </WorkspacePanel>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <WorkspacePanel id="ready-to-work" padding="compact" className="scroll-mt-6">
-            <SectionHeading
-              title="Ready to work"
-              description="Tasks and jobs that are unblocked and ready for the next step."
-            />
-            <div className="space-y-3">
-              {readyItems.length > 0 ? (
-                readyItems.slice(0, 10).map((item) => (
-                  <WorkItemAttentionCard 
-                    key={item.id} 
-                    item={item} 
-                    isSelected={selectedId === item.id}
-                  />
-                ))
-              ) : (
-                <p className="text-sm text-foreground-muted italic">No items ready to work.</p>
-              )}
-              {readyItems.length > 10 && (
-                <p className="text-center text-xs text-foreground-muted">
-                  Showing 10 of {readyItems.length} ready items — see Sales intake for the full lead and quote list.
-                </p>
-              )}
-            </div>
-          </WorkspacePanel>
-
-          <WorkspacePanel id="waiting" padding="compact" className="scroll-mt-6">
-            <SectionHeading
-              title="Waiting / Follow-up"
-              description="Items waiting on customer action or future events."
-            />
-            <div className="space-y-3">
-              {waitingItems.length > 0 ? (
-                waitingItems.slice(0, 5).map((item) => (
-                  <WorkItemAttentionCard 
-                    key={item.id} 
-                    item={item} 
-                    isSelected={selectedId === item.id}
-                  />
-                ))
-              ) : (
-                <p className="text-sm text-foreground-muted italic">No items waiting.</p>
-              )}
-            </div>
-          </WorkspacePanel>
         </div>
+      </div>
 
-        <WorkspacePanel id="active-jobs" padding="compact" className="scroll-mt-6">
-          <SectionHeading
-            title="Active jobs"
-            description="Overview of jobs currently in motion."
-          />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {allItems.filter(i => i.kind === "job").map(item => (
-               <WorkItemAttentionCard 
-                 key={item.id} 
-                 item={item} 
-                 isSelected={selectedId === item.id}
-               />
-            ))}
-          </div>
-          {allItems.filter(i => i.kind === "job").length === 0 && (
-            <p className="text-sm text-foreground-muted italic">No active jobs found.</p>
+      {prioritizedItems.length > 0 ? (
+        <div className="space-y-12">
+          {/* Primary Focus */}
+          {focusItem && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                  Primary Focus
+                </h3>
+              </div>
+              <WorkstationFocusCard 
+                item={{
+                  ...focusItem,
+                  href: buildWorkstationSelectHref(focusItem.id, focusItem.kind)
+                }} 
+                isSelected={selectedId === focusItem.id} 
+              />
+            </section>
           )}
-        </WorkspacePanel>
 
-        <WorkspacePanel id="sales-intake" padding="compact" className="scroll-mt-6">
-          <SectionHeading
-            title="Sales intake"
-            description="Leads and quotes currently being processed."
-          />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {allItems.filter(i => i.kind === "lead" || i.kind === "quote").map(item => (
-               <WorkItemAttentionCard 
-                 key={item.id} 
-                 item={item} 
-                 isSelected={selectedId === item.id}
-               />
-            ))}
-          </div>
-          {allItems.filter(i => i.kind === "lead" || i.kind === "quote").length === 0 && (
-            <p className="text-sm text-foreground-muted italic">No active leads or quotes found.</p>
+          {/* Secondary Queue */}
+          {queueItems.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                  Next in Queue
+                </h3>
+              </div>
+              <div className="grid gap-2">
+                {queueItems.map((item) => (
+                  <WorkstationQueueItem 
+                    key={item.id} 
+                    item={{
+                      ...item,
+                      href: buildWorkstationSelectHref(item.id, item.kind)
+                    }} 
+                    isSelected={selectedId === item.id} 
+                  />
+                ))}
+              </div>
+            </section>
           )}
-        </WorkspacePanel>
 
-        <WorkspacePanel id="reserved-areas" padding="compact" className="bg-foreground/[0.01] scroll-mt-6">
+          {/* Waiting / Follow-up (Compact) */}
+          {waitingItems.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                  Waiting / Follow-up
+                </h3>
+              </div>
+              <div className="grid gap-2">
+                {waitingItems.map((item) => (
+                  <WorkstationQueueItem 
+                    key={item.id} 
+                    item={{
+                      ...item,
+                      href: buildWorkstationSelectHref(item.id, item.kind)
+                    }} 
+                    isSelected={selectedId === item.id} 
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      ) : (
+        <WorkstationClearedState />
+      )}
+
+      {selectedItem && (
+        <div id="selected-item-panel" className="scroll-mt-6">
+          <WorkstationWorkPanel item={selectedItem}>
+            {selectedItem.kind === "task" && (
+              <TaskDetailWrapper taskId={selectedItem.recordId} />
+            )}
+            {selectedItem.kind === "job" && (
+              <JobDetailWrapper jobId={selectedItem.recordId} />
+            )}
+            {selectedItem.kind === "lead" && (
+              <LeadDetailWrapper leadId={selectedItem.recordId} />
+            )}
+            {selectedItem.kind === "quote" && (
+              <QuoteDetailWrapper quoteId={selectedItem.recordId} />
+            )}
+          </WorkstationWorkPanel>
+        </div>
+      )}
+
+      {/* Footer Navigation */}
+      <div className="grid gap-6 border-t border-border pt-12 lg:grid-cols-2">
+        <WorkspacePanel id="reserved-areas" padding="compact" className="bg-foreground/[0.01]">
           <SectionHeading title={WORKSTATION_COPY.reservedAreas.title} description={WORKSTATION_COPY.reservedAreas.description} />
           <div className="flex flex-wrap gap-2">
             <Link href="/workstation/tasks" className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground">
@@ -299,7 +195,7 @@ export default async function WorkstationTodayLensPage({
 
         <HandoffPanel
           title="Authoritative record routes"
-          description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work. Workstation surfaces signals from these records."
+          description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work."
         >
           <Link href="/quotes" className={handoffMutedLinkClass}>
             Quotes
@@ -316,25 +212,6 @@ export default async function WorkstationTodayLensPage({
         </HandoffPanel>
       </div>
     </div>
-  );
-}
-
-function WorkItemAttentionCard({ item, isSelected }: { item: WorkstationWorkItem; isSelected?: boolean }) {
-  return (
-    <AttentionCard
-      title={item.title}
-      eyebrow={item.kind}
-      statusLabel={item.workflow?.statusLabel}
-      recordLabel={item.subtitle || ""}
-      severity={item.priority === "critical" ? "high" : item.priority}
-      reason={item.reason}
-      suggestedAction={item.nextStep}
-      href={buildWorkstationSelectHref(item.id, item.kind)}
-      secondaryHref={item.href}
-      secondaryActionLabel="Open full record"
-      origin="derived"
-      isSelected={isSelected}
-    />
   );
 }
 
@@ -510,6 +387,7 @@ async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {
       mode="compact"
       quote={result.quote}
       readiness={result.readiness}
+      workspaceTabs={result.workspaceTabs}
     />
   );
 }

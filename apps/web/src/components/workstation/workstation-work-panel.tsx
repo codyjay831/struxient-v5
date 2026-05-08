@@ -44,24 +44,26 @@ export function WorkstationWorkPanel({
       >
         <div className="flex h-full flex-col">
           {/* Header */}
-          <div className="flex items-start justify-between border-b border-border p-6">
+          <div className="flex items-start justify-between border-b border-border p-8">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="text-[0.65rem] font-bold uppercase tracking-[0.15em] text-foreground-subtle">
                   {item.kind}
                 </span>
                 {item.status && (
                   <StatusBadge label={item.status} tone="neutral" />
                 )}
               </div>
-              <h2 id="panel-title" className="mt-1 text-xl font-bold text-foreground">{item.title}</h2>
+              <h2 id="panel-title" className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                {item.title}
+              </h2>
               {item.subtitle && (
-                <p className="mt-0.5 text-sm text-foreground-muted">{item.subtitle}</p>
+                <p className="mt-1 text-sm font-medium text-foreground-muted">{item.subtitle}</p>
               )}
             </div>
             <button
               onClick={handleClose}
-              className="rounded-md p-2 text-foreground-subtle hover:bg-foreground/[0.05] hover:text-foreground transition-colors"
+              className="ml-4 rounded-full p-2 text-foreground-subtle transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
               aria-label="Close panel"
             >
               <X className="size-6" />
@@ -69,45 +71,45 @@ export function WorkstationWorkPanel({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-8">
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="space-y-10">
               {!children ? (
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div>
-                    <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                      Why it matters
+                <div className="grid gap-8 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Reason for review
                     </h4>
-                    <p className="mt-1.5 text-sm italic leading-relaxed text-foreground-muted">
+                    <p className="text-base italic leading-relaxed text-foreground-muted">
                       {item.reason}
                     </p>
                     {item.workflow ? (
-                      <p className="mt-2 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                        {item.workflow.statusLabel}
+                      <p className="mt-4 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                        Current Status: {item.workflow.statusLabel}
                       </p>
                     ) : null}
                   </div>
-                  <div>
-                    <h4 className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                      Next step
+                  <div className="space-y-2">
+                    <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Recommended action
                     </h4>
-                    <p className="mt-1.5 text-sm font-medium text-foreground">
+                    <p className="text-lg font-bold leading-snug text-foreground">
                       {item.nextStep}
                     </p>
                   </div>
                 </div>
               ) : null}
 
-              {children ? <div>{children}</div> : null}
+              {children ? <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">{children}</div> : null}
             </div>
           </div>
 
           {/* Footer */}
-          <div className="border-t border-border bg-foreground/[0.01] p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="border-t border-border bg-foreground/[0.01] p-8">
+            <div className="flex flex-wrap items-center justify-between gap-6">
               {item.href && (
                 <Link
                   href={item.href}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                  className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   {item.kind === "quote" ? "Open quote record" : item.kind === "lead" ? "Open lead workspace" : "Open full record"}
                   <ArrowRight className="size-4" />
@@ -115,9 +117,9 @@ export function WorkstationWorkPanel({
               )}
               <button
                 onClick={handleClose}
-                className="text-sm font-medium text-foreground-subtle hover:text-foreground transition-colors"
+                className="text-sm font-bold text-foreground-subtle transition-colors hover:text-foreground"
               >
-                Close
+                Close panel
               </button>
             </div>
           </div>
