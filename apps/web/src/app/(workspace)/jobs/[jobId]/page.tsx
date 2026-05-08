@@ -19,6 +19,7 @@ import { Briefcase, Layers, ListOrdered } from "lucide-react";
 import { JobIssueManager } from "@/components/jobs/job-issue-manager";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
+import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobIssueStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -123,6 +124,19 @@ export default async function JobDetailPage({
           details: true,
           createdAt: true,
           actorUser: { select: { name: true, email: true } },
+        },
+      },
+      dailyJobLogs: {
+        orderBy: [{ logDate: "desc" }],
+        take: 30,
+        select: {
+          id: true,
+          logDate: true,
+          summary: true,
+          internalNotes: true,
+          status: true,
+          reviewedAt: true,
+          reviewedByUser: { select: { name: true, email: true } },
         },
       },
     },
@@ -282,6 +296,11 @@ export default async function JobDetailPage({
       />
 
       <JobActivityFeed activities={job.activities} />
+
+      <DailyJobLogManager
+        jobId={job.id}
+        initialLogs={job.dailyJobLogs}
+      />
 
       {totalTasks === 0 ? (
         <WorkspacePanel>

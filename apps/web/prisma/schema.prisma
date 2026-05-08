@@ -94,6 +94,12 @@ enum JobStatus {
   ARCHIVED
 }
 
+enum DailyJobLogStatus {
+  DRAFT
+  REVIEWED
+  VOID
+}
+
 /// V1 stage grouping inside a job: SHARED merges across quote lines using canonical phases;
 /// SEPARATE_LINE_ITEM keeps one quote line's stages as their own block (one work block per source line).
 enum JobStageBlockType {
@@ -126,6 +132,7 @@ model Organization {
   jobs                  Job[]
   jobPaymentRequirements JobPaymentRequirement[]
   jobActivities         JobActivity[]
+  dailyJobLogs          DailyJobLog[]
   publicRequestSettings PublicRequestSettings?
 }
 
@@ -179,8 +186,9 @@ model User {
   memberships   Membership[]
   jobIssues     JobIssue[]
   jobActivities JobActivity[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  reviewedDailyJobLogs DailyJobLog[] @relation("ReviewedBy")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model Membership {
@@ -421,6 +429,7 @@ model Job {
   issues         JobIssue[]
   paymentRequirements JobPaymentRequirement[]
   activities     JobActivity[]
+  dailyJobLogs   DailyJobLog[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -582,6 +591,31 @@ model JobActivity {
   @@index([organizationId, createdAt])
   @@index([jobId, createdAt])
   @@index([entityType, entityId])
+}
+
+model DailyJobLog {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId            String
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  /// Normalized to midnight for v1. Org-timezone-aware date handling can be improved later.
+  logDate          DateTime
+  summary          String            @db.Text
+  internalNotes    String?
+  status           DailyJobLogStatus @default(DRAFT)
+  reviewedByUserId String?
+  reviewedByUser   User?             @relation("ReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([jobId, logDate])
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, logDate])
+  @@index([jobId, logDate])
+  @@index([status])
 }
 
 model JobPaymentRequirement {
