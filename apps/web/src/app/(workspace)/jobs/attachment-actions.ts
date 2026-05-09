@@ -28,6 +28,12 @@ export async function uploadTaskAttachmentAction(
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
+  // Production guard: Local filesystem storage is for development only.
+  if (process.env.NODE_ENV === "production") {
+    console.error("Local filesystem upload attempted in production. This is forbidden.");
+    return { error: "Upload failed: Storage misconfiguration." };
+  }
+
   const file = formData.get("file") as File;
   if (!file) {
     return { error: "No file provided." };
@@ -71,7 +77,7 @@ export async function uploadTaskAttachmentAction(
           jobTaskId: taskId,
           jobId: task.jobId,
           fileName: file.name,
-          fileKey: `/uploads/${fileKey}`, // Public URL for dev
+          fileKey: fileKey, // Internal storage key (relative filename)
           contentType: file.type,
           fileSize: file.size,
           uploadedByUserId: session.userId,

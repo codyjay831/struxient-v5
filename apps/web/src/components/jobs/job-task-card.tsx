@@ -132,7 +132,7 @@ export function JobTaskCard({ task }: { task: Task }) {
                 {task.attachments.map((att) => (
                   <a
                     key={att.id}
-                    href={att.fileKey}
+                    href={`/api/media/attachments/${att.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 rounded-md border border-border bg-surface-strong px-2 py-1.5 text-xs hover:border-border-strong transition-colors"
