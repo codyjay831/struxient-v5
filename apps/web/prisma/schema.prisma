@@ -120,6 +120,12 @@ enum JobVisitStatus {
   CANCELED
 }
 
+enum AttachmentStatus {
+  PENDING
+  READY
+  FAILED
+}
+
 model Organization {
   id                    String                 @id @default(cuid())
   name                  String
@@ -635,6 +641,7 @@ model Attachment {
   fileKey         String       // Storage provider key/path
   contentType     String
   fileSize        Int
+  status          AttachmentStatus @default(READY)
   
   // Explicit nullable foreign keys
   leadId          String?

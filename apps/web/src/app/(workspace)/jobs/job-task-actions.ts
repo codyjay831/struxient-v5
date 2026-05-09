@@ -24,7 +24,10 @@ export async function completeJobTaskAction(
       where: { id: taskId, job: { organizationId } },
       include: {
         jobStage: true,
-        attachments: { select: { id: true } },
+        attachments: { 
+          where: { status: "READY" },
+          select: { id: true } 
+        },
         issues: {
           where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
         },

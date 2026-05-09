@@ -5,7 +5,11 @@ import { JobTaskStatus, JobIssueStatus, JobIssueSeverity, JobPaymentRequirementS
 import { StatusBadge } from "@/components/ui/status-badge";
 import { deriveTaskState, taskStateLabel, taskStateTone, type TaskCompletionRequirements } from "@/lib/task-readiness";
 import { completeJobTaskAction } from "@/app/(workspace)/jobs/job-task-actions";
-import { uploadTaskAttachmentAction } from "@/app/(workspace)/jobs/attachment-actions";
+import { 
+  uploadTaskAttachmentAction, 
+  getTaskAttachmentUploadUrlAction, 
+  completeTaskAttachmentUploadAction 
+} from "@/app/(workspace)/jobs/attachment-actions";
 import { Check, AlertCircle, MessageSquare, Lock, Camera, Paperclip, FileText, Loader2, X } from "lucide-react";
 
 type Task = {
@@ -68,14 +72,53 @@ export function JobTaskCard({ task }: { task: Task }) {
     if (!file) return;
 
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
 
-    const result = await uploadTaskAttachmentAction(task.id, formData);
-    setIsUploading(false);
+    try {
+      // Step 1: Get signed URL (or local marker)
+      const prep = await getTaskAttachmentUploadUrlAction(
+        task.id,
+        file.name,
+        file.type,
+        file.size
+      );
 
-    if (result.error) {
-      alert(result.error);
+      if (prep.error) {
+        alert(prep.error);
+        setIsUploading(false);
+        return;
+      }
+
+      if (prep.storageProvider === "local") {
+        // Fallback to legacy direct upload for local dev
+        const formData = new FormData();
+        formData.append("file", file);
+        const result = await uploadTaskAttachmentAction(task.id, formData);
+        if (result.error) alert(result.error);
+      } else if (prep.uploadUrl) {
+        // Step 2: Direct PUT to GCS
+        const response = await fetch(prep.uploadUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed with status ${response.status}`);
+        }
+
+        // Step 3: Complete upload
+        const result = await completeTaskAttachmentUploadAction(prep.attachmentId!);
+        if (result.error) alert(result.error);
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      e.target.value = "";
     }
   };
 

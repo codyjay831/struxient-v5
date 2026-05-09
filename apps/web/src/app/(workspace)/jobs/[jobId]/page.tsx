@@ -116,6 +116,7 @@ export default async function JobDetailPage({
               completionNote: true,
               completionRequirementsJson: true,
               attachments: {
+                where: { status: "READY" },
                 select: {
                   id: true,
                   fileName: true,

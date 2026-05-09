@@ -326,7 +326,10 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         where: { completedAt: null },
         include: { 
           jobStage: true,
-          attachments: { select: { id: true } },
+          attachments: { 
+            where: { status: "READY" },
+            select: { id: true } 
+          },
           issues: {
             where: { status: JobIssueStatus.OPEN },
             select: { status: true, severity: true },
