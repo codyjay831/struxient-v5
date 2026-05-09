@@ -7,6 +7,7 @@ import {
   JobIssueStatus,
   JobPaymentRequirementStatus,
   DailyJobLogStatus,
+  JobVisitStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -18,6 +19,7 @@ import {
   toEmbeddedWorkflow,
   type WorkItemEmbeddedWorkflow,
 } from "@/lib/record-workflow-surface";
+import { deriveTaskState, taskStateLabel } from "./task-readiness";
 
 export type WorkstationWorkItemKind =
   | "lead"
@@ -321,46 +323,200 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       customer: true,
       lead: true,
       tasks: {
-        where: { status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
-        include: { jobStage: true },
+        where: { completedAt: null },
+        include: { 
+          jobStage: true,
+          attachments: { select: { id: true } },
+          issues: {
+            where: { status: JobIssueStatus.OPEN },
+            select: { status: true, severity: true },
+          },
+        },
       },
       issues: {
         where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
       },
       paymentRequirements: {
-        where: { status: JobPaymentRequirementStatus.DUE },
+        where: {
+          status: { in: [JobPaymentRequirementStatus.DUE, JobPaymentRequirementStatus.PENDING] },
+        },
+        include: {
+          requiredBeforeStage: { select: { sortOrder: true } },
+        },
+      },
+      visits: {
+        where: { status: { in: [JobVisitStatus.SCHEDULED, JobVisitStatus.COMPLETED] } },
+        orderBy: { scheduledStartAt: "desc" },
+        take: 10,
       },
     },
   });
 
   for (const job of jobs) {
-    const isJobBlocked = job.issues.length > 0 || job.paymentRequirements.length > 0;
+    const unpaidRequirements = job.paymentRequirements.filter(p => p.status === JobPaymentRequirementStatus.DUE);
+    const isJobBlocked = job.issues.length > 0 || unpaidRequirements.length > 0;
+    const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+    const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+
+    // 3a. Scheduling Signals
+    const now = new Date();
+    const upcomingVisits = job.visits.filter(
+      (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt > now
+    );
+    const missedVisits = job.visits.filter(
+      (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt <= now
+    );
+    const hasFutureVisit = upcomingVisits.length > 0;
+
+    for (const visit of missedVisits) {
+      items.push({
+        id: `visit-missed-${visit.id}`,
+        kind: "schedule",
+        title: `Missed Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
+        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+        status: "Missed",
+        priority: "high",
+        group: "investigate",
+        lens: "attention",
+        filterCategory: "jobs",
+        reason: "Scheduled visit time has passed without completion.",
+        nextStep: "Complete, reschedule, or cancel visit.",
+        recordId: visit.id,
+        parentRecordId: job.id,
+        parentLabel: primaryJobIdentity,
+        href: `/jobs/${job.id}`,
+        updatedAt: visit.updatedAt,
+      });
+    }
+
+    for (const visit of upcomingVisits) {
+      const isToday = visit.scheduledStartAt.toDateString() === now.toDateString();
+      items.push({
+        id: `visit-upcoming-${visit.id}`,
+        kind: "schedule",
+        title: `Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
+        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+        status: isToday ? "Today" : "Upcoming",
+        priority: isToday ? "high" : "medium",
+        group: isToday ? "active" : "scheduled",
+        lens: isToday ? "today" : "upcoming",
+        filterCategory: "jobs",
+        reason: isToday ? "Visit scheduled for today." : "Upcoming scheduled visit.",
+        nextStep: "Prepare for visit.",
+        recordId: visit.id,
+        parentRecordId: job.id,
+        parentLabel: primaryJobIdentity,
+        href: `/jobs/${job.id}`,
+        updatedAt: visit.updatedAt,
+      });
+    }
+
+    // 3b. Payment Signals (surfaced as attention items)
+    for (const payment of unpaidRequirements) {
+      items.push({
+        id: `payment-needed-${payment.id}`,
+        kind: "job",
+        title: `Payment Due: ${payment.title}`,
+        subtitle: primaryJobIdentity,
+        status: "Unpaid",
+        priority: "high",
+        group: "investigate",
+        lens: "attention",
+        filterCategory: "payments",
+        reason: payment.requiredBeforeStageId ? "Payment required before next stage." : "Required payment is due.",
+        nextStep: "Record payment or waive.",
+        recordId: job.id,
+        parentRecordId: job.customerId || job.leadId || undefined,
+        parentLabel: primaryJobIdentity,
+        href: `/jobs/${job.id}`,
+        updatedAt: payment.updatedAt,
+      });
+    }
+
+    if (!hasFutureVisit && job.status === JobStatus.ACTIVE && !isJobBlocked) {
+      // Only signal unscheduled if there are tasks to do
+      const hasOpenTasks = job.tasks.length > 0;
+      if (hasOpenTasks) {
+        items.push({
+          id: `job-unscheduled-${job.id}`,
+          kind: "schedule",
+          title: "Unscheduled Job",
+          subtitle: primaryJobIdentity,
+          status: "Needs Schedule",
+          priority: "medium",
+          group: "ready",
+          lens: "today",
+          filterCategory: "jobs",
+          reason: "Active job with open tasks has no upcoming visits.",
+          nextStep: "Schedule a job visit.",
+          recordId: job.id,
+          parentRecordId: job.customerId || job.leadId || undefined,
+          parentLabel: primaryJobIdentity,
+          href: `/jobs/${job.id}`,
+          updatedAt: job.updatedAt,
+        });
+      }
+    }
 
     for (const task of job.tasks) {
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
-      const priority = task.status === JobTaskStatus.IN_PROGRESS ? "high" : "medium";
-      const lens: WorkstationLens = priority === "high" ? "attention" : "today";
+      const taskPaymentBlockers = unpaidRequirements.filter((p) => {
+        // Job-level gate blocks everything
+        if (p.requiredBeforeStageId === null) return true;
+
+        // Stage-level gate blocks its stage and all subsequent stages
+        if (p.requiredBeforeStage) {
+          return task.jobStage.sortOrder >= p.requiredBeforeStage.sortOrder;
+        }
+
+        return false;
+      });
+
+      const derivedState = deriveTaskState({
+        completedAt: task.completedAt,
+        completionNote: task.completionNote,
+        completionRequirementsJson: task.completionRequirementsJson,
+        attachments: task.attachments,
+        issues: task.issues,
+        paymentBlockers: taskPaymentBlockers,
+      });
+
+      const priority = derivedState === "READY_TO_COMPLETE" ? "high" : "medium";
+      const lens: WorkstationLens = derivedState === "BLOCKED" ? "waiting" : priority === "high" ? "attention" : "today";
+      const group: WorkstationWorkItemGroup = derivedState === "BLOCKED" ? "blocked" : "active";
 
       items.push({
         id: `task-${task.id}`,
         kind: "task",
         title: task.title,
         subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""} · ${task.jobStage.title}`,
-        status: task.status,
+        status: taskStateLabel(derivedState, {
+          completedAt: task.completedAt,
+          completionNote: task.completionNote,
+          completionRequirementsJson: task.completionRequirementsJson,
+          attachments: task.attachments,
+          issues: task.issues,
+          paymentBlockers: taskPaymentBlockers,
+        }),
         priority,
-        group: "active",
+        group,
         lens,
         filterCategory: "tasks",
-        reason: task.status === JobTaskStatus.IN_PROGRESS ? "Task is currently in progress." : "Task is ready to start.",
-        nextStep: task.status === JobTaskStatus.IN_PROGRESS ? "Complete the task." : "Start the task.",
+        reason: derivedState === "BLOCKED" ? 
+                (taskPaymentBlockers.length > 0 ? "Task is blocked by unpaid payment." : "Task is blocked by an open issue.") : 
+                derivedState === "NEEDS_PROOF" ? "Task needs completion proof." :
+                "Task is ready to complete.",
+        nextStep: derivedState === "BLOCKED" ? 
+                  (taskPaymentBlockers.length > 0 ? "Record payment." : "Resolve the issue.") : 
+                  "Complete the task.",
         recordId: task.id,
         parentRecordId: job.id,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: task.updatedAt,
-        isBlocked: isJobBlocked,
+        isBlocked: derivedState === "BLOCKED",
       });
     }
 
@@ -537,7 +693,7 @@ export function getWorkstationSummary(items: WorkstationWorkItem[]): Workstation
     ).size,
     openTasksCount: items.filter((i) => i.kind === "task").length,
     openLeadsQuotesCount: items.filter((i) => i.kind === "lead" || i.kind === "quote").length,
-    scheduledTodayCount: 0,
+    scheduledTodayCount: items.filter((i) => i.kind === "schedule" && i.status === "Today").length,
     dailyLogsToReviewCount: items.filter((i) => i.kind === "daily-log").length,
   };
 }

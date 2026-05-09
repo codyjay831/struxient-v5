@@ -114,6 +114,12 @@ enum JobTaskStatus {
   DONE
 }
 
+enum JobVisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
 model Organization {
   id                    String                 @id @default(cuid())
   name                  String
@@ -133,6 +139,8 @@ model Organization {
   jobPaymentRequirements JobPaymentRequirement[]
   jobActivities         JobActivity[]
   dailyJobLogs          DailyJobLog[]
+  attachments           Attachment[]
+  jobVisits             JobVisit[]
   publicRequestSettings PublicRequestSettings?
 }
 
@@ -187,6 +195,9 @@ model User {
   jobIssues     JobIssue[]
   jobActivities JobActivity[]
   reviewedDailyJobLogs DailyJobLog[] @relation("ReviewedBy")
+  completedTasks JobTask[] @relation("CompletedTasks")
+  uploadedAttachments Attachment[] @relation("UploadedAttachments")
+  assignedVisits JobVisit[] @relation("AssignedVisits")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -223,6 +234,7 @@ model Lead {
   convertedAt    DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  attachments    Attachment[]
   quotes         Quote[]
   jobs           Job[]
 
@@ -248,6 +260,7 @@ model Quote {
   totalCents         Int            @default(0)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  attachments        Attachment[]
   lineItems          QuoteLineItem[]
   checkpoints        QuoteCheckpoint[]
   job                Job?
@@ -315,6 +328,7 @@ model TaskTemplate {
   stageKey           ExecutionStageKey
   category           TaskTemplateCategory
   instructions       String?
+  requirementsJson   Json                 @default("{}")
   archivedAt         DateTime?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
@@ -338,6 +352,7 @@ model LineItemTemplateTask {
   stageKey             ExecutionStageKey
   category             TaskTemplateCategory
   instructions         String?
+  requirementsJson     Json                       @default("{}")
   sortOrder            Int                        @default(0)
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
@@ -397,6 +412,7 @@ model QuoteLineExecutionTask {
   stageKey                     ExecutionStageKey
   category                     TaskTemplateCategory
   instructions                 String?
+  requirementsJson             Json                       @default("{}")
   sortOrder                    Int                        @default(0)
   createdAt                    DateTime                   @default(now())
   updatedAt                    DateTime                   @updatedAt
@@ -424,6 +440,8 @@ model Job {
   activatedAt    DateTime     @default(now())
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  attachments    Attachment[]
+  visits         JobVisit[]
   stages         JobStage[]
   tasks          JobTask[]
   issues         JobIssue[]
@@ -487,8 +505,14 @@ model JobTask {
   instructions                   String?
   status                         JobTaskStatus              @default(TODO)
   sortOrder                      Int                        @default(0)
+  completedAt                    DateTime?
+  completedByUserId              String?
+  completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
+  completionNote                 String?
+  completionRequirementsJson     Json                       @default("{}")
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt
+  attachments                    Attachment[]
   issues                         JobIssue[]
   sourceJobIssueId               String?                    @unique
   sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id], onDelete: SetNull)
@@ -568,6 +592,71 @@ enum JobActivityType {
   PAYMENT_REQUIREMENT_PAID
   PAYMENT_REQUIREMENT_WAIVED
   PAYMENT_REQUIREMENT_CANCELED
+  TASK_COMPLETED
+  ATTACHMENT_UPLOADED
+  VISIT_SCHEDULED
+  VISIT_RESCHEDULED
+  VISIT_CANCELED
+  VISIT_COMPLETED
+}
+
+model JobVisit {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId           String
+  job             Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  scheduledStartAt DateTime
+  scheduledEndAt   DateTime?
+  status           JobVisitStatus @default(SCHEDULED)
+  
+  assignedUserId   String?
+  assignedUser     User?          @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  
+  notes            String?
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([scheduledStartAt])
+}
+
+model Attachment {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  fileName        String
+  fileKey         String       // Storage provider key/path
+  contentType     String
+  fileSize        Int
+  
+  // Explicit nullable foreign keys
+  leadId          String?
+  lead            Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  quoteId         String?
+  quote           Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  jobId           String?
+  job             Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  jobTaskId       String?
+  jobTask         JobTask?     @relation(fields: [jobTaskId], references: [id], onDelete: SetNull)
+  
+  uploadedByUserId String?
+  uploadedByUser   User?       @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([leadId])
+  @@index([quoteId])
+  @@index([jobId])
+  @@index([jobTaskId])
 }
 
 model JobActivity {

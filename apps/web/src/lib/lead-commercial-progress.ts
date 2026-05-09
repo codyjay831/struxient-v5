@@ -142,12 +142,12 @@ const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
 };
 
 const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
-  ADD_CONTACT_INFO: "New lead — add contact info",
-  NEEDS_CUSTOMER: "Needs customer",
+  ADD_CONTACT_INFO: "Needs contact info",
+  NEEDS_CUSTOMER: "Needs customer record",
   READY_FOR_QUOTE: "Ready for quote",
   QUOTE_IN_PROGRESS: "Quote in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
-  APPROVED_READY_TO_ACTIVATE: "Approved — ready for execution",
+  APPROVED_READY_TO_ACTIVATE: "Approved — ready to activate",
   JOB_ACTIVE: "Job active",
   CLOSED_NOT_A_FIT: "Closed — not a fit",
   ARCHIVED: "Archived",
@@ -367,13 +367,13 @@ export function getLeadCommercialProgress(
   if (lead.status === ("OPEN" as LeadStatus)) {
     return {
       state: "ADD_CONTACT_INFO",
-      label: "New lead — needs qualification",
+      label: "New lead — review intake",
       description: hasContact
-        ? "Contact info is available. Qualify this lead to move it forward."
-        : "Add contact info and qualify this lead to move it forward.",
-      primaryAction: { kind: "QUALIFY_LEAD", label: "Mark as qualifying" },
+        ? "Review the intake details, then qualify this lead to move it forward."
+        : "Add an email or phone number and qualify this lead to move it forward.",
+      primaryAction: { kind: "QUALIFY_LEAD", label: "Qualify lead" },
       secondaryAction: hasContact
-        ? { kind: "ATTACH_OR_CREATE_CUSTOMER", label: "Attach or create customer" }
+        ? { kind: "ATTACH_OR_CREATE_CUSTOMER", label: "Link customer" }
         : { kind: "EDIT_CONTACT_INFO", label: "Add contact info" },
       activeQuote: null,
       activeJob: null,
@@ -389,10 +389,10 @@ export function getLeadCommercialProgress(
     return {
       state: "NEEDS_CUSTOMER",
       label: STATE_LABEL.NEEDS_CUSTOMER,
-      description: "This lead has contact info. Attach or create a customer to anchor a quote.",
+      description: "Contact info is on file. Link an existing customer or create a new one to anchor the quote.",
       primaryAction: {
         kind: "ATTACH_OR_CREATE_CUSTOMER",
-        label: "Attach or create customer",
+        label: "Link or create customer",
       },
       secondaryAction: { kind: "START_QUOTE", label: "Start quote anyway" },
       activeQuote: null,

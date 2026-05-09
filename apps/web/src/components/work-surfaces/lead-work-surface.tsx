@@ -20,8 +20,10 @@ import Link from "next/link";
 import {
   ArrowRight,
   ArrowUpRight,
+  Check,
   ChevronRight,
   Pencil,
+  UserRound,
 } from "lucide-react";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import {
@@ -405,9 +407,12 @@ function NextStepCard({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-background p-5">
-      <p className={sectionLabelClass}>Next step</p>
-      <h3 className="mt-1.5 text-base font-semibold text-foreground leading-snug">
+    <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`size-1.5 rounded-full bg-accent animate-pulse`} />
+        <p className={sectionLabelClass}>Next action</p>
+      </div>
+      <h3 className="text-lg font-semibold text-foreground leading-snug">
         {lead.progressLabel}
       </h3>
       <p className="mt-1 text-sm text-foreground-muted leading-relaxed">
@@ -415,9 +420,9 @@ function NextStepCard({
       </p>
 
       {lead.activeJobId && (
-        <div className="mt-3 rounded-lg border border-border bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
+        <div className="mt-4 rounded-lg border border-border bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
           <div>
-            <p className={sectionLabelClass}>Linked job</p>
+            <p className={sectionLabelClass}>Active job</p>
             <p className="mt-0.5 text-sm font-medium text-foreground capitalize">
               {lead.activeJobStatus
                 ? lead.activeJobStatus.charAt(0).toUpperCase() +
@@ -426,12 +431,12 @@ function NextStepCard({
             </p>
           </div>
           <p className="text-xs text-foreground-subtle">
-            Opening the job page is the next step.
+            Job in execution
           </p>
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-2">
         {primary && renderAction(primary, "primary")}
         {secondary && renderAction(secondary, "secondary")}
       </div>
@@ -472,12 +477,16 @@ function OverviewTab({
 
       {/* 4-field summary — same shape in all modes. */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-border bg-surface p-3">
+        <button
+          type="button"
+          onClick={onSwitchToContact}
+          className="rounded-lg border border-border bg-surface p-3 text-left hover:bg-background transition-colors"
+        >
           <p className={`${sectionLabelClass} mb-0.5`}>Customer</p>
           <p className="text-sm font-medium text-foreground truncate">
             {lead.customerDisplayName ?? "Not linked"}
           </p>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onSwitchToQuote}
@@ -502,6 +511,29 @@ function OverviewTab({
           </div>
         )}
       </div>
+
+      {/* Prominent Linked Customer card (if linked) */}
+      {lead.customerId && (
+        <div className="rounded-xl border border-border bg-surface p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-foreground/[0.03] text-foreground-subtle">
+              <UserRound className="size-5" />
+            </div>
+            <div>
+              <p className={sectionLabelClass}>Linked customer</p>
+              <p className="text-sm font-semibold text-foreground">
+                {lead.customerDisplayName}
+              </p>
+            </div>
+          </div>
+          {lead.customerHref && (
+            <Link href={lead.customerHref} className={mutedLinkClass}>
+              View record
+              <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Active quote summary (full mode only). */}
       {isFull && lead.activeQuoteId && lead.activeQuoteTitle && (
@@ -710,10 +742,11 @@ function ContactTab({
   onRefresh: () => void;
 }) {
   const isFull = mode === "full";
+  const hasContactInfo = Boolean(lead.email) || Boolean(lead.phone);
   /* Auto-expand the edit form when the lead has no contact info. Lazy initial
      state so it's set once per surface mount. */
   const [isEditingContact, setIsEditingContact] = useState(
-    () => lead.progressState === "ADD_CONTACT_INFO",
+    () => lead.progressState === "ADD_CONTACT_INFO" && !hasContactInfo,
   );
 
   function handleContactSaved() {
@@ -727,7 +760,7 @@ function ContactTab({
   return (
     <div className="space-y-4">
       {/* ── Contact info ─────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className={`rounded-xl border border-border bg-surface p-4 ${!isEditingContact && hasContactInfo ? 'opacity-70' : ''}`}>
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className={sectionLabelClass}>Contact info</p>
           {!isEditingContact && (
@@ -753,7 +786,7 @@ function ContactTab({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <p className={`${sectionLabelClass} mb-0.5`}>Name</p>
-              <p className="text-sm text-foreground-muted">
+              <p className="text-sm font-medium text-foreground">
                 {lead.contactName ?? "Not provided"}
               </p>
             </div>
@@ -762,7 +795,7 @@ function ContactTab({
               {lead.email ? (
                 <a
                   href={`mailto:${lead.email}`}
-                  className="text-sm text-foreground-muted hover:text-foreground transition-colors break-all"
+                  className="text-sm text-foreground hover:text-accent transition-colors break-all"
                 >
                   {lead.email}
                 </a>
@@ -775,7 +808,7 @@ function ContactTab({
               {lead.phone ? (
                 <a
                   href={`tel:${lead.phone}`}
-                  className="text-sm text-foreground-muted hover:text-foreground transition-colors"
+                  className="text-sm text-foreground hover:text-accent transition-colors"
                 >
                   {lead.phone}
                 </a>
@@ -791,17 +824,25 @@ function ContactTab({
       {lead.customerId ? (
         <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className={sectionLabelClass}>Customer</p>
-              <p className="mt-1 text-sm font-medium text-foreground">
-                {lead.customerDisplayName}
-              </p>
-              <StatusBadge label="Linked" tone="approved" />
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-foreground/[0.03] text-foreground-subtle">
+                <UserRound className="size-5" />
+              </div>
+              <div>
+                <p className={sectionLabelClass}>Linked customer</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {lead.customerDisplayName}
+                </p>
+                <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success-strong">
+                  <Check className="size-3" />
+                  <span>Linked</span>
+                </div>
+              </div>
             </div>
             <div className="flex flex-col items-end gap-2">
               {lead.customerHref && (
                 <Link href={lead.customerHref} className={mutedLinkClass}>
-                  Customer record
+                  View record
                   <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
                 </Link>
               )}
@@ -1043,23 +1084,40 @@ function QuoteTab({
     const hasCustomer = lead.customerId != null;
     return (
       <div className="space-y-4">
-        <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
-          <p className="text-sm font-medium text-foreground">No quote started</p>
-          <p className="text-xs text-foreground-subtle max-w-xs leading-relaxed">
-            {hasCustomer
-              ? "Start a draft quote for this lead here, or use the full-page builder if you prefer more room."
-              : "Start a draft from this workspace (optional customer — link one on the Contact tab when you want billing anchored)."}
-          </p>
-          <button
-            type="button"
-            onClick={onStartQuote}
-            disabled={isStartQuotePending}
-            aria-busy={isStartQuotePending}
-            className={primaryBtnClass}
-          >
-            Start quote
-            <ArrowRight className="w-3.5 h-3.5 opacity-70" strokeWidth={2} />
-          </button>
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+          <div className="flex size-12 items-center justify-center rounded-full bg-foreground/[0.03] text-foreground-subtle">
+            <ArrowRight className="size-6" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-foreground">No quote started yet</p>
+            <p className="text-xs text-foreground-muted max-w-xs leading-relaxed">
+              {hasCustomer
+                ? "The customer is linked. You can now start a draft quote to begin pricing the work."
+                : "Start a draft quote for this lead. You can link a customer later on the Contact tab."}
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onStartQuote}
+              disabled={isStartQuotePending}
+              aria-busy={isStartQuotePending}
+              className={primaryBtnClass}
+            >
+              Start draft quote
+              <ArrowRight className="w-3.5 h-3.5 opacity-70" strokeWidth={2} />
+            </button>
+
+            {!hasCustomer ? (
+              <button
+                type="button"
+                onClick={onSwitchToContact}
+                className="text-xs text-foreground-subtle hover:text-foreground underline underline-offset-4 transition-colors"
+              >
+                Link customer first
+              </button>
+            ) : null}
+          </div>
 
           {startQuoteError ? (
             <p
@@ -1071,23 +1129,15 @@ function QuoteTab({
             </p>
           ) : null}
 
-          <Link
-            href={lead.newQuoteHref}
-            className="inline-flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
-          >
-            Create quote on full page
-            <ArrowUpRight className="w-3 h-3" strokeWidth={1.5} />
-          </Link>
-
-          {!hasCustomer ? (
-            <button
-              type="button"
-              onClick={onSwitchToContact}
-              className="text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
+          <div className="pt-4 border-t border-border w-full max-w-[200px]">
+            <Link
+              href={lead.newQuoteHref}
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-foreground-subtle hover:text-foreground transition-colors"
             >
-              Go to Contact tab to link or create a customer
-            </button>
-          ) : null}
+              Full quote builder
+              <ArrowUpRight className="w-3 h-3" strokeWidth={2} />
+            </Link>
+          </div>
         </div>
       </div>
     );

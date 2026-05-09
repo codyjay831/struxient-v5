@@ -20,6 +20,8 @@ import { JobIssueManager } from "@/components/jobs/job-issue-manager";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
+import { JobVisitManager } from "@/components/jobs/job-visit-manager";
+import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobIssueStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +52,17 @@ export default async function JobDetailPage({
       createdAt: true,
       updatedAt: true,
       quoteId: true,
+      visits: {
+        orderBy: [{ scheduledStartAt: "desc" }],
+        select: {
+          id: true,
+          scheduledStartAt: true,
+          scheduledEndAt: true,
+          status: true,
+          notes: true,
+          assignedUser: { select: { name: true, email: true } },
+        },
+      },
       quote: { select: { id: true, title: true, organizationId: true } },
       customer: { select: { id: true, displayName: true, organizationId: true } },
       lead: { select: { id: true, title: true, organizationId: true } },
@@ -82,6 +95,7 @@ export default async function JobDetailPage({
           id: true,
           stageKey: true,
           title: true,
+          sortOrder: true,
           blockType: true,
           blockTitle: true,
           blockSortOrder: true,
@@ -95,6 +109,21 @@ export default async function JobDetailPage({
               category: true,
               instructions: true,
               sourceQuoteLineItemId: true,
+              completedAt: true,
+              completionNote: true,
+              completionRequirementsJson: true,
+              attachments: {
+                select: {
+                  id: true,
+                  fileName: true,
+                  fileKey: true,
+                  contentType: true,
+                },
+              },
+              issues: {
+                where: { status: JobIssueStatus.OPEN },
+                select: { status: true, severity: true },
+              },
             },
           },
         },
@@ -108,7 +137,7 @@ export default async function JobDetailPage({
           status: true,
           notes: true,
           requiredBeforeStageId: true,
-          requiredBeforeStage: { select: { title: true } },
+          requiredBeforeStage: { select: { title: true, sortOrder: true } },
           paidAt: true,
           waivedAt: true,
           canceledAt: true,
@@ -295,6 +324,11 @@ export default async function JobDetailPage({
         stages={job.stages}
       />
 
+      <JobVisitManager
+        jobId={job.id}
+        initialVisits={job.visits}
+      />
+
       <JobActivityFeed activities={job.activities} />
 
       <DailyJobLogManager
@@ -333,26 +367,22 @@ export default async function JobDetailPage({
                 {stage.tasks.length === 0 ? (
                   <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
                 ) : (
-                  <ul className="space-y-2">
-                    {stage.tasks.map((task) => (
-                      <li
-                        key={task.id}
-                        className="rounded-md border border-border/80 bg-background/30 px-3 py-2"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-foreground">{task.title}</p>
-                            {task.instructions ? (
-                              <p className="mt-1 text-xs text-foreground-muted">{task.instructions}</p>
-                            ) : null}
-                          </div>
-                          <StatusBadge
-                            label={formatJobTaskStatus(task.status)}
-                            tone={jobTaskStatusBadgeTone(task.status)}
-                          />
-                        </div>
-                      </li>
-                    ))}
+                  <ul className="space-y-3">
+                    {stage.tasks.map((task) => {
+                      const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
+                        if (p.status !== "DUE") return false;
+                        if (p.requiredBeforeStageId === null) return true;
+                        if (p.requiredBeforeStage) {
+                          return stage.sortOrder >= p.requiredBeforeStage.sortOrder;
+                        }
+                        return false;
+                      });
+                      return (
+                        <li key={task.id}>
+                          <JobTaskCard task={{ ...task, paymentBlockers: taskPaymentBlockers }} />
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>
@@ -386,26 +416,22 @@ export default async function JobDetailPage({
                       {stage.tasks.length === 0 ? (
                         <p className="mt-2 text-xs text-foreground-muted">No tasks on this stage.</p>
                       ) : (
-                        <ul className="mt-2 space-y-1.5">
-                          {stage.tasks.map((task) => (
-                            <li
-                              key={task.id}
-                              className="rounded border border-border/60 bg-background/40 px-2.5 py-1.5"
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm text-foreground">{task.title}</p>
-                                  {task.instructions ? (
-                                    <p className="mt-1 text-xs text-foreground-muted">{task.instructions}</p>
-                                  ) : null}
-                                </div>
-                                <StatusBadge
-                                  label={formatJobTaskStatus(task.status)}
-                                  tone={jobTaskStatusBadgeTone(task.status)}
-                                />
-                              </div>
-                            </li>
-                          ))}
+                        <ul className="mt-3 space-y-2">
+                          {stage.tasks.map((task) => {
+                            const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
+                              if (p.status !== "DUE") return false;
+                              if (p.requiredBeforeStageId === null) return true;
+                              if (p.requiredBeforeStage) {
+                                return stage.sortOrder >= p.requiredBeforeStage.sortOrder;
+                              }
+                              return false;
+                            });
+                            return (
+                              <li key={task.id}>
+                                <JobTaskCard task={{ ...task, paymentBlockers: taskPaymentBlockers }} />
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </div>

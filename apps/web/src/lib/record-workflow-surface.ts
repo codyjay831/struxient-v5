@@ -217,15 +217,15 @@ export function buildLeadRecordActionState(input: {
       }
       break;
     case "NEEDS_CUSTOMER":
-      requiredItems.push("Link or create a customer to anchor quotes and billing.");
+      requiredItems.push("Link an existing customer or create a new one from this lead.");
       break;
     case "READY_FOR_QUOTE":
-      satisfiedItems.push("Customer is linked.");
-      requiredItems.push("Start a quote when you have enough scope to price.");
+      satisfiedItems.push("Customer is linked and ready.");
+      requiredItems.push("Start a draft quote to begin pricing the work.");
       break;
     case "QUOTE_IN_PROGRESS":
       satisfiedItems.push("Customer is linked.");
-      requiredItems.push("Finish the draft quote — lines, totals, and terms.");
+      requiredItems.push("Finish the draft quote — add lines, totals, and terms.");
       break;
     case "SENT_AWAITING_CUSTOMER":
       satisfiedItems.push("Quote sent — waiting on the customer.");

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
+import { ArrowRight, UserRound } from "lucide-react";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
 import {
   createCustomerFromLeadWorkspaceAction,
@@ -55,14 +56,13 @@ export function LeadWorkspaceCustomerCreateInline({
   });
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
-      <p className="text-xs font-medium text-foreground-subtle uppercase tracking-wide">
-        Create customer from lead
-      </p>
-      <p className="text-xs text-foreground-muted leading-relaxed">
-        Creates a new customer record from this intake and links it to the lead. Review the
-        preview, then confirm.
-      </p>
+    <div className="rounded-xl border border-border bg-surface p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <UserRound className="size-4 text-foreground-subtle" />
+        <p className="text-xs font-bold text-foreground-subtle uppercase tracking-wider">
+          New customer record
+        </p>
+      </div>
 
       {!prepared.ok ? (
         <div className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-danger">
@@ -75,28 +75,35 @@ export function LeadWorkspaceCustomerCreateInline({
           </Link>
         </div>
       ) : (
-        <dl className="rounded-lg border border-border bg-background px-4 py-3 grid gap-2.5 text-sm">
-          <div>
-            <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-              Display name
-            </dt>
-            <dd className="mt-0.5 font-medium text-foreground">{prepared.data.displayName}</dd>
-          </div>
-          <div>
-            <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-              Email
-            </dt>
-            <dd className="mt-0.5 text-foreground-muted break-all">
-              {prepared.data.email ?? "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-              Phone
-            </dt>
-            <dd className="mt-0.5 text-foreground-muted">{prepared.data.phone ?? "—"}</dd>
-          </div>
-        </dl>
+        <div className="space-y-3">
+          <p className="text-xs text-foreground-muted leading-relaxed">
+            Create a new customer record from this intake.
+          </p>
+          <dl className="rounded-lg border border-border bg-background px-4 py-3 grid gap-2.5 text-sm">
+            <div>
+              <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                Display name
+              </dt>
+              <dd className="mt-0.5 font-medium text-foreground">{prepared.data.displayName}</dd>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                  Email
+                </dt>
+                <dd className="mt-0.5 text-foreground-muted break-all truncate">
+                  {prepared.data.email ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                  Phone
+                </dt>
+                <dd className="mt-0.5 text-foreground-muted">{prepared.data.phone ?? "—"}</dd>
+              </div>
+            </div>
+          </dl>
+        </div>
       )}
 
       {state.error && (
@@ -116,10 +123,11 @@ export function LeadWorkspaceCustomerCreateInline({
           aria-busy={isPending}
           className={primaryBtnClass}
         >
-          {isPending ? "Creating…" : "Create customer from lead"}
+          {isPending ? "Creating…" : "Confirm & Create"}
+          {!isPending && <ArrowRight className="size-3.5 opacity-70" />}
         </button>
         <Link href={editLeadHref} className={secondaryBtnClass}>
-          Edit lead first
+          Edit details
         </Link>
       </form>
     </div>

@@ -2,7 +2,7 @@
 
 import { JobActivityType } from "@prisma/client";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { History, User as UserIcon, Settings } from "lucide-react";
+import { History, User as UserIcon, Settings, Calendar } from "lucide-react";
 
 type Activity = {
   id: string;
@@ -104,6 +104,17 @@ function ActivityIcon({ type }: { type: JobActivityType }) {
       return <span className="text-foreground-muted">~</span>;
     case "PAYMENT_REQUIREMENT_CANCELED":
       return <span className="text-danger-strong">×</span>;
+    case "TASK_COMPLETED":
+      return <span className="text-success-strong">✓</span>;
+    case "ATTACHMENT_UPLOADED":
+      return <span className="text-accent">↑</span>;
+    case "VISIT_SCHEDULED":
+    case "VISIT_RESCHEDULED":
+      return <Calendar className="size-4 text-accent" />;
+    case "VISIT_CANCELED":
+      return <Calendar className="size-4 text-danger-strong" />;
+    case "VISIT_COMPLETED":
+      return <Calendar className="size-4 text-success-strong" />;
     default:
       return <Settings className="size-4 text-foreground-subtle" />;
   }

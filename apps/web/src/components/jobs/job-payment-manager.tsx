@@ -162,6 +162,12 @@ function RequirementCard({
               label={formatJobPaymentStatus(requirement.status)}
               tone={jobPaymentStatusBadgeTone(requirement.status)}
             />
+            {requirement.status === "DUE" && (
+              <span className="flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger">
+                <Ban className="size-2.5" />
+                Blocking work
+              </span>
+            )}
           </div>
           {requirement.amountCents && (
             <p className="mt-1 text-xs font-medium text-foreground-subtle">

@@ -7,7 +7,7 @@ import type { WorkspaceFormState } from "@/app/(workspace)/leads/leads-workspace
 import { linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/leads-workspace-actions";
 import { EmptyState } from "@/components/ui/empty-state";
 import { handoffPrimaryLinkClass } from "@/components/ui/handoff-panel";
-import { UserRound } from "lucide-react";
+import { ArrowRight, UserRound } from "lucide-react";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -153,7 +153,7 @@ export function LeadLinkCustomerWorkspaceForm({
 
       <div>
         <label className="block" htmlFor="lead-link-customer-workspace-select">
-          <span className={fieldLabelClass}>Customer</span>
+          <span className={fieldLabelClass}>Select customer</span>
           <select
             id="lead-link-customer-workspace-select"
             name="customerId"
@@ -162,7 +162,7 @@ export function LeadLinkCustomerWorkspaceForm({
             defaultValue=""
           >
             <option value="" disabled>
-              Select a customer…
+              Select…
             </option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
@@ -181,10 +181,8 @@ export function LeadLinkCustomerWorkspaceForm({
           className={primaryButtonClass}
         >
           {isPending ? "Linking…" : "Link to customer"}
+          {!isPending && <ArrowRight className="size-3.5 opacity-70 ml-1.5" />}
         </button>
-        <Link href="/customers" className={mutedLinkClass}>
-          Browse customers
-        </Link>
       </div>
     </form>
   );
