@@ -8,7 +8,19 @@ import {
   QuoteStatus,
   StaffRole,
   TaskTemplateCategory,
+  JobStatus,
+  JobTaskStatus,
+  JobVisitStatus,
+  AttachmentStatus,
+  JobIssueType,
+  JobIssueSeverity,
+  JobIssueStatus,
+  JobPaymentRequirementStatus,
+  JobActivityType,
+  JobStageBlockType,
 } from "@prisma/client";
+import { join } from "path";
+import { mkdir, writeFile } from "fs/promises";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -468,6 +480,396 @@ async function main() {
     `[dev seed] Demo quote: "${demoQuoteResult.quoteId}" created with ${demoQuoteResult.lineCount} lines.`,
   );
 
+  // --- EXECUTION SHOWCASE DEMO SCENARIO ---
+  console.log("[dev seed] Starting Execution Showcase demo scenario…");
+
+  const demoCustomer = await prisma.customer.upsert({
+    where: { id: "dev-customer-demo-execution" },
+    update: {
+      displayName: "Demo Customer — Execution Showcase",
+      companyName: "Execution Showcase Corp",
+      email: "demo@execution.struxient",
+      phone: "555-0999",
+      organizationId: devOrg.id,
+    },
+    create: {
+      id: "dev-customer-demo-execution",
+      displayName: "Demo Customer — Execution Showcase",
+      companyName: "Execution Showcase Corp",
+      email: "demo@execution.struxient",
+      phone: "555-0999",
+      organizationId: devOrg.id,
+    },
+  });
+
+  const demoLeads = [
+    {
+      id: "dev-lead-unlinked-demo",
+      title: "Demo Lead — Unlinked (Needs Customer)",
+      status: LeadStatus.OPEN,
+      source: LeadSource.WEBSITE,
+      contactName: "Unlinked User",
+      email: "unlinked@example.com",
+      organizationId: devOrg.id,
+    },
+    {
+      id: "dev-lead-linked-no-quote",
+      title: "Demo Lead — Linked (Ready for Quote)",
+      status: LeadStatus.QUALIFYING,
+      source: LeadSource.REFERRAL,
+      customerId: demoCustomer.id,
+      contactName: "No Quote User",
+      organizationId: devOrg.id,
+    },
+    {
+      id: "dev-lead-linked-draft-quote",
+      title: "Demo Lead — Linked (Has Draft Quote)",
+      status: LeadStatus.QUALIFYING,
+      source: LeadSource.PHONE,
+      customerId: demoCustomer.id,
+      contactName: "Draft Quote User",
+      organizationId: devOrg.id,
+    },
+  ];
+
+  for (const lead of demoLeads) {
+    await prisma.lead.upsert({
+      where: { id: lead.id },
+      update: lead,
+      create: lead,
+    });
+  }
+
+  const demoQuote = await prisma.quote.upsert({
+    where: { id: "dev-quote-demo-execution" },
+    update: {
+      title: "Demo Quote — Execution Showcase",
+      status: QuoteStatus.APPROVED,
+      customerId: demoCustomer.id,
+      leadId: "dev-lead-linked-draft-quote",
+      totalCents: 1250000,
+      organizationId: devOrg.id,
+    },
+    create: {
+      id: "dev-quote-demo-execution",
+      title: "Demo Quote — Execution Showcase",
+      status: QuoteStatus.APPROVED,
+      customerId: demoCustomer.id,
+      leadId: "dev-lead-linked-draft-quote",
+      totalCents: 1250000,
+      organizationId: devOrg.id,
+    },
+  });
+
+  console.log("[dev seed] Demo leads and quote created.");
+
+  const demoJob = await prisma.job.upsert({
+    where: { id: "dev-job-demo-execution" },
+    update: {
+      title: "Demo Job — Execution Showcase",
+      status: JobStatus.ACTIVE,
+      quoteId: demoQuote.id,
+      customerId: demoCustomer.id,
+      leadId: "dev-lead-linked-draft-quote",
+      organizationId: devOrg.id,
+    },
+    create: {
+      id: "dev-job-demo-execution",
+      title: "Demo Job — Execution Showcase",
+      status: JobStatus.ACTIVE,
+      quoteId: demoQuote.id,
+      customerId: demoCustomer.id,
+      leadId: "dev-lead-linked-draft-quote",
+      organizationId: devOrg.id,
+    },
+  });
+
+  // Clean up existing stages/tasks for idempotency
+  await prisma.jobTask.deleteMany({ where: { jobId: demoJob.id } });
+  await prisma.jobStage.deleteMany({ where: { jobId: demoJob.id } });
+
+  const stagePreCon = await prisma.jobStage.create({
+    data: {
+      id: "dev-stage-pre-con",
+      jobId: demoJob.id,
+      blockType: JobStageBlockType.SHARED,
+      stageKey: ExecutionStageKey.pre_install,
+      title: "Pre-Construction",
+      sortOrder: 10,
+    },
+  });
+
+  const stageInstall = await prisma.jobStage.create({
+    data: {
+      id: "dev-stage-install",
+      jobId: demoJob.id,
+      blockType: JobStageBlockType.SHARED,
+      stageKey: ExecutionStageKey.installation,
+      title: "Installation",
+      sortOrder: 20,
+    },
+  });
+
+  const stageCloseout = await prisma.jobStage.create({
+    data: {
+      id: "dev-stage-closeout",
+      jobId: demoJob.id,
+      blockType: JobStageBlockType.SHARED,
+      stageKey: ExecutionStageKey.closeout,
+      title: "Final Inspection & Closeout",
+      sortOrder: 30,
+    },
+  });
+
+  console.log("[dev seed] Demo job and stages created.");
+
+  const demoTasks = [
+    {
+      id: "dev-task-ready",
+      jobId: demoJob.id,
+      jobStageId: stagePreCon.id,
+      title: "Demo Task — Ready to Complete",
+      category: TaskTemplateCategory.GENERAL,
+      stageKey: ExecutionStageKey.pre_install,
+      status: JobTaskStatus.TODO,
+      sortOrder: 1,
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+    {
+      id: "dev-task-note",
+      jobId: demoJob.id,
+      jobStageId: stagePreCon.id,
+      title: "Demo Task — Needs Note Proof",
+      category: TaskTemplateCategory.GENERAL,
+      stageKey: ExecutionStageKey.pre_install,
+      status: JobTaskStatus.TODO,
+      sortOrder: 2,
+      completionRequirementsJson: { noteRequired: true },
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+    {
+      id: "dev-task-photo",
+      jobId: demoJob.id,
+      jobStageId: stageInstall.id,
+      title: "Demo Task — Needs Photo Proof",
+      category: TaskTemplateCategory.PHOTO_EVIDENCE,
+      stageKey: ExecutionStageKey.installation,
+      status: JobTaskStatus.TODO,
+      sortOrder: 1,
+      completionRequirementsJson: { photoRequired: true },
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+    {
+      id: "dev-task-completed",
+      jobId: demoJob.id,
+      jobStageId: stagePreCon.id,
+      title: "Demo Task — Completed with Activity",
+      category: TaskTemplateCategory.GENERAL,
+      stageKey: ExecutionStageKey.pre_install,
+      status: JobTaskStatus.DONE,
+      completedAt: new Date(Date.now() - 86400000 * 2), // 2 days ago
+      completedByUserId: devUser.id,
+      completionNote: "Completed successfully during pre-con walk.",
+      sortOrder: 0,
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+    {
+      id: "dev-task-blocked-issue",
+      jobId: demoJob.id,
+      jobStageId: stageInstall.id,
+      title: "Demo Task — Blocked by Issue",
+      category: TaskTemplateCategory.GENERAL,
+      stageKey: ExecutionStageKey.installation,
+      status: JobTaskStatus.TODO,
+      sortOrder: 2,
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+    {
+      id: "dev-task-blocked-payment",
+      jobId: demoJob.id,
+      jobStageId: stageInstall.id,
+      title: "Demo Task — Blocked by Payment",
+      category: TaskTemplateCategory.GENERAL,
+      stageKey: ExecutionStageKey.installation,
+      status: JobTaskStatus.TODO,
+      sortOrder: 3,
+      sourceType: LineItemTemplateTaskSource.CUSTOM,
+    },
+  ];
+
+  for (const task of demoTasks) {
+    await prisma.jobTask.create({ data: task });
+  }
+
+  console.log("[dev seed] Demo tasks created.");
+
+  await prisma.jobIssue.deleteMany({ where: { jobId: demoJob.id } });
+  const demoIssue = await prisma.jobIssue.create({
+    data: {
+      id: "dev-issue-blocking",
+      organizationId: devOrg.id,
+      jobId: demoJob.id,
+      jobTaskId: "dev-task-blocked-issue",
+      type: JobIssueType.SITE_CONDITION,
+      severity: JobIssueSeverity.BLOCKS_WORK,
+      status: JobIssueStatus.OPEN,
+      title: "Demo Issue — Site Access Blocked",
+      description: "Main gate code changed; waiting for customer to provide new code.",
+      createdByUserId: devUser.id,
+    },
+  });
+
+  await prisma.jobPaymentRequirement.deleteMany({ where: { jobId: demoJob.id } });
+  const paymentDeposit = await prisma.jobPaymentRequirement.create({
+    data: {
+      id: "dev-payment-deposit",
+      organizationId: devOrg.id,
+      jobId: demoJob.id,
+      title: "Demo Deposit — Blocks Installation",
+      amountCents: 500000,
+      status: JobPaymentRequirementStatus.DUE,
+      requiredBeforeStageId: stageInstall.id,
+      notes: "50% deposit required before installation begins.",
+    },
+  });
+
+  const paymentPaid = await prisma.jobPaymentRequirement.create({
+    data: {
+      id: "dev-payment-paid",
+      organizationId: devOrg.id,
+      jobId: demoJob.id,
+      title: "Demo Paid Requirement — Does Not Block",
+      amountCents: 10000,
+      status: JobPaymentRequirementStatus.PAID,
+      paidAt: new Date(Date.now() - 86400000 * 5),
+      notes: "Initial consultation fee.",
+    },
+  });
+
+  console.log("[dev seed] Demo issues and payments created.");
+
+  await prisma.jobVisit.deleteMany({ where: { jobId: demoJob.id } });
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 14, 0);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 9, 0);
+  const lastWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 11, 0);
+
+  await prisma.jobVisit.createMany({
+    data: [
+      {
+        id: "dev-visit-today",
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        scheduledStartAt: today,
+        scheduledEndAt: new Date(today.getTime() + 3600000 * 2),
+        status: JobVisitStatus.SCHEDULED,
+        notes: "Today's demo visit.",
+      },
+      {
+        id: "dev-visit-tomorrow",
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        scheduledStartAt: tomorrow,
+        scheduledEndAt: new Date(tomorrow.getTime() + 3600000 * 4),
+        status: JobVisitStatus.SCHEDULED,
+        notes: "Upcoming visit for tomorrow.",
+      },
+      {
+        id: "dev-visit-yesterday",
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        scheduledStartAt: yesterday,
+        scheduledEndAt: new Date(yesterday.getTime() + 3600000),
+        status: JobVisitStatus.SCHEDULED,
+        notes: "Missed visit from yesterday.",
+      },
+      {
+        id: "dev-visit-completed",
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        scheduledStartAt: lastWeek,
+        scheduledEndAt: new Date(lastWeek.getTime() + 3600000 * 3),
+        status: JobVisitStatus.COMPLETED,
+        notes: "Successfully completed visit from last week.",
+      },
+    ],
+  });
+
+  await prisma.jobActivity.deleteMany({ where: { jobId: demoJob.id } });
+  await prisma.jobActivity.createMany({
+    data: [
+      {
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        type: JobActivityType.TASK_COMPLETED,
+        title: "Task completed: Demo Task — Completed with Activity",
+        details: "Outcome: Completed successfully during pre-con walk.",
+        actorUserId: devUser.id,
+        createdAt: new Date(Date.now() - 86400000 * 2),
+      },
+      {
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        type: JobActivityType.PAYMENT_REQUIREMENT_CREATED,
+        title: "Payment requirement created: Demo Deposit — Blocks Installation",
+        details: "Amount: $5,000.00",
+        actorUserId: devUser.id,
+        createdAt: new Date(Date.now() - 86400000 * 4),
+      },
+      {
+        organizationId: devOrg.id,
+        jobId: demoJob.id,
+        type: JobActivityType.ISSUE_CREATED,
+        title: "Issue reported: Demo Issue — Site Access Blocked",
+        details: "Severity: BLOCKS_WORK",
+        actorUserId: devUser.id,
+        createdAt: new Date(Date.now() - 86400000 * 1),
+      },
+    ],
+  });
+
+  console.log("[dev seed] Demo visits and activities created.");
+
+  await prisma.attachment.deleteMany({ where: { jobId: demoJob.id } });
+  const attachmentReady = await prisma.attachment.create({
+    data: {
+      id: "dev-attachment-ready",
+      organizationId: devOrg.id,
+      jobId: demoJob.id,
+      jobTaskId: "dev-task-completed",
+      fileName: "demo-proof.jpg",
+      fileKey: "dev-attachment-ready-demo-proof.jpg",
+      contentType: "image/jpeg",
+      fileSize: 1024,
+      status: AttachmentStatus.READY,
+      uploadedByUserId: devUser.id,
+    },
+  });
+
+  const attachmentPending = await prisma.attachment.create({
+    data: {
+      id: "dev-attachment-pending",
+      organizationId: devOrg.id,
+      jobId: demoJob.id,
+      jobTaskId: "dev-task-photo",
+      fileName: "pending-upload.jpg",
+      fileKey: "dev-attachment-pending-pending-upload.jpg",
+      contentType: "image/jpeg",
+      fileSize: 2048,
+      status: AttachmentStatus.PENDING,
+      uploadedByUserId: devUser.id,
+    },
+  });
+
+  // Create a dummy file for the READY attachment in local storage
+  const uploadDir = join(process.cwd(), "public", "uploads");
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(join(uploadDir, attachmentReady.fileKey), "dummy-image-content");
+
+  console.log("[dev seed] Demo attachments and dummy file created.");
+
+  console.log("[dev seed] Execution Showcase demo scenario completed.");
   console.log("[dev seed] Completed (idempotent upserts).");
 }
 
