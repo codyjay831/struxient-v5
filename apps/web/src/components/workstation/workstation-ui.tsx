@@ -1,8 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
-import { type WorkstationWorkItem } from "@/lib/workstation-query";
+import { useSearchParams } from "next/navigation";
+import { ChevronRight, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { type WorkstationWorkItem, type WorkstationFilterCategory, type WorkstationLens } from "@/lib/workstation-query";
+
+export function WorkstationFilterBar({ 
+  currentFilter, 
+  currentLens 
+}: { 
+  currentFilter: WorkstationFilterCategory; 
+  currentLens: WorkstationLens;
+}) {
+  const searchParams = useSearchParams();
+  const filters: { id: WorkstationFilterCategory; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "leads", label: "Leads" },
+    { id: "quotes", label: "Quotes" },
+    { id: "jobs", label: "Jobs" },
+    { id: "tasks", label: "Tasks" },
+    { id: "issues", label: "Issues" },
+    { id: "payments", label: "Payments" },
+    { id: "logs", label: "Logs" },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4">
+      {filters.map((f) => {
+        const active = currentFilter === f.id;
+        
+        const params = new URLSearchParams(searchParams.toString());
+        if (currentLens !== "attention") {
+          params.set("lens", currentLens);
+        } else {
+          params.delete("lens");
+        }
+        
+        if (f.id === "all") {
+          params.delete("filter");
+        } else {
+          params.set("filter", f.id);
+        }
+
+        return (
+          <Link
+            key={f.id}
+            href={`?${params.toString()}`}
+            className={[
+              "rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wider transition-colors",
+              active
+                ? "bg-foreground text-background"
+                : "bg-foreground/[0.03] text-foreground-muted hover:bg-foreground/[0.06] hover:text-foreground",
+            ].join(" ")}
+          >
+            {f.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
 export function WorkstationFocusCard({ 
   item, 
@@ -38,8 +95,14 @@ export function WorkstationFocusCard({
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-3">
               <span className={badgeClass}>
-                Primary Focus
+                {isHighPriority ? "Urgent Action" : "Next Action"}
               </span>
+              {item.isBlocked && (
+                <span className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-danger">
+                  <AlertCircle className="size-3" />
+                  Blocked
+                </span>
+              )}
               {item.status && (
                 <span className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
                   {item.status}
@@ -61,7 +124,7 @@ export function WorkstationFocusCard({
             <div className="flex flex-col gap-6 pt-2 sm:flex-row sm:gap-12">
               <div className="space-y-1">
                 <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                  Reason
+                  Context
                 </p>
                 <p className="text-base italic leading-relaxed text-foreground-muted">
                   {item.reason}
@@ -69,7 +132,7 @@ export function WorkstationFocusCard({
               </div>
               <div className="space-y-1">
                 <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                  Next step
+                  Action
                 </p>
                 <p className="text-base font-bold leading-relaxed text-foreground">
                   {item.nextStep}
@@ -113,9 +176,15 @@ export function WorkstationQueueItem({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <span className="text-[0.6rem] font-bold uppercase tracking-wider text-foreground-subtle">
-            {item.kind}
+            {item.kind.replace("-", " ")}
           </span>
-          {isHighPriority && (
+          {item.isBlocked && (
+            <span className="flex items-center gap-1 text-[0.6rem] font-bold uppercase tracking-wider text-danger">
+              <AlertCircle className="size-2.5" />
+              Blocked
+            </span>
+          )}
+          {isHighPriority && !item.isBlocked && (
             <span className="inline-flex size-1.5 rounded-full bg-danger animate-pulse" />
           )}
         </div>
@@ -123,7 +192,7 @@ export function WorkstationQueueItem({
           <h4 className="truncate text-sm font-bold text-foreground">
             {item.title}
           </h4>
-          <span className="shrink-0 text-xs text-foreground-muted">
+          <span className="shrink-0 text-xs font-semibold text-foreground">
             {item.nextStep}
           </span>
         </div>
@@ -138,29 +207,62 @@ export function WorkstationQueueItem({
   );
 }
 
-export function WorkstationClearedState() {
+export function WorkstationClearedState({ 
+  lens, 
+  filter 
+}: { 
+  lens?: WorkstationLens; 
+  filter?: WorkstationFilterCategory;
+}) {
+  const isFiltered = filter && filter !== "all";
+  
+  let title = "Today is clear";
+  let description = "No urgent lead, quote, payment, job, task, or activity reviews need action right now.";
+
+  if (lens === "waiting") {
+    title = "Nothing waiting";
+    description = "You don't have any items waiting on external actions right now.";
+  } else if (lens === "upcoming") {
+    title = "Schedule is clear";
+    description = "No upcoming tasks or follow-ups are scheduled for the near future.";
+  } else if (isFiltered) {
+    title = "No matches found";
+    description = `No items match the selected filter in this view.`;
+  }
+
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
       <div className="mb-4 rounded-full bg-foreground/[0.03] p-4">
         <CheckCircle2 className="size-10 text-foreground-subtle" />
       </div>
-      <h3 className="text-xl font-bold text-foreground">Today is clear</h3>
+      <h3 className="text-xl font-bold text-foreground">{title}</h3>
       <p className="mt-2 max-w-sm text-sm text-foreground-muted">
-        No urgent lead, quote, payment, job, task, or activity reviews need action right now.
+        {description}
       </p>
       <div className="mt-8 flex gap-4">
-        <Link 
-          href="/leads" 
-          className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
-        >
-          Browse Leads
-        </Link>
-        <Link 
-          href="/jobs" 
-          className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
-        >
-          Review Jobs
-        </Link>
+        {isFiltered ? (
+          <Link 
+            href={`?${new URLSearchParams({ ...(lens !== "attention" ? { lens } : {}) }).toString()}`}
+            className="text-xs font-semibold uppercase tracking-wider text-foreground hover:underline"
+          >
+            Clear Filters
+          </Link>
+        ) : (
+          <>
+            <Link 
+              href="/leads" 
+              className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
+            >
+              Browse Leads
+            </Link>
+            <Link 
+              href="/jobs" 
+              className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
+            >
+              Review Jobs
+            </Link>
+          </>
+        )}
       </div>
     </div>
   );

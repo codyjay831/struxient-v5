@@ -33,7 +33,8 @@ import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { 
   WorkstationFocusCard, 
   WorkstationQueueItem, 
-  WorkstationClearedState 
+  WorkstationClearedState,
+  WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
 
 export const dynamic = "force-dynamic";
@@ -46,46 +47,44 @@ export default async function WorkstationTodayLensPage({
   const org = await getDevOrganizationOrThrow();
   const sp = await searchParams;
   const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
+  const lens = (typeof sp.lens === "string" ? sp.lens : "attention") as any;
+  const filter = (typeof sp.filter === "string" ? sp.filter : "all") as any;
 
   const allItems = await queryWorkstationWorkItems(org.id);
   const summary = getWorkstationSummary(allItems);
 
-  const investigateItems = allItems.filter((i) => i.group === "investigate");
-  const readyItems = allItems.filter((i) => i.group === "ready" || i.group === "active");
-  const waitingItems = allItems.filter((i) => i.group === "waiting");
-  
-  // "Needs attention" = high/critical priority items
-  const attentionItems = allItems.filter((i) => i.priority === "critical" || i.priority === "high");
+  // Filter by lens
+  let filteredItems = allItems;
+  if (lens !== "all") {
+    filteredItems = allItems.filter((i) => i.lens === lens);
+  }
+
+  // Filter by category
+  if (filter !== "all") {
+    filteredItems = filteredItems.filter((i) => i.filterCategory === filter);
+  }
 
   const selectedItem = selectedId ? allItems.find((i) => i.id === selectedId) : null;
 
-  // Combine and prioritize for a single flow
-  const prioritizedItems = [
-    ...attentionItems,
-    ...investigateItems.filter(i => !attentionItems.find(a => a.id === i.id)),
-    ...readyItems.filter(i => !attentionItems.find(a => a.id === i.id) && !investigateItems.find(inv => inv.id === i.id)),
-  ];
+  // Helper to build hrefs that preserve lens/filter
+  const buildItemHref = (item: WorkstationWorkItem) => {
+    const p = new URLSearchParams();
+    if (lens !== "attention") p.set("lens", lens);
+    if (filter !== "all") p.set("filter", filter);
+    p.set("selectedId", item.id);
+    p.set("selectedKind", item.kind);
+    return `?${p.toString()}`;
+  };
+
+  // Prioritize for the selected view
+  const prioritizedItems = [...filteredItems].sort(compareWorkstationSalesIntakeOrder);
 
   const focusItem = prioritizedItems[0];
   const queueItems = prioritizedItems.slice(1);
 
   return (
-    <div className="space-y-12">
-      {/* Calm Today Header */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground-subtle">
-          Today
-        </h2>
-        <div className="flex items-center gap-4 text-xs font-medium text-foreground-muted">
-          <span>{summary.investigateCount + summary.openTasksCount + summary.openLeadsQuotesCount} items need review</span>
-          {summary.investigateCount > 0 && (
-            <span className="flex items-center gap-1 text-danger">
-              <span className="size-1.5 rounded-full bg-danger" />
-              {summary.investigateCount} blocking
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="space-y-8">
+      <WorkstationFilterBar currentFilter={filter} currentLens={lens} />
 
       {prioritizedItems.length > 0 ? (
         <div className="space-y-12">
@@ -100,7 +99,7 @@ export default async function WorkstationTodayLensPage({
               <WorkstationFocusCard 
                 item={{
                   ...focusItem,
-                  href: buildWorkstationSelectHref(focusItem.id, focusItem.kind)
+                  href: buildItemHref(focusItem)
                 }} 
                 isSelected={selectedId === focusItem.id} 
               />
@@ -112,7 +111,7 @@ export default async function WorkstationTodayLensPage({
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Next in Queue
+                  Queue
                 </h3>
               </div>
               <div className="grid gap-2">
@@ -121,30 +120,7 @@ export default async function WorkstationTodayLensPage({
                     key={item.id} 
                     item={{
                       ...item,
-                      href: buildWorkstationSelectHref(item.id, item.kind)
-                    }} 
-                    isSelected={selectedId === item.id} 
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Waiting / Follow-up (Compact) */}
-          {waitingItems.length > 0 && (
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Waiting / Follow-up
-                </h3>
-              </div>
-              <div className="grid gap-2">
-                {waitingItems.map((item) => (
-                  <WorkstationQueueItem 
-                    key={item.id} 
-                    item={{
-                      ...item,
-                      href: buildWorkstationSelectHref(item.id, item.kind)
+                      href: buildItemHref(item)
                     }} 
                     isSelected={selectedId === item.id} 
                   />
@@ -154,7 +130,7 @@ export default async function WorkstationTodayLensPage({
           )}
         </div>
       ) : (
-        <WorkstationClearedState />
+        <WorkstationClearedState lens={lens} filter={filter} />
       )}
 
       {selectedItem && (

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   ClipboardList,
@@ -10,29 +10,24 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-const LENSES: { href: string; label: string; icon: LucideIcon; title?: string }[] = [
-  { href: "/workstation", label: "Today", icon: LayoutDashboard },
-  {
-    href: "/workstation/tasks",
-    label: "Tasks",
-    icon: ClipboardList,
-    title:
-      "Task attention lens only—no task board, no CRUD. Standalone /tasks is a deferred stub.",
-  },
-  { href: "/workstation/jobs", label: "Jobs", icon: FolderKanban },
-  { href: "/workstation/schedule", label: "Schedule", icon: CalendarDays },
+const LENSES: { href: string; label: string; icon: LucideIcon; lens: string }[] = [
+  { href: "/workstation", label: "Needs Attention", icon: LayoutDashboard, lens: "attention" },
+  { href: "/workstation?lens=today", label: "Today", icon: ClipboardList, lens: "today" },
+  { href: "/workstation?lens=waiting", label: "Waiting", icon: FolderKanban, lens: "waiting" },
+  { href: "/workstation?lens=upcoming", label: "Upcoming", icon: CalendarDays, lens: "upcoming" },
+  { href: "/workstation?lens=all", label: "All", icon: LayoutDashboard, lens: "all" },
 ];
 
-function lensActive(pathname: string, href: string) {
-  if (href === "/workstation") {
-    return pathname === "/workstation";
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
+function lensActive(pathname: string, searchParams: URLSearchParams, lens: string, href: string) {
+  const currentLens = searchParams.get("lens") || "attention";
+  if (pathname !== "/workstation") return false;
+  return currentLens === lens;
 }
 
 export function WorkstationShell() {
   const pathname = usePathname();
-  const activeLens = LENSES.find(l => lensActive(pathname, l.href));
+  const searchParams = useSearchParams();
+  const activeLens = LENSES.find(l => lensActive(pathname, searchParams, l.lens, l.href)) || LENSES[0];
 
   return (
     <div className="mb-8 space-y-6">
@@ -43,18 +38,27 @@ export function WorkstationShell() {
               Workstation
             </p>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {activeLens && activeLens.label !== "Today" ? `Review: ${activeLens.label}` : "Operational Review"}
+              {activeLens.label}
             </h1>
           </div>
           <nav aria-label="Workstation lenses">
             <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-              {LENSES.map(({ href, label, icon: Icon, title }) => {
-                const active = lensActive(pathname, href);
+              {LENSES.map(({ href, label, icon: Icon, lens }) => {
+                const active = lensActive(pathname, searchParams, lens, href);
+                
+                // Preserve selectedId and selectedKind if they exist
+                const params = new URLSearchParams(searchParams.toString());
+                if (lens === "attention") {
+                  params.delete("lens");
+                } else {
+                  params.set("lens", lens);
+                }
+                const finalHref = `/workstation?${params.toString()}`;
+
                 return (
-                  <li key={href}>
+                  <li key={lens}>
                     <Link
-                      href={href}
-                      title={title}
+                      href={finalHref}
                       className={[
                         "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
                         active

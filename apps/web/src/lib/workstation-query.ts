@@ -6,6 +6,7 @@ import {
   JobIssueSeverity,
   JobIssueStatus,
   JobPaymentRequirementStatus,
+  DailyJobLogStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -24,7 +25,8 @@ export type WorkstationWorkItemKind =
   | "job"
   | "task"
   | "schedule"
-  | "investigate";
+  | "investigate"
+  | "daily-log";
 
 export type WorkstationWorkItemPriority = "critical" | "high" | "medium" | "low";
 
@@ -36,6 +38,23 @@ export type WorkstationWorkItemGroup =
   | "scheduled"
   | "blocked";
 
+export type WorkstationLens =
+  | "attention"
+  | "today"
+  | "waiting"
+  | "upcoming"
+  | "all";
+
+export type WorkstationFilterCategory =
+  | "all"
+  | "leads"
+  | "quotes"
+  | "jobs"
+  | "tasks"
+  | "issues"
+  | "payments"
+  | "logs";
+
 export type WorkstationWorkItem = {
   id: string;
   kind: WorkstationWorkItemKind;
@@ -44,6 +63,8 @@ export type WorkstationWorkItem = {
   status?: string;
   priority: WorkstationWorkItemPriority;
   group: WorkstationWorkItemGroup;
+  lens: WorkstationLens;
+  filterCategory: WorkstationFilterCategory;
   reason: string;
   nextStep: string;
   recordId: string;
@@ -51,6 +72,7 @@ export type WorkstationWorkItem = {
   parentLabel?: string;
   href?: string;
   updatedAt: Date;
+  isBlocked?: boolean;
   /** Shared readiness / checklist model for Workstation + full-record alignment. */
   workflow?: WorkItemEmbeddedWorkflow;
 };
@@ -61,57 +83,60 @@ export type WorkstationSummary = {
   openTasksCount: number;
   openLeadsQuotesCount: number;
   scheduledTodayCount: number;
+  dailyLogsToReviewCount: number;
 };
 
 function lanesForQuoteWorkflow(
   readinessState: ReturnType<typeof getQuoteReadiness>["state"],
   workflow: WorkItemEmbeddedWorkflow,
   base: { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority },
-): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority } {
+): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
   if (readinessState === "SENT_AWAITING_CUSTOMER") {
-    return { group: "waiting", priority: "low" };
+    return { group: "waiting", priority: "low", lens: "waiting" };
   }
   if (readinessState === "APPROVED_READY_TO_ACTIVATE") {
-    return { group: "ready", priority: "high" };
+    return { group: "ready", priority: "high", lens: "attention" };
   }
   if (readinessState === "APPROVED_NEEDS_EXECUTION_REVIEW") {
-    return { group: "investigate", priority: "high" };
+    return { group: "investigate", priority: "high", lens: "attention" };
   }
   if (workflow.priority === "blocking") {
-    return { group: "investigate", priority: "high" };
+    return { group: "investigate", priority: "high", lens: "attention" };
   }
   if (workflow.priority === "critical") {
-    return { group: "ready", priority: "high" };
+    return { group: "ready", priority: "high", lens: "attention" };
   }
   if (workflow.priority === "watching") {
-    return { group: "waiting", priority: "low" };
+    return { group: "waiting", priority: "low", lens: "waiting" };
   }
-  return base;
+  
+  const lens: WorkstationLens = base.priority === "high" || base.priority === "critical" ? "attention" : "today";
+  return { ...base, lens };
 }
 
 function lanesForLeadWorkflow(
   workflow: WorkItemEmbeddedWorkflow,
   isUnlinked: boolean,
-): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority } {
+): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
   if (workflow.priority === "blocking") {
-    return { group: "investigate", priority: "high" };
+    return { group: "investigate", priority: "high", lens: "attention" };
   }
   if (workflow.priority === "critical") {
-    return { group: "ready", priority: "high" };
+    return { group: "ready", priority: "high", lens: "attention" };
   }
   if (workflow.priority === "watching") {
-    return { group: "waiting", priority: "low" };
+    return { group: "waiting", priority: "low", lens: "waiting" };
   }
   if (workflow.priority === "satisfied") {
-    return { group: "ready", priority: "low" };
+    return { group: "ready", priority: "low", lens: "today" };
   }
   if (isUnlinked) {
     if (workflow.priority === "actionable" && workflow.canCompleteInWorkstation) {
-      return { group: "ready", priority: "medium" };
+      return { group: "ready", priority: "medium", lens: "today" };
     }
-    return { group: "investigate", priority: "high" };
+    return { group: "investigate", priority: "high", lens: "attention" };
   }
-  return { group: "ready", priority: "medium" };
+  return { group: "ready", priority: "medium", lens: "today" };
 }
 
 export function compareWorkstationSalesIntakeOrder(
@@ -175,7 +200,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority } = lanesForLeadWorkflow(workflow, isUnlinked);
+    const { group, priority, lens } = lanesForLeadWorkflow(workflow, isUnlinked);
 
     items.push({
       id: `lead-${lead.id}`,
@@ -185,6 +210,8 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       status: lead.status,
       priority,
       group,
+      lens,
+      filterCategory: "leads",
       reason: workflow.reason,
       nextStep: workflow.nextAction?.label ?? "Review in Leads.",
       recordId: lead.id,
@@ -261,7 +288,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority } = lanesForQuoteWorkflow(readiness.state, workflow, {
+    const { group, priority, lens } = lanesForQuoteWorkflow(readiness.state, workflow, {
       group: "ready",
       priority: "medium",
     });
@@ -274,6 +301,8 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       status: quote.status,
       priority,
       group,
+      lens,
+      filterCategory: "quotes",
       reason: workflow.reason,
       nextStep: workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
@@ -295,13 +324,24 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         where: { status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
         include: { jobStage: true },
       },
+      issues: {
+        where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+      },
+      paymentRequirements: {
+        where: { status: JobPaymentRequirementStatus.DUE },
+      },
     },
   });
 
   for (const job of jobs) {
+    const isJobBlocked = job.issues.length > 0 || job.paymentRequirements.length > 0;
+
     for (const task of job.tasks) {
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+
+      const priority = task.status === JobTaskStatus.IN_PROGRESS ? "high" : "medium";
+      const lens: WorkstationLens = priority === "high" ? "attention" : "today";
 
       items.push({
         id: `task-${task.id}`,
@@ -309,8 +349,10 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         title: task.title,
         subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""} · ${task.jobStage.title}`,
         status: task.status,
-        priority: task.status === JobTaskStatus.IN_PROGRESS ? "high" : "medium",
+        priority,
         group: "active",
+        lens,
+        filterCategory: "tasks",
         reason: task.status === JobTaskStatus.IN_PROGRESS ? "Task is currently in progress." : "Task is ready to start.",
         nextStep: task.status === JobTaskStatus.IN_PROGRESS ? "Complete the task." : "Start the task.",
         recordId: task.id,
@@ -318,6 +360,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: task.updatedAt,
+        isBlocked: isJobBlocked,
       });
     }
 
@@ -333,6 +376,8 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         status: job.status,
         priority: "medium",
         group: "investigate",
+        lens: "attention",
+        filterCategory: "jobs",
         reason: "Active job has no remaining TODO or IN_PROGRESS tasks.",
         nextStep: "Review job completion or add tasks.",
         recordId: job.id,
@@ -340,6 +385,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
+        isBlocked: isJobBlocked,
       });
     }
   }
@@ -375,6 +421,8 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       status: issue.status,
       priority: "high",
       group: "investigate",
+      lens: "attention",
+      filterCategory: "issues",
       reason: issue.description || "Blocking issue needs resolution.",
       nextStep: "Review and resolve issue.",
       recordId: issue.id,
@@ -422,6 +470,8 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       status: payment.status,
       priority: "high",
       group: "investigate",
+      lens: "attention",
+      filterCategory: "payments",
       reason: payment.requiredBeforeStage
         ? `Payment required before ${payment.requiredBeforeStage.title}.`
         : "Payment is due.",
@@ -431,6 +481,48 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       parentLabel: primaryJobIdentity,
       href: `/jobs/${payment.jobId}`,
       updatedAt: payment.updatedAt,
+    });
+  }
+
+  // 6. Daily Job Logs (Needing Review)
+  const draftLogs = await db.dailyJobLog.findMany({
+    where: {
+      organizationId,
+      status: DailyJobLogStatus.DRAFT,
+    },
+    include: {
+      job: {
+        include: {
+          customer: true,
+          lead: true,
+        },
+      },
+    },
+    orderBy: { logDate: "desc" },
+    take: 50,
+  });
+
+  for (const log of draftLogs) {
+    const primaryJobIdentity = log.job.lead?.title || log.job.customer?.displayName || log.job.title;
+    const secondaryJobIdentity = log.job.title !== primaryJobIdentity ? log.job.title : null;
+
+    items.push({
+      id: `log-${log.id}`,
+      kind: "daily-log",
+      title: `Daily Log: ${log.logDate.toLocaleDateString()}`,
+      subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+      status: log.status,
+      priority: "medium",
+      group: "investigate",
+      lens: "attention",
+      filterCategory: "logs",
+      reason: "Daily log needs review and approval.",
+      nextStep: "Review and approve log.",
+      recordId: log.id,
+      parentRecordId: log.jobId,
+      parentLabel: primaryJobIdentity,
+      href: `/jobs/${log.jobId}`, // No popup for now, link to job
+      updatedAt: log.updatedAt,
     });
   }
 
@@ -446,5 +538,6 @@ export function getWorkstationSummary(items: WorkstationWorkItem[]): Workstation
     openTasksCount: items.filter((i) => i.kind === "task").length,
     openLeadsQuotesCount: items.filter((i) => i.kind === "lead" || i.kind === "quote").length,
     scheduledTodayCount: 0,
+    dailyLogsToReviewCount: items.filter((i) => i.kind === "daily-log").length,
   };
 }
