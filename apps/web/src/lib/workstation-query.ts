@@ -461,7 +461,17 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       }
     }
 
-    for (const task of job.tasks) {
+    const sortedTasks = [...job.tasks].sort((a, b) => {
+      if (a.jobStage.sortOrder !== b.jobStage.sortOrder) {
+        return a.jobStage.sortOrder - b.jobStage.sortOrder;
+      }
+      return a.sortOrder - b.sortOrder;
+    });
+
+    const primaryTaskId = sortedTasks[0]?.id;
+
+    for (const task of sortedTasks) {
+      const isPrimary = task.id === primaryTaskId;
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
@@ -486,7 +496,14 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         paymentBlockers: taskPaymentBlockers,
       });
 
-      const priority = derivedState === "READY_TO_COMPLETE" ? "high" : "medium";
+      let priority: WorkstationWorkItemPriority = derivedState === "READY_TO_COMPLETE" ? "high" : "medium";
+
+      // If not the primary task for this job, demote it so it doesn't take the XL card
+      // while earlier work is incomplete.
+      if (!isPrimary) {
+        priority = "low";
+      }
+
       const lens: WorkstationLens = derivedState === "BLOCKED" ? "waiting" : priority === "high" ? "attention" : "today";
       const group: WorkstationWorkItemGroup = derivedState === "BLOCKED" ? "blocked" : "active";
 
