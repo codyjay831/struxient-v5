@@ -1,16 +1,14 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { LeadsScaffoldingDialog } from "@/components/leads/leads-scaffolding-dialog";
+import {
+  LeadSourcesProvider,
+  LeadSourcesToolbarButton,
+} from "@/components/leads/lead-sources-provider";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
 import {
   LeadsListClient,
@@ -176,98 +174,78 @@ export default async function LeadsPage({
 
   /* ── Render ────────────────────────────────────────────────────────────── */
 
-  return (
-    <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[{ label: "Sales" }, { label: "Leads" }]}
+  const sourcesPanel = (
+    <>
+      <PublicRequestLinkPanel
+        organizationName={ctx.organizationName}
+        slug={ctx.organizationSlug || null}
+        baseUrl={publicSiteBaseUrl}
+        publicRequestLive={publicRequestLive}
       />
-      <PageHeader
-        title="Leads"
-        description="Capture and move new sales opportunities toward quotes. Open a lead to review intake details, verify the customer, and track its progress."
-        actions={
-          <>
-            {fromWorkstation ? (
-              <Link
-                href={workstationReturnHref(returnSection)}
-                className={returnLinkClass}
-              >
-                ← Workstation
-              </Link>
-            ) : null}
-            <Link href="/leads/new" className={primaryLinkClass}>
-              New lead
-            </Link>
-            <LeadsScaffoldingDialog />
-            <PlaceholderButton title="Channel integrations are planned; not connected in this build.">
-              Channel setup (soon)
-            </PlaceholderButton>
-          </>
-        }
-      />
-
-      <HandoffPanel
-        title="Ready for a quote?"
-        description="When you have enough detail to price the work, continue in Quotes. Each step stays explicit—nothing moves between leads and quotes automatically yet."
-      >
-        <Link href="/quotes" className={handoffPrimaryLinkClass}>
-          Go to Quotes
-        </Link>
-        <Link href="/leads/new" className={handoffMutedLinkClass}>
-          Start new lead
-        </Link>
-      </HandoffPanel>
-
-      <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,18rem)]">
-        <div>
-          <SectionHeading
-            title="Leads"
-            description="Open a row to review contact details, track commercial progress, and navigate to customer or quote records."
-          />
-          <WorkspacePanel padding="none" className="overflow-hidden">
-            {leads.length === 0 ? (
-              <div className="p-6">
-                <EmptyState
-                  icon={Inbox}
-                  title="Queue is empty"
-                  description="No leads yet. Add one when a call, walk-in, or message comes in—or when you are ready to log the next opportunity."
-                >
-                  <Link href="/leads/new" className={primaryLinkClass}>
-                    New lead
-                  </Link>
-                </EmptyState>
-              </div>
-            ) : (
-              <LeadsListClient leads={serializedLeads} />
-            )}
-          </WorkspacePanel>
+      <WorkspacePanel padding="compact">
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          More lead sources (soon)
+        </p>
+        <p className="mt-2 text-sm text-foreground-muted">
+          Your Public Request Link sends leads here automatically. Email, phone, text, and
+          file imports will land in this queue as integrations roll out. You can always add
+          leads by hand from the New lead action.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <PlaceholderButton title="CSV import is not connected in this build.">
+            CSV import (soon)
+          </PlaceholderButton>
         </div>
+      </WorkspacePanel>
+    </>
+  );
 
-        <aside>
-          <PublicRequestLinkPanel
-            organizationName={ctx.organizationName}
+  return (
+    <LeadSourcesProvider sourcesPanel={sourcesPanel}>
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[{ label: "Sales" }, { label: "Leads" }]}
+        />
+        <PageHeader
+          title="Leads"
+          description="Capture and move new sales opportunities toward quotes. Open a lead to review intake details, verify the customer, and track its progress."
+          actions={
+            <>
+              {fromWorkstation ? (
+                <Link
+                  href={workstationReturnHref(returnSection)}
+                  className={returnLinkClass}
+                >
+                  ← Workstation
+                </Link>
+              ) : null}
+              <Link href="/leads/new" className={primaryLinkClass}>
+                New lead
+              </Link>
+              <LeadSourcesToolbarButton />
+              <LeadsScaffoldingDialog />
+            </>
+          }
+        />
 
-             slug={ctx.organizationSlug}
-
-            baseUrl={publicSiteBaseUrl}
-            publicRequestLive={publicRequestLive}
-          />
-          <WorkspacePanel padding="compact">
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              Connected channels
-            </p>
-            <p className="mt-2 text-sm text-foreground-muted">
-              Your Public Request Link sends leads here automatically. Other channels—email,
-              phone, text, imports—will land in this queue as integrations roll out. You can
-              always add leads by hand from the New lead action.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <PlaceholderButton title="CSV import is not connected in this build.">
-                CSV import (soon)
-              </PlaceholderButton>
+        <WorkspacePanel padding="none" className="mb-6 overflow-hidden">
+          {leads.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={Inbox}
+                title="Queue is empty"
+                description="No leads yet. Add one when a call, walk-in, or message comes in—or when you are ready to log the next opportunity."
+              >
+                <Link href="/leads/new" className={primaryLinkClass}>
+                  New lead
+                </Link>
+              </EmptyState>
             </div>
-          </WorkspacePanel>
-        </aside>
+          ) : (
+            <LeadsListClient leads={serializedLeads} />
+          )}
+        </WorkspacePanel>
       </div>
-    </div>
+    </LeadSourcesProvider>
   );
 }

@@ -10,19 +10,22 @@ export function PublicRequestLinkPanel({
   slug,
   baseUrl,
   publicRequestLive,
+  className = "",
 }: {
   organizationName: string;
   slug: string | null;
   baseUrl: string;
   /** When no settings row exists, treated as live (enabled). */
   publicRequestLive: boolean;
+  /** Passed to the outer {@link WorkspacePanel} (spacing in modals vs. legacy layouts). */
+  className?: string;
 }) {
   const path = slug ? `/request/${slug}` : null;
   const absoluteUrl =
     path && baseUrl ? `${baseUrl.replace(/\/+$/, "")}${path}` : path ?? null;
 
   return (
-    <WorkspacePanel padding="compact" className="mb-6">
+    <WorkspacePanel padding="compact" className={className}>
       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
         Public Request Link
       </p>

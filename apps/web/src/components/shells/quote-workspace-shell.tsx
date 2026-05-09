@@ -69,7 +69,7 @@ export function QuoteWorkspaceShell({
           ) : null}
           {quote.leadHref ? (
             <Link href={quote.leadHref} className={listLinkClass}>
-              ← Opportunity
+              ← Lead
             </Link>
           ) : null}
           <Link href="/quotes" className={listLinkClass}>

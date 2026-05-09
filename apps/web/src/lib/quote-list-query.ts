@@ -3,7 +3,13 @@ import { QuoteStatus } from "@prisma/client";
 
 const MAX_QUERY_LEN = 200;
 
-export type QuoteListStatusParam = "all" | "draft" | "active" | "archived";
+export type QuoteListStatusParam =
+  | "all"
+  | "draft"
+  | "sent"
+  | "approved"
+  | "active"
+  | "archived";
 
 export type QuoteListSortParam =
   | "updated"
@@ -14,7 +20,14 @@ export type QuoteListSortParam =
 
 export const QUOTE_LIST_DEFAULT_SORT: QuoteListSortParam = "updated";
 
-const STATUS_VALUES: QuoteListStatusParam[] = ["all", "draft", "active", "archived"];
+const STATUS_VALUES: QuoteListStatusParam[] = [
+  "all",
+  "draft",
+  "sent",
+  "approved",
+  "active",
+  "archived",
+];
 const SORT_VALUES: QuoteListSortParam[] = [
   "updated",
   "created",
@@ -58,6 +71,10 @@ export function quoteListWhere(
   };
   if (status === "draft") {
     where.status = QuoteStatus.DRAFT;
+  } else if (status === "sent") {
+    where.status = QuoteStatus.SENT;
+  } else if (status === "approved") {
+    where.status = QuoteStatus.APPROVED;
   } else if (status === "active") {
     where.status = { not: QuoteStatus.ARCHIVED };
   } else if (status === "archived") {

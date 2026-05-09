@@ -1131,7 +1131,7 @@ function ContextTab({
 
       {/* Lead */}
       <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-2`}>Lead / Opportunity</p>
+        <p className={`${sectionLabelClass} mb-2`}>Lead</p>
         {leadIntake ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
@@ -1209,7 +1209,7 @@ function ContextTab({
             </p>
             <p className="mt-1 text-xs text-foreground-subtle">
               Linking is optional. Use it when this quote comes from a tracked
-              sales opportunity.
+              lead.
             </p>
             <Link href="/leads" className={`mt-3 ${listLinkClass}`}>
               Leads

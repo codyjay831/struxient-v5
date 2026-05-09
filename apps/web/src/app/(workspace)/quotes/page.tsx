@@ -1,20 +1,17 @@
 import Link from "next/link";
 import { QuoteStatus } from "@prisma/client";
-import {
-  HandoffPanel,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { SignalCard } from "@/components/ui/signal-card";
 import {
   QuotesListClient,
   type SerializedQuoteListRow,
 } from "@/components/quotes/quotes-list-client";
+import { QuoteListSearchForm } from "@/components/quotes/quote-list-search-form";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 
@@ -54,10 +51,16 @@ const sortLinkBase =
 const sortLinkActive = `${sortLinkBase} border-border-strong bg-foreground/[0.04] text-foreground`;
 const sortLinkIdle = `${sortLinkBase} border-transparent text-foreground-muted hover:border-border hover:bg-foreground/[0.02] hover:text-foreground`;
 
-const fieldLabelClass =
-  "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
+const STATUS_FILTER_PILLS: { param: Exclude<QuoteListStatusParam, "active">; label: string }[] = [
+  { param: "all", label: "All" },
+  { param: "draft", label: "Draft" },
+  { param: "sent", label: "Sent" },
+  { param: "approved", label: "Approved" },
+  { param: "archived", label: "Archived" },
+];
+
 const controlClass =
-  "mt-1 w-full min-w-[12rem] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "w-full min-w-[12rem] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 function sortLabel(sort: QuoteListSortParam): string {
   switch (sort) {
@@ -72,20 +75,6 @@ function sortLabel(sort: QuoteListSortParam): string {
     case "updated":
     default:
       return "Recently updated";
-  }
-}
-
-function statusFilterLabel(status: QuoteListStatusParam): string {
-  switch (status) {
-    case "draft":
-      return "Draft";
-    case "active":
-      return "Active (not archived)";
-    case "archived":
-      return "Archived";
-    case "all":
-    default:
-      return "All statuses";
   }
 }
 
@@ -222,7 +211,7 @@ export default async function QuotesPage({
       <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Quotes" }]} />
       <PageHeader
         title="Quotes"
-        description="Commercial documents for this organization. Quotes carry pricing, scope, and rollups. For the full sales pipeline and opportunity context, use the Leads/Opportunities workspace."
+        description="Commercial documents for this organization. Quotes carry pricing, scope, and rollups. For the full sales pipeline and intake context, use the Leads workspace."
         actions={
           <>
             {fromWorkstation ? (
@@ -234,7 +223,7 @@ export default async function QuotesPage({
               </Link>
             ) : null}
             <Link href="/leads" className={mutedLinkClass}>
-              ← Opportunities
+              ← Leads
             </Link>
             <Link href="/quotes/new" className={primaryLinkClass}>
               New quote
@@ -243,20 +232,7 @@ export default async function QuotesPage({
         }
       />
 
-      <HandoffPanel
-        title="Commercial documents"
-        description="Quotes are document-centric records. They are typically created as a step within a sales opportunity. Use the Opportunities workspace to manage the overall customer relationship and sales flow."
-      >
-        <Link href="/leads" className={primaryLinkClass}>
-          Go to Opportunities
-        </Link>
-      </HandoffPanel>
-
-      <section className="mb-8">
-        <SectionHeading
-          title="Organization overview"
-          description="Counts and draft rollups are real database aggregates for this development tenant only."
-        />
+      <section className="mb-6">
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <li>
             <SignalCard label="Quotes (all)" value={String(totalInOrg)} hint="Rows in this org." />
@@ -287,114 +263,50 @@ export default async function QuotesPage({
         </ul>
       </section>
 
-      <WorkspacePanel padding="compact" className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Quote status (persisted)
-        </p>
-        <p className="mt-2 text-sm text-foreground-muted">
-          Draft → Sent (Send quote) → Approved (Mark approved) → Archived. Restore from archive returns to Draft. Use
-          filters below to narrow the list.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <StatusBadge label={formatQuoteStatus("DRAFT")} tone={quoteStatusBadgeTone("DRAFT")} />
-          <StatusBadge label={formatQuoteStatus("SENT")} tone={quoteStatusBadgeTone("SENT")} />
-          <StatusBadge label={formatQuoteStatus("APPROVED")} tone={quoteStatusBadgeTone("APPROVED")} />
-          <StatusBadge
-            label={formatQuoteStatus("ARCHIVED")}
-            tone={quoteStatusBadgeTone("ARCHIVED")}
-          />
-        </div>
-      </WorkspacePanel>
-
-      <WorkspacePanel className="mb-6">
-        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-          Search & filters
-        </p>
-        <p className="mt-1 text-xs text-foreground-muted">
-          Matches quote title, linked customer name or company, and linked lead title or contact name.
-          URL query params keep this view shareable.
-        </p>
-
-        <form method="get" action="/quotes" className="mt-4 flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 sm:max-w-md">
-            <label className="block">
-              <span className={fieldLabelClass}>Search</span>
-              <input
-                name="q"
-                type="search"
-                defaultValue={q}
-                maxLength={200}
-                placeholder="Title, customer, lead…"
-                className={controlClass}
-                autoComplete="off"
-              />
-            </label>
-          </div>
-          {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-          {sort !== QUOTE_LIST_DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
-          <button type="submit" className={primaryLinkClass}>
-            Apply search
-          </button>
-        </form>
-
-        <div className="mt-4">
-          <p className={`${fieldLabelClass} mb-2`}>Status</p>
-          <div className="flex flex-wrap gap-2">
-            {(["all", "draft", "active", "archived"] as const).map((s) => (
-              <Link
-                key={s}
-                href={serializeQuotesListHref({ q, status: s, sort })}
-                className={status === s ? pillActive : pillIdle}
-                aria-current={status === s ? "page" : undefined}
-              >
-                {s === "all" ? "All" : s === "draft" ? "Draft" : s === "active" ? "Active" : "Archived"}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <p className={`${fieldLabelClass} mb-2`}>Sort</p>
-          <div className="flex flex-wrap gap-1.5">
-            {sortOptions.map((s) => (
-              <Link
-                key={s}
-                href={serializeQuotesListHref({ q, status, sort: s })}
-                className={sort === s ? sortLinkActive : sortLinkIdle}
-                aria-current={sort === s ? "true" : undefined}
-              >
-                {sortLabel(s)}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4 text-xs text-foreground-muted">
-          <span>
-            <span className="font-medium text-foreground">Active view:</span>{" "}
-            {statusFilterLabel(status)}
-            {" · "}
-            {sortLabel(sort)}
-            {q ? (
-              <>
-                {" · "}
-                <span className="break-all">
-                  Search &quot;{q}&quot;
-                </span>
-              </>
-            ) : null}
-          </span>
-          {hasActiveListFilters ? (
-            <Link href="/quotes" className={mutedLinkClass}>
-              Clear filters
-            </Link>
-          ) : null}
-        </div>
-      </WorkspacePanel>
-
       <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,17rem)]">
         <div>
           <SectionHeading title="Quote list" description={listDescription} />
+          <div className="mb-4 space-y-3 border-y border-border py-3">
+            <QuoteListSearchForm
+              q={q}
+              status={status}
+              sort={sort}
+              hasActiveListFilters={hasActiveListFilters}
+              controlClass={controlClass}
+              primaryLinkClass={primaryLinkClass}
+              mutedLinkClass={mutedLinkClass}
+            />
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <nav aria-label="Quote status filters" className="flex flex-wrap gap-2">
+                {STATUS_FILTER_PILLS.map(({ param: s, label }) => (
+                  <Link
+                    key={s}
+                    href={serializeQuotesListHref({ q, status: s, sort })}
+                    scroll={false}
+                    className={status === s ? pillActive : pillIdle}
+                    aria-current={status === s ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+
+              <nav aria-label="Quote sort options" className="flex flex-wrap gap-1.5">
+                {sortOptions.map((s) => (
+                  <Link
+                    key={s}
+                    href={serializeQuotesListHref({ q, status, sort: s })}
+                    scroll={false}
+                    className={sort === s ? sortLinkActive : sortLinkIdle}
+                    aria-current={sort === s ? "true" : undefined}
+                  >
+                    {sortLabel(s)}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          </div>
           {totalInOrg === 0 ? (
             <EmptyState
               icon={FileText}
@@ -411,7 +323,7 @@ export default async function QuotesPage({
               title="No quotes match this view"
               description="Try a different search term, switch status to All, or change sort. Quotes still exist in your organization—they are just filtered out here."
             >
-              <Link href="/quotes" className={primaryLinkClass}>
+              <Link href="/quotes" scroll={false} className={primaryLinkClass}>
                 Clear filters
               </Link>
               <Link href="/quotes/new" className={mutedLinkClass}>

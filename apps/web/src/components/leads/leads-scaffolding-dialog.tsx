@@ -63,8 +63,9 @@ export function LeadsScaffoldingDialog() {
                 channels (email, phone, SMS, imports) are still planned.
               </li>
               <li>
-                Channel integrations are not connected; the &quot;Channel setup&quot; and
-                &quot;CSV import&quot; placeholders intentionally do nothing in this build.
+                Channel integrations are not connected; the Lead Sources modal&apos;s
+                &quot;CSV import (soon)&quot; and future integrations intentionally do nothing in this
+                build.
               </li>
               <li>
                 Notes &amp; activity timelines are not wired yet—event logging will surface

@@ -153,12 +153,12 @@ function QuoteRow({
           </dl>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-          <div className="flex flex-col items-end gap-1">
-            <StatusBadge label={quote.readinessLabel} tone={quote.readinessTone} />
+          <div className="flex flex-col items-end gap-1.5">
+            <StatusBadge label={quote.statusLabel} tone={quote.statusTone} />
             <StatusBadge
-              label={quote.statusLabel}
-              tone={quote.statusTone}
-              className="h-4 px-1 text-[9px]"
+              label={quote.readinessLabel}
+              tone={quote.readinessTone}
+              className="text-[0.65rem] px-1.5 py-0.5"
             />
           </div>
           <span className="text-sm font-medium tabular-nums text-foreground">
@@ -216,11 +216,11 @@ function QuotePopupContent({
       <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <StatusBadge label={quote.readinessLabel} tone={quote.readinessTone} />
+            <StatusBadge label={quote.statusLabel} tone={quote.statusTone} />
             <StatusBadge
-              label={quote.statusLabel}
-              tone={quote.statusTone}
-              className="h-4 px-1 text-[9px]"
+              label={quote.readinessLabel}
+              tone={quote.readinessTone}
+              className="text-[0.65rem] px-1.5 py-0.5"
             />
             <span className="text-xs text-foreground-subtle">
               Commercial quote · {quote.createdLabel}

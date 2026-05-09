@@ -140,7 +140,7 @@ function OverviewTab({
             )}
             {quote.lead && (
               <div>
-                <p className={`${sectionLabelClass} mb-0.5`}>Lead / Opportunity</p>
+                <p className={`${sectionLabelClass} mb-0.5`}>Lead</p>
                 <Link
                   href={`/leads/${quote.lead.id}`}
                   className="text-sm font-medium text-foreground hover:underline underline-offset-2 inline-flex items-center gap-1"
@@ -359,8 +359,8 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
       {/* ── Lead ─────────────────────────────────────────────────────────── */}
       <WorkspacePanel>
         <SectionHeading
-          title="Lead / Opportunity"
-          description="The sales opportunity this quote is tied to. Lead intake notes and contact context are shown when linked."
+          title="Lead"
+          description="The lead this quote is tied to. Intake notes and contact context are shown when linked."
         />
         {hasLead ? (
           <div className="space-y-4">
@@ -424,7 +424,7 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-6 text-center">
             <p className="text-sm text-foreground-muted">No lead linked to this quote.</p>
             <p className="mt-1 text-xs text-foreground-subtle">
-              Linking is optional. Use it when this quote comes from a tracked sales opportunity.
+              Linking is optional. Use it when this quote comes from a tracked lead.
             </p>
             <Link href="/leads" className={`mt-4 ${listLinkClass}`}>
               Leads
