@@ -31,7 +31,9 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
 
@@ -51,16 +53,17 @@ export default async function LeadsPage({
   const sq = await (searchParams ?? Promise.resolve({} as { from?: string; section?: string }));
   const fromWorkstation = sq["from"] === "workstation";
   const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const publicSiteBaseUrl = await resolvePublicSiteBaseUrl();
   const publicRequestGate = await db.publicRequestSettings.findUnique({
-    where: { organizationId: org.id },
+    where: { organizationId: ctx.organizationId },
     select: { enabled: true },
   });
   const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
 
   const leads = await db.lead.findMany({
-    where: { organizationId: org.id },
+    where: { organizationId: ctx.organizationId },
+
     orderBy: { createdAt: "desc" },
     include: {
       customer: { select: { id: true, displayName: true } },
@@ -105,9 +108,10 @@ export default async function LeadsPage({
       lineItemCount: q._count.lineItems,
       updatedAt: q.updatedAt,
       job:
-        q.job && q.job.organizationId === org.id
+        q.job && q.job.organizationId === ctx.organizationId
           ? { id: q.job.id, status: q.job.status }
           : null,
+
     }));
 
     const progress = getLeadCommercialProgress({
@@ -240,8 +244,10 @@ export default async function LeadsPage({
 
         <aside>
           <PublicRequestLinkPanel
-            organizationName={org.name}
-            slug={org.slug}
+            organizationName={ctx.organizationName}
+
+             slug={ctx.organizationSlug}
+
             baseUrl={publicSiteBaseUrl}
             publicRequestLive={publicRequestLive}
           />

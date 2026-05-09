@@ -3,8 +3,10 @@
 import { LeadSource, LeadStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
+
 
 class CreateFromLeadTransactionError extends Error {
   constructor(message: string) {
@@ -93,7 +95,7 @@ export async function createLeadAction(
     return titleErr;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const contactName = trimOrNull(formData.get("contactName"));
   const email = trimOrNull(formData.get("email"));
@@ -138,7 +140,7 @@ export async function createLeadAction(
 
   const lead = await db.lead.create({
     data: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       title,
       contactName,
       email,
@@ -148,6 +150,7 @@ export async function createLeadAction(
       notes,
     },
   });
+
 
   redirect(`/leads/${lead.id}`);
 }
@@ -179,10 +182,10 @@ export async function updateLeadStatusAction(
   }
   const status = v as LeadStatus;
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!exists) {
@@ -195,10 +198,11 @@ export async function updateLeadStatusAction(
   const result = await db.lead.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     data: { status },
   });
+
 
   if (result.count === 0) {
     return {
@@ -233,9 +237,9 @@ export async function updateLeadAction(
     return titleErr;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const existing = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: { source: true },
   });
   if (!existing) {
@@ -289,7 +293,7 @@ export async function updateLeadAction(
   const result = await db.lead.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     data: {
       title,
@@ -301,6 +305,7 @@ export async function updateLeadAction(
       notes,
     },
   });
+
 
   if (result.count === 0) {
     return {
@@ -331,12 +336,12 @@ export async function linkLeadToCustomerAction(
     return { error: "Choose a customer to link, or create one first." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const customer = await db.customer.findFirst({
     where: {
       id: customerIdRaw,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     select: { id: true },
   });
@@ -349,7 +354,7 @@ export async function linkLeadToCustomerAction(
   const lead = await db.lead.findFirst({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     select: { customerId: true },
   });
@@ -369,7 +374,7 @@ export async function linkLeadToCustomerAction(
   const result = await db.lead.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       customerId: null,
     },
     data: {
@@ -377,6 +382,7 @@ export async function linkLeadToCustomerAction(
       convertedAt,
     },
   });
+
 
   if (result.count === 0) {
     return {
@@ -404,12 +410,12 @@ export async function createCustomerFromLeadAction(
     return { error: "Missing lead record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
       const lead = await tx.lead.findFirst({
-        where: { id, organizationId: org.id },
+        where: { id, organizationId: ctx.organizationId },
         select: {
           customerId: true,
           title: true,
@@ -438,7 +444,7 @@ export async function createCustomerFromLeadAction(
 
       const customer = await tx.customer.create({
         data: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           ...prep.data,
         },
       });
@@ -447,7 +453,7 @@ export async function createCustomerFromLeadAction(
       const result = await tx.lead.updateMany({
         where: {
           id,
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           customerId: null,
         },
         data: {
@@ -455,6 +461,7 @@ export async function createCustomerFromLeadAction(
           convertedAt,
         },
       });
+
 
       if (result.count === 0) {
         throw new CreateFromLeadTransactionError(

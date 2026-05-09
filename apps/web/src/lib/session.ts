@@ -1,5 +1,5 @@
 import { StaffRole } from "@prisma/client";
-import { DEV_ORGANIZATION_ID, DEV_USER_ID } from "./dev-organization";
+import { getRequestContextOrThrow } from "./auth-context";
 
 export type CurrentSession = {
   userId: string;
@@ -14,29 +14,30 @@ export type CurrentSession = {
  * In production, returns null if no real auth provider is wired yet.
  */
 export async function getCurrentSession(): Promise<CurrentSession | null> {
-  // TODO: Implement real auth provider lookup here (e.g. Auth.js)
-  
-  if (process.env.NODE_ENV === "development") {
+  try {
+    const ctx = await getRequestContextOrThrow();
     return {
-      userId: DEV_USER_ID,
-      organizationId: DEV_ORGANIZATION_ID,
-      role: StaffRole.OWNER,
-      isDevFallback: true,
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+      role: ctx.role,
+      isDevFallback: ctx.authSource === "dev",
     };
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 /**
  * Throws an error if no session exists.
  */
 export async function requireCurrentSession(): Promise<CurrentSession> {
-  const session = await getCurrentSession();
-  if (!session) {
-    throw new Error("Unauthorized: No active session found.");
-  }
-  return session;
+  const ctx = await getRequestContextOrThrow();
+  return {
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    role: ctx.role,
+    isDevFallback: ctx.authSource === "dev",
+  };
 }
 
 /**

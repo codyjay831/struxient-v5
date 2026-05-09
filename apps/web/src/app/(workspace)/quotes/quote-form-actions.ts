@@ -22,8 +22,10 @@ import {
   parseQuoteLineFormDataInput,
   type ParsedQuoteLineInput as ParsedQuoteLineInputLib,
 } from "@/lib/quote-line-form-input";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
+
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import {
   QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
@@ -268,6 +270,7 @@ async function resolveCreateQuoteDraftFromFormFields(
         select: { id: true, title: true, customerId: true },
       })
     : null;
+
   if (formLeadId && !lead) {
     return {
       ok: false,
@@ -282,6 +285,7 @@ async function resolveCreateQuoteDraftFromFormFields(
         select: { id: true, displayName: true },
       })
     : null;
+
   if (formCustomerId && !customer) {
     return {
       ok: false,
@@ -328,6 +332,7 @@ async function resolveCreateQuoteDraftFromFormFields(
     });
   }
 
+
   if (!title) {
     title = defaultTitleFromContext({
       lead,
@@ -352,6 +357,7 @@ async function resolveCreateQuoteDraftFromFormFields(
       internalNotes,
     },
   };
+
 }
 
 function validateResolvedDraftQuoteFields(data: ResolvedDraftQuoteInsert): string | null {
@@ -389,7 +395,7 @@ export type PerformCreateQuoteDraftFromLeadResult =
 export async function performCreateQuoteDraftFromLead(
   leadId: string,
 ): Promise<PerformCreateQuoteDraftFromLeadResult> {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const id = leadId.trim();
   if (!id) {
     return { ok: false, error: "Missing lead record id." };
@@ -399,7 +405,7 @@ export async function performCreateQuoteDraftFromLead(
     return await db.$transaction(
       async (tx) => {
         const lead = await tx.lead.findFirst({
-          where: { id, organizationId: org.id },
+          where: { id, organizationId: ctx.organizationId },
           select: {
             id: true,
             title: true,
@@ -435,7 +441,7 @@ export async function performCreateQuoteDraftFromLead(
           lineItemCount: q._count.lineItems,
           updatedAt: q.updatedAt,
           job:
-            q.job && q.job.organizationId === org.id
+            q.job && q.job.organizationId === ctx.organizationId
               ? { id: q.job.id, status: q.job.status }
               : null,
         }));
@@ -466,12 +472,13 @@ export async function performCreateQuoteDraftFromLead(
           };
         }
 
-        const resolved = await resolveCreateQuoteDraftFromFormFields(tx, org, {
+        const resolved = await resolveCreateQuoteDraftFromFormFields(tx, { id: ctx.organizationId }, {
           formLeadId: lead.id,
           formCustomerId: null,
           title: "",
           internalNotes: null,
         });
+
         if (!resolved.ok) {
           return { ok: false as const, error: resolved.error };
         }
@@ -522,19 +529,20 @@ export async function createQuoteDraftAction(
   _prevState: QuoteFormState,
   formData: FormData,
 ): Promise<QuoteFormState> {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const formLeadId = trimOrNull(formData.get("leadId"));
   const formCustomerId = trimOrNull(formData.get("customerId"));
   const title = trimRequired(formData.get("title"));
   const internalNotes = trimOrNull(formData.get("internalNotes"));
 
-  const resolved = await resolveCreateQuoteDraftFromFormFields(db, org, {
+  const resolved = await resolveCreateQuoteDraftFromFormFields(db, { id: ctx.organizationId }, {
     formLeadId,
     formCustomerId,
     title,
     internalNotes,
   });
+
   if (!resolved.ok) {
     return { error: resolved.error };
   }
@@ -644,11 +652,11 @@ export async function updateDraftQuoteDetailsAction(
     return { error: customerDocTitle.error };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       status: QuoteStatus.DRAFT,
     },
     data: {
@@ -686,12 +694,12 @@ export async function copyLeadIntakeToQuoteNotesAction(
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
       const quote = await tx.quote.findFirst({
-        where: { id, organizationId: org.id, status: QuoteStatus.DRAFT },
+        where: { id, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
         select: { internalNotes: true, lead: { select: { notes: true } } },
       });
 
@@ -756,13 +764,13 @@ export async function performAddQuoteLineItem(
     return { ok: false, error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const quote = await tx.quote.findFirst({
       where: {
         id,
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         status: QuoteStatus.DRAFT,
       },
       select: { id: true },
@@ -798,7 +806,7 @@ export async function performAddQuoteLineItem(
       },
     });
 
-    await recalculateQuoteRollupsInTx(tx, { quoteId: id, organizationId: org.id });
+    await recalculateQuoteRollupsInTx(tx, { quoteId: id, organizationId: ctx.organizationId });
     return { ok: true as const };
   });
 
@@ -860,7 +868,7 @@ export async function performUpdateQuoteLineItem(
     return { ok: false, error: "Missing quote or line item id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
@@ -868,7 +876,7 @@ export async function performUpdateQuoteLineItem(
         id: lid,
         quoteId: qid,
         quote: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.DRAFT,
         },
       },
@@ -894,7 +902,7 @@ export async function performUpdateQuoteLineItem(
       },
     });
 
-    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: ctx.organizationId });
     return { ok: true as const };
   });
 
@@ -955,7 +963,7 @@ export async function performDeleteQuoteLineItem(
     return { ok: false, error: "Missing quote or line item id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
@@ -963,7 +971,7 @@ export async function performDeleteQuoteLineItem(
         id: lid,
         quoteId: qid,
         quote: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.DRAFT,
         },
       },
@@ -978,7 +986,7 @@ export async function performDeleteQuoteLineItem(
     });
 
     await normalizeQuoteLineExecutionOrdersTx(tx, qid);
-    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: ctx.organizationId });
     return { ok: true as const };
   });
 
@@ -1041,10 +1049,10 @@ export async function createLineItemTemplateAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const quoteExists = await db.quote.findFirst({
-    where: { id: rid, organizationId: org.id, status: QuoteStatus.DRAFT },
+    where: { id: rid, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
     select: { id: true },
   });
   if (!quoteExists) {
@@ -1056,7 +1064,7 @@ export async function createLineItemTemplateAction(
 
   await db.lineItemTemplate.create({
     data: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       ...parsed.data,
     },
   });
@@ -1076,11 +1084,11 @@ export async function createLineItemTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   await db.lineItemTemplate.create({
     data: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       ...parsed.data,
     },
   });
@@ -1106,12 +1114,12 @@ export async function updateLineItemTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const result = await db.lineItemTemplate.updateMany({
     where: {
       id: tid,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       archivedAt: null,
     },
     data: parsed.data,
@@ -1141,12 +1149,12 @@ export async function archiveLineItemTemplateFromScopeLibraryAction(
     return { error: "Missing template id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const result = await db.lineItemTemplate.updateMany({
     where: {
       id: tid,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       archivedAt: null,
     },
     data: { archivedAt: new Date() },
@@ -1178,10 +1186,10 @@ export async function archiveLineItemTemplateAction(
     return { error: "Missing quote or template id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const quoteExists = await db.quote.findFirst({
-    where: { id: rid, organizationId: org.id, status: QuoteStatus.DRAFT },
+    where: { id: rid, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
     select: { id: true },
   });
   if (!quoteExists) {
@@ -1194,7 +1202,7 @@ export async function archiveLineItemTemplateAction(
   const result = await db.lineItemTemplate.updateMany({
     where: {
       id: tid,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       archivedAt: null,
     },
     data: { archivedAt: new Date() },
@@ -1229,13 +1237,13 @@ export async function performApplyLineItemTemplateToQuote(
     return { ok: false, error: "Missing quote or template id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const template = await tx.lineItemTemplate.findFirst({
       where: {
         id: tid,
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         archivedAt: null,
       },
     });
@@ -1246,7 +1254,7 @@ export async function performApplyLineItemTemplateToQuote(
     const quote = await tx.quote.findFirst({
       where: {
         id: qid,
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         status: QuoteStatus.DRAFT,
       },
       select: { id: true },
@@ -1317,7 +1325,7 @@ export async function performApplyLineItemTemplateToQuote(
       });
     }
 
-    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: org.id });
+    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: ctx.organizationId });
     return { ok: true as const, message: null as string | null };
   });
 
@@ -1375,12 +1383,12 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const draftExists = await db.quote.findFirst({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       status: QuoteStatus.DRAFT,
     },
     select: { id: true },
@@ -1397,7 +1405,7 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
       const quote = await tx.quote.findFirst({
         where: {
           id,
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.DRAFT,
         },
         select: quoteSelectForCustomerProposalCheckpoint,
@@ -1407,16 +1415,16 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
         throw new Error("QUOTE_SEND_CHECKPOINT_RACE");
       }
 
-      const input = quoteRowToCustomerPreviewInput(quote, org.id);
+      const input = quoteRowToCustomerPreviewInput(quote, ctx.organizationId);
       const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
-        organizationDisplayName: org.name,
+        organizationDisplayName: ctx.organizationName,
       });
 
       const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
 
       const aggregate = await tx.quoteCheckpoint.aggregate({
         where: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.SEND,
         },
@@ -1426,7 +1434,7 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
 
       await tx.quoteCheckpoint.create({
         data: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.SEND,
           sequence: nextSequence,
@@ -1442,7 +1450,7 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
       const statusUpdate = await tx.quote.updateMany({
         where: {
           id,
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.DRAFT,
         },
         data: { status: QuoteStatus.SENT },
@@ -1508,12 +1516,12 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const sentExists = await db.quote.findFirst({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       status: QuoteStatus.SENT,
     },
     select: { id: true },
@@ -1530,7 +1538,7 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
       const quote = await tx.quote.findFirst({
         where: {
           id,
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.SENT,
         },
         select: quoteSelectForCustomerProposalCheckpoint,
@@ -1540,16 +1548,16 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
         throw new Error("QUOTE_APPROVAL_RACE");
       }
 
-      const input = quoteRowToCustomerPreviewInput(quote, org.id);
+      const input = quoteRowToCustomerPreviewInput(quote, ctx.organizationId);
       const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
-        organizationDisplayName: org.name,
+        organizationDisplayName: ctx.organizationName,
       });
 
       const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
 
       const aggregate = await tx.quoteCheckpoint.aggregate({
         where: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.APPROVAL,
         },
@@ -1559,7 +1567,7 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
 
       await tx.quoteCheckpoint.create({
         data: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.APPROVAL,
           sequence: nextSequence,
@@ -1575,7 +1583,7 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
       const statusUpdate = await tx.quote.updateMany({
         where: {
           id,
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           status: QuoteStatus.SENT,
         },
         data: { status: QuoteStatus.APPROVED },
@@ -1646,11 +1654,11 @@ export async function archiveQuoteAction(
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] },
     },
     data: { status: QuoteStatus.ARCHIVED },
@@ -1684,11 +1692,11 @@ export async function restoreQuoteToDraftAction(
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       status: QuoteStatus.ARCHIVED,
     },
     data: { status: QuoteStatus.DRAFT },

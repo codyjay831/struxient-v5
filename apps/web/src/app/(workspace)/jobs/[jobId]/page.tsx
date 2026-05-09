@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JobStageBlockType } from "@prisma/client";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+
 import {
   formatJobStatus,
   formatJobTaskStatus,
@@ -40,10 +42,11 @@ export default async function JobDetailPage({
     notFound();
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const job = await db.job.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
+
     select: {
       id: true,
       title: true,
@@ -175,10 +178,11 @@ export default async function JobDetailPage({
     notFound();
   }
 
-  const safeQuote = job.quote && job.quote.organizationId === org.id ? job.quote : null;
+  const safeQuote = job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
   const safeCustomer =
-    job.customer && job.customer.organizationId === org.id ? job.customer : null;
-  const safeLead = job.lead && job.lead.organizationId === org.id ? job.lead : null;
+    job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
+  const safeLead = job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
+
 
   const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;

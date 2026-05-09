@@ -12,7 +12,9 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { UserCircle } from "lucide-react";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 
@@ -29,10 +31,10 @@ export default async function CustomersPage({
   const sq = await (searchParams ?? Promise.resolve({} as { from?: string; section?: string }));
   const fromWorkstation = sq.from === "workstation";
   const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const [customers, totalLeads, unlinkedLeads, openPipelineLeads] = await Promise.all([
     db.customer.findMany({
-      where: { organizationId: org.id },
+      where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
       include: {
         _count: {
@@ -40,15 +42,16 @@ export default async function CustomersPage({
         },
       },
     }),
-    db.lead.count({ where: { organizationId: org.id } }),
-    db.lead.count({ where: { organizationId: org.id, customerId: null } }),
+    db.lead.count({ where: { organizationId: ctx.organizationId } }),
+    db.lead.count({ where: { organizationId: ctx.organizationId, customerId: null } }),
     db.lead.count({
       where: {
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
       },
     }),
   ]);
+
   const customersWithLinkedLead = customers.filter((c) => c._count.leads > 0).length;
 
   return (
@@ -143,8 +146,9 @@ export default async function CustomersPage({
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           This route reads from <span className="font-medium text-foreground">PostgreSQL</span> via{" "}
           <span className="font-medium text-foreground">Prisma</span>. Until auth exists, rows are
-          scoped with <span className="font-medium text-foreground">getDevOrganizationOrThrow()</span>{" "}
-          (development tenant only — not production org resolution).
+          scoped with <span className="font-medium text-foreground">getRequestContextOrThrow()</span>{" "}
+          ({ctx.organizationName}).
+
         </p>
       </WorkspacePanel>
 

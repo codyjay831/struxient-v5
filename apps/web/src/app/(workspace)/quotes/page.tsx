@@ -15,7 +15,9 @@ import {
   QuotesListClient,
   type SerializedQuoteListRow,
 } from "@/components/quotes/quotes-list-client";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import {
   formatMoneyCents,
@@ -96,9 +98,9 @@ export default async function QuotesPage({
   const { q, status, sort } = parseQuoteListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
-  const listWhere = quoteListWhere(org.id, status, q);
+  const listWhere = quoteListWhere(ctx.organizationId, status, q);
   const orderBy = quoteListOrderBy(sort);
 
   const [
@@ -122,16 +124,17 @@ export default async function QuotesPage({
       },
     }),
     db.quote.count({ where: listWhere }),
-    db.quote.count({ where: { organizationId: org.id } }),
-    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.DRAFT } }),
-    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.SENT } }),
-    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.APPROVED } }),
-    db.quote.count({ where: { organizationId: org.id, status: QuoteStatus.ARCHIVED } }),
+    db.quote.count({ where: { organizationId: ctx.organizationId } }),
+    db.quote.count({ where: { organizationId: ctx.organizationId, status: QuoteStatus.DRAFT } }),
+    db.quote.count({ where: { organizationId: ctx.organizationId, status: QuoteStatus.SENT } }),
+    db.quote.count({ where: { organizationId: ctx.organizationId, status: QuoteStatus.APPROVED } }),
+    db.quote.count({ where: { organizationId: ctx.organizationId, status: QuoteStatus.ARCHIVED } }),
     db.quote.aggregate({
-      where: { organizationId: org.id, status: QuoteStatus.DRAFT },
+      where: { organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
       _sum: { totalCents: true },
     }),
   ]);
+
 
   const draftValueCents = draftTotalsAgg._sum.totalCents ?? 0;
 
@@ -150,9 +153,10 @@ export default async function QuotesPage({
         totalCents: r.totalCents,
       },
       job:
-        r.job && r.job.organizationId === org.id
+        r.job && r.job.organizationId === ctx.organizationId
           ? { id: r.job.id, status: r.job.status }
           : null,
+
       activationReadiness: null, // Skip expensive activation check on list
       revisionDriftSinceLastProof: false, // Skip expensive drift check on list
     });
@@ -201,8 +205,9 @@ export default async function QuotesPage({
 
   const listDescription =
     totalInOrg === 0
-      ? `No quotes in ${org.name} yet.`
-      : `Showing ${matchingCount} of ${totalInOrg} quote${totalInOrg === 1 ? "" : "s"} in ${org.name}.`;
+      ? `No quotes in ${ctx.organizationName} yet.`
+      : `Showing ${matchingCount} of ${totalInOrg} quote${totalInOrg === 1 ? "" : "s"} in ${ctx.organizationName}.`;
+
 
   const sortOptions: QuoteListSortParam[] = [
     "updated",

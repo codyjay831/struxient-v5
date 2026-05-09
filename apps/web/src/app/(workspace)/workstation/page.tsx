@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/handoff-panel";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { getDevOrganizationOrThrow } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import {
@@ -44,13 +44,14 @@ export default async function WorkstationTodayLensPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
   const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
   const lens = (typeof sp.lens === "string" ? sp.lens : "attention") as any;
   const filter = (typeof sp.filter === "string" ? sp.filter : "all") as any;
 
-  const allItems = await queryWorkstationWorkItems(org.id);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
+
   const summary = getWorkstationSummary(allItems);
 
   // Filter by lens
@@ -240,10 +241,11 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 const WORKSTATION_CUSTOMER_LINK_FETCH_CAP = 500;
 
 async function LeadDetailWrapper({ leadId }: { leadId: string }) {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const lead = await db.lead.findFirst({
-    where: { id: leadId, organizationId: org.id },
+    where: { id: leadId, organizationId: ctx.organizationId },
+
     select: {
       id: true,
       status: true,
@@ -262,7 +264,7 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
   if (!lead) return null;
 
   const linkedQuotes = await db.quote.findMany({
-    where: { leadId: lead.id, organizationId: org.id },
+    where: { leadId: lead.id, organizationId: ctx.organizationId },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -289,7 +291,7 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
       totalCents: q.totalCents,
       lineItemCount: q._count.lineItems,
       updatedAt: q.updatedAt,
-      job: q.job && q.job.organizationId === org.id ? { id: q.job.id, status: q.job.status } : null,
+      job: q.job && q.job.organizationId === ctx.organizationId ? { id: q.job.id, status: q.job.status } : null,
     })),
   });
 
@@ -297,13 +299,14 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
   let customersForLink: { id: string; displayName: string }[] | undefined;
   if (!hasCustomer) {
     const rows = await db.customer.findMany({
-      where: { organizationId: org.id },
+      where: { organizationId: ctx.organizationId },
       orderBy: { displayName: "asc" },
       take: WORKSTATION_CUSTOMER_LINK_FETCH_CAP,
       select: { id: true, displayName: true },
     });
     customersForLink = rows.map((c) => ({ id: c.id, displayName: c.displayName }));
   }
+
 
   const surfaceQuotes = linkedQuotes
     .filter((q) => q.status !== "ARCHIVED")
@@ -322,8 +325,9 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
    * Quote page so all containers see identical readiness state. */
   const activeQuoteId = progress.activeQuote?.id ?? null;
   const activeQuoteWorkSurface = activeQuoteId
-    ? await loadQuoteWorkSurface(activeQuoteId, org.id)
+    ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
     : null;
+
 
   return (
     <WorkstationLeadPanel
@@ -354,8 +358,9 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
 }
 
 async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {
-  const org = await getDevOrganizationOrThrow();
-  const result = await loadQuoteWorkSurface(quoteId, org.id);
+  const ctx = await getRequestContextOrThrow();
+  const result = await loadQuoteWorkSurface(quoteId, ctx.organizationId);
+
   if (!result) return null;
 
   return (

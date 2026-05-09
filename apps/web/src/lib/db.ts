@@ -46,10 +46,15 @@ export const db: PrismaClient = new Proxy({} as PrismaClient, {
 });
 
 /**
+ * @deprecated Use getRequestContextOrThrow() from @/lib/auth-context instead.
  * Temporary development-only tenant selection until auth and org context exist.
  * Uses a fixed development organization id aligned with prisma/seed.ts — not RBAC.
  */
 export async function getDevOrganizationOrThrow() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("getDevOrganizationOrThrow is not allowed in production.");
+  }
+
   const existing = await db.organization.findUnique({
     where: { id: DEV_ORGANIZATION_ID },
   });

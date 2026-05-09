@@ -11,11 +11,13 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   EXECUTION_STAGE_KEYS_ORDERED,
   getExecutionStageLabel,
 } from "@/lib/execution-stage-catalog";
+
 import { jobDetailPath } from "@/lib/job-path";
 import {
   evaluateQuoteJobActivationReadiness,
@@ -45,14 +47,15 @@ export async function activateQuoteJobAction(
     return { error: "Missing quote record id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   let createdJobId: string | null = null;
 
   try {
     createdJobId = await db.$transaction(async (tx) => {
       const quote = await tx.quote.findFirst({
-        where: { id, organizationId: org.id },
+        where: { id, organizationId: ctx.organizationId },
+
         select: {
           id: true,
           title: true,
@@ -151,13 +154,13 @@ export async function activateQuoteJobAction(
       );
 
       const safeCustomerId =
-        quote.customer && quote.customer.organizationId === org.id ? quote.customerId : null;
+        quote.customer && quote.customer.organizationId === ctx.organizationId ? quote.customerId : null;
       const safeLeadId =
-        quote.lead && quote.lead.organizationId === org.id ? quote.leadId : null;
+        quote.lead && quote.lead.organizationId === ctx.organizationId ? quote.leadId : null;
 
       const job = await tx.job.create({
         data: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           quoteId: quote.id,
           customerId: safeCustomerId,
           leadId: safeLeadId,
@@ -166,6 +169,7 @@ export async function activateQuoteJobAction(
         },
         select: { id: true },
       });
+
 
       let stageSortOrder = 0;
 

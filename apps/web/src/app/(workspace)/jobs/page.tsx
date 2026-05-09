@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { JobStatus } from "@prisma/client";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+
 import { jobDetailPath } from "@/lib/job-path";
 import { formatJobStatus, jobStatusBadgeTone } from "@/lib/job-display";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,11 +20,11 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function JobsPage() {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const [jobs, totalCount, activeCount, archivedCount] = await Promise.all([
     db.job.findMany({
-      where: { organizationId: org.id },
+      where: { organizationId: ctx.organizationId },
       orderBy: [{ activatedAt: "desc" }],
       select: {
         id: true,
@@ -36,10 +38,11 @@ export default async function JobsPage() {
         _count: { select: { tasks: true, stages: true } },
       },
     }),
-    db.job.count({ where: { organizationId: org.id } }),
-    db.job.count({ where: { organizationId: org.id, status: JobStatus.ACTIVE } }),
-    db.job.count({ where: { organizationId: org.id, status: JobStatus.ARCHIVED } }),
+    db.job.count({ where: { organizationId: ctx.organizationId } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ARCHIVED } }),
   ]);
+
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -52,7 +55,8 @@ export default async function JobsPage() {
       <section className="mb-8">
         <SectionHeading
           title="Organization overview"
-          description={`Real database counts for ${org.name}.`}
+          description={`Real database counts for ${ctx.organizationName}.`}
+
         />
         <ul className="grid gap-3 sm:grid-cols-3">
           <li>
@@ -84,11 +88,12 @@ export default async function JobsPage() {
           {jobs.map((job) => {
             const activated = new Date(job.activatedAt).toLocaleString();
             const safeQuote =
-              job.quote && job.quote.organizationId === org.id ? job.quote : null;
+              job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
             const safeCustomer =
-              job.customer && job.customer.organizationId === org.id ? job.customer : null;
+              job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
             const safeLead =
-              job.lead && job.lead.organizationId === org.id ? job.lead : null;
+              job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
+
             
             const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
             const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
