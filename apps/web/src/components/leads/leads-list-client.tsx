@@ -47,6 +47,8 @@ export type SerializedLeadRow = {
   customerDisplayName: string | null;
   customerHref: string | null;
   createdAtLabel: string;
+  /** Server-rendered staleness hint, e.g. `Age 2D 3H`. */
+  ageLabel: string;
   progressLabel: string;
   progressDescription: string;
   progressTone: StatusBadgeTone;
@@ -142,6 +144,8 @@ function LeadRow({
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs text-foreground-subtle">
           <span>{lead.sourceLabel}</span>
+          <span>·</span>
+          <span>{lead.ageLabel}</span>
           <span>·</span>
           <span>{lead.createdAtLabel}</span>
           {lead.customerDisplayName && (

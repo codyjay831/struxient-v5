@@ -372,6 +372,9 @@ export type QuoteLineItemsWorkspaceEditorProps = {
    */
   shouldFocusAddForm?: boolean;
   onAddOpenConsumed?: () => void;
+  /** Opens the Scope Library picker dialog once (from Overview next step). */
+  shouldOpenScopeLibraryPicker?: boolean;
+  onScopeLibraryPickerOpenConsumed?: () => void;
   /**
    * Called after a successful add / update / delete / template-apply so
    * the container can re-fetch its `QuoteWorkSurfaceData` payload.
@@ -393,6 +396,8 @@ export function QuoteLineItemsWorkspaceEditor({
   reusableTaskOptions,
   shouldFocusAddForm = false,
   onAddOpenConsumed,
+  shouldOpenScopeLibraryPicker = false,
+  onScopeLibraryPickerOpenConsumed,
   onMutated,
 }: QuoteLineItemsWorkspaceEditorProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
@@ -469,6 +474,8 @@ export function QuoteLineItemsWorkspaceEditor({
             templates={[...lineItemTemplates]}
             onApplied={onMutated}
             triggerVariant="compact"
+            requestOpen={shouldOpenScopeLibraryPicker}
+            onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}
           />
         </div>
       ) : (
@@ -495,8 +502,8 @@ export function QuoteLineItemsWorkspaceEditor({
             No line items yet
           </p>
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            Use Add line item above for a one-off row, or Add from Scope Library
-            to copy a reusable saved row.
+            Add custom scope or copy reusable scope from the Scope Library using
+            the buttons above.
           </p>
         </div>
       ) : (

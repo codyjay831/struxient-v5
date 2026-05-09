@@ -20,7 +20,7 @@
  *   - Record          — archive/restore + internal notes + record details
  *
  * Actions that the surface can satisfy in-place switch tabs internally:
- *   - ADD_LINE_ITEM / CONTINUE_EDITING → Scope tab
+ *   - ADD_LINE_ITEM / ADD_FROM_SCOPE_LIBRARY / CONTINUE_EDITING → Scope tab
  *   - RESTORE_TO_DRAFT                 → Record tab
  *   - SEND_QUOTE / MARK_APPROVED       → inline workspace-safe forms (no nav)
  *
@@ -63,6 +63,8 @@ import {
   ChevronRight,
   Eye,
   FileText,
+  Layers,
+  Library,
   ListOrdered,
   MessageSquare,
   Send,
@@ -108,7 +110,6 @@ import { QuoteLineItemsWorkspaceEditor } from "@/components/quotes/quote-line-it
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
-import { Layers } from "lucide-react";
 
 /* ─── Public types ─────────────────────────────────────────────────────── */
 
@@ -181,6 +182,7 @@ const TAB_BOUND_ACTIONS: Record<
   QuoteWorkSurfaceTab | null
 > = {
   ADD_LINE_ITEM: "scope",
+  ADD_FROM_SCOPE_LIBRARY: "scope",
   CONTINUE_EDITING: "scope",
   RESTORE_TO_DRAFT: "record",
   SEND_QUOTE: null,
@@ -198,6 +200,7 @@ const ACTION_ICON: Record<QuoteReadinessAction["kind"], typeof Send> = {
   ACTIVATE_JOB: Briefcase,
   OPEN_JOB: Briefcase,
   ADD_LINE_ITEM: FileText,
+  ADD_FROM_SCOPE_LIBRARY: Library,
   CONTINUE_EDITING: FileText,
   OPEN_PROPOSAL_PREVIEW: ArrowRight,
   RESTORE_TO_DRAFT: ArrowRight,
@@ -513,6 +516,7 @@ function renderAction({
   mode,
   onSwitchToTab,
   onRequestAddLineItem,
+  onRequestScopeLibraryPicker,
   onMutated,
 }: {
   action: QuoteReadinessAction | null;
@@ -521,6 +525,7 @@ function renderAction({
   mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
+  onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
 }) {
   if (!action) return null;
@@ -564,6 +569,9 @@ function renderAction({
           onSwitchToTab(targetTab, preview);
           if (action.kind === "ADD_LINE_ITEM") {
             onRequestAddLineItem();
+          }
+          if (action.kind === "ADD_FROM_SCOPE_LIBRARY") {
+            onRequestScopeLibraryPicker();
           }
         }}
         className={cls}
@@ -619,6 +627,7 @@ function NextStepCard({
   mode,
   onSwitchToTab,
   onRequestAddLineItem,
+  onRequestScopeLibraryPicker,
   onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
@@ -626,6 +635,7 @@ function NextStepCard({
   mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
+  onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
 }) {
   const { primaryAction, secondaryAction, label, description, showsRevisionDrift } =
@@ -656,6 +666,7 @@ function NextStepCard({
           mode,
           onSwitchToTab,
           onRequestAddLineItem,
+          onRequestScopeLibraryPicker,
           onMutated,
         })}
         {renderAction({
@@ -665,6 +676,7 @@ function NextStepCard({
           mode,
           onSwitchToTab,
           onRequestAddLineItem,
+          onRequestScopeLibraryPicker,
           onMutated,
         })}
       </div>
@@ -744,6 +756,7 @@ function OverviewTab({
   mode,
   onSwitchToTab,
   onRequestAddLineItem,
+  onRequestScopeLibraryPicker,
   onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
@@ -752,6 +765,7 @@ function OverviewTab({
   mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
+  onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
 }) {
   const isFull = mode === "full";
@@ -763,6 +777,7 @@ function OverviewTab({
         mode={mode}
         onSwitchToTab={onSwitchToTab}
         onRequestAddLineItem={onRequestAddLineItem}
+        onRequestScopeLibraryPicker={onRequestScopeLibraryPicker}
         onMutated={onMutated}
       />
 
@@ -862,6 +877,8 @@ function ScopeTab({
   mode,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
+  shouldOpenScopeLibraryPicker,
+  onScopeLibraryPickerOpenConsumed,
   onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
@@ -870,6 +887,8 @@ function ScopeTab({
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
+  shouldOpenScopeLibraryPicker: boolean;
+  onScopeLibraryPickerOpenConsumed: () => void;
   onMutated?: () => void;
 }) {
   const isFull = mode === "full";
@@ -910,6 +929,8 @@ function ScopeTab({
         lineItemTemplates={lineItemTemplates}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
+        shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
+        onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
       />
     );
   }
@@ -1000,6 +1021,8 @@ function ScopeTab({
         reusableTaskOptions={reusableTaskOptions}
         shouldFocusAddForm={shouldFocusAddForm}
         onAddOpenConsumed={onAddFormFocusConsumed}
+        shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
+        onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
         onMutated={onMutated ?? (() => {})}
       />
     );
@@ -1659,8 +1682,18 @@ export function QuoteWorkSurface({
   /* Set by `ADD_LINE_ITEM` action to ask the Scope tab editor to mount with
    * its add-line form open + focused. Cleared after the editor consumes it. */
   const [shouldFocusAddForm, setShouldFocusAddForm] = useState(false);
-  const handleRequestAddLineItem = () => setShouldFocusAddForm(true);
+  const [shouldOpenScopeLibraryPicker, setShouldOpenScopeLibraryPicker] = useState(false);
+  const handleRequestAddLineItem = () => {
+    setShouldOpenScopeLibraryPicker(false);
+    setShouldFocusAddForm(true);
+  };
+  const handleRequestScopeLibraryPicker = () => {
+    setShouldFocusAddForm(false);
+    setShouldOpenScopeLibraryPicker(true);
+  };
   const handleAddFormFocusConsumed = () => setShouldFocusAddForm(false);
+  const handleScopeLibraryPickerOpenConsumed = () =>
+    setShouldOpenScopeLibraryPicker(false);
 
   /* Always invalidate SSR-rendered surfaces (Workstation drawer, full Quote
    * page, full Lead page Quote tab) and additionally let the parent
@@ -1714,6 +1747,7 @@ export function QuoteWorkSurface({
           mode={mode}
           onSwitchToTab={handleSwitchToTab}
           onRequestAddLineItem={handleRequestAddLineItem}
+          onRequestScopeLibraryPicker={handleRequestScopeLibraryPicker}
           onMutated={handleSurfaceMutated}
         />
       )}
@@ -1725,6 +1759,8 @@ export function QuoteWorkSurface({
           onSwitchToTab={handleSwitchToTab}
           shouldFocusAddForm={shouldFocusAddForm}
           onAddFormFocusConsumed={handleAddFormFocusConsumed}
+          shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
+          onScopeLibraryPickerOpenConsumed={handleScopeLibraryPickerOpenConsumed}
           onMutated={handleSurfaceMutated}
         />
       )}

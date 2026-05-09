@@ -3,14 +3,13 @@ import { QuoteStatus } from "@prisma/client";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import {
   QuotesListClient,
   type SerializedQuoteListRow,
 } from "@/components/quotes/quotes-list-client";
+import { QuoteListFiltersClient } from "@/components/quotes/quote-list-filters-client";
 import { QuoteListSearchForm } from "@/components/quotes/quote-list-search-form";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -31,7 +30,16 @@ import {
   type QuoteListStatusParam,
 } from "@/lib/quote-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
+import { formatCompactAge } from "@/lib/compact-age";
 import { FileText, Search } from "lucide-react";
+
+const quoteListTimestampOpts: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +96,7 @@ export default async function QuotesPage({
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getRequestContextOrThrow();
+  const now = new Date();
 
   const listWhere = quoteListWhere(ctx.organizationId, status, q);
   const orderBy = quoteListOrderBy(sort);
@@ -107,7 +116,7 @@ export default async function QuotesPage({
       orderBy,
       include: {
         customer: { select: { id: true, displayName: true, companyName: true } },
-        lead: { select: { id: true, title: true, contactName: true } },
+        lead: { select: { id: true, title: true, contactName: true, createdAt: true } },
         job: { select: { id: true, status: true, organizationId: true } },
         _count: { select: { lineItems: true } },
       },
@@ -172,11 +181,17 @@ export default async function QuotesPage({
         ? contextBits.join(" · ")
         : "No customer or lead linked";
 
+    const quoteAge = formatCompactAge(r.createdAt, now);
+    const ageLine = r.lead
+      ? `Lead ${formatCompactAge(r.lead.createdAt, now)} · Quote ${quoteAge}`
+      : `Quote ${quoteAge}`;
+
     return {
       id: r.id,
       primaryIdentity,
       secondaryIdentity,
       contextLine,
+      ageLine,
       totalCents: r.totalCents,
       totalLabel: formatMoneyCents(r.totalCents),
       status: r.status,
@@ -184,19 +199,13 @@ export default async function QuotesPage({
       statusTone: quoteStatusBadgeTone(r.status),
       readinessLabel: readiness.label,
       readinessTone: readiness.badgeTone,
-      createdLabel: new Date(r.createdAt).toLocaleString(),
-      updatedLabel: new Date(r.updatedAt).toLocaleString(),
+      createdLabel: new Date(r.createdAt).toLocaleString("en-US", quoteListTimestampOpts),
+      updatedLabel: new Date(r.updatedAt).toLocaleString("en-US", quoteListTimestampOpts),
       href: `/quotes/${r.id}`,
     };
   });
   const hasActiveListFilters =
     q.length > 0 || status !== "all" || sort !== QUOTE_LIST_DEFAULT_SORT;
-
-  const listDescription =
-    totalInOrg === 0
-      ? `No quotes in ${ctx.organizationName} yet.`
-      : `Showing ${matchingCount} of ${totalInOrg} quote${totalInOrg === 1 ? "" : "s"} in ${ctx.organizationName}.`;
-
 
   const sortOptions: QuoteListSortParam[] = [
     "updated",
@@ -205,6 +214,19 @@ export default async function QuotesPage({
     "total_desc",
     "total_asc",
   ];
+
+  const statusNavItems = STATUS_FILTER_PILLS.map(({ param: s, label }) => ({
+    key: s,
+    href: serializeQuotesListHref({ q, status: s, sort }),
+    label,
+    active: status === s,
+  }));
+  const sortNavItems = sortOptions.map((s) => ({
+    key: s,
+    href: serializeQuotesListHref({ q, status, sort: s }),
+    label: sortLabel(s),
+    active: sort === s,
+  }));
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -225,6 +247,9 @@ export default async function QuotesPage({
             <Link href="/leads" className={mutedLinkClass}>
               ← Leads
             </Link>
+            <PlaceholderButton title="No template library in this build">
+              Browse templates (soon)
+            </PlaceholderButton>
             <Link href="/quotes/new" className={primaryLinkClass}>
               New quote
             </Link>
@@ -263,95 +288,55 @@ export default async function QuotesPage({
         </ul>
       </section>
 
-      <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_minmax(0,17rem)]">
-        <div>
-          <SectionHeading title="Quote list" description={listDescription} />
-          <div className="mb-4 space-y-3 border-y border-border py-3">
-            <QuoteListSearchForm
-              q={q}
-              status={status}
-              sort={sort}
-              hasActiveListFilters={hasActiveListFilters}
-              controlClass={controlClass}
-              primaryLinkClass={primaryLinkClass}
-              mutedLinkClass={mutedLinkClass}
-            />
+      <div className="mb-10">
+        <div className="mb-4 space-y-3 border-y border-border py-3">
+          <QuoteListSearchForm
+            q={q}
+            status={status}
+            sort={sort}
+            matchingCount={matchingCount}
+            totalInOrg={totalInOrg}
+            hasActiveListFilters={hasActiveListFilters}
+            controlClass={controlClass}
+            primaryLinkClass={primaryLinkClass}
+            mutedLinkClass={mutedLinkClass}
+          />
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <nav aria-label="Quote status filters" className="flex flex-wrap gap-2">
-                {STATUS_FILTER_PILLS.map(({ param: s, label }) => (
-                  <Link
-                    key={s}
-                    href={serializeQuotesListHref({ q, status: s, sort })}
-                    scroll={false}
-                    className={status === s ? pillActive : pillIdle}
-                    aria-current={status === s ? "page" : undefined}
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </nav>
-
-              <nav aria-label="Quote sort options" className="flex flex-wrap gap-1.5">
-                {sortOptions.map((s) => (
-                  <Link
-                    key={s}
-                    href={serializeQuotesListHref({ q, status, sort: s })}
-                    scroll={false}
-                    className={sort === s ? sortLinkActive : sortLinkIdle}
-                    aria-current={sort === s ? "true" : undefined}
-                  >
-                    {sortLabel(s)}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-          </div>
-          {totalInOrg === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="No quotes yet"
-              description="There are no quote records for this organization. Create a draft from New quote, or run the development seed if your database is empty."
-            >
-              <Link href="/quotes/new" className={primaryLinkClass}>
-                New quote
-              </Link>
-            </EmptyState>
-          ) : matchingCount === 0 ? (
-            <EmptyState
-              icon={Search}
-              title="No quotes match this view"
-              description="Try a different search term, switch status to All, or change sort. Quotes still exist in your organization—they are just filtered out here."
-            >
-              <Link href="/quotes" scroll={false} className={primaryLinkClass}>
-                Clear filters
-              </Link>
-              <Link href="/quotes/new" className={mutedLinkClass}>
-                New quote
-              </Link>
-            </EmptyState>
-          ) : (
-            <QuotesListClient quotes={serializedQuotes} />
-          )}
+          <QuoteListFiltersClient
+            statusItems={statusNavItems}
+            sortItems={sortNavItems}
+            pillActiveClass={pillActive}
+            pillIdleClass={pillIdle}
+            sortActiveClass={sortLinkActive}
+            sortIdleClass={sortLinkIdle}
+          />
         </div>
-        <WorkspacePanel padding="compact">
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-            Detail surface
-          </p>
-          <ul className="mt-3 space-y-2 text-sm text-foreground-muted">
-            <li>Open a quote for line items and rollups; drafts are editable, archived are read-only.</li>
-            <li>Totals follow line items on the quote row—no separate billing or tax lines in this build.</li>
-            <li>Live proposal preview and recorded send checkpoints are staff-only views on the same working record.</li>
-          </ul>
-          <div className="mt-5 flex flex-wrap gap-2">
+        {totalInOrg === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No quotes yet"
+            description="There are no quote records for this organization. Create a draft from New quote, or run the development seed if your database is empty."
+          >
             <Link href="/quotes/new" className={primaryLinkClass}>
               New quote
             </Link>
-            <PlaceholderButton title="No template library in this build">
-              Browse templates (soon)
-            </PlaceholderButton>
-          </div>
-        </WorkspacePanel>
+          </EmptyState>
+        ) : matchingCount === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No quotes match this view"
+            description="Try a different search term, switch status to All, or change sort. Quotes still exist in your organization—they are just filtered out here."
+          >
+            <Link href="/quotes" scroll={false} className={primaryLinkClass}>
+              Clear filters
+            </Link>
+            <Link href="/quotes/new" className={mutedLinkClass}>
+              New quote
+            </Link>
+          </EmptyState>
+        ) : (
+          <QuotesListClient quotes={serializedQuotes} />
+        )}
       </div>
     </div>
   );

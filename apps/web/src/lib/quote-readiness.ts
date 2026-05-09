@@ -24,6 +24,7 @@ export type QuoteReadinessState =
  */
 export type QuoteReadinessActionKind =
   | "ADD_LINE_ITEM"
+  | "ADD_FROM_SCOPE_LIBRARY"
   | "CONTINUE_EDITING"
   | "SEND_QUOTE"
   | "OPEN_PROPOSAL_PREVIEW"
@@ -201,9 +202,13 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
     return {
       state: "EMPTY_DRAFT",
       label: STATE_LABEL.EMPTY_DRAFT,
-      description: "This draft quote has no line items. Add commercial scope to continue.",
+      description:
+        "This draft quote has no line items. Add custom scope or copy reusable scope from the Scope Library.",
       primaryAction: { kind: "ADD_LINE_ITEM", label: "Add line item" },
-      secondaryAction: null,
+      secondaryAction: {
+        kind: "ADD_FROM_SCOPE_LIBRARY",
+        label: "Add from Scope Library",
+      },
       stepIndex: STATE_STEP_INDEX.EMPTY_DRAFT,
       totalSteps: TOTAL_STEPS,
       isTerminal: false,
@@ -269,6 +274,7 @@ export function resolveQuoteReadinessActionHref(
 ): string {
   switch (action.kind) {
     case "ADD_LINE_ITEM":
+    case "ADD_FROM_SCOPE_LIBRARY":
     case "CONTINUE_EDITING":
       return `/quotes/${ctx.quoteId}#line-items`;
     case "SEND_QUOTE":

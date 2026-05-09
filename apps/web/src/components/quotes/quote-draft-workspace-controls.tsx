@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import {
   addQuoteLineItemAction,
   deleteQuoteLineItemAction,
@@ -373,6 +372,9 @@ export type QuoteDraftWorkspaceControlsProps = {
   lineItemTemplates: LineItemTemplatePickerRow[];
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  /** From quote Overview — open Scope Library picker on Scope tab (full page). */
+  shouldOpenScopeLibraryPicker?: boolean;
+  onScopeLibraryPickerOpenConsumed?: () => void;
 };
 
 export function QuoteDraftWorkspaceControls({
@@ -388,6 +390,8 @@ export function QuoteDraftWorkspaceControls({
   lineItemTemplates,
   draftTasksByLineId,
   reusableTaskOptions,
+  shouldOpenScopeLibraryPicker = false,
+  onScopeLibraryPickerOpenConsumed,
 }: QuoteDraftWorkspaceControlsProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
@@ -448,7 +452,7 @@ export function QuoteDraftWorkspaceControls({
             <EmptyState
               icon={ListOrdered}
               title="No line items on this quote yet"
-              description="Use Add line item above for a one-off row, or browse your Scope Library to copy a reusable row. Either path adds a normal line to this working quote."
+              description="This draft quote has no line items. Add custom scope or copy reusable scope from the Scope Library."
             >
               <div className="flex flex-wrap gap-2">
                 <button
@@ -458,9 +462,13 @@ export function QuoteDraftWorkspaceControls({
                 >
                   Add line item
                 </button>
-                <Link href="/scope-library" className={secondaryButtonClass}>
-                  Open Scope Library
-                </Link>
+                <SavedLineItemPickerDialog
+                  quoteId={quoteId}
+                  templates={lineItemTemplates}
+                  triggerVariant="compact"
+                  requestOpen={shouldOpenScopeLibraryPicker}
+                  onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}
+                />
               </div>
             </EmptyState>
           </div>
@@ -506,7 +514,9 @@ export function QuoteDraftWorkspaceControls({
           </ul>
         )}
 
-        <SavedLineItemPickerDialog quoteId={quoteId} templates={lineItemTemplates} />
+        {lineCount > 0 ? (
+          <SavedLineItemPickerDialog quoteId={quoteId} templates={lineItemTemplates} />
+        ) : null}
       </WorkspacePanel>
     </>
   );

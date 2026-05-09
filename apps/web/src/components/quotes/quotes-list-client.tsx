@@ -37,6 +37,8 @@ export type SerializedQuoteListRow = {
   secondaryIdentity: string | null;
   /** "Customer · Company · Lead: Title · Contact" or "No customer or lead linked". */
   contextLine: string;
+  /** Compact staleness, e.g. `Lead 2D 3H · Quote 6H` or `Quote 6H`. */
+  ageLine: string;
   totalCents: number;
   /** Pre-formatted total for display. */
   totalLabel: string;
@@ -137,20 +139,9 @@ function QuoteRow({
           <p className="mt-1 text-xs text-foreground-muted break-words">
             {quote.contextLine}
           </p>
-          <dl className="mt-3 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
-            <div>
-              <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                Created
-              </dt>
-              <dd className="mt-0.5 text-foreground">{quote.createdLabel}</dd>
-            </div>
-            <div>
-              <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                Updated
-              </dt>
-              <dd className="mt-0.5 text-foreground">{quote.updatedLabel}</dd>
-            </div>
-          </dl>
+          <p className="mt-2 text-xs text-foreground-subtle">
+            {quote.ageLine}
+          </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
           <div className="flex flex-col items-end gap-1.5">

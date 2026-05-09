@@ -33,6 +33,7 @@ import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 
 import { workstationReturnHref } from "@/lib/workstation-return-href";
+import { formatCompactAge } from "@/lib/compact-age";
 import { Inbox } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,8 @@ export default async function LeadsPage({
     select: { enabled: true },
   });
   const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
+
+  const now = new Date();
 
   const leads = await db.lead.findMany({
     where: { organizationId: ctx.organizationId },
@@ -144,6 +147,7 @@ export default async function LeadsPage({
         month: "short",
         day: "numeric",
       }),
+      ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
       progressLabel: progress.label,
       progressDescription: progress.description,
       progressTone: progress.badgeTone,

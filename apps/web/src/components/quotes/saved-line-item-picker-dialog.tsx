@@ -35,6 +35,13 @@ interface SavedLineItemPickerDialogProps {
    * 'compact' - simple secondary button
    */
   triggerVariant?: "standard" | "compact";
+  /**
+   * When this becomes true, opens the dialog programmatically (e.g. from the
+   * quote Overview “Add from Scope Library” next step). Parent should clear
+   * via `onRequestOpenConsumed` after the dialog opens.
+   */
+  requestOpen?: boolean;
+  onRequestOpenConsumed?: () => void;
 }
 
 export function SavedLineItemPickerDialog({
@@ -42,10 +49,25 @@ export function SavedLineItemPickerDialog({
   templates,
   onApplied,
   triggerVariant = "standard",
+  requestOpen = false,
+  onRequestOpenConsumed,
 }: SavedLineItemPickerDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "name">("newest");
+
+  useEffect(() => {
+    if (!requestOpen) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      dialogRef.current?.showModal();
+      onRequestOpenConsumed?.();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestOpen, onRequestOpenConsumed]);
 
   function open() {
     dialogRef.current?.showModal();

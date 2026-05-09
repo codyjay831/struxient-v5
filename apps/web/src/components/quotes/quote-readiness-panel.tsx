@@ -13,12 +13,13 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { formatMoneyCents } from "@/lib/quote-display";
 import {
   ArrowRight,
+  Briefcase,
   CheckCircle2,
   FileText,
+  Library,
   Send,
   ThumbsUp,
   Wrench,
-  Briefcase,
 } from "lucide-react";
 
 export function QuoteReadinessIconStrip({
@@ -97,6 +98,7 @@ export function QuoteReadinessPanel({
       ACTIVATE_JOB: Briefcase,
       OPEN_JOB: Briefcase,
       ADD_LINE_ITEM: FileText,
+      ADD_FROM_SCOPE_LIBRARY: Library,
       CONTINUE_EDITING: FileText,
     };
 
