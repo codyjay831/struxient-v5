@@ -8,7 +8,8 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import {
   quoteRowToCustomerPreviewInput,
@@ -35,12 +36,12 @@ export default async function QuoteLiveProposalPreviewPage({
   params: Promise<{ quoteId: string }>;
 }) {
   const { quoteId } = await params;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const row = await db.quote.findFirst({
     where: {
       id: quoteId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     select: quoteSelectForLiveCustomerPreviewPage,
   });
@@ -87,17 +88,17 @@ export default async function QuoteLiveProposalPreviewPage({
   const latestSendCheckpoint = await db.quoteCheckpoint.findFirst({
     where: {
       quoteId: row.id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       kind: QuoteCheckpointKind.SEND,
     },
     orderBy: { sequence: "desc" },
     select: { id: true },
   });
 
-  const input = quoteRowToCustomerPreviewInput(row, org.id);
+  const input = quoteRowToCustomerPreviewInput(row, ctx.organizationId);
 
   const { document: preview, staffOnly } = buildCustomerQuotePreviewDocument(input, {
-    organizationDisplayName: org.name,
+    organizationDisplayName: ctx.organizationName,
   });
 
   const isArchived = row.status === QuoteStatus.ARCHIVED;

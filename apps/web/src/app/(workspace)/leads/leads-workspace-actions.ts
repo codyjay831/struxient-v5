@@ -14,7 +14,8 @@ import { performCreateQuoteDraftFromLead } from "@/app/(workspace)/quotes/quote-
  */
 
 import { LeadStatus } from "@prisma/client";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
 import {
   getLeadCommercialProgress,
@@ -112,12 +113,12 @@ export async function createCustomerFromLeadWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
       const lead = await tx.lead.findFirst({
-        where: { id, organizationId: org.id },
+        where: { id, organizationId: ctx.organizationId },
         select: {
           customerId: true,
           title: true,
@@ -142,13 +143,13 @@ export async function createCustomerFromLeadWorkspaceAction(
 
       const customer = await tx.customer.create({
         data: {
-          organizationId: org.id,
+          organizationId: ctx.organizationId,
           ...prep.data,
         },
       });
 
       const result = await tx.lead.updateMany({
-        where: { id, organizationId: org.id, customerId: null },
+        where: { id, organizationId: ctx.organizationId, customerId: null },
         data: { customerId: customer.id, convertedAt: new Date() },
       });
 
@@ -189,10 +190,10 @@ export async function linkLeadToCustomerWorkspaceAction(
     return { error: "Choose a customer to link, or create one first." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const customer = await db.customer.findFirst({
-    where: { id: customerIdRaw, organizationId: org.id },
+    where: { id: customerIdRaw, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!customer) {
@@ -202,7 +203,7 @@ export async function linkLeadToCustomerWorkspaceAction(
   }
 
   const lead = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: { customerId: true },
   });
   if (!lead) {
@@ -217,7 +218,7 @@ export async function linkLeadToCustomerWorkspaceAction(
 
   const convertedAt = new Date();
   const result = await db.lead.updateMany({
-    where: { id, organizationId: org.id, customerId: null },
+    where: { id, organizationId: ctx.organizationId, customerId: null },
     data: { customerId: customer.id, convertedAt },
   });
 
@@ -259,10 +260,10 @@ export async function updateLeadStatusWorkspaceAction(
   }
   const status = v as LeadStatus;
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!exists) {
@@ -275,7 +276,7 @@ export async function updateLeadStatusWorkspaceAction(
   const result = await db.lead.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     data: { status },
   });
@@ -303,10 +304,10 @@ export async function updateLeadContactWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!exists) return { error: "Lead not found in your organization." };
@@ -330,7 +331,7 @@ export async function updateLeadContactWorkspaceAction(
   }
 
   const result = await db.lead.updateMany({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     data: { contactName, email, phone },
   });
 
@@ -350,7 +351,7 @@ export async function updateLeadContactWorkspaceAction(
  * full page) do not need this — they pass `activeQuoteWorkSurface` directly.
  *
  * Security:
- *   - org-scoped via `getDevOrganizationOrThrow`
+ *   - org-scoped via `getRequestContextOrThrow`
  *   - never trusts a client-supplied quote id; the active quote is derived
  *     server-side from the lead's quotes using the same
  *     `getLeadCommercialProgress` logic the other containers use
@@ -366,10 +367,10 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const lead = await db.lead.findFirst({
-    where: { id, organizationId: org.id },
+    where: { id, organizationId: ctx.organizationId },
     select: {
       status: true,
       customerId: true,
@@ -402,7 +403,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     lineItemCount: q._count.lineItems,
     updatedAt: q.updatedAt,
     job:
-      q.job && q.job.organizationId === org.id
+      q.job && q.job.organizationId === ctx.organizationId
         ? { id: q.job.id, status: q.job.status }
         : null,
   }));
@@ -421,6 +422,6 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     return { ok: true, payload: null };
   }
 
-  const result = await loadQuoteWorkSurface(progress.activeQuote.id, org.id);
+  const result = await loadQuoteWorkSurface(progress.activeQuote.id, ctx.organizationId);
   return { ok: true, payload: result };
 }

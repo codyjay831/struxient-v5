@@ -7,14 +7,15 @@
  * `quote-form-actions.ts`, which is mutation-only) so the lazy loader path
  * can be audited independently:
  *
- *   - org-scoped via `getDevOrganizationOrThrow`
+ *   - org-scoped via `getRequestContextOrThrow`
  *   - re-validated by `loadQuoteWorkSurface` (which also checks org scope on
  *     the customer/lead/job relations before exposing them)
  *   - no `redirect`, no `revalidatePath`, no mutations
  *   - never trusts a client-supplied org id
  */
 
-import { getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   loadQuoteWorkSurface,
   type QuoteWorkSurfaceLoaderResult,
@@ -35,8 +36,8 @@ export async function loadQuoteWorkSurfaceAction(
   const id = quoteId.trim();
   if (!id) return { ok: false, error: "Missing quote id." };
 
-  const org = await getDevOrganizationOrThrow();
-  const result = await loadQuoteWorkSurface(id, org.id);
+  const ctx = await getRequestContextOrThrow();
+  const result = await loadQuoteWorkSurface(id, ctx.organizationId);
   if (!result) {
     return { ok: false, error: "Quote not found in your organization." };
   }

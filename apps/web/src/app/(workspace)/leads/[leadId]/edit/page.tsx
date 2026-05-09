@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { Inbox } from "lucide-react";
 import { updateLeadAction } from "../../lead-form-actions";
 import { LeadRecordForm } from "../../lead-record-form";
@@ -20,11 +21,11 @@ export default async function EditLeadPage({
   params: Promise<{ leadId: string }>;
 }) {
   const { leadId } = await params;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const lead = await db.lead.findFirst({
     where: {
       id: leadId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
   });
 

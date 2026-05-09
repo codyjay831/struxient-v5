@@ -12,7 +12,8 @@ import {
   getLeadCommercialProgress,
   type LeadProgressQuoteInput,
 } from "@/lib/lead-commercial-progress";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
 import {
@@ -47,11 +48,11 @@ export default async function LeadDetailPage({
   const fromWorkstation = sq["from"] === "workstation";
   const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
   const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const row = await db.lead.findFirst({
     where: {
       id: leadId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     include: {
       customer: {
@@ -100,7 +101,7 @@ export default async function LeadDetailPage({
   }
 
   const customer =
-    row.customer && row.customer.organizationId === org.id
+    row.customer && row.customer.organizationId === ctx.organizationId
       ? { id: row.customer.id, displayName: row.customer.displayName }
       : null;
 
@@ -130,7 +131,7 @@ export default async function LeadDetailPage({
 
   const linkedQuotes = await db.quote.findMany({
     where: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       leadId: row.id,
     },
     orderBy: { updatedAt: "desc" },
@@ -153,7 +154,7 @@ export default async function LeadDetailPage({
     lineItemCount: q._count.lineItems,
     updatedAt: q.updatedAt,
     job:
-      q.job && q.job.organizationId === org.id
+      q.job && q.job.organizationId === ctx.organizationId
         ? { id: q.job.id, status: q.job.status }
         : null,
   }));
@@ -177,7 +178,7 @@ export default async function LeadDetailPage({
   ) {
     const latestProof = await db.quoteCheckpoint.findFirst({
       where: {
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         quoteId: provisionalProgress.activeQuote.id,
         kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
       },
@@ -216,12 +217,12 @@ export default async function LeadDetailPage({
    * the Quote full page sees. */
   const activeQuoteId = commercialProgress.activeQuote?.id ?? null;
   const activeQuoteWorkSurface = activeQuoteId
-    ? await loadQuoteWorkSurface(activeQuoteId, org.id)
+    ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
     : null;
 
   if (showLinkForm) {
     const customers = await db.customer.findMany({
-      where: { organizationId: org.id },
+      where: { organizationId: ctx.organizationId },
       orderBy: { displayName: "asc" },
       take: CUSTOMER_HINT_FETCH_CAP,
       select: {

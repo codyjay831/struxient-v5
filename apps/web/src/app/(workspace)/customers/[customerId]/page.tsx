@@ -13,7 +13,8 @@ import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   formatLeadSource,
   formatLeadStatus,
@@ -89,11 +90,11 @@ export default async function CustomerDetailPage({
   const fromWorkstation = sq.from === "workstation";
   const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
   const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const customer = await db.customer.findFirst({
     where: {
       id: customerId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
   });
 
@@ -147,7 +148,7 @@ export default async function CustomerDetailPage({
 
   const linkedLeads = await db.lead.findMany({
     where: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       customerId: customer.id,
     },
     orderBy: { createdAt: "desc" },
@@ -166,7 +167,7 @@ export default async function CustomerDetailPage({
 
   const linkedQuotes = await db.quote.findMany({
     where: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       customerId: customer.id,
     },
     orderBy: { updatedAt: "desc" },
@@ -230,7 +231,7 @@ export default async function CustomerDetailPage({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge label="Relationship record" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            Scoped to development organization ({org.name})
+            Scoped to organization ({ctx.organizationName})
           </span>
         </div>
         <dl className="mt-4 grid gap-2 text-xs text-foreground-muted sm:grid-cols-2">

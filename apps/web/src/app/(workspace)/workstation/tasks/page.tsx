@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
-import { getDevOrganizationOrThrow, db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
@@ -18,11 +19,11 @@ export default async function WorkstationTasksLensPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
   const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
 
-  const allItems = await queryWorkstationWorkItems(org.id);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
   const taskItems = allItems.filter((i) => i.kind === "task");
 
   const inProgressCount = taskItems.filter(i => i.status === JobTaskStatus.IN_PROGRESS).length;
@@ -87,8 +88,9 @@ export default async function WorkstationTasksLensPage({
 }
 
 async function TaskDetailWrapper({ taskId }: { taskId: string }) {
-  const task = await db.jobTask.findUnique({
-    where: { id: taskId },
+  const ctx = await getRequestContextOrThrow();
+  const task = await db.jobTask.findFirst({
+    where: { id: taskId, job: { organizationId: ctx.organizationId } },
     select: { id: true, status: true, instructions: true },
   });
 

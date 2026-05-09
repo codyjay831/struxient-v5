@@ -2,7 +2,8 @@
 
 import { LineItemTemplateTaskSource, Prisma, type ExecutionStageKey } from "@prisma/client";
 import { redirect } from "next/navigation";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
@@ -141,11 +142,11 @@ export async function addLineItemTemplateTaskFromReusableAction(
     return { error: "Missing saved line item or reusable task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const preset = await tx.lineItemTemplate.findFirst({
-      where: { id: tid, organizationId: org.id, archivedAt: null },
+      where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
       select: { id: true },
     });
     if (!preset) {
@@ -155,7 +156,7 @@ export async function addLineItemTemplateTaskFromReusableAction(
     const reusable = await tx.taskTemplate.findFirst({
       where: {
         id: taskTemplateId,
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         archivedAt: null,
       },
     });
@@ -178,7 +179,7 @@ export async function addLineItemTemplateTaskFromReusableAction(
       },
     });
 
-    await touchLineItemTemplateUpdatedAt(tx, tid, org.id);
+    await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -213,11 +214,11 @@ export async function addLineItemTemplateTaskCustomAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const preset = await tx.lineItemTemplate.findFirst({
-      where: { id: tid, organizationId: org.id, archivedAt: null },
+      where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
       select: { id: true },
     });
     if (!preset) {
@@ -239,7 +240,7 @@ export async function addLineItemTemplateTaskCustomAction(
       },
     });
 
-    await touchLineItemTemplateUpdatedAt(tx, tid, org.id);
+    await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return true;
   });
 
@@ -270,7 +271,7 @@ export async function updateLineItemTemplateTaskAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -281,7 +282,7 @@ export async function updateLineItemTemplateTaskAction(
     });
     if (
       !existing ||
-      existing.lineItemTemplate.organizationId !== org.id ||
+      existing.lineItemTemplate.organizationId !== ctx.organizationId ||
       existing.lineItemTemplate.archivedAt != null
     ) {
       return { ok: false as const };
@@ -314,7 +315,7 @@ export async function updateLineItemTemplateTaskAction(
       });
     }
 
-    await touchLineItemTemplateUpdatedAt(tx, tid, org.id);
+    await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -341,7 +342,7 @@ export async function deleteLineItemTemplateTaskAction(
     return { error: "Missing saved line item or task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -352,7 +353,7 @@ export async function deleteLineItemTemplateTaskAction(
     });
     if (
       !existing ||
-      existing.lineItemTemplate.organizationId !== org.id ||
+      existing.lineItemTemplate.organizationId !== ctx.organizationId ||
       existing.lineItemTemplate.archivedAt != null
     ) {
       return { ok: false as const };
@@ -361,7 +362,7 @@ export async function deleteLineItemTemplateTaskAction(
     const stageKey = existing.stageKey;
     await tx.lineItemTemplateTask.delete({ where: { id: kid } });
     await renumberSortOrdersInStage(tx, tid, stageKey);
-    await touchLineItemTemplateUpdatedAt(tx, tid, org.id);
+    await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -389,7 +390,7 @@ export async function moveLineItemTemplateTaskAction(
     return { error: "Missing saved line item or task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -400,7 +401,7 @@ export async function moveLineItemTemplateTaskAction(
     });
     if (
       !existing ||
-      existing.lineItemTemplate.organizationId !== org.id ||
+      existing.lineItemTemplate.organizationId !== ctx.organizationId ||
       existing.lineItemTemplate.archivedAt != null
     ) {
       return false;
@@ -436,7 +437,7 @@ export async function moveLineItemTemplateTaskAction(
       data: { sortOrder: b.sortOrder },
     });
 
-    await touchLineItemTemplateUpdatedAt(tx, tid, org.id);
+    await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return true;
   });
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
-import { getDevOrganizationOrThrow, db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
@@ -18,15 +19,15 @@ export default async function WorkstationJobsLensPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
   const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
 
-  const allItems = await queryWorkstationWorkItems(org.id);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
   const jobItems = allItems.filter((i) => i.kind === "job");
   
   const activeJobs = await db.job.findMany({
-    where: { organizationId: org.id, status: JobStatus.ACTIVE },
+    where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE },
     include: {
       customer: true,
       lead: true,
@@ -123,8 +124,9 @@ export default async function WorkstationJobsLensPage({
 }
 
 async function JobDetailWrapper({ jobId }: { jobId: string }) {
-  const job = await db.job.findUnique({
-    where: { id: jobId },
+  const ctx = await getRequestContextOrThrow();
+  const job = await db.job.findFirst({
+    where: { id: jobId, organizationId: ctx.organizationId },
     include: {
       stages: true,
       tasks: {
@@ -139,7 +141,11 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
   const stageCount = job.stages.length;
   const activeTaskCount = await db.jobTask.count({
-    where: { jobId: job.id, status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
+    where: { 
+      jobId: job.id, 
+      status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] },
+      job: { organizationId: ctx.organizationId }
+    },
   });
 
   return (

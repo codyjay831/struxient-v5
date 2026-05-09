@@ -3,16 +3,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
 import { ScopeLibraryTaskTemplatesPanel } from "@/components/scope-library/scope-library-task-templates";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import type { TaskTemplateLibraryRow } from "@/lib/task-template-display";
 
 export const dynamic = "force-dynamic";
 
 export default async function ScopeLibraryTasksPage() {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const rows = await db.taskTemplate.findMany({
-    where: { organizationId: org.id, archivedAt: null },
+    where: { organizationId: ctx.organizationId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
   });
 

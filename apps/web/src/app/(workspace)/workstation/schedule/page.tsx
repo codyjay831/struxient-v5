@@ -1,18 +1,19 @@
 import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
-import { getDevOrganizationOrThrow, db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { db } from "@/lib/db";
 import { JobStatus, JobTaskStatus } from "@prisma/client";
 import { WorkstationClearedState } from "@/components/workstation/workstation-ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorkstationScheduleLensPage() {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   // Count active jobs and tasks that would normally be scheduled
   const [activeJobsCount, todoTasksCount] = await Promise.all([
-    db.job.count({ where: { organizationId: org.id, status: JobStatus.ACTIVE } }),
-    db.jobTask.count({ where: { job: { organizationId: org.id }, status: JobTaskStatus.TODO } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE } }),
+    db.jobTask.count({ where: { job: { organizationId: ctx.organizationId }, status: JobTaskStatus.TODO } }),
   ]);
 
   return (

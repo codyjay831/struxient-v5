@@ -5,7 +5,8 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
 import { LineItemTemplateDefaultExecutionPanel } from "@/components/scope-library/line-item-template-default-execution-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { EXECUTION_STAGE_KEYS_ORDERED, getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import type {
@@ -27,10 +28,10 @@ export default async function LineItemTemplateDefaultExecutionPage({
     notFound();
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const preset = await db.lineItemTemplate.findFirst({
-    where: { id, organizationId: org.id, archivedAt: null },
+    where: { id, organizationId: ctx.organizationId, archivedAt: null },
     select: { id: true, description: true },
   });
 
@@ -71,7 +72,7 @@ export default async function LineItemTemplateDefaultExecutionPage({
   }));
 
   const reusableRows = await db.taskTemplate.findMany({
-    where: { organizationId: org.id, archivedAt: null },
+    where: { organizationId: ctx.organizationId, archivedAt: null },
     orderBy: { title: "asc" },
     select: { id: true, title: true, stageKey: true, category: true },
   });

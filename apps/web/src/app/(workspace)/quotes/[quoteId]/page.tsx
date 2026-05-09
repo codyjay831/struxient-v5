@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
-import { getDevOrganizationOrThrow } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { FileText } from "lucide-react";
@@ -40,8 +40,8 @@ export default async function QuoteDetailPage({
     ? workstationReturnHref(returnSection)
     : undefined;
 
-  const org = await getDevOrganizationOrThrow();
-  const result = await loadQuoteWorkSurface(quoteId, org.id);
+  const ctx = await getRequestContextOrThrow();
+  const result = await loadQuoteWorkSurface(quoteId, ctx.organizationId);
 
   if (!result) {
     return (

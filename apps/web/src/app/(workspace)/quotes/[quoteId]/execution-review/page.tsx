@@ -9,7 +9,8 @@ import {
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
@@ -32,10 +33,10 @@ export default async function QuoteExecutionReviewPreviewPage({
     notFound();
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const row = await db.quote.findFirst({
-    where: { id: qid, organizationId: org.id },
+    where: { id: qid, organizationId: ctx.organizationId },
     select: {
       id: true,
       title: true,
@@ -93,7 +94,7 @@ export default async function QuoteExecutionReviewPreviewPage({
   const reusableTaskOptions: ReusableTaskPickerOption[] = executionPlanningEditable
     ? (
         await db.taskTemplate.findMany({
-          where: { organizationId: org.id, archivedAt: null },
+          where: { organizationId: ctx.organizationId, archivedAt: null },
           orderBy: { title: "asc" },
           select: { id: true, title: true, stageKey: true, category: true },
         })

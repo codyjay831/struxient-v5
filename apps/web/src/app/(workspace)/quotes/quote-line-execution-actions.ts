@@ -8,7 +8,8 @@ import {
   type ExecutionStageKey,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
@@ -206,10 +207,10 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
     return { error: "Missing quote line or reusable task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
-    const line = await assertDraftQuoteLine(tx, qid, lid, org.id);
+    const line = await assertDraftQuoteLine(tx, qid, lid, ctx.organizationId);
     if (!line) {
       return { ok: false as const, code: "LINE" as const };
     }
@@ -217,7 +218,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
     const reusable = await tx.taskTemplate.findFirst({
       where: {
         id: taskTemplateId,
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         archivedAt: null,
       },
     });
@@ -242,7 +243,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
     });
 
     await clearNoExecutionNeededWhenTasksAdded(tx, lid);
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -280,10 +281,10 @@ export async function addQuoteLineExecutionTaskCustomAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
-    const line = await assertDraftQuoteLine(tx, qid, lid, org.id);
+    const line = await assertDraftQuoteLine(tx, qid, lid, ctx.organizationId);
     if (!line) {
       return false;
     }
@@ -305,7 +306,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
     });
 
     await clearNoExecutionNeededWhenTasksAdded(tx, lid);
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;
   });
 
@@ -339,7 +340,7 @@ export async function updateQuoteLineExecutionTaskAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -356,7 +357,7 @@ export async function updateQuoteLineExecutionTaskAction(
     if (
       !existing ||
       existing.quoteLineItem.quoteId !== qid ||
-      existing.quoteLineItem.quote.organizationId !== org.id ||
+      existing.quoteLineItem.quote.organizationId !== ctx.organizationId ||
       !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(existing.quoteLineItem.quote.status)
     ) {
       return { ok: false as const };
@@ -389,7 +390,7 @@ export async function updateQuoteLineExecutionTaskAction(
       });
     }
 
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -418,7 +419,7 @@ export async function deleteQuoteLineExecutionTaskAction(
     return { error: "Missing quote, line item, or task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -435,7 +436,7 @@ export async function deleteQuoteLineExecutionTaskAction(
     if (
       !existing ||
       existing.quoteLineItem.quoteId !== qid ||
-      existing.quoteLineItem.quote.organizationId !== org.id ||
+      existing.quoteLineItem.quote.organizationId !== ctx.organizationId ||
       !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(existing.quoteLineItem.quote.status)
     ) {
       return { ok: false as const };
@@ -444,7 +445,7 @@ export async function deleteQuoteLineExecutionTaskAction(
     const stageKey = existing.stageKey;
     await tx.quoteLineExecutionTask.delete({ where: { id: kid } });
     await renumberSortOrdersInStage(tx, lid, stageKey);
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -474,7 +475,7 @@ export async function moveQuoteLineExecutionTaskAction(
     return { error: "Missing quote, line item, or task." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -491,7 +492,7 @@ export async function moveQuoteLineExecutionTaskAction(
     if (
       !existing ||
       existing.quoteLineItem.quoteId !== qid ||
-      existing.quoteLineItem.quote.organizationId !== org.id ||
+      existing.quoteLineItem.quote.organizationId !== ctx.organizationId ||
       !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(existing.quoteLineItem.quote.status)
     ) {
       return false;
@@ -527,7 +528,7 @@ export async function moveQuoteLineExecutionTaskAction(
       data: { sortOrder: b.sortOrder },
     });
 
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;
   });
 
@@ -568,14 +569,14 @@ export async function updateQuoteLineExecutionSettingsAction(
     ? QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED
     : QuoteLineExecutionReviewStatus.UNREVIEWED;
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
       where: {
         id: lid,
         quoteId: qid,
-        quote: { organizationId: org.id, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
+        quote: { organizationId: ctx.organizationId, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
       },
       select: { id: true },
     });
@@ -600,7 +601,7 @@ export async function updateQuoteLineExecutionSettingsAction(
       },
     });
 
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
 
@@ -635,14 +636,14 @@ export async function moveQuoteLineWorkOrderAction(
     return { error: "Missing quote or line item." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
       where: {
         id: lid,
         quoteId: qid,
-        quote: { organizationId: org.id, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
+        quote: { organizationId: ctx.organizationId, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
       },
       select: { id: true },
     });
@@ -675,7 +676,7 @@ export async function moveQuoteLineWorkOrderAction(
       });
     }
 
-    await touchQuoteUpdatedAt(tx, qid, org.id);
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;
   });
 

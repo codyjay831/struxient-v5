@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { UserRound } from "lucide-react";
 import { updateCustomerAction } from "../../customer-form-actions";
 import { CustomerRecordForm } from "../../customer-record-form";
@@ -20,11 +21,11 @@ export default async function EditCustomerPage({
   params: Promise<{ customerId: string }>;
 }) {
   const { customerId } = await params;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const customer = await db.customer.findFirst({
     where: {
       id: customerId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
   });
 

@@ -193,8 +193,9 @@ export default async function WorkstationTodayLensPage({
 }
 
 async function TaskDetailWrapper({ taskId }: { taskId: string }) {
-  const task = await db.jobTask.findUnique({
-    where: { id: taskId },
+  const ctx = await getRequestContextOrThrow();
+  const task = await db.jobTask.findFirst({
+    where: { id: taskId, job: { organizationId: ctx.organizationId } },
     select: { id: true, status: true, instructions: true },
   });
 
@@ -210,8 +211,9 @@ async function TaskDetailWrapper({ taskId }: { taskId: string }) {
 }
 
 async function JobDetailWrapper({ jobId }: { jobId: string }) {
-  const job = await db.job.findUnique({
-    where: { id: jobId },
+  const ctx = await getRequestContextOrThrow();
+  const job = await db.job.findFirst({
+    where: { id: jobId, organizationId: ctx.organizationId },
     include: {
       stages: true,
       tasks: {
@@ -226,7 +228,11 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
   const stageCount = job.stages.length;
   const activeTaskCount = await db.jobTask.count({
-    where: { jobId: job.id, status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
+    where: { 
+      jobId: job.id, 
+      status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] },
+      job: { organizationId: ctx.organizationId }
+    },
   });
 
   return (

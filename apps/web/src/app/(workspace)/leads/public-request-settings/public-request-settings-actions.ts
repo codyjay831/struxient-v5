@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
 import { validateRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
 export type PublicRequestSettingsFormState = {
@@ -33,7 +34,7 @@ export async function updatePublicRequestSettingsAction(
 ): Promise<PublicRequestSettingsFormState> {
   void _prevState;
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const enabled = formData.get("publicRequestEnabled") === "on";
 
@@ -111,9 +112,9 @@ export async function updatePublicRequestSettingsAction(
 
   try {
     await db.publicRequestSettings.upsert({
-      where: { organizationId: org.id },
+      where: { organizationId: ctx.organizationId },
       create: {
-        organizationId: org.id,
+        organizationId: ctx.organizationId,
         enabled,
         formTitle,
         introMessage,

@@ -5,7 +5,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   parseQuoteCheckpointStaffOnly,
   parseQuoteSendCheckpointSnapshot,
@@ -52,13 +53,13 @@ export default async function QuoteCheckpointViewPage({
   params: Promise<{ quoteId: string; checkpointId: string }>;
 }) {
   const { quoteId, checkpointId } = await params;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const checkpoint = await db.quoteCheckpoint.findFirst({
     where: {
       id: checkpointId,
       quoteId,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
     },
     select: {

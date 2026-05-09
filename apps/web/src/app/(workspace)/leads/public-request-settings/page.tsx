@@ -2,7 +2,8 @@ import Link from "next/link";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
   DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
@@ -20,9 +21,9 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function PublicRequestSettingsPage() {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const row = await db.publicRequestSettings.findUnique({
-    where: { organizationId: org.id },
+    where: { organizationId: ctx.organizationId },
   });
 
   const introFieldValue = !row

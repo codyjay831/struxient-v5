@@ -3,7 +3,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
 import { ScopeLibraryLinePresetsPanel } from "@/components/scope-library/scope-library-line-presets";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import type { LineItemTemplateLibraryRow } from "@/lib/line-item-template-display";
 import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
 import { formatCentsAsDollarInput } from "@/lib/quote-display";
@@ -11,10 +12,10 @@ import { formatCentsAsDollarInput } from "@/lib/quote-display";
 export const dynamic = "force-dynamic";
 
 export default async function ScopeLibraryPage() {
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const rows = await db.lineItemTemplate.findMany({
-    where: { organizationId: org.id, archivedAt: null },
+    where: { organizationId: ctx.organizationId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
     include: {
       defaultExecutionTasks: {

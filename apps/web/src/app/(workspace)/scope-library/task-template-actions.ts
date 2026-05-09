@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "./task-template-field-limits";
@@ -96,11 +97,11 @@ export async function createTaskTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   await db.taskTemplate.create({
     data: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       title: parsed.data.title,
       stageKey: parsed.data.stageKey,
       category: parsed.data.category,
@@ -129,12 +130,12 @@ export async function updateTaskTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const result = await db.taskTemplate.updateMany({
     where: {
       id: tid,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       archivedAt: null,
     },
     data: {
@@ -169,12 +170,12 @@ export async function archiveTaskTemplateFromScopeLibraryAction(
     return { error: "Missing template id." };
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
 
   const result = await db.taskTemplate.updateMany({
     where: {
       id: tid,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       archivedAt: null,
     },
     data: { archivedAt: new Date() },

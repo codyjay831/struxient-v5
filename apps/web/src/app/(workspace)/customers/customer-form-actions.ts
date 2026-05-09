@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { CUSTOMER_FIELD_LIMITS } from "./customer-field-limits";
 
 export type CustomerFormState = {
@@ -55,7 +56,7 @@ export async function createCustomerAction(
     return displayErr;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
@@ -91,7 +92,7 @@ export async function createCustomerAction(
 
   const customer = await db.customer.create({
     data: {
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
       displayName,
       companyName,
       email,
@@ -130,7 +131,7 @@ export async function updateCustomerAction(
     return displayErr;
   }
 
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
@@ -167,7 +168,7 @@ export async function updateCustomerAction(
   const result = await db.customer.updateMany({
     where: {
       id,
-      organizationId: org.id,
+      organizationId: ctx.organizationId,
     },
     data: {
       displayName,

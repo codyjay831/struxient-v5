@@ -3,7 +3,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { db, getDevOrganizationOrThrow } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { QuoteDraftForm } from "../quote-draft-form";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function NewQuotePage({
   searchParams: Promise<SearchRecord>;
 }) {
   const sp = await searchParams;
-  const org = await getDevOrganizationOrThrow();
+  const ctx = await getRequestContextOrThrow();
   const rawLead = firstString(sp.leadId);
   const rawCustomer = firstString(sp.customerId);
 
@@ -44,7 +45,7 @@ export default async function NewQuotePage({
 
   const lead = rawLead
     ? await db.lead.findFirst({
-        where: { id: rawLead, organizationId: org.id },
+        where: { id: rawLead, organizationId: ctx.organizationId },
         select: { id: true, title: true, customerId: true },
       })
     : null;
@@ -55,7 +56,7 @@ export default async function NewQuotePage({
 
   const customer = rawCustomer
     ? await db.customer.findFirst({
-        where: { id: rawCustomer, organizationId: org.id },
+        where: { id: rawCustomer, organizationId: ctx.organizationId },
         select: { id: true, displayName: true },
       })
     : null;
@@ -81,7 +82,7 @@ export default async function NewQuotePage({
     contextLines.push({ label: "Lead", value: lead.title });
     if (lead.customerId) {
       const linked = await db.customer.findFirst({
-        where: { id: lead.customerId, organizationId: org.id },
+        where: { id: lead.customerId, organizationId: ctx.organizationId },
         select: { id: true, displayName: true },
       });
       if (linked) {
