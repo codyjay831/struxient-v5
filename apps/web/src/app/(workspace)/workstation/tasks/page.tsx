@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
-import { WorkstationTaskPanel } from "@/components/workstation/workstation-task-panel";
+import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
+import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
 import { JobTaskStatus } from "@prisma/client";
 import { 
   WorkstationQueueItem, 
@@ -89,18 +89,9 @@ export default async function WorkstationTasksLensPage({
 
 async function TaskDetailWrapper({ taskId }: { taskId: string }) {
   const ctx = await getRequestContextOrThrow();
-  const task = await db.jobTask.findFirst({
-    where: { id: taskId, job: { organizationId: ctx.organizationId } },
-    select: { id: true, status: true, instructions: true },
-  });
+  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId);
 
-  if (!task) return null;
+  if (!payload) return null;
 
-  return (
-    <WorkstationTaskPanel
-      taskId={task.id}
-      initialStatus={task.status}
-      instructions={task.instructions}
-    />
-  );
+  return <TaskWorkSurface {...payload} clearWorkstationSelectionOnComplete />;
 }

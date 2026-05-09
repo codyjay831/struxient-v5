@@ -94,6 +94,7 @@ export async function createJobIssueAction(input: CreateJobIssueInput) {
   });
 
   revalidatePath("/workstation");
+  revalidatePath("/workstation/tasks");
   revalidatePath(`/jobs/${input.jobId}`);
 
   return { success: true, issueId: issue.id };

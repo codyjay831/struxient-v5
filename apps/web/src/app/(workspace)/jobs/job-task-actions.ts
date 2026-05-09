@@ -111,8 +111,9 @@ export async function completeJobTaskAction(
     });
 
     revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
     revalidatePath(`/jobs/${task.jobId}`);
-    
+
     return { success: true };
   } catch (e) {
     console.error("Failed to complete task", e);

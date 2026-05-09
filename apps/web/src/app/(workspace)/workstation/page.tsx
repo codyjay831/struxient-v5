@@ -16,7 +16,8 @@ import {
   type WorkstationWorkItem,
 } from "@/lib/workstation-query";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
-import { WorkstationTaskPanel } from "@/components/workstation/workstation-task-panel";
+import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
+import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import { WorkstationLeadPanel } from "@/components/workstation/workstation-lead-panel";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
@@ -194,20 +195,11 @@ export default async function WorkstationTodayLensPage({
 
 async function TaskDetailWrapper({ taskId }: { taskId: string }) {
   const ctx = await getRequestContextOrThrow();
-  const task = await db.jobTask.findFirst({
-    where: { id: taskId, job: { organizationId: ctx.organizationId } },
-    select: { id: true, status: true, instructions: true },
-  });
+  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId);
 
-  if (!task) return null;
+  if (!payload) return null;
 
-  return (
-    <WorkstationTaskPanel
-      taskId={task.id}
-      initialStatus={task.status}
-      instructions={task.instructions}
-    />
-  );
+  return <TaskWorkSurface {...payload} clearWorkstationSelectionOnComplete />;
 }
 
 async function JobDetailWrapper({ jobId }: { jobId: string }) {

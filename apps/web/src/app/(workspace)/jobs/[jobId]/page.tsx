@@ -384,7 +384,15 @@ export default async function JobDetailPage({
                       });
                       return (
                         <li key={task.id}>
-                          <JobTaskCard task={{ ...task, paymentBlockers: taskPaymentBlockers }} />
+                          <JobTaskCard
+                            jobId={job.id}
+                            jobStageId={stage.id}
+                            stageTitle={stage.title}
+                            jobContextLabel={
+                              secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
+                            }
+                            task={{ ...task, paymentBlockers: taskPaymentBlockers }}
+                          />
                         </li>
                       );
                     })}
@@ -433,7 +441,15 @@ export default async function JobDetailPage({
                             });
                             return (
                               <li key={task.id}>
-                                <JobTaskCard task={{ ...task, paymentBlockers: taskPaymentBlockers }} />
+                                <JobTaskCard
+                                  jobId={job.id}
+                                  jobStageId={stage.id}
+                                  stageTitle={stage.title}
+                                  jobContextLabel={
+                                    secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
+                                  }
+                                  task={{ ...task, paymentBlockers: taskPaymentBlockers }}
+                                />
                               </li>
                             );
                           })}

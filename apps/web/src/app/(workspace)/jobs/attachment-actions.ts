@@ -112,6 +112,7 @@ export async function uploadTaskAttachmentAction(
 
     revalidatePath(`/jobs/${task.jobId}`);
     revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
 
     return { success: true, attachmentId: attachment.id };
   } catch (e) {
@@ -256,6 +257,7 @@ export async function completeTaskAttachmentUploadAction(
 
     revalidatePath(`/jobs/${attachment.jobId}`);
     revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
 
     return { success: true, attachmentId };
   } catch (e) {
