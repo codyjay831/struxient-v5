@@ -473,6 +473,7 @@ export function QuoteLineItemsWorkspaceEditor({
             quoteId={quoteId}
             templates={[...lineItemTemplates]}
             onApplied={onMutated}
+            closeOnApply={false}
             triggerVariant="compact"
             requestOpen={shouldOpenScopeLibraryPicker}
             onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}

@@ -42,6 +42,11 @@ interface SavedLineItemPickerDialogProps {
    */
   requestOpen?: boolean;
   onRequestOpenConsumed?: () => void;
+  /**
+   * Workspace-safe apply flows historically closed the picker after one item.
+   * Set false for multi-add surfaces that should keep the picker available.
+   */
+  closeOnApply?: boolean;
 }
 
 export function SavedLineItemPickerDialog({
@@ -51,6 +56,7 @@ export function SavedLineItemPickerDialog({
   triggerVariant = "standard",
   requestOpen = false,
   onRequestOpenConsumed,
+  closeOnApply = true,
 }: SavedLineItemPickerDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,7 +67,10 @@ export function SavedLineItemPickerDialog({
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (cancelled) return;
-      dialogRef.current?.showModal();
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.open) {
+        dialog.showModal();
+      }
       onRequestOpenConsumed?.();
     });
     return () => {
@@ -209,7 +218,9 @@ export function SavedLineItemPickerDialog({
                             quoteId={quoteId}
                             templateId={t.id}
                             onSuccess={() => {
-                              close();
+                              if (closeOnApply) {
+                                close();
+                              }
                               onApplied();
                             }}
                           />
@@ -283,10 +294,14 @@ function ApplyTemplateWorkspaceForm({
     applyLineItemTemplateToQuoteWorkspaceAction.bind(null, quoteId, templateId),
     initialWorkspaceState,
   );
+  const handledKeyRef = useRef<unknown>(null);
 
   useEffect(() => {
-    if (state.success) onSuccess();
-  }, [state.success, onSuccess]);
+    if (state.success && handledKeyRef.current !== state) {
+      handledKeyRef.current = state;
+      onSuccess();
+    }
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction}>
