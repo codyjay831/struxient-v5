@@ -148,6 +148,7 @@ model Organization {
   attachments           Attachment[]
   jobVisits             JobVisit[]
   publicRequestSettings PublicRequestSettings?
+  customerServiceLocations CustomerServiceLocation[]
 }
 
 /// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
@@ -180,8 +181,44 @@ model Customer {
   leads          Lead[]
   quotes         Quote[]
   jobs           Job[]
+  serviceLocations CustomerServiceLocation[]
 
   @@index([organizationId])
+}
+
+/// Service / job site addresses for a customer (multiple over time). Intake may seed the first row.
+enum CustomerServiceLocationSource {
+  google_places
+  manual
+}
+
+model CustomerServiceLocation {
+  id               String                        @id @default(cuid())
+  organizationId   String
+  organization     Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId       String
+  customer         Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdFromLeadId String?
+  createdFromLead   Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id], onDelete: SetNull)
+  formattedAddress String
+  addressLine1     String                        @default("")
+  addressLine2     String                        @default("")
+  city             String                        @default("")
+  state            String                        @default("")
+  postalCode       String                        @default("")
+  country          String                        @default("")
+  googlePlaceId    String                        @default("")
+  latitude         Float?
+  longitude        Float?
+  source           CustomerServiceLocationSource
+  label            String?
+  isPrimary        Boolean                       @default(false)
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([customerId, isPrimary])
 }
 
 enum StaffRole {
@@ -237,12 +274,15 @@ model Lead {
   email          String?
   phone          String?
   notes          String?
+  /// Optional snapshot from the public intake form (e.g. Google Places). Not authoritative for protected server decisions.
+  publicIntakeServiceLocation Json?
   convertedAt    DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   attachments    Attachment[]
   quotes         Quote[]
   jobs           Job[]
+  createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromLead")
 
   @@index([organizationId])
   @@index([customerId])

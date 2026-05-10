@@ -114,6 +114,8 @@ export function LeadWorkspaceShell({
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
+    publicIntakeFormattedAddress: lead.publicIntakeFormattedAddress,
+    intakeServiceLocationLinkedToCustomer: lead.intakeServiceLocationLinkedToCustomer,
     sourceLabel: formatLeadSource(lead.source),
     sourceDetail: lead.sourceDetail,
     statusLabel: formatLeadStatus(lead.status),

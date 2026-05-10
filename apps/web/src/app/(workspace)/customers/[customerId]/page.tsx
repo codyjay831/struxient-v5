@@ -30,6 +30,7 @@ import {
   Building2,
   CalendarDays,
   CreditCard,
+  MapPin,
   FileText,
   FolderKanban,
   MessageSquare,
@@ -97,6 +98,16 @@ export default async function CustomerDetailPage({
       organizationId: ctx.organizationId,
     },
   });
+
+  const serviceLocations = customer
+    ? await db.customerServiceLocation.findMany({
+        where: {
+          customerId: customer.id,
+          organizationId: ctx.organizationId,
+        },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      })
+    : [];
 
   if (!customer) {
     return (
@@ -330,6 +341,56 @@ export default async function CustomerDetailPage({
               Edit customer
             </Link>
           </EmptyState>
+        )}
+      </WorkspacePanel>
+
+      <WorkspacePanel className="mb-6">
+        <SectionHeading
+          title="Service locations"
+          description="Job sites and service addresses for this customer. Intake from linked leads can add the first location automatically."
+        />
+        {serviceLocations.length === 0 ? (
+          <p className="text-sm text-foreground-muted">
+            No service locations on file yet. They appear when you create or link a lead that
+            includes a service address.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+            {serviceLocations.map((loc) => (
+              <li key={loc.id} className="px-4 py-4">
+                <div className="flex items-start gap-2">
+                  <MapPin
+                    className="mt-0.5 size-4 shrink-0 text-foreground-subtle"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {loc.isPrimary ? (
+                        <StatusBadge label="Primary" tone="draft" />
+                      ) : null}
+                      {loc.label ? (
+                        <span className="text-xs font-medium text-foreground-muted">{loc.label}</span>
+                      ) : null}
+                      <span className="text-xs text-foreground-subtle capitalize">
+                        {String(loc.source).replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">
+                      {loc.formattedAddress.trim() || loc.addressLine1}
+                    </p>
+                    {(loc.addressLine2 || loc.city || loc.state || loc.postalCode || loc.country) && (
+                      <p className="mt-1 text-xs text-foreground-muted">
+                        {[loc.addressLine2, [loc.city, loc.state].filter(Boolean).join(", "), loc.postalCode, loc.country]
+                          .filter((x) => x && String(x).trim().length > 0)
+                          .join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </WorkspacePanel>
 

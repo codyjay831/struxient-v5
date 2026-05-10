@@ -13,6 +13,10 @@ import {
   type LeadProgressQuoteInput,
 } from "@/lib/lead-commercial-progress";
 import { db } from "@/lib/db";
+import {
+  publicIntakeFormattedAddressForDisplay,
+} from "@/lib/public-intake-service-location";
+import { intakeServiceLocationReflectedOnCustomer } from "@/lib/customer-service-location-from-lead";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
@@ -105,6 +109,17 @@ export default async function LeadDetailPage({
       ? { id: row.customer.id, displayName: row.customer.displayName }
       : null;
 
+  const intakeServiceLocationLinkedToCustomer =
+    row.customerId != null
+      ? await intakeServiceLocationReflectedOnCustomer(db, {
+          organizationId: ctx.organizationId,
+          customerId: row.customerId,
+          leadId: row.id,
+          publicIntakeServiceLocation: row.publicIntakeServiceLocation,
+          notes: row.notes,
+        })
+      : false;
+
   const lead: LeadDetailPayload = {
     id: row.id,
     title: row.title,
@@ -115,6 +130,10 @@ export default async function LeadDetailPage({
     email: row.email,
     phone: row.phone,
     notes: row.notes,
+    publicIntakeFormattedAddress: publicIntakeFormattedAddressForDisplay(
+      row.publicIntakeServiceLocation,
+    ),
+    intakeServiceLocationLinkedToCustomer,
     customerId: row.customerId,
     convertedAt: row.convertedAt,
     createdAt: row.createdAt,

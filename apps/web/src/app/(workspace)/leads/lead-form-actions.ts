@@ -3,6 +3,10 @@
 import { LeadSource, LeadStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import {
+  attachIntakeServiceLocationToCustomer,
+  intakeSnapshotForCustomerFromLead,
+} from "@/lib/customer-service-location-from-lead";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
@@ -351,44 +355,69 @@ export async function linkLeadToCustomerAction(
     };
   }
 
-  const lead = await db.lead.findFirst({
+  const leadPeek = await db.lead.findFirst({
     where: {
       id,
       organizationId: ctx.organizationId,
     },
     select: { customerId: true },
   });
-  if (!lead) {
+  if (!leadPeek) {
     return {
       error:
         "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
-  if (lead.customerId != null) {
+  if (leadPeek.customerId != null) {
     return {
       error: "This lead is already linked to a customer. Unlinking is not available yet.",
     };
   }
 
   const convertedAt = new Date();
-  const result = await db.lead.updateMany({
-    where: {
-      id,
-      organizationId: ctx.organizationId,
-      customerId: null,
-    },
-    data: {
-      customerId: customer.id,
-      convertedAt,
-    },
-  });
-
-
-  if (result.count === 0) {
-    return {
-      error:
-        "This lead could not be linked. It may have been linked already—refresh the page and try again.",
-    };
+  try {
+    await db.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: {
+          id,
+          organizationId: ctx.organizationId,
+          customerId: null,
+        },
+        select: { id: true, notes: true, publicIntakeServiceLocation: true },
+      });
+      if (!lead) {
+        throw new CreateFromLeadTransactionError(
+          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+        );
+      }
+      const result = await tx.lead.updateMany({
+        where: {
+          id,
+          organizationId: ctx.organizationId,
+          customerId: null,
+        },
+        data: {
+          customerId: customer.id,
+          convertedAt,
+        },
+      });
+      if (result.count === 0) {
+        throw new CreateFromLeadTransactionError(
+          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+        );
+      }
+      await attachIntakeServiceLocationToCustomer(tx, {
+        organizationId: ctx.organizationId,
+        customerId: customer.id,
+        leadId: id,
+        snapshot: intakeSnapshotForCustomerFromLead(lead),
+      });
+    });
+  } catch (e) {
+    if (e instanceof CreateFromLeadTransactionError) {
+      return { error: e.message };
+    }
+    throw e;
   }
 
   redirect(`/leads/${id}`);
@@ -423,6 +452,7 @@ export async function createCustomerFromLeadAction(
           email: true,
           phone: true,
           notes: true,
+          publicIntakeServiceLocation: true,
         },
       });
 
@@ -468,6 +498,13 @@ export async function createCustomerFromLeadAction(
           "Could not link this lead—it may have been linked elsewhere. Refresh and try again.",
         );
       }
+
+      await attachIntakeServiceLocationToCustomer(tx, {
+        organizationId: ctx.organizationId,
+        customerId: customer.id,
+        leadId: id,
+        snapshot: intakeSnapshotForCustomerFromLead(lead),
+      });
     });
   } catch (e) {
     if (e instanceof CreateFromLeadTransactionError) {

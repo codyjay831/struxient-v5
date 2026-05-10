@@ -80,6 +80,7 @@ export default async function PublicRequestPage(props: PageProps) {
             companySlug={bundle.companySlug}
             organizationDisplayName={bundle.organizationDisplayName}
             intake={view}
+            googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
           />
         </div>
       </main>

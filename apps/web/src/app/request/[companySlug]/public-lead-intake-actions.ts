@@ -2,12 +2,17 @@
 
 // TODO: Add server-side rate limiting (per IP / per slug) when traffic warrants it.
 
-import { LeadSource, LeadStatus } from "@prisma/client";
+import { LeadSource, LeadStatus, type Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/leads/lead-field-limits";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { effectivePublicRequestSettingsFromRow } from "@/lib/public-request-settings-effective";
 import { requestTypeLabelByValue } from "@/lib/public-request-settings-validation";
+import {
+  buildManualPublicIntakeSnapshotFromFreeText,
+  sanitizePublicIntakeServiceLocationFromClient,
+  type PublicIntakeServiceLocationV1,
+} from "@/lib/public-intake-service-location";
 
 export type PublicLeadIntakeState = {
   error?: string;
@@ -117,6 +122,7 @@ export async function submitPublicLeadIntakeAction(
   const preferredTiming = trimOrEmpty(formData.get("preferredTiming"));
   const requestDetails = trimOrEmpty(formData.get("requestDetails"));
   const requestTypeValue = trimOrEmpty(formData.get("requestType"));
+  const rawLocationJson = trimOrEmpty(formData.get("publicIntakeServiceLocation"));
 
   if (!contactName) {
     return { error: "Please enter your name." };
@@ -138,6 +144,26 @@ export async function submitPublicLeadIntakeAction(
   }
   if (!requestDetails) {
     return { error: "Please describe what you need help with." };
+  }
+
+  if (rawLocationJson.length > 16_000) {
+    return { error: "Your message is too long. Please shorten the description and try again." };
+  }
+
+  let publicIntakeServiceLocation: PublicIntakeServiceLocationV1 | null = null;
+  if (rawLocationJson.length > 0) {
+    try {
+      const parsed: unknown = JSON.parse(rawLocationJson);
+      const sanitized = sanitizePublicIntakeServiceLocationFromClient(parsed);
+      if (sanitized) {
+        publicIntakeServiceLocation = sanitized;
+      }
+    } catch {
+      /* Ignore malformed JSON — fall back to manual snapshot from textarea. */
+    }
+  }
+  if (!publicIntakeServiceLocation) {
+    publicIntakeServiceLocation = buildManualPublicIntakeSnapshotFromFreeText(serviceAddress);
   }
 
   for (const [label, value, max] of [
@@ -187,6 +213,8 @@ export async function submitPublicLeadIntakeAction(
         sourceDetail: "Public Intake Form",
         notes,
         status: LeadStatus.OPEN,
+        publicIntakeServiceLocation:
+          publicIntakeServiceLocation as unknown as Prisma.InputJsonValue,
       },
     });
   } catch {

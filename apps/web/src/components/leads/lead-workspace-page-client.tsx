@@ -49,6 +49,8 @@ export type SerializedLeadFull = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  publicIntakeFormattedAddress: string | null;
+  intakeServiceLocationLinkedToCustomer: boolean;
   sourceLabel: string;
   sourceDetail: string | null;
   statusLabel: string;
@@ -113,6 +115,8 @@ function adaptLeadFull(
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
+    publicIntakeFormattedAddress: lead.publicIntakeFormattedAddress,
+    intakeServiceLocationLinkedToCustomer: lead.intakeServiceLocationLinkedToCustomer,
     sourceLabel: lead.sourceLabel,
     sourceDetail: lead.sourceDetail,
     statusLabel: lead.statusLabel,

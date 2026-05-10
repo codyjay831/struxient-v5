@@ -7,6 +7,7 @@ import {
   submitPublicLeadIntakeAction,
   type PublicLeadIntakeState,
 } from "./public-lead-intake-actions";
+import { PublicIntakeServiceAddressField } from "./public-intake-service-address-field";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -21,10 +22,13 @@ export function PublicRequestForm({
   companySlug,
   organizationDisplayName,
   intake,
+  googleMapsApiKey = "",
 }: {
   companySlug: string;
   organizationDisplayName: string;
   intake: PublicIntakeFormViewModel;
+  /** Browser-safe key for Places Autocomplete only; omit or empty to use manual address only. */
+  googleMapsApiKey?: string;
 }) {
   const boundSubmit = submitPublicLeadIntakeAction.bind(null, companySlug);
   const [state, formAction, isPending] = useActionState(boundSubmit, initialState);
@@ -124,19 +128,11 @@ export function PublicRequestForm({
         </div>
       </div>
 
-      <div>
-        <label className="block">
-          <span className={fieldLabelClass}>Service address / project location</span>
-          <textarea
-            name="serviceAddress"
-            required
-            rows={3}
-            maxLength={LEAD_FIELD_LIMITS.publicIntakeServiceAddress}
-            autoComplete="street-address"
-            className={`${controlClass} min-h-[5.5rem] resize-y`}
-          />
-        </label>
-      </div>
+      <PublicIntakeServiceAddressField
+        googleMapsApiKey={googleMapsApiKey}
+        fieldLabelClass={fieldLabelClass}
+        controlClass={controlClass}
+      />
 
       <div>
         <label className="block">

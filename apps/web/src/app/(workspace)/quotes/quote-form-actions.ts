@@ -24,6 +24,7 @@ import {
 } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { formatPrimaryServiceLocationLineForQuoteNotes } from "@/lib/customer-service-location-from-lead";
 import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
 
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
@@ -500,6 +501,28 @@ export async function performCreateQuoteDraftFromLead(
             totalCents: 0,
           },
         });
+
+        if (resolved.data.customerId) {
+          const primaryLoc = await tx.customerServiceLocation.findFirst({
+            where: {
+              organizationId: ctx.organizationId,
+              customerId: resolved.data.customerId,
+              isPrimary: true,
+            },
+            select: { formattedAddress: true, addressLine1: true },
+          });
+          const line = formatPrimaryServiceLocationLineForQuoteNotes(primaryLoc);
+          if (line) {
+            const prefix = `Primary service location:\n${line}\n\n`;
+            const merged = prefix + (resolved.data.internalNotes ?? "");
+            if (merged.length <= QUOTE_FIELD_LIMITS.internalNotes) {
+              await tx.quote.update({
+                where: { id: quote.id },
+                data: { internalNotes: merged },
+              });
+            }
+          }
+        }
 
         return { ok: true as const, quoteId: quote.id, reusedExisting: false };
       },

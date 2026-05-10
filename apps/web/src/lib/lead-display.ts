@@ -12,6 +12,10 @@ export type LeadDetailPayload = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  /** From `Lead.publicIntakeServiceLocation` when present (public intake Places snapshot). */
+  publicIntakeFormattedAddress: string | null;
+  /** True when a linked customer already reflects this lead's intake service location. */
+  intakeServiceLocationLinkedToCustomer: boolean;
   customerId: string | null;
   convertedAt: Date | null;
   createdAt: Date;

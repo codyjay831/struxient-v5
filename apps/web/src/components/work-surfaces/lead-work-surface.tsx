@@ -116,6 +116,9 @@ export type LeadWorkSurfaceData = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  /** Optional formatted service address from public intake (Places snapshot). */
+  publicIntakeFormattedAddress?: string | null;
+  intakeServiceLocationLinkedToCustomer?: boolean;
   sourceLabel: string;
   /** Optional, full mode only. */
   sourceDetail?: string | null;
@@ -604,7 +607,9 @@ function OverviewTab({
       )}
 
       {/* Notes — popup keeps this simple; full mode also shows sourceDetail. */}
-      {(lead.notes || (isFull && lead.sourceDetail)) && (
+      {(lead.notes ||
+        (isFull && lead.publicIntakeFormattedAddress) ||
+        (isFull && lead.sourceDetail)) && (
         <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
           <p className={sectionLabelClass}>
             {isFull ? "Intake notes" : "Request notes"}
@@ -615,6 +620,21 @@ function OverviewTab({
               <p className="text-sm text-foreground-muted">{lead.sourceDetail}</p>
             </div>
           )}
+          {isFull && lead.publicIntakeFormattedAddress ? (
+            <div>
+              <p className={`${sectionLabelClass} mb-0.5`}>Service location (intake)</p>
+              <p className="text-sm leading-relaxed text-foreground-muted">
+                {lead.publicIntakeFormattedAddress}
+              </p>
+              <p className="mt-2 text-xs text-foreground-subtle">
+                {lead.customerId == null
+                  ? "Create or link a customer to copy this address onto their service locations."
+                  : lead.intakeServiceLocationLinkedToCustomer
+                    ? "Saved on the linked customer’s service locations."
+                    : "Not detected on the customer yet — refresh after linking, or review the customer record."}
+              </p>
+            </div>
+          ) : null}
           {lead.notes && (
             <div>
               {isFull ? (
