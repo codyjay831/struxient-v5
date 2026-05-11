@@ -42,12 +42,13 @@ import {
   WorkstationClearedState,
   WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
-import { Plus, Search, ListOrdered, History, Zap } from "lucide-react";
+import { Plus, Search, ListOrdered, History, Zap, Settings2 } from "lucide-react";
+import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-settings-drawer";
 
 export const dynamic = "force-dynamic";
 
 const quickActionClass =
-  "flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-4 text-xs font-bold uppercase tracking-widest text-foreground transition-all hover:border-border-strong hover:bg-foreground/[0.02] sm:py-3";
+  "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle transition-all hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 const activityItemClass =
   "flex items-start gap-3 rounded-lg border border-transparent p-2 transition-colors hover:bg-foreground/[0.02]";
@@ -63,7 +64,17 @@ export default async function WorkstationTodayLensPage({
   const lens = (typeof sp.lens === "string" ? sp.lens : "attention") as WorkstationLens;
   const filter = (typeof sp.filter === "string" ? sp.filter : "all") as WorkstationFilterCategory;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
+  const settings = await db.workstationSettings.findUnique({
+    where: { organizationId: ctx.organizationId },
+  });
+
+  const showQuickActions = settings?.showQuickActions ?? true;
+  const quickActions = settings?.quickActionsJson 
+    ? (JSON.parse(settings.quickActionsJson as string) as string[]) 
+    : ["new-intake", "new-quote", "browse-jobs"];
+  const urgentThresholdHours = settings?.urgentThresholdHours ?? 24;
+
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, urgentThresholdHours);
 
   const summary = getWorkstationSummary(allItems);
 
@@ -113,31 +124,48 @@ export default async function WorkstationTodayLensPage({
 
   return (
     <div className="space-y-8">
-      <WorkstationFilterBar currentFilter={filter} currentLens={lens} />
+      <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
+        <WorkstationFilterBar currentFilter={filter} currentLens={lens} />
+        <WorkstationSettingsDrawer 
+          initial={{
+            showQuickActions,
+            quickActions,
+            urgentThresholdHours,
+          }}
+        />
+      </div>
 
       {/* Quick Actions */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Link href="/sales/new" className={quickActionClass}>
-          <div className="relative">
-            <Plus className="size-4" />
-            {unreviewedIntakesCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
-              </span>
-            )}
-          </div>
-          New Intake
-        </Link>
-        <Link href="/sales?tab=proposals&new=true" className={quickActionClass}>
-          <Plus className="size-4" />
-          New Quote
-        </Link>
-        <Link href="/jobs" className={quickActionClass}>
-          <ListOrdered className="size-4" />
-          Browse Jobs
-        </Link>
-      </section>
+      {showQuickActions && (
+        <section className="flex flex-wrap items-center gap-2">
+          {quickActions.includes("new-intake") && (
+            <Link href="/sales/new" className={quickActionClass}>
+              <div className="relative">
+                <Plus className="size-3.5" />
+                {unreviewedIntakesCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
+                  </span>
+                )}
+              </div>
+              New Intake
+            </Link>
+          )}
+          {quickActions.includes("new-quote") && (
+            <Link href="/sales?tab=proposals&new=true" className={quickActionClass}>
+              <Plus className="size-3.5" />
+              New Quote
+            </Link>
+          )}
+          {quickActions.includes("browse-jobs") && (
+            <Link href="/jobs" className={quickActionClass}>
+              <ListOrdered className="size-3.5" />
+              Browse Jobs
+            </Link>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-12">

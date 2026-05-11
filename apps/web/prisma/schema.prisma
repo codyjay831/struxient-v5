@@ -177,6 +177,19 @@ model Organization {
   quoteShareTokens      QuoteShareToken[]
   salesVisitRequests    SalesVisitRequest[]
   salesCustomFieldDefs  SalesCustomFieldDef[]
+  workstationSettings   WorkstationSettings?
+}
+
+model WorkstationSettings {
+  id                   String       @id @default(cuid())
+  organizationId       String       @unique
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  showQuickActions     Boolean      @default(true)
+  /// JSON array of visible action keys: ["new-intake", "new-quote", "browse-jobs"]
+  quickActionsJson     Json         @default("[\"new-intake\", \"new-quote\", \"browse-jobs\"]")
+  urgentThresholdHours Int          @default(24)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 }
 
 /// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.

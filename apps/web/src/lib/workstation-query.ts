@@ -153,8 +153,13 @@ export function compareWorkstationSalesIntakeOrder(
   return b.updatedAt.getTime() - a.updatedAt.getTime();
 }
 
-export async function queryWorkstationWorkItems(organizationId: string): Promise<WorkstationWorkItem[]> {
+export async function queryWorkstationWorkItems(
+  organizationId: string,
+  urgentThresholdHours: number = 24
+): Promise<WorkstationWorkItem[]> {
   const items: WorkstationWorkItem[] = [];
+  const now = new Date();
+  const urgentThreshold = new Date(now.getTime() - urgentThresholdHours * 60 * 60 * 1000);
 
   // 1. Sales Intakes
   const salesIntakes = await db.salesIntake.findMany({
@@ -211,7 +216,13 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
 
     // Prioritize sales intakes with pending visit requests
     const pendingVisit = salesIntake.visitRequests[0];
-    const effectivePriority = pendingVisit ? "critical" : priority;
+    let effectivePriority = pendingVisit ? "critical" : priority;
+    
+    // Senior logic: items updated within the threshold are also high priority
+    if (effectivePriority !== "critical" && salesIntake.updatedAt > urgentThreshold) {
+      effectivePriority = "high";
+    }
+
     const effectiveGroup = pendingVisit ? "investigate" : group;
     const effectiveLens = pendingVisit ? "attention" : lens;
     const effectiveReason = pendingVisit 
@@ -225,7 +236,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       title: salesIntake.title,
       subtitle: salesIntake.contactName || salesIntake.email || salesIntake.phone || undefined,
       status: salesIntake.status,
-      priority: effectivePriority,
+      priority: effectivePriority as WorkstationWorkItemPriority,
       group: effectiveGroup,
       lens: effectiveLens,
       filterCategory: "salesIntakes",
@@ -318,13 +329,19 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       priority: "medium",
     });
 
+    let effectivePriority = priority;
+    // Senior logic: items updated within the threshold are also high priority
+    if (effectivePriority !== "critical" && quote.updatedAt > urgentThreshold) {
+      effectivePriority = "high";
+    }
+
     items.push({
       id: `quote-${quote.id}`,
       kind: "quote",
       title: primaryIdentity,
       subtitle,
       status: quote.status,
-      priority,
+      priority: effectivePriority as WorkstationWorkItemPriority,
       group,
       lens,
       filterCategory: "quotes",
