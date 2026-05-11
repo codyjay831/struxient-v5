@@ -1,10 +1,12 @@
 "use server";
 
 import {
+  JobActivityType,
   JobStageBlockType,
   JobStatus,
   JobTaskStatus,
   Prisma,
+  QuoteCheckpointKind,
   QuoteLineExecutionMergeMode,
   QuoteLineExecutionReviewStatus,
   QuoteStatus,
@@ -23,6 +25,7 @@ import {
   evaluateQuoteJobActivationReadiness,
   type QuoteActivationLineInput,
 } from "@/lib/quote-job-activation-readiness";
+import { recordJobActivity } from "@/lib/job-activity-helper";
 
 export type QuoteJobActivationFormState = {
   error?: string;
@@ -114,6 +117,22 @@ async function performActivateQuoteJob(
         throw new ActivationError(
           "NOT_APPROVED",
           "Only approved quotes can be activated. Record customer acceptance first, then refresh.",
+        );
+      }
+
+      const approvalCheckpoint = await tx.quoteCheckpoint.findFirst({
+        where: {
+          organizationId: ctx.organizationId,
+          quoteId: quote.id,
+          kind: QuoteCheckpointKind.APPROVAL,
+        },
+        orderBy: { sequence: "desc" },
+        select: { id: true },
+      });
+      if (!approvalCheckpoint) {
+        throw new ActivationError(
+          "NOT_APPROVED",
+          "Record customer acceptance with an approval checkpoint before activating this quote.",
         );
       }
 
@@ -246,6 +265,8 @@ async function performActivateQuoteJob(
         }
       }
 
+      const activatedTaskCount = readiness.totalTasksToActivate;
+
       let blockSortOrder = 1;
       for (const line of separateContributors) {
         const blockTitle = line.description;
@@ -299,6 +320,25 @@ async function performActivateQuoteJob(
           }
         }
       }
+
+      await recordJobActivity(
+        {
+          organizationId: ctx.organizationId,
+          jobId: job.id,
+          type: JobActivityType.JOB_ACTIVATED,
+          title: "Job activated from approved quote",
+          details: `Copied ${activatedTaskCount} task${activatedTaskCount === 1 ? "" : "s"} from quote execution planning.`,
+          entityType: "Quote",
+          entityId: quote.id,
+          actorUserId: ctx.userId,
+          metadataJson: {
+            quoteId: quote.id,
+            activatedTaskCount,
+            approvalCheckpointId: approvalCheckpoint.id,
+          },
+        },
+        tx,
+      );
 
       return job.id;
     });

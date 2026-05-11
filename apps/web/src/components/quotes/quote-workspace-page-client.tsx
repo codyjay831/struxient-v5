@@ -46,7 +46,7 @@ import {
 } from "@/lib/quote-display";
 import {
   quoteStatusAllowsCommercialEdits,
-  quoteStatusAllowsExecutionEdits,
+  quoteAllowsQuoteLineExecutionPlanning,
   quoteStatusIsArchived,
 } from "@/lib/quote-status-workflow";
 import { quoteExecutionReviewPreviewPath } from "@/lib/quote-execution-review-path";
@@ -224,14 +224,19 @@ function ScopeTab({
   lineItemTemplates,
   draftTasksByLineId,
   reusableTaskOptions,
+  activatedJobId,
 }: {
   quote: QuoteDetailPayload;
   lineItemTemplates: LineItemTemplatePickerRow[];
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  activatedJobId: string | null;
 }) {
   const isCommercialEditable = quoteStatusAllowsCommercialEdits(quote.status);
-  const executionPlanningEditable = quoteStatusAllowsExecutionEdits(quote.status);
+  const executionPlanningEditable = quoteAllowsQuoteLineExecutionPlanning(
+    quote.status,
+    Boolean(activatedJobId),
+  );
   const isArchived = quoteStatusIsArchived(quote.status);
   const lineCount = quote.lineItems.length;
 
@@ -261,7 +266,9 @@ function ScopeTab({
         description={
           isArchived
             ? "Read-only scope rows as stored when archived. Restore to draft to edit."
-            : "Commercial scope and pricing are read-only after send. Internal draft execution can still be edited from each line."
+            : activatedJobId
+              ? "Commercial scope is read-only after send. A runtime job is active—edit tasks on the job, not quote-line draft execution."
+              : "Commercial scope and pricing are read-only after send. Internal draft execution can still be edited from each line until activation."
         }
       />
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
@@ -635,6 +642,7 @@ export function QuoteWorkspacePageClient({
           lineItemTemplates={lineItemTemplates}
           draftTasksByLineId={draftTasksByLineId}
           reusableTaskOptions={reusableTaskOptions}
+          activatedJobId={activatedJobId}
         />
       )}
       {activeTab === "context" && <ContextTab quote={quote} />}

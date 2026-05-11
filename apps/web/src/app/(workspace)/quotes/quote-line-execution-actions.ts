@@ -145,11 +145,15 @@ async function assertDraftQuoteLine(
       quote: {
         organizationId,
         status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+        job: { is: null },
       },
     },
     select: { id: true, quoteId: true },
   });
 }
+
+const QUOTE_LINE_EXECUTION_LOCKED_ERROR =
+  "This quote line is not editable. The quote may be archived, a job may already be activated, or it is outside your organization.";
 
 async function clearNoExecutionNeededWhenTasksAdded(
   tx: Prisma.TransactionClient,
@@ -249,10 +253,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
 
   if (!outcome.ok) {
     if (outcome.code === "LINE") {
-      return {
-        error:
-          "This quote line was not found, the quote may not be a draft, or it is outside your organization.",
-      };
+      return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
     }
     return {
       error:
@@ -311,10 +312,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
   });
 
   if (!ok) {
-    return {
-      error:
-        "This quote line was not found, the quote may not be a draft, or it is outside your organization.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
@@ -363,6 +361,14 @@ export async function updateQuoteLineExecutionTaskAction(
       return { ok: false as const };
     }
 
+    const quoteHasJob = await tx.job.findFirst({
+      where: { quoteId: qid, organizationId: ctx.organizationId },
+      select: { id: true },
+    });
+    if (quoteHasJob) {
+      return { ok: false as const };
+    }
+
     const oldStage = existing.stageKey;
     const newStage = parsed.data.stageKey;
 
@@ -395,10 +401,7 @@ export async function updateQuoteLineExecutionTaskAction(
   });
 
   if (!outcome.ok) {
-    return {
-      error:
-        "This task could not be updated. It may have been removed, or the quote line is not editable.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
@@ -442,6 +445,14 @@ export async function deleteQuoteLineExecutionTaskAction(
       return { ok: false as const };
     }
 
+    const quoteHasJob = await tx.job.findFirst({
+      where: { quoteId: qid, organizationId: ctx.organizationId },
+      select: { id: true },
+    });
+    if (quoteHasJob) {
+      return { ok: false as const };
+    }
+
     const stageKey = existing.stageKey;
     await tx.quoteLineExecutionTask.delete({ where: { id: kid } });
     await renumberSortOrdersInStage(tx, lid, stageKey);
@@ -450,10 +461,7 @@ export async function deleteQuoteLineExecutionTaskAction(
   });
 
   if (!outcome.ok) {
-    return {
-      error:
-        "This task could not be removed. It may have already been deleted, or the quote line is not editable.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
@@ -498,6 +506,14 @@ export async function moveQuoteLineExecutionTaskAction(
       return false;
     }
 
+    const quoteHasJob = await tx.job.findFirst({
+      where: { quoteId: qid, organizationId: ctx.organizationId },
+      select: { id: true },
+    });
+    if (quoteHasJob) {
+      return false;
+    }
+
     const stageKey = existing.stageKey;
     const peers = await tx.quoteLineExecutionTask.findMany({
       where: { quoteLineItemId: lid, stageKey },
@@ -533,10 +549,7 @@ export async function moveQuoteLineExecutionTaskAction(
   });
 
   if (!ok) {
-    return {
-      error:
-        "Could not reorder this task. It may have been removed, or the quote line is not editable.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
@@ -576,7 +589,11 @@ export async function updateQuoteLineExecutionSettingsAction(
       where: {
         id: lid,
         quoteId: qid,
-        quote: { organizationId: ctx.organizationId, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
+        quote: {
+          organizationId: ctx.organizationId,
+          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+          job: { is: null },
+        },
       },
       select: { id: true },
     });
@@ -612,10 +629,7 @@ export async function updateQuoteLineExecutionSettingsAction(
           "Remove draft tasks from this line before marking it commercial-only, or leave tasks and keep execution planning on.",
       };
     }
-    return {
-      error:
-        "These settings could not be saved. The quote may not be a draft, the line may be missing, or it is outside your organization.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
@@ -643,7 +657,11 @@ export async function moveQuoteLineWorkOrderAction(
       where: {
         id: lid,
         quoteId: qid,
-        quote: { organizationId: ctx.organizationId, status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] } },
+        quote: {
+          organizationId: ctx.organizationId,
+          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+          job: { is: null },
+        },
       },
       select: { id: true },
     });
@@ -681,10 +699,7 @@ export async function moveQuoteLineWorkOrderAction(
   });
 
   if (!ok) {
-    return {
-      error:
-        "Work order could not be updated. The quote may not be a draft, or the line is outside your organization.",
-    };
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
   }
 
   revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));

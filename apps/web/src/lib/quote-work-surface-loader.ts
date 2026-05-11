@@ -13,7 +13,7 @@ import {
 } from "@/lib/quote-display";
 import {
   quoteStatusAllowsCommercialEdits,
-  quoteStatusAllowsExecutionEdits,
+  quoteAllowsQuoteLineExecutionPlanning,
   quoteStatusIsArchived,
 } from "@/lib/quote-status-workflow";
 import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
@@ -361,7 +361,10 @@ export async function loadQuoteWorkSurface(
   });
 
   const isCommercialEditable = quoteStatusAllowsCommercialEdits(row.status);
-  const isExecutionEditable = quoteStatusAllowsExecutionEdits(row.status);
+  const isExecutionEditable = quoteAllowsQuoteLineExecutionPlanning(
+    row.status,
+    Boolean(job),
+  );
   const isArchived = quoteStatusIsArchived(row.status);
 
   /* Line-item templates — only meaningful while DRAFT (saved-line picker). */

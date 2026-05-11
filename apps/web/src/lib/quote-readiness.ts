@@ -160,18 +160,24 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
   if (quote.status === ("APPROVED" as QuoteStatus)) {
     const isReady = activationReadiness?.ready ?? false;
     const state = isReady ? "APPROVED_READY_TO_ACTIVATE" : "APPROVED_NEEDS_EXECUTION_REVIEW";
+    const driftDescription =
+      "The quote record changed after the last commercial proof. Restore to draft before changing sold commercial terms.";
     return {
       state,
       label: STATE_LABEL[state],
-      description: isReady
-        ? "Commercial terms are approved and execution planning is ready. Activate the job to begin work."
-        : "Commercial terms are approved. Resolve planning gaps in execution review to activate the job.",
+      description: input.revisionDriftSinceLastProof
+        ? driftDescription
+        : isReady
+          ? "Commercial terms are approved and execution planning is ready. Activate the job to begin work."
+          : "Commercial terms are approved. Resolve planning gaps in execution review to activate the job.",
       primaryAction: isReady
         ? { kind: "ACTIVATE_JOB", label: "Activate job" }
         : { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" },
-      secondaryAction: isReady
-        ? { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" }
-        : null,
+      secondaryAction: input.revisionDriftSinceLastProof
+        ? { kind: "RESTORE_TO_DRAFT", label: "Restore to draft" }
+        : isReady
+          ? { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" }
+          : null,
       stepIndex: STATE_STEP_INDEX[state],
       totalSteps: TOTAL_STEPS,
       isTerminal: false,
@@ -182,12 +188,18 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
   }
 
   if (quote.status === ("SENT" as QuoteStatus)) {
+    const driftDescription =
+      "The quote record changed after the last commercial proof. Restore to draft to realign scope and send again.";
     return {
       state: "SENT_AWAITING_CUSTOMER",
       label: STATE_LABEL.SENT_AWAITING_CUSTOMER,
-      description: "The proposal has been sent to the customer. Waiting on their commercial acceptance.",
+      description: input.revisionDriftSinceLastProof
+        ? driftDescription
+        : "The proposal has been sent to the customer. Waiting on their commercial acceptance.",
       primaryAction: { kind: "MARK_APPROVED", label: "Mark approved" },
-      secondaryAction: { kind: "OPEN_PROPOSAL_PREVIEW", label: "Open live proposal preview" },
+      secondaryAction: input.revisionDriftSinceLastProof
+        ? { kind: "RESTORE_TO_DRAFT", label: "Restore to draft" }
+        : { kind: "OPEN_PROPOSAL_PREVIEW", label: "Open live proposal preview" },
       stepIndex: STATE_STEP_INDEX.SENT_AWAITING_CUSTOMER,
       totalSteps: TOTAL_STEPS,
       isTerminal: false,

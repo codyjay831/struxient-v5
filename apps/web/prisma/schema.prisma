@@ -939,6 +939,7 @@ enum JobPaymentRequirementStatus {
 }
 
 enum JobActivityType {
+  JOB_ACTIVATED
   ISSUE_CREATED
   ISSUE_RESOLVED
   ISSUE_FOLLOW_UP_TASK_CREATED

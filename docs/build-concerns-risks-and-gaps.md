@@ -120,6 +120,41 @@ This is **process guidance for people and agents shaping the repo**—not produc
 
 ---
 
+## 11. Lifecycle status mapping (v5 app slice)
+
+Canon names richer quote/job lifecycles in [locked-decisions-v1.md](./canon/locked-decisions-v1.md) §2. The runnable app uses a **smaller enum set** until a user-facing flow needs more values.
+
+| Canon concept | Current DB enum | Notes |
+|---------------|-----------------|-------|
+| `draft` | `QuoteStatus.DRAFT` | Commercial editing |
+| `sent` | `QuoteStatus.SENT` | Commercial locked; `QuoteCheckpointKind.SEND` proof |
+| `approved` | `QuoteStatus.APPROVED` | `QuoteCheckpointKind.APPROVAL` proof; execution review pre-activation |
+| `archived` / voided read-only | `QuoteStatus.ARCHIVED` | Restore → `DRAFT` for commercial edits |
+| `declined` / `expired` / `superseded` | *(not persisted yet)* | Add when portal reject / expiry / supersede ships |
+| `active` execution | `JobStatus.ACTIVE` | One `Job` per `Quote` (`quoteId` unique) |
+| `scheduled` / `on_hold` / `complete` / `closed` / `cancelled` | *(not persisted yet)* | Add when job lifecycle UX needs them; today use issues/holds/activity |
+| Job task runtime | `JobTaskStatus.TODO` \| `IN_PROGRESS` \| `DONE` | Workstation + job detail |
+
+**Rule:** do not migrate enums for parity alone. New values ship with the flow that needs them (portal decline, job hold, and so on).
+
+---
+
+## 12. Payment schedule vs gate vs task (implementation contract)
+
+Product canon: [domains-and-boundaries.md](./canon/domains-and-boundaries.md) (payments vs scheduling vs tasks), [experience-canon-lead-to-workstation.md](./canon/experience-canon-lead-to-workstation.md) §12, [locked-decisions-v1.md](./canon/locked-decisions-v1.md) §8.
+
+| Layer | Money truth? | v5 today | Next build |
+|-------|----------------|----------|------------|
+| **Payment schedule** | Yes — what is owed, when, why | Not persisted on `Quote`; customer projection omits schedule | `PaymentSchedule` rows on quote; include in SEND/APPROVAL checkpoint payloads; portal read-only summary |
+| **Payment gate** | No — readiness only | `JobPaymentRequirement` on job; can block tasks | Derive gated rows from schedule at activation with lineage; no ad-hoc amounts without audit |
+| **Payment task** | No — coordination | `TaskTemplateCategory.PAYMENT` exists; optional follow-up | Record paid/waived against schedule/gate; completing a task does not rewrite obligations |
+
+**Contractor modes (v1):** (1) **Simple plan** — quote-level milestones (deposit / progress / final), count chosen by staff, not auto-derived from line-item count; (2) **Gated execution** — same schedule plus optional gates on phases and optional PAYMENT tasks for follow-up. Optional **line/phase anchors** on schedule rows are labeling/tie-point metadata only.
+
+**Locking:** schedule amounts, labels, and gate tie-points lock at **APPROVAL** checkpoint; material changes use change order + re-approve (locked §7). Stripe/ledger and org `/payments` roll-up remain phase 2.
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -129,3 +164,4 @@ This is **process guidance for people and agents shaping the repo**—not produc
 | 2026-05-05 | Added R4 (RSC / client component props); workspace shell and routes. |
 | 2026-05-05 | Added §10 Fast Build vs Strict Correction (outside product canon). |
 | 2026-05-06 | D3 + §9 step 4 — aligned with [canon/quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md); `QuoteCheckpoint` naming guidance vs `QuoteRevision` / `ApprovedSnapshot`. |
+| 2026-05-12 | §11 lifecycle status mapping (canon vs current enums); §12 payment schedule / gate / task implementation contract. |

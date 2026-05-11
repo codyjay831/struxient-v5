@@ -92,6 +92,8 @@ export function JobActivityFeed({ activities }: { activities: Activity[] }) {
 
 function ActivityIcon({ type }: { type: JobActivityType }) {
   switch (type) {
+    case "JOB_ACTIVATED":
+      return <span className="text-accent">▶</span>;
     case "ISSUE_CREATED":
       return <span className="text-warning-strong">!</span>;
     case "ISSUE_RESOLVED":

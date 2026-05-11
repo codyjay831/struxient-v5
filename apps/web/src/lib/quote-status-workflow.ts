@@ -17,6 +17,17 @@ export function quoteStatusAllowsExecutionEdits(status: QuoteStatus): boolean {
   return QUOTE_STATUSES_EXECUTION_EDITABLE.includes(status);
 }
 
+/** Quote-line draft execution may be edited until a runtime job exists for the quote. */
+export function quoteAllowsQuoteLineExecutionPlanning(
+  status: QuoteStatus,
+  hasActivatedJob: boolean,
+): boolean {
+  if (hasActivatedJob) {
+    return false;
+  }
+  return quoteStatusAllowsExecutionEdits(status);
+}
+
 export function quoteStatusIsArchived(status: QuoteStatus): boolean {
   return status === QuoteStatus.ARCHIVED;
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { QuoteStatus } from "@prisma/client";
-import { quoteStatusAllowsExecutionEdits } from "@/lib/quote-status-workflow";
+import { quoteAllowsQuoteLineExecutionPlanning } from "@/lib/quote-status-workflow";
 import {
   QuoteExecutionReviewPreviewView,
   type QuoteActivationStatus,
@@ -74,7 +74,10 @@ export default async function QuoteExecutionReviewPreviewPage({
     notFound();
   }
 
-  const executionPlanningEditable = quoteStatusAllowsExecutionEdits(row.status);
+  const executionPlanningEditable = quoteAllowsQuoteLineExecutionPlanning(
+    row.status,
+    Boolean(row.job),
+  );
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
   for (const line of row.lineItems) {
