@@ -43,7 +43,10 @@ export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
 };
 
 const addressPrimaryBtnClass =
-  "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:py-2 sm:text-xs sm:font-medium";
+
+const actionBtnBaseClass =
+  "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold transition-all disabled:opacity-50 sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs sm:font-semibold";
 
 export function TaskWorkSurface({
   jobId,
@@ -332,11 +335,11 @@ export function TaskWorkSurface({
       </details>
 
       {task.instructions && (
-        <div>
+        <div className="rounded-xl border border-border bg-surface/30 p-4 sm:border-none sm:bg-transparent sm:p-0">
           <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
             Instructions
           </h4>
-          <p className="mt-2 text-sm leading-relaxed text-foreground-muted">{task.instructions}</p>
+          <p className="mt-2 text-base leading-relaxed text-foreground-muted sm:text-sm">{task.instructions}</p>
         </div>
       )}
 
@@ -388,12 +391,12 @@ export function TaskWorkSurface({
       )}
 
       {!isCompleted && !isBlocked && (
-        <div>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-all hover:border-border-strong hover:text-foreground">
+        <div className="pt-2">
+          <label className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-surface/50 px-5 py-6 text-sm font-bold text-foreground-muted transition-all hover:border-border-strong hover:text-foreground sm:inline-flex sm:w-auto sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
             {isUploading ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-5 animate-spin sm:size-3.5" />
             ) : (
-              <Paperclip className="size-3.5" />
+              <Paperclip className="size-5 sm:size-3.5" />
             )}
             <span>{isUploading ? "Uploading..." : "Add proof / attachment"}</span>
             <input
@@ -431,15 +434,15 @@ export function TaskWorkSurface({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+      <div className="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:gap-2 sm:pt-4">
         {task.status === JobTaskStatus.TODO && !isCompleted && !isBlocked && (
           <button
             type="button"
             onClick={handleStartTask}
             disabled={isPending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-border-strong disabled:opacity-50"
+            className={`${actionBtnBaseClass} border border-border bg-surface text-foreground hover:border-border-strong`}
           >
-            {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5 fill-current" />}
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
             Start task
           </button>
         )}
@@ -449,16 +452,16 @@ export function TaskWorkSurface({
             type="button"
             onClick={handleComplete}
             disabled={isPending}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+            className={`${actionBtnBaseClass} ${
               needsProof && !showNoteForm
                 ? "border border-border bg-surface text-foreground hover:border-border-strong"
                 : "bg-accent text-accent-contrast hover:opacity-90"
             }`}
           >
             {isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Check className="size-3.5" />
+              <Check className="size-4" strokeWidth={3} />
             )}
             {isPending ? "Working…" : needsProof && !showNoteForm ? "Add proof / note" : "Complete task"}
           </button>
@@ -471,9 +474,9 @@ export function TaskWorkSurface({
               setShowReportForm((v) => !v);
               setActionMessage(null);
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground"
+            className={`${actionBtnBaseClass} border border-border bg-surface text-foreground-muted hover:border-border-strong hover:text-foreground`}
           >
-            <AlertCircle className="size-3.5" />
+            <AlertCircle className="size-4" />
             {showReportForm ? "Cancel report" : "Report problem"}
           </button>
         )}

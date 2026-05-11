@@ -25,7 +25,7 @@ export function WorkstationFilterBar({
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4">
+    <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
       {filters.map((f) => {
         const active = currentFilter === f.id;
         
@@ -47,7 +47,7 @@ export function WorkstationFilterBar({
             key={f.id}
             href={`?${params.toString()}`}
             className={[
-              "rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wider transition-colors",
+              "whitespace-nowrap rounded-full px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider transition-colors sm:px-3 sm:py-1",
               active
                 ? "bg-foreground text-background"
                 : "bg-foreground/[0.03] text-foreground-muted hover:bg-foreground/[0.06] hover:text-foreground",

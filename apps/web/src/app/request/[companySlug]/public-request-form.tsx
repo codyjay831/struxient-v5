@@ -15,7 +15,7 @@ import { CustomFieldsForm, type CustomFieldDefPayload } from "@/components/forms
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-loader";
 import { formatMoneyCents } from "@/lib/quote-display";
 
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2, FileText } from "lucide-react";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -157,15 +157,33 @@ export function PublicRequestForm({
       </h2>
 
       {/* Progress Indicator */}
-      <div className="flex items-center gap-2 mb-8">
-        {[1, 2, 3].map((s) => (
-          <div
-            key={s}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-              s <= step ? "bg-accent" : "bg-border"
-            }`}
-          />
-        ))}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-2 px-1">
+          {[
+            { s: 1, label: "Contact" },
+            { s: 2, label: "Project" },
+            { s: 3, label: "Finish" },
+          ].map(({ s, label }) => (
+            <span
+              key={s}
+              className={`text-[0.65rem] font-bold uppercase tracking-widest transition-colors duration-300 ${
+                s <= step ? "text-accent" : "text-foreground-subtle"
+              }`}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          {[1, 2, 3].map((s) => (
+            <div
+              key={s}
+              className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+                s <= step ? "bg-accent" : "bg-border"
+              }`}
+            />
+          ))}
+        </div>
       </div>
 
       {intake.offerings.length > 0 && step === 1 && (
@@ -351,33 +369,40 @@ export function PublicRequestForm({
         </div>
 
         {hasInstantQuote && (
-          <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-accent">Indicative Estimate Only</p>
-                <p className="mt-1 text-sm text-foreground-muted">
-                  Based on your request type, here is a starting estimate.
+          <div className="rounded-xl border border-accent/30 bg-accent/5 p-5 shadow-sm ring-1 ring-accent/10">
+            <div className="flex items-start gap-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                <FileText className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-widest text-accent">Indicative Estimate</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  Get a head start on pricing
                 </p>
-                <div className="mt-3 border-t border-accent/20 pt-2 flex justify-between items-center">
-                  <span className="text-sm font-bold text-foreground">Estimated total</span>
-                  <span className="text-lg font-bold text-accent">
+                <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                  Based on your request type, we can provide an immediate indicative range. 
+                  Final pricing will be confirmed by our team after review.
+                </p>
+                <div className="mt-4 flex items-baseline justify-between rounded-lg bg-background/50 px-3 py-2.5">
+                  <span className="text-xs font-semibold text-foreground-subtle uppercase tracking-wider">Estimated total</span>
+                  <span className="text-xl font-bold text-accent tabular-nums">
                     {maxIndicativeCents > totalIndicativeCents 
                       ? `${formatMoneyCents(totalIndicativeCents)} – ${formatMoneyCents(maxIndicativeCents)}`
                       : formatMoneyCents(totalIndicativeCents)}
                   </span>
                 </div>
+                <label className="mt-4 flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    name="lockInInstantQuote"
+                    className="size-4 rounded border-border text-accent focus:ring-accent"
+                  />
+                  <span className="text-xs font-semibold text-foreground">
+                    Include this estimate in my request (optional)
+                  </span>
+                </label>
               </div>
             </div>
-            <label className="mt-4 flex cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
-                name="lockInInstantQuote"
-                className="size-4 rounded border-border text-accent focus:ring-accent"
-              />
-              <span className="text-xs font-medium text-foreground">
-                Use this estimate to start my draft quote (optional)
-              </span>
-            </label>
           </div>
         )}
 

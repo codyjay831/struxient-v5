@@ -42,8 +42,12 @@ import {
   WorkstationClearedState,
   WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
+import { Plus, Search, ListOrdered } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+const quickActionClass =
+  "flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-4 text-xs font-bold uppercase tracking-widest text-foreground transition-all hover:border-border-strong hover:bg-foreground/[0.02] sm:py-3";
 
 export default async function WorkstationTodayLensPage({
   searchParams,
@@ -92,6 +96,22 @@ export default async function WorkstationTodayLensPage({
   return (
     <div className="space-y-8">
       <WorkstationFilterBar currentFilter={filter} currentLens={lens} />
+
+      {/* Quick Actions */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Link href="/sales/new" className={quickActionClass}>
+          <Plus className="size-4" />
+          New Intake
+        </Link>
+        <Link href="/sales?tab=proposals&new=true" className={quickActionClass}>
+          <Plus className="size-4" />
+          New Quote
+        </Link>
+        <Link href="/jobs" className={quickActionClass}>
+          <ListOrdered className="size-4" />
+          Browse Jobs
+        </Link>
+      </section>
 
       {prioritizedItems.length > 0 ? (
         <div className="space-y-12">
