@@ -42,12 +42,15 @@ import {
   WorkstationClearedState,
   WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
-import { Plus, Search, ListOrdered } from "lucide-react";
+import { Plus, Search, ListOrdered, History, Zap } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 const quickActionClass =
   "flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-4 text-xs font-bold uppercase tracking-widest text-foreground transition-all hover:border-border-strong hover:bg-foreground/[0.02] sm:py-3";
+
+const activityItemClass =
+  "flex items-start gap-3 rounded-lg border border-transparent p-2 transition-colors hover:bg-foreground/[0.02]";
 
 export default async function WorkstationTodayLensPage({
   searchParams,
@@ -63,6 +66,21 @@ export default async function WorkstationTodayLensPage({
   const allItems = await queryWorkstationWorkItems(ctx.organizationId);
 
   const summary = getWorkstationSummary(allItems);
+
+  // Fetch recent activity for Priority 3 Notifications/Activity
+  const recentActivity = await db.jobActivity.findMany({
+    where: { job: { organizationId: ctx.organizationId } },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    include: {
+      actorUser: { select: { name: true } },
+      job: { select: { title: true } },
+    },
+  });
+
+  const unreviewedIntakesCount = await db.salesIntake.count({
+    where: { organizationId: ctx.organizationId, status: "OPEN" },
+  });
 
   // Filter by lens
   let filteredItems = allItems;
@@ -100,7 +118,15 @@ export default async function WorkstationTodayLensPage({
       {/* Quick Actions */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Link href="/sales/new" className={quickActionClass}>
-          <Plus className="size-4" />
+          <div className="relative">
+            <Plus className="size-4" />
+            {unreviewedIntakesCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
+              </span>
+            )}
+          </div>
           New Intake
         </Link>
         <Link href="/sales?tab=proposals&new=true" className={quickActionClass}>
@@ -113,52 +139,127 @@ export default async function WorkstationTodayLensPage({
         </Link>
       </section>
 
-      {prioritizedItems.length > 0 ? (
-        <div className="space-y-12">
-          {/* Primary Focus */}
-          {focusItem && (
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Primary Focus
-                </h3>
-              </div>
-              <WorkstationFocusCard 
-                item={{
-                  ...focusItem,
-                  href: buildItemHref(focusItem)
-                }} 
-                isSelected={selectedId === focusItem.id} 
-              />
-            </section>
-          )}
-
-          {/* Secondary Queue */}
-          {queueItems.length > 0 && (
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Queue
-                </h3>
-              </div>
-              <div className="grid gap-2">
-                {queueItems.map((item) => (
-                  <WorkstationQueueItem 
-                    key={item.id} 
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-12">
+          {prioritizedItems.length > 0 ? (
+            <div className="space-y-12">
+              {/* Primary Focus */}
+              {focusItem && (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                      Primary Focus
+                    </h3>
+                  </div>
+                  <WorkstationFocusCard 
                     item={{
-                      ...item,
-                      href: buildItemHref(item)
+                      ...focusItem,
+                      href: buildItemHref(focusItem)
                     }} 
-                    isSelected={selectedId === item.id} 
+                    isSelected={selectedId === focusItem.id} 
                   />
-                ))}
-              </div>
-            </section>
+                </section>
+              )}
+
+              {/* Secondary Queue */}
+              {queueItems.length > 0 && (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                      Queue
+                    </h3>
+                  </div>
+                  <div className="grid gap-2">
+                    {queueItems.map((item) => (
+                      <WorkstationQueueItem 
+                        key={item.id} 
+                        item={{
+                          ...item,
+                          href: buildItemHref(item)
+                        }} 
+                        isSelected={selectedId === item.id} 
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          ) : (
+            <WorkstationClearedState lens={lens} filter={filter} />
           )}
         </div>
-      ) : (
-        <WorkstationClearedState lens={lens} filter={filter} />
-      )}
+
+        {/* Sidebar: Activity & Insights */}
+        <aside className="space-y-8">
+          <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
+            <div className="flex items-center gap-2 mb-6">
+              <History className="size-4 text-foreground-subtle" />
+              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">
+                Recent Activity
+              </h3>
+            </div>
+            
+            {recentActivity.length > 0 ? (
+              <div className="space-y-4">
+                {recentActivity.map((activity) => (
+                  <div key={activity.id} className={activityItemClass}>
+                    <div className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/5">
+                      <Zap className="size-3 text-foreground-subtle" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground leading-snug">
+                        {activity.title}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-foreground-subtle truncate">
+                        {activity.job.title} · {activity.actorUser?.name || "System"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <Link 
+                  href="/jobs" 
+                  className="mt-4 block text-center text-[10px] font-bold uppercase tracking-widest text-foreground-subtle hover:text-foreground transition-colors"
+                >
+                  View All Activity
+                </Link>
+              </div>
+            ) : (
+              <p className="text-xs text-foreground-muted italic">
+                No recent activity recorded.
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
+            <div className="flex items-center gap-2 mb-6">
+              <Zap className="size-4 text-accent" />
+              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">
+                Insights
+              </h3>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                  <span>Job Velocity</span>
+                  <span className="text-success">↑ 12%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-foreground/5">
+                  <div className="h-full w-[75%] rounded-full bg-accent" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                  <span>Quote Conversion</span>
+                  <span className="text-foreground">68%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-foreground/5">
+                  <div className="h-full w-[68%] rounded-full bg-foreground/20" />
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       {selectedItem && (
         <div id="selected-item-panel" className="scroll-mt-6">

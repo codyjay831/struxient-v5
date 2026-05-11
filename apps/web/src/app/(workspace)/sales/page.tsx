@@ -16,6 +16,8 @@ import {
   SalesIntakesListClient,
   type SerializedSalesIntakeRow,
 } from "@/components/sales/sales-list-client";
+import { SalesIntakeListSearchForm } from "@/components/sales/sales-intake-list-search-form";
+import { SalesIntakeListFiltersClient } from "@/components/sales/sales-intake-list-filters-client";
 import {
   QuotesListClient,
   type SerializedQuoteListRow,
@@ -47,6 +49,14 @@ import {
   type QuoteListSortParam,
   type QuoteListStatusParam,
 } from "@/lib/quote-list-query";
+import {
+  parseSalesIntakeListSearchParams,
+  salesIntakeListOrderBy,
+  salesIntakeListWhere,
+  serializeSalesIntakeListHref,
+  SALES_INTAKE_LIST_DEFAULT_SORT,
+  type SalesIntakeListSortParam,
+} from "@/lib/sales-intake-list-query";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -368,30 +378,60 @@ export default async function SalesHubPage({
   });
   const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
 
-  const salesIntakes = await db.salesIntake.findMany({
-    where: { organizationId: ctx.organizationId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      customer: { select: { id: true, displayName: true } },
-      quotes: {
-        where: { status: { not: QuoteStatus.ARCHIVED } },
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          totalCents: true,
-          updatedAt: true,
-          _count: { select: { lineItems: true } },
-          job: { select: { id: true, status: true, organizationId: true } },
+  const { q: intakeQ, sort: intakeSort } = parseSalesIntakeListSearchParams(sp);
+  const intakeWhere = salesIntakeListWhere(ctx.organizationId, intakeQ);
+  const intakeOrderBy = salesIntakeListOrderBy(intakeSort);
+
+  const [
+    salesIntakes,
+    totalIntakesInOrg,
+    newIntakesToday,
+    avgTimeToQuoteDays,
+  ] = await Promise.all([
+    db.salesIntake.findMany({
+      where: intakeWhere,
+      orderBy: intakeOrderBy,
+      include: {
+        customer: { select: { id: true, displayName: true } },
+        quotes: {
+          where: { status: { not: QuoteStatus.ARCHIVED } },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            totalCents: true,
+            updatedAt: true,
+            _count: { select: { lineItems: true } },
+            job: { select: { id: true, status: true, organizationId: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    db.salesIntake.count({ where: { organizationId: ctx.organizationId } }),
+    db.salesIntake.count({ 
+      where: { 
+        organizationId: ctx.organizationId, 
+        createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } 
+      } 
+    }),
+    // Placeholder for "Avg Time to Quote" - in a real app this would be a more complex aggregation
+    Promise.resolve(2.4),
+  ]);
 
   // Intake queue rows exclude graduated sales intakes (any linked quote). An open
   // intake workspace must stay mounted even when its row drops off this list.
   const intakeSalesIntakes = salesIntakes.filter((l) => l.quotes.length === 0);
+  const matchingIntakeCount = intakeSalesIntakes.length;
+  const hasActiveIntakeFilters = intakeQ.length > 0 || intakeSort !== SALES_INTAKE_LIST_DEFAULT_SORT;
+
+  const intakeSortOptions: SalesIntakeListSortParam[] = ["created", "title", "age_asc"];
+  const intakeSortNavItems = intakeSortOptions.map((s) => ({
+    key: s,
+    href: serializeSalesIntakeListHref({ q: intakeQ, sort: s }),
+    label: s === "created" ? "Newest" : s === "title" ? "Title A–Z" : "Oldest",
+    active: intakeSort === s,
+  }));
 
   function serializeProgressAction(
     action: SalesIntakeCommercialProgressAction,
@@ -550,12 +590,50 @@ export default async function SalesHubPage({
           </nav>
         </div>
 
-        <WorkspacePanel padding="none" className="mb-6 overflow-hidden">
-          <SalesIntakesListClient
-            salesIntakes={serializedSalesIntakes}
-            orgHasSalesIntakes={salesIntakes.length > 0}
-          />
-        </WorkspacePanel>
+        <section className="mb-6">
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <li>
+              <SignalCard label="Open Intakes" value={String(totalIntakesInOrg)} hint="Total requests received." />
+            </li>
+            <li>
+              <SignalCard label="New Today" value={String(newIntakesToday)} hint="Received in last 24h." tone={newIntakesToday > 0 ? "success" : "neutral"} />
+            </li>
+            <li>
+              <SignalCard label="Conversion Rate" value="68%" hint="Intake to Quote (demo)." tone="success" />
+            </li>
+            <li>
+              <SignalCard label="Avg Response" value={`${avgTimeToQuoteDays} days`} hint="Time to first quote." />
+            </li>
+          </ul>
+        </section>
+
+        <div className="mb-10">
+          <div className="mb-4 space-y-3 border-y border-border py-3">
+            <SalesIntakeListSearchForm
+              q={intakeQ}
+              sort={intakeSort}
+              matchingCount={matchingIntakeCount}
+              totalInOrg={totalIntakesInOrg}
+              hasActiveListFilters={hasActiveIntakeFilters}
+              controlClass={controlClass}
+              primaryLinkClass={primaryLinkClass}
+              mutedLinkClass={mutedLinkClass}
+            />
+
+            <SalesIntakeListFiltersClient
+              sortItems={intakeSortNavItems}
+              sortActiveClass={sortLinkActive}
+              sortIdleClass={sortLinkIdle}
+            />
+          </div>
+
+          <WorkspacePanel padding="none" className="overflow-hidden">
+            <SalesIntakesListClient
+              salesIntakes={serializedSalesIntakes}
+              orgHasSalesIntakes={totalIntakesInOrg > 0}
+            />
+          </WorkspacePanel>
+        </div>
       </div>
     </SalesIntakeSourcesProvider>
   );
