@@ -3,27 +3,27 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   SalesWorkspacePageClient,
-  type SerializedLeadFull,
+  type SerializedSalesIntakeFull,
   type SerializedLinkedQuoteFull,
   type SerializedProgressActionFull,
 } from "@/components/sales/sales-workspace-page-client";
-import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
-import type { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
-import type { LeadCommercialProgress, LeadCommercialProgressAction } from "@/lib/lead-commercial-progress";
-import { resolveLeadCommercialProgressActionHref } from "@/lib/lead-commercial-progress";
+import type { SalesIntakeFormState } from "@/app/(workspace)/sales/sales-form-actions";
+import type { SalesIntakeCustomerMatchHints } from "@/lib/sales-intake-customer-match-hints";
+import type { SalesIntakeCommercialProgress, SalesIntakeCommercialProgressAction } from "@/lib/sales-commercial-progress";
+import { resolveSalesIntakeCommercialProgressActionHref } from "@/lib/sales-commercial-progress";
 import {
-  formatLeadSource,
-  formatLeadStatus,
-  leadStatusBadgeTone,
-  type LeadDetailPayload,
-} from "@/lib/lead-display";
+  formatSalesIntakeSource,
+  formatSalesIntakeStatus,
+  salesIntakeStatusBadgeTone,
+  type SalesIntakeDetailPayload,
+} from "@/lib/sales-intake-display";
 import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
   type QuoteLinkedSummary,
 } from "@/lib/quote-display";
-import type { LeadWorkSurfaceActiveQuotePayload } from "@/components/work-surfaces/lead-work-surface";
-import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
+import type { SalesIntakeWorkSurfaceActiveQuotePayload } from "@/components/work-surfaces/sales-intake-work-surface";
+import type { SalesIntakeServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -31,56 +31,56 @@ const listLinkClass =
 /** QuoteLinkedSummary extended with the line-item count needed for the full-page quota tab. */
 export type QuoteLinkedSummaryWithCount = QuoteLinkedSummary & { lineItemCount: number };
 
-export type LeadWorkspaceShellProps = {
-  lead: LeadDetailPayload;
-  /** Bound `updateLeadStatusAction.bind(null, lead.id)` from the lead detail route. */
+export type SalesIntakeWorkspaceShellProps = {
+  salesIntake: SalesIntakeDetailPayload;
+  /** Bound `updateSalesIntakeStatusAction.bind(null, salesIntake.id)` from the sales intake detail route. */
   updateStatusAction: (
-    prevState: LeadFormState,
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
-  /** Org-scoped customers for the link form; omit when the lead is already linked. */
+  ) => Promise<SalesIntakeFormState>;
+  /** Org-scoped customers for the link form; omit when the sales intake is already linked. */
   customersForLink?: { id: string; displayName: string }[];
-  /** Bound `linkLeadToCustomerAction.bind(null, lead.id)`; omit when already linked. */
-  linkLeadAction?: (
-    prevState: LeadFormState,
+  /** Bound `linkSalesIntakeToCustomerAction.bind(null, salesIntake.id)`; omit when already linked. */
+  linkSalesIntakeAction?: (
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
-  /** Warn-only customer match hints when the lead is unlinked. */
-  matchHints?: LeadCustomerMatchHints;
-  /** Bound `createCustomerFromLeadAction.bind(null, lead.id)` — unused on this page
+  ) => Promise<SalesIntakeFormState>;
+  /** Warn-only customer match hints when the sales intake is unlinked. */
+  matchHints?: SalesIntakeCustomerMatchHints;
+  /** Bound `createCustomerFromSalesIntakeAction.bind(null, salesIntake.id)` — unused on this page
    *  (the workspace client uses the non-redirect workspace variant directly), kept for
    *  forward-compat if callers already pass it. */
-  createFromLeadAction?: (
-    prevState: LeadFormState,
+  createFromSalesIntakeAction?: (
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
-  /** Quotes linked to this lead (with line-item count), newest first. */
+  ) => Promise<SalesIntakeFormState>;
+  /** Quotes linked to this sales intake (with line-item count), newest first. */
   linkedQuotes?: QuoteLinkedSummaryWithCount[];
   /** Derived commercial progress story; computed server-side per request. */
-  commercialProgress: LeadCommercialProgress;
+  commercialProgress: SalesIntakeCommercialProgress;
   /**
    * Optional return context link — shown as the first header action when the
    * user arrived from Workstation.
    */
   returnHref?: string;
   /** Pre-loaded QuoteWorkSurface payload for the active linked quote. */
-  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
+  activeQuoteWorkSurface?: SalesIntakeWorkSurfaceActiveQuotePayload | null;
   /** Pre-loaded service-address context for the Customer Info block. */
-  serviceAddressContext?: LeadServiceAddressContext;
+  serviceAddressContext?: SalesIntakeServiceAddressContext;
 };
 
-export function LeadWorkspaceShell({
-  lead,
+export function SalesIntakeWorkspaceShell({
+  salesIntake,
   updateStatusAction,
   customersForLink,
-  linkLeadAction,
+  linkSalesIntakeAction,
   matchHints,
   linkedQuotes = [],
   commercialProgress,
   returnHref,
   activeQuoteWorkSurface,
   serviceAddressContext,
-}: LeadWorkspaceShellProps) {
+}: SalesIntakeWorkspaceShellProps) {
   /* ── Date formatting (server-side for SSR consistency) ─────────────────── */
   const locale = "en-US";
   const dateOpts: Intl.DateTimeFormatOptions = {
@@ -88,21 +88,21 @@ export function LeadWorkspaceShell({
     month: "short",
     day: "numeric",
   };
-  const createdAtLabel = lead.createdAt.toLocaleDateString(locale, dateOpts);
-  const updatedAtLabel = lead.updatedAt.toLocaleDateString(locale, dateOpts);
-  const convertedAtLabel = lead.convertedAt
-    ? lead.convertedAt.toLocaleDateString(locale, dateOpts)
+  const createdAtLabel = salesIntake.createdAt.toLocaleDateString(locale, dateOpts);
+  const updatedAtLabel = salesIntake.updatedAt.toLocaleDateString(locale, dateOpts);
+  const convertedAtLabel = salesIntake.convertedAt
+    ? salesIntake.convertedAt.toLocaleDateString(locale, dateOpts)
     : null;
-  const neededByDateLabel = lead.neededByDate
-    ? lead.neededByDate.toLocaleDateString(locale, dateOpts)
+  const neededByDateLabel = salesIntake.neededByDate
+    ? salesIntake.neededByDate.toLocaleDateString(locale, dateOpts)
     : null;
 
   /* ── Serialize progress actions ────────────────────────────────────────── */
   function serializeAction(
-    action: LeadCommercialProgressAction | null,
+    action: SalesIntakeCommercialProgressAction | null,
   ): SerializedProgressActionFull | null {
     if (!action) return null;
-    const href = resolveLeadCommercialProgressActionHref(action, { leadId: lead.id });
+    const href = resolveSalesIntakeCommercialProgressActionHref(action, { salesIntakeId: salesIntake.id });
     const opensQuoteTab =
       action.kind === "OPEN_DRAFT_QUOTE" ||
       action.kind === "OPEN_QUOTE" ||
@@ -113,36 +113,36 @@ export function LeadWorkspaceShell({
     return { href, label: action.label, opensQuoteTab, opensContactTab };
   }
 
-  /* ── Serialize lead ────────────────────────────────────────────────────── */
-  const serializedLead: SerializedLeadFull = {
-    id: lead.id,
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-    phone: lead.phone,
-    notes: lead.notes,
-    requestType: lead.requestType,
-    neededByBucket: lead.neededByBucket,
+  /* ── Serialize sales intake ────────────────────────────────────────────────────── */
+  const serializedSalesIntake: SerializedSalesIntakeFull = {
+    id: salesIntake.id,
+    title: salesIntake.title,
+    contactName: salesIntake.contactName,
+    email: salesIntake.email,
+    phone: salesIntake.phone,
+    notes: salesIntake.notes,
+    requestType: salesIntake.requestType,
+    neededByBucket: salesIntake.neededByBucket,
     neededByDateLabel,
-    scopeSummary: lead.scopeSummary,
-    jobsiteAddressLine: lead.jobsiteAddressLine,
-    intakeServiceLocationLinkedToCustomer: lead.intakeServiceLocationLinkedToCustomer,
-    sourceLabel: formatLeadSource(lead.source),
-    sourceDetail: lead.sourceDetail,
-    statusLabel: formatLeadStatus(lead.status),
-    statusTone: leadStatusBadgeTone(lead.status),
-    statusValue: lead.status,
-    customerId: lead.customerId,
-    customerDisplayName: lead.customer?.displayName ?? null,
-    customerHref: lead.customer ? `/customers/${lead.customer.id}` : null,
+    scopeSummary: salesIntake.scopeSummary,
+    jobsiteAddressLine: salesIntake.jobsiteAddressLine,
+    intakeServiceLocationLinkedToCustomer: salesIntake.intakeServiceLocationLinkedToCustomer,
+    sourceLabel: formatSalesIntakeSource(salesIntake.source),
+    sourceDetail: salesIntake.sourceDetail,
+    statusLabel: formatSalesIntakeStatus(salesIntake.status),
+    statusTone: salesIntakeStatusBadgeTone(salesIntake.status),
+    statusValue: salesIntake.status,
+    customerId: salesIntake.customerId,
+    customerDisplayName: salesIntake.customer?.displayName ?? null,
+    customerHref: salesIntake.customer ? `/customers/${salesIntake.customer.id}` : null,
     createdAtLabel,
     updatedAtLabel,
     convertedAtLabel,
     showConvertedWithoutCustomerHelper:
-      lead.status === "CONVERTED" && lead.customerId == null,
-    leadHref: `/sales/${lead.id}`,
-    editHref: `/sales/${lead.id}/edit`,
-    newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(lead.id)}`,
+      salesIntake.status === "CONVERTED" && salesIntake.customerId == null,
+    salesIntakeHref: `/sales/${salesIntake.id}`,
+    editHref: `/sales/${salesIntake.id}/edit`,
+    newQuoteHref: `/quotes/new?salesIntakeId=${encodeURIComponent(salesIntake.id)}`,
     progressLabel: commercialProgress.label,
     progressDescription: commercialProgress.description,
     progressTone: commercialProgress.badgeTone,
@@ -165,8 +165,8 @@ export function LeadWorkspaceShell({
     activeJobId: commercialProgress.activeJob?.id ?? null,
     activeJobStatus: commercialProgress.activeJob?.status ?? null,
     showsRevisionDrift: commercialProgress.showsRevisionDrift,
-    source: lead.source,
-    visitRequests: lead.visitRequests.map((vr) => ({
+    source: salesIntake.source,
+    visitRequests: salesIntake.visitRequests.map((vr) => ({
       id: vr.id,
       requestedDate: vr.requestedDate,
       requestedDateLabel: vr.requestedDate
@@ -206,7 +206,7 @@ export function LeadWorkspaceShell({
         items={[
           { label: "Sales" },
           { label: "Sales", href: "/sales" },
-          { label: lead.title },
+          { label: salesIntake.title },
         ]}
       />
 
@@ -219,14 +219,14 @@ export function LeadWorkspaceShell({
               tone={commercialProgress.badgeTone}
             />
             <span className="text-xs text-foreground-subtle">
-              {formatLeadSource(lead.source)} · {createdAtLabel}
+              {formatSalesIntakeSource(salesIntake.source)} · {createdAtLabel}
             </span>
           </div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight leading-tight">
-            {lead.title}
+            {salesIntake.title}
           </h1>
-          {lead.contactName && (
-            <p className="text-sm text-foreground-muted mt-0.5">{lead.contactName}</p>
+          {salesIntake.contactName && (
+            <p className="text-sm text-foreground-muted mt-0.5">{salesIntake.contactName}</p>
           )}
         </div>
 
@@ -237,9 +237,9 @@ export function LeadWorkspaceShell({
             </Link>
           )}
           <Link href="/sales" className={listLinkClass}>
-            ← Leads
+            ← Sales Intakes
           </Link>
-          <Link href={`/sales/${lead.id}/edit`} className={listLinkClass}>
+          <Link href={`/sales/${salesIntake.id}/edit`} className={listLinkClass}>
             Edit
           </Link>
         </div>
@@ -247,11 +247,11 @@ export function LeadWorkspaceShell({
 
       {/* ── Client workspace (next step + tabs) ──────────────────────────── */}
       <SalesWorkspacePageClient
-        lead={serializedLead}
+        salesIntake={serializedSalesIntake}
         linkedQuotes={serializedQuotes}
         updateStatusAction={updateStatusAction}
         customersForLink={customersForLink}
-        linkLeadAction={linkLeadAction}
+        linkSalesIntakeAction={linkSalesIntakeAction}
         matchHints={matchHints}
         activeQuoteWorkSurface={activeQuoteWorkSurface}
         serviceAddressContext={serviceAddressContext}

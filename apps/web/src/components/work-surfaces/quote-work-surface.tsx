@@ -8,14 +8,14 @@
  * Modes change density / surrounding context, never core actions.
  *
  *   compact   — Workstation drawer
- *   standard  — Quotes list popup, Lead Quote tab embed
+ *   standard  — Quotes list popup, Sales Intake Quote tab embed
  *   full      — Quote full page (`/quotes/[quoteId]`) — the entire workspace body
  *
  * The surface owns the same five tabs the full Quote page used to render
  * separately:
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
- *   - Customer & Lead — customer card + lead intake context
+ *   - Customer & Sales Intake — customer card + sales intake intake context
  *   - Send & Accept   — inline Send/Approve + checkpoint history + preview link
  *   - Record          — archive/restore + internal notes + record details
  *
@@ -30,7 +30,7 @@
  *   - OPEN_JOB (job page)
  *
  * Workspace-safe mutations (every mode — actions return structured state
- * instead of `redirect()`, so popup/drawer/lead-tab containers stay open):
+ * instead of `redirect()`, so popup/drawer/sales-intake-tab containers stay open):
  *   - line item add / edit / delete (`QuoteLineItemsWorkspaceEditor` in
  *     `standard`/`compact`; `QuoteDraftWorkspaceControls` in `full` — the
  *     full-page editor's redirecting form actions are a no-op when the user
@@ -49,7 +49,7 @@
  *
  * After every workspace-safe mutation, the surface calls `router.refresh()`
  * (always) and the optional `onWorkSurfaceMutated` prop (when supplied by
- * a popup/drawer/lead-tab container that lazy-loaded its
+ * a popup/drawer/sales-intake-tab container that lazy-loaded its
  * `QuoteWorkSurfaceData` payload via `loadQuoteWorkSurfaceAction`).
  */
 import { useCallback, useEffect, useRef, useState, useActionState } from "react";
@@ -131,9 +131,9 @@ export type QuoteWorkSurfaceProps = {
   workspaceTabs: QuoteWorkspaceTabData;
   /**
    * Suppress the `mode="standard"` internal identity row when the container
-   * chrome already prints the quote's status/title/customer/lead (e.g. the
-   * Quotes list popup chrome). Default `false` preserves the embedded Lead
-   * Quote tab UX, where the surrounding Lead container shows lead identity
+   * chrome already prints the quote's status/title/customer/sales intake (e.g. the
+   * Quotes list popup chrome). Default `false` preserves the embedded Sales Intake
+   * Quote tab UX, where the surrounding Sales Intake container shows sales intake identity
    * and the quote needs its own.
    */
   suppressIdentityRow?: boolean;
@@ -142,7 +142,7 @@ export type QuoteWorkSurfaceProps = {
   /**
    * Called after a workspace-safe mutation (line item add/edit/delete,
    * inline send/approve) so the container can re-fetch its lazy-loaded
-   * QuoteWorkSurfaceData payload. Required for popup/drawer/lead-tab
+   * QuoteWorkSurfaceData payload. Required for popup/drawer/sales-intake-tab
    * containers that load via `loadQuoteWorkSurfaceAction`. Server-rendered
    * full-page and Workstation containers can omit this — `revalidatePath`
    * + `router.refresh()` already covers them — but providing it is
@@ -150,19 +150,19 @@ export type QuoteWorkSurfaceProps = {
    */
   onWorkSurfaceMutated?: () => void;
   /**
-   * When true, the surface is rendered inside the Lead workspace Quote tab.
+   * When true, the surface is rendered inside the Sales Intake workspace Quote tab.
    * Lets the surface defer service-address ownership to the surrounding
-   * Lead Customer Info area: the missing-address CTA routes back to the
-   * Lead block instead of opening a quote-owned dialog, and the present-
-   * address callout is suppressed (the Lead shell already shows it).
+   * Sales Intake Customer Info area: the missing-address CTA routes back to the
+   * Sales Intake block instead of opening a quote-owned dialog, and the present-
+   * address callout is suppressed (the Sales Intake shell already shows it).
    *
    * Optional + defaults to `false` so Workstation / standalone Quote page
    * usage is unchanged.
    */
-  embeddedInLead?: boolean;
+  embeddedInSalesIntake?: boolean;
   /**
-   * Required when `embeddedInLead` is true — handler invoked by the
-   * embedded missing-address CTA so the Lead workspace can switch to the
+   * Required when `embeddedInSalesIntake` is true — handler invoked by the
+   * embedded missing-address CTA so the Sales Intake workspace can switch to the
    * Customer Info tab and scroll the Service address block into view.
    */
   onRequestServiceAddress?: () => void;
@@ -173,7 +173,7 @@ export type QuoteWorkSurfaceProps = {
 const TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
-  { id: "context", label: "Customer & Lead" },
+  { id: "context", label: "Customer & Sales Intake" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },
 ];
@@ -306,7 +306,8 @@ function QuoteProposalPreviewEmbedded({
       )}
 
       <div className="border-t border-border pt-4">
-        <p className="text-[0.65rem] leading-relaxed text-foreground-subtle">
+        <p className={sectionLabelClass}>Internal note</p>
+        <p className="mt-1 text-[0.65rem] leading-relaxed text-foreground-subtle">
           This is an internal preview of the customer proposal. E-sign and automated
           delivery are not wired in this build.
         </p>
@@ -706,29 +707,29 @@ function NextStepCard({
 function QuoteJobsiteCallout({
   quote,
   onMutated,
-  embeddedInLead = false,
+  embeddedInSalesIntake = false,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
   onMutated?: () => void;
-  embeddedInLead?: boolean;
+  embeddedInSalesIntake?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
 
-  /* When the Quote is embedded inside the Lead workspace AND the Lead
+  /* When the Quote is embedded inside the Sales Intake workspace AND the Sales Intake
    * shell already shows the address prominently, suppress the present-
-   * address card here. The Lead Customer Info block owns it. */
-  if (embeddedInLead && hasLine) {
+   * address card here. The Sales Intake Customer Info block owns it. */
+  if (embeddedInSalesIntake && hasLine) {
     return null;
   }
 
-  /* Embedded missing-address: route the user back to the Lead Customer Info
+  /* Embedded missing-address: route the user back to the Sales Intake Customer Info
    * service-address block instead of opening a quote-owned dialog. The
    * primary CTA copy makes ownership obvious. */
-  if (embeddedInLead && !hasLine && onRequestServiceAddress) {
+  if (embeddedInSalesIntake && !hasLine && onRequestServiceAddress) {
     return (
       <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex gap-3">
@@ -775,13 +776,13 @@ function QuoteJobsiteCallout({
                       Add service address
                     </button>
                   ) : null}
-                  {quote.leadHref && !quote.canAddServiceAddress ? (
-                    <Link href={`${quote.leadHref}/edit`} className={primaryBtnClass}>
+                  {quote.salesIntakeHref && !quote.canAddServiceAddress ? (
+                    <Link href={`${quote.salesIntakeHref}/edit`} className={primaryBtnClass}>
                       Add on request
                     </Link>
                   ) : null}
-                  {quote.leadHref && quote.canAddServiceAddress ? (
-                    <Link href={`${quote.leadHref}/edit`} className={secondaryBtnClass}>
+                  {quote.salesIntakeHref && quote.canAddServiceAddress ? (
+                    <Link href={`${quote.salesIntakeHref}/edit`} className={secondaryBtnClass}>
                       Edit request record
                     </Link>
                   ) : null}
@@ -817,8 +818,8 @@ function FactsGrid({
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
 }) {
   const { signals } = readiness;
-  const leadLabel =
-    quote.leadTitle ?? (mode === "standard" ? "Inside this lead" : "—");
+  const salesIntakeLabel =
+    quote.salesIntakeTitle ?? (mode === "standard" ? "Inside this intake" : "—");
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -848,8 +849,8 @@ function FactsGrid({
         onClick={() => onSwitchToTab("context")}
         className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background"
       >
-        <p className={`${sectionLabelClass} mb-0.5`}>Lead</p>
-        <p className="truncate text-sm font-medium text-foreground">{leadLabel}</p>
+        <p className={`${sectionLabelClass} mb-0.5`}>Intake</p>
+        <p className="truncate text-sm font-medium text-foreground">{salesIntakeLabel}</p>
       </button>
       <div className="rounded-lg border border-border bg-surface p-3">
         <p className={`${sectionLabelClass} mb-0.5`}>Job</p>
@@ -879,7 +880,7 @@ function OverviewTab({
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
   onMutated,
-  embeddedInLead,
+  embeddedInSalesIntake,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
@@ -890,7 +891,7 @@ function OverviewTab({
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
-  embeddedInLead?: boolean;
+  embeddedInSalesIntake?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
   const isFull = mode === "full";
@@ -916,7 +917,7 @@ function OverviewTab({
       <QuoteJobsiteCallout
         quote={quote}
         onMutated={onMutated}
-        embeddedInLead={embeddedInLead}
+        embeddedInSalesIntake={embeddedInSalesIntake}
         onRequestServiceAddress={onRequestServiceAddress}
       />
 
@@ -1030,7 +1031,7 @@ function ScopeTab({
     isArchived,
     customerDocumentTitle,
     internalNotes,
-    hasLeadNotes,
+    hasSalesIntakeNotes,
     subtotalCents,
     totalCents,
     lineItems,
@@ -1054,7 +1055,7 @@ function ScopeTab({
         initialTitle={quote.title}
         initialInternalNotes={internalNotes}
         initialCustomerDocumentTitle={customerDocumentTitle}
-        hasLeadNotes={hasLeadNotes}
+        hasSalesIntakeNotes={hasSalesIntakeNotes}
         subtotalCents={subtotalCents}
         totalCents={totalCents}
         lineItems={lineItems}
@@ -1137,7 +1138,7 @@ function ScopeTab({
   /* Standard / compact + DRAFT — workspace-safe inline editor. Add / Edit /
    * Delete and Scope Library Apply-template submit through `*WorkspaceAction`
    * server actions and call `onMutated()` so the surrounding popup/drawer/
-   * lead-tab can re-load its `QuoteWorkSurfaceData` payload. Per-line
+   * sales-intake-tab can re-load its `QuoteWorkSurfaceData` payload. Per-line
    * execution editing is also supported in-place. */
   if (isCommercialEditable) {
     return (
@@ -1236,29 +1237,29 @@ function ScopeTab({
   );
 }
 
-/* ─── Tab: Customer & Lead ─────────────────────────────────────────────── */
+/* ─── Tab: Customer & Sales Intake ─────────────────────────────────────────────── */
 
 function ContextTab({
   quote,
   workspaceTabs,
   onMutated,
-  embeddedInLead,
+  embeddedInSalesIntake,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   onMutated?: () => void;
-  embeddedInLead?: boolean;
+  embeddedInSalesIntake?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
-  const { customerName, customerHref, leadIntake } = workspaceTabs;
+  const { customerName, customerHref, salesIntake } = workspaceTabs;
 
   return (
     <div className="space-y-4">
       <QuoteJobsiteCallout
         quote={quote}
         onMutated={onMutated}
-        embeddedInLead={embeddedInLead}
+        embeddedInSalesIntake={embeddedInSalesIntake}
         onRequestServiceAddress={onRequestServiceAddress}
       />
 
@@ -1329,56 +1330,56 @@ function ContextTab({
         )}
       </div>
 
-      {/* Lead */}
+      {/* Sales Intake */}
       <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-2`}>Lead</p>
-        {leadIntake ? (
+        <p className={`${sectionLabelClass} mb-2`}>Sales Intake</p>
+        {salesIntake ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
               <div className="min-w-0">
-                <p className={sectionLabelClass}>Linked lead</p>
+                <p className={sectionLabelClass}>Linked sales intake</p>
                 <p className="mt-1 truncate text-sm font-medium text-foreground">
-                  {leadIntake.title}
+                  {salesIntake.title}
                 </p>
               </div>
-              <Link href={leadIntake.href} className={listLinkClass}>
-                Lead record
+              <Link href={salesIntake.href} className={listLinkClass}>
+                Intake record
                 <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
               </Link>
             </div>
 
             {/* Intake context */}
             <div className="rounded-lg border border-border bg-foreground/[0.01] px-4 py-4">
-              <p className={`${sectionLabelClass} mb-3`}>Lead intake context</p>
+              <p className={`${sectionLabelClass} mb-3`}>Sales intake context</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-3">
-                  {leadIntake.source ? (
+                  {salesIntake.source ? (
                     <div>
                       <p className={sectionLabelClass}>Source</p>
                       <p className="mt-0.5 text-sm text-foreground">
-                        {leadIntake.source}
+                        {salesIntake.source}
                       </p>
                     </div>
                   ) : null}
-                  {leadIntake.contactName ||
-                  leadIntake.email ||
-                  leadIntake.phone ? (
+                  {salesIntake.contactName ||
+                  salesIntake.email ||
+                  salesIntake.phone ? (
                     <div>
                       <p className={sectionLabelClass}>Contact</p>
                       <div className="mt-0.5 space-y-0.5 text-sm">
-                        {leadIntake.contactName ? (
+                        {salesIntake.contactName ? (
                           <p className="text-foreground">
-                            {leadIntake.contactName}
+                            {salesIntake.contactName}
                           </p>
                         ) : null}
-                        {leadIntake.email ? (
+                        {salesIntake.email ? (
                           <p className="text-foreground-muted break-all">
-                            {leadIntake.email}
+                            {salesIntake.email}
                           </p>
                         ) : null}
-                        {leadIntake.phone ? (
+                        {salesIntake.phone ? (
                           <p className="text-foreground-muted">
-                            {leadIntake.phone}
+                            {salesIntake.phone}
                           </p>
                         ) : null}
                       </div>
@@ -1388,9 +1389,9 @@ function ContextTab({
                 <div>
                   <p className={sectionLabelClass}>Intake notes</p>
                   <div className="mt-1">
-                    {leadIntake.notes ? (
+                    {salesIntake.notes ? (
                       <div className="rounded border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-foreground">
-                        {leadIntake.notes}
+                        {salesIntake.notes}
                       </div>
                     ) : (
                       <p className="text-sm italic text-foreground-muted">
@@ -1405,14 +1406,14 @@ function ContextTab({
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-5 text-center">
             <p className="text-sm text-foreground-muted">
-              No lead linked to this quote.
+              No sales intake linked to this quote.
             </p>
             <p className="mt-1 text-xs text-foreground-subtle">
               Linking is optional. Use it when this quote comes from a tracked
-              lead.
+              sales intake.
             </p>
             <Link href="/sales" className={`mt-3 ${listLinkClass}`}>
-              Leads
+              Sales Intakes
             </Link>
           </div>
         )}
@@ -1463,8 +1464,8 @@ function CheckpointList({
 
 /**
  * Workspace-safe activate button shown only when the quote is approved AND
- * the surface is embedded inside a Lead workspace. Calls the same activation
- * transaction as the full-page form, but stays in the Lead workspace and
+ * the surface is embedded inside a Sales Intake workspace. Calls the same activation
+ * transaction as the full-page form, but stays in the Sales Intake workspace and
  * shows an in-place success card with an Open job link.
  *
  * The full-page execution-review activation form continues to redirect — this
@@ -1556,7 +1557,7 @@ function SendAcceptTab({
   activePreview,
   onPreviewChange,
   onMutated,
-  embeddedInLead,
+  embeddedInSalesIntake,
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
@@ -1565,7 +1566,7 @@ function SendAcceptTab({
   activePreview: "none" | "proposal" | "execution";
   onPreviewChange: (preview: "none" | "proposal" | "execution") => void;
   onMutated?: () => void;
-  embeddedInLead?: boolean;
+  embeddedInSalesIntake?: boolean;
 }) {
   const { isArchived, sendCheckpoints, approvalCheckpoints } = workspaceTabs;
 
@@ -1735,11 +1736,11 @@ function SendAcceptTab({
           </div>
         ) : null}
 
-        {/* Embedded-only inline Activate job — keeps the user in the Lead
+        {/* Embedded-only inline Activate job — keeps the user in the Sales Intake
             workspace; the full quote page continues to use the redirecting
             QuoteActivateJobForm via the execution-review route. Only shown
             when the readiness story says activation is the next step. */}
-        {embeddedInLead &&
+        {embeddedInSalesIntake &&
         !isArchived &&
         readiness.state === "APPROVED_READY_TO_ACTIVATE" ? (
           <div className="mb-4">
@@ -1978,7 +1979,7 @@ export function QuoteWorkSurface({
   suppressIdentityRow = false,
   initialTab = "overview",
   onWorkSurfaceMutated,
-  embeddedInLead = false,
+  embeddedInSalesIntake = false,
   onRequestServiceAddress,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
@@ -1988,7 +1989,7 @@ export function QuoteWorkSurface({
   const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
     if (
       initialTab === "overview" &&
-      embeddedInLead &&
+      embeddedInSalesIntake &&
       workspaceTabs.lineItems.length === 0
     ) {
       return "scope";
@@ -1997,7 +1998,7 @@ export function QuoteWorkSurface({
   });
 
   const visibleTabs = TABS.filter((t) => {
-    if (embeddedInLead && t.id === "context") return false;
+    if (embeddedInSalesIntake && t.id === "context") return false;
     return true;
   });
   const [activePreview, setActivePreview] = useState<
@@ -2029,9 +2030,9 @@ export function QuoteWorkSurface({
     setShouldOpenScopeLibraryPicker(false);
 
   /* Always invalidate SSR-rendered surfaces (Workstation drawer, full Quote
-   * page, full Lead page Quote tab) and additionally let the parent
+   * page, full Sales Intake page Quote tab) and additionally let the parent
    * container re-fetch its lazy `loadQuoteWorkSurfaceAction` payload for
-   * popup/drawer/lead-tab cases. This handler is the single source of
+   * popup/drawer/sales-intake-tab cases. This handler is the single source of
    * truth for "the quote just changed inside the surface — refresh
    * everything that displays it without navigating away". */
   const handleSurfaceMutated = useCallback(() => {
@@ -2082,7 +2083,7 @@ export function QuoteWorkSurface({
           onRequestAddLineItem={handleRequestAddLineItem}
           onRequestScopeLibraryPicker={handleRequestScopeLibraryPicker}
           onMutated={handleSurfaceMutated}
-          embeddedInLead={embeddedInLead}
+          embeddedInSalesIntake={embeddedInSalesIntake}
           onRequestServiceAddress={onRequestServiceAddress}
         />
       )}
@@ -2104,7 +2105,7 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           onMutated={handleSurfaceMutated}
-          embeddedInLead={embeddedInLead}
+          embeddedInSalesIntake={embeddedInSalesIntake}
           onRequestServiceAddress={onRequestServiceAddress}
         />
       )}
@@ -2117,7 +2118,7 @@ export function QuoteWorkSurface({
           activePreview={activePreview}
           onPreviewChange={setActivePreview}
           onMutated={handleSurfaceMutated}
-          embeddedInLead={embeddedInLead}
+          embeddedInSalesIntake={embeddedInSalesIntake}
         />
       )}
       {activeTab === "record" && (

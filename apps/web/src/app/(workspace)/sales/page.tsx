@@ -6,15 +6,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { SignalCard } from "@/components/ui/signal-card";
-import { LeadsScaffoldingDialog } from "@/components/sales/sales-scaffolding-dialog";
+import { SalesIntakeScaffoldingDialog } from "@/components/sales/sales-scaffolding-dialog";
 import {
-  LeadSourcesProvider,
-  LeadSourcesToolbarButton,
+  SalesIntakeSourcesProvider,
+  SalesIntakeSourcesToolbarButton,
 } from "@/components/sales/sales-sources-provider";
 import { PublicRequestLinkPanel } from "@/components/sales/public-request-link-panel";
 import {
-  LeadsListClient,
-  type SerializedLeadRow,
+  SalesIntakesListClient,
+  type SerializedSalesIntakeRow,
 } from "@/components/sales/sales-list-client";
 import {
   QuotesListClient,
@@ -24,15 +24,15 @@ import { QuoteListFiltersClient } from "@/components/quotes/quote-list-filters-c
 import { QuoteListSearchForm } from "@/components/quotes/quote-list-search-form";
 import { resolvePublicSiteBaseUrl } from "@/lib/public-site-base-url";
 import {
-  formatLeadSource,
-  formatLeadStatus,
-  leadStatusBadgeTone,
-} from "@/lib/lead-display";
+  formatSalesIntakeSource,
+  formatSalesIntakeStatus,
+  salesIntakeStatusBadgeTone,
+} from "@/lib/sales-intake-display";
 import {
-  getLeadCommercialProgress,
-  resolveLeadCommercialProgressActionHref,
-  type LeadCommercialProgressAction,
-} from "@/lib/lead-commercial-progress";
+  getSalesIntakeCommercialProgress,
+  resolveSalesIntakeCommercialProgressActionHref,
+  type SalesIntakeCommercialProgressAction,
+} from "@/lib/sales-commercial-progress";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -52,7 +52,7 @@ import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { formatCompactAge } from "@/lib/compact-age";
-import { jobsiteLineFromLeadIntake } from "@/lib/jobsite-address";
+import { jobsiteLineFromSalesIntake } from "@/lib/jobsite-address";
 import { Inbox, FileText, Search } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -140,7 +140,7 @@ export default async function SalesHubPage({
         orderBy,
         include: {
           customer: { select: { id: true, displayName: true, companyName: true } },
-          lead: { select: { id: true, title: true, contactName: true, createdAt: true } },
+          salesIntake: { select: { id: true, title: true, contactName: true, createdAt: true } },
           job: { select: { id: true, status: true, organizationId: true } },
           _count: { select: { lineItems: true } },
         },
@@ -175,7 +175,7 @@ export default async function SalesHubPage({
         revisionDriftSinceLastProof: false,
       });
 
-      const primaryIdentity = r.lead?.title || r.customer?.displayName || r.title;
+      const primaryIdentity = r.salesIntake?.title || r.customer?.displayName || r.title;
       const secondaryIdentity = r.title !== primaryIdentity ? r.title : null;
 
       const contextBits: string[] = [];
@@ -184,18 +184,18 @@ export default async function SalesHubPage({
         const co = r.customer.companyName?.trim();
         contextBits.push(co ? `${c} · ${co}` : c);
       }
-      if (r.lead) {
-        const leadBits = [`Lead: ${r.lead.title}`];
-        const cn = r.lead.contactName?.trim();
-        if (cn) leadBits.push(cn);
-        contextBits.push(leadBits.join(" · "));
+      if (r.salesIntake) {
+        const salesIntakeBits = [`Sales Intake: ${r.salesIntake.title}`];
+        const cn = r.salesIntake.contactName?.trim();
+        if (cn) salesIntakeBits.push(cn);
+        contextBits.push(salesIntakeBits.join(" · "));
       }
       const contextLine =
-        contextBits.length > 0 ? contextBits.join(" · ") : "No customer or lead linked";
+        contextBits.length > 0 ? contextBits.join(" · ") : "No customer or sales intake linked";
 
       const quoteAge = formatCompactAge(r.createdAt, now);
-      const ageLine = r.lead
-        ? `Lead ${formatCompactAge(r.lead.createdAt, now)} · Quote ${quoteAge}`
+      const ageLine = r.salesIntake
+        ? `Sales Intake ${formatCompactAge(r.salesIntake.createdAt, now)} · Quote ${quoteAge}`
         : `Quote ${quoteAge}`;
 
       return {
@@ -267,7 +267,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Intake (Leads)
+              Intake (Sales Intakes)
             </Link>
             <Link
               href="/sales?tab=proposals"
@@ -360,7 +360,7 @@ export default async function SalesHubPage({
     );
   }
 
-  // Default: Intake (Leads) tab
+  // Default: Intake (Sales Intakes) tab
   const publicSiteBaseUrl = await resolvePublicSiteBaseUrl();
   const publicRequestGate = await db.publicRequestSettings.findUnique({
     where: { organizationId: ctx.organizationId },
@@ -368,7 +368,7 @@ export default async function SalesHubPage({
   });
   const publicRequestLive = publicRequestGate ? publicRequestGate.enabled : true;
 
-  const leads = await db.lead.findMany({
+  const salesIntakes = await db.salesIntake.findMany({
     where: { organizationId: ctx.organizationId },
     orderBy: { createdAt: "desc" },
     include: {
@@ -389,21 +389,23 @@ export default async function SalesHubPage({
     },
   });
 
-  const intakeLeads = leads.filter((l) => l.quotes.length === 0);
+  // Intake queue rows exclude graduated sales intakes (any linked quote). An open
+  // intake workspace must stay mounted even when its row drops off this list.
+  const intakeSalesIntakes = salesIntakes.filter((l) => l.quotes.length === 0);
 
   function serializeProgressAction(
-    action: LeadCommercialProgressAction,
-    leadId: string,
-  ): SerializedLeadRow["progressPrimaryAction"] {
-    const href = resolveLeadCommercialProgressActionHref(action, { leadId });
+    action: SalesIntakeCommercialProgressAction,
+    salesIntakeId: string,
+  ): SerializedSalesIntakeRow["progressPrimaryAction"] {
+    const href = resolveSalesIntakeCommercialProgressActionHref(action, { salesIntakeId });
     const opensQuoteTab =
       action.kind === "OPEN_DRAFT_QUOTE" || action.kind === "OPEN_QUOTE" || action.kind === "START_QUOTE";
     const opensContactTab = action.kind === "ATTACH_OR_CREATE_CUSTOMER" || action.kind === "EDIT_CONTACT_INFO";
     return { href, label: action.label, opensQuoteTab, opensContactTab };
   }
 
-  const serializedLeads: SerializedLeadRow[] = intakeLeads.map((lead) => {
-    const progressQuoteInputs = lead.quotes.map((q) => ({
+  const serializedSalesIntakes: SerializedSalesIntakeRow[] = intakeSalesIntakes.map((salesIntake) => {
+    const progressQuoteInputs = salesIntake.quotes.map((q) => ({
       id: q.id,
       title: q.title,
       status: q.status,
@@ -413,46 +415,46 @@ export default async function SalesHubPage({
       job: q.job && q.job.organizationId === ctx.organizationId ? { id: q.job.id, status: q.job.status } : null,
     }));
 
-    const progress = getLeadCommercialProgress({
-      lead: {
-        status: lead.status,
-        customerId: lead.customerId,
-        email: lead.email,
-        phone: lead.phone,
+    const progress = getSalesIntakeCommercialProgress({
+      salesIntake: {
+        status: salesIntake.status,
+        customerId: salesIntake.customerId,
+        email: salesIntake.email,
+        phone: salesIntake.phone,
       },
       quotes: progressQuoteInputs,
     });
 
-    const customer = lead.customer;
+    const customer = salesIntake.customer;
 
     return {
-      id: lead.id,
-      title: lead.title,
-      contactName: lead.contactName,
-      email: lead.email,
-      phone: lead.phone,
-      notes: lead.notes,
-      source: lead.source,
-      sourceLabel: formatLeadSource(lead.source),
-      statusLabel: formatLeadStatus(lead.status),
-      statusTone: leadStatusBadgeTone(lead.status),
-      customerId: lead.customerId,
+      id: salesIntake.id,
+      title: salesIntake.title,
+      contactName: salesIntake.contactName,
+      email: salesIntake.email,
+      phone: salesIntake.phone,
+      notes: salesIntake.notes,
+      source: salesIntake.source,
+      sourceLabel: formatSalesIntakeSource(salesIntake.source),
+      statusLabel: formatSalesIntakeStatus(salesIntake.status),
+      statusTone: salesIntakeStatusBadgeTone(salesIntake.status),
+      customerId: salesIntake.customerId,
       customerDisplayName: customer?.displayName ?? null,
       customerHref: customer ? `/customers/${customer.id}` : null,
-      createdAtLabel: lead.createdAt.toLocaleDateString("en-US", {
+      createdAtLabel: salesIntake.createdAt.toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
       }),
-      ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
+      ageLabel: `Age ${formatCompactAge(salesIntake.createdAt, now)}`,
       progressLabel: progress.label,
       progressDescription: progress.description,
       progressTone: progress.badgeTone,
-      progressPrimaryAction: progress.primaryAction ? serializeProgressAction(progress.primaryAction, lead.id) : null,
+      progressPrimaryAction: progress.primaryAction ? serializeProgressAction(progress.primaryAction, salesIntake.id) : null,
       progressSecondaryAction: progress.secondaryAction
-        ? serializeProgressAction(progress.secondaryAction, lead.id)
+        ? serializeProgressAction(progress.secondaryAction, salesIntake.id)
         : null,
-      quotes: lead.quotes
+      quotes: salesIntake.quotes
         .filter((q) => q.status !== "ARCHIVED")
         .map((q) => ({
           id: q.id,
@@ -466,13 +468,13 @@ export default async function SalesHubPage({
       progressState: progress.state,
       activeJobId: progress.activeJob?.id ?? null,
       activeJobStatus: progress.activeJob?.status ?? null,
-      leadHref: `/sales/${lead.id}`,
-      newQuoteHref: `/sales?tab=proposals&new=true?leadId=${encodeURIComponent(lead.id)}`,
-      jobsiteAddressLine: jobsiteLineFromLeadIntake({
-        publicIntakeServiceLocation: lead.publicIntakeServiceLocation,
-        notes: lead.notes,
+      salesIntakeHref: `/sales/${salesIntake.id}`,
+      newQuoteHref: `/sales?tab=proposals&new=true?salesIntakeId=${encodeURIComponent(salesIntake.id)}`,
+      jobsiteAddressLine: jobsiteLineFromSalesIntake({
+        publicIntakeServiceLocation: salesIntake.publicIntakeServiceLocation,
+        notes: salesIntake.notes,
       }),
-      valueLabel: lead.quotes.length > 0 ? formatMoneyCents(lead.quotes[0].totalCents) : null,
+      valueLabel: salesIntake.quotes.length > 0 ? formatMoneyCents(salesIntake.quotes[0].totalCents) : null,
     };
   });
 
@@ -485,10 +487,10 @@ export default async function SalesHubPage({
         publicRequestLive={publicRequestLive}
       />
       <WorkspacePanel padding="compact">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">More lead sources (soon)</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">More intake sources (soon)</p>
         <p className="mt-2 text-sm text-foreground-muted">
-          Your Public Request Link sends leads here automatically. Email, phone, text, and file imports will land in
-          this queue as integrations roll out. You can always add leads by hand from the New lead action.
+          Your Public Request Link sends sales intakes here automatically. Email, phone, text, and file imports will land in
+          this queue as integrations roll out. You can always add sales intakes by hand from the New sales intake action.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <PlaceholderButton title="CSV import is not connected in this build.">CSV import (soon)</PlaceholderButton>
@@ -498,7 +500,7 @@ export default async function SalesHubPage({
   );
 
   return (
-    <LeadSourcesProvider sourcesPanel={sourcesPanel}>
+    <SalesIntakeSourcesProvider sourcesPanel={sourcesPanel}>
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Intake" }]} />
         <PageHeader
@@ -515,10 +517,10 @@ export default async function SalesHubPage({
                 Proposals
               </Link>
               <Link href="/sales/new" className={primaryLinkClass}>
-                New lead
+                New sales intake
               </Link>
-              <LeadSourcesToolbarButton />
-              <LeadsScaffoldingDialog />
+              <SalesIntakeSourcesToolbarButton />
+              <SalesIntakeScaffoldingDialog />
             </>
           }
         />
@@ -533,7 +535,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Intake (Leads)
+              Intake (Sales Intakes)
             </Link>
             <Link
               href="/sales?tab=proposals"
@@ -549,30 +551,12 @@ export default async function SalesHubPage({
         </div>
 
         <WorkspacePanel padding="none" className="mb-6 overflow-hidden">
-          {intakeLeads.length === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                icon={Inbox}
-                title="Queue is empty"
-                description={leads.length > 0 ? "All active leads have progressed to proposals." : "No leads yet. Add one when a call, walk-in, or message comes in."}
-              >
-                <div className="flex flex-col items-center gap-4">
-                  {leads.length > 0 && (
-                    <Link href="/sales?tab=proposals" className={mutedLinkClass}>
-                      View Proposals
-                    </Link>
-                  )}
-                  <Link href="/sales/new" className={primaryLinkClass}>
-                    New lead
-                  </Link>
-                </div>
-              </EmptyState>
-            </div>
-          ) : (
-            <LeadsListClient leads={serializedLeads} />
-          )}
+          <SalesIntakesListClient
+            salesIntakes={serializedSalesIntakes}
+            orgHasSalesIntakes={salesIntakes.length > 0}
+          />
         </WorkspacePanel>
       </div>
-    </LeadSourcesProvider>
+    </SalesIntakeSourcesProvider>
   );
 }

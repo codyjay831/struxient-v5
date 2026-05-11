@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
-import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
+import type { SalesIntakeFormState } from "@/app/(workspace)/sales/sales-form-actions";
 import type { WorkspaceFormState } from "@/app/(workspace)/sales/sales-workspace-actions";
-import { linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/sales/sales-workspace-actions";
+import { linkSalesIntakeToCustomerWorkspaceAction } from "@/app/(workspace)/sales/sales-workspace-actions";
 import { EmptyState } from "@/components/ui/empty-state";
 import { handoffPrimaryLinkClass } from "@/components/ui/handoff-panel";
 import { ArrowRight, UserRound } from "lucide-react";
@@ -18,16 +18,16 @@ const primaryButtonClass =
 const mutedLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-const initialActionState: LeadFormState = {};
+const initialActionState: SalesIntakeFormState = {};
 
-export function LeadLinkCustomerForm({
+export function SalesIntakeLinkCustomerForm({
   linkFormAction,
   customers,
 }: {
   linkFormAction: (
-    prevState: LeadFormState,
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
+  ) => Promise<SalesIntakeFormState>;
   customers: { id: string; displayName: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(linkFormAction, initialActionState);
@@ -62,10 +62,10 @@ export function LeadLinkCustomerForm({
       ) : null}
 
       <div>
-        <label className="block" htmlFor="lead-link-customer-select">
+        <label className="block" htmlFor="sales-intake-link-customer-select">
           <span className={fieldLabelClass}>Customer</span>
           <select
-            id="lead-link-customer-select"
+            id="sales-intake-link-customer-select"
             name="customerId"
             required
             className={controlClass}
@@ -103,19 +103,19 @@ export function LeadLinkCustomerForm({
 const initialWorkspaceState: WorkspaceFormState = {};
 
 /**
- * Same flow as {@link LeadLinkCustomerForm} but uses workspace-safe action + `onSuccess`
+ * Same flow as {@link SalesIntakeLinkCustomerForm} but uses workspace-safe action + `onSuccess`
  * (e.g. `router.refresh()`) instead of redirecting after link.
  */
-export function LeadLinkCustomerWorkspaceForm({
-  leadId,
+export function SalesIntakeLinkCustomerWorkspaceForm({
+  salesIntakeId,
   customers,
   onSuccess,
 }: {
-  leadId: string;
+  salesIntakeId: string;
   customers: { id: string; displayName: string }[];
   onSuccess: () => void;
 }) {
-  const boundAction = linkLeadToCustomerWorkspaceAction.bind(null, leadId);
+  const boundAction = linkSalesIntakeToCustomerWorkspaceAction.bind(null, salesIntakeId);
   const [state, formAction, isPending] = useActionState(boundAction, initialWorkspaceState);
 
   useEffect(() => {
@@ -152,10 +152,10 @@ export function LeadLinkCustomerWorkspaceForm({
       ) : null}
 
       <div>
-        <label className="block" htmlFor="lead-link-customer-workspace-select">
+        <label className="block" htmlFor="sales-intake-link-customer-workspace-select">
           <span className={fieldLabelClass}>Select customer</span>
           <select
-            id="lead-link-customer-workspace-select"
+            id="sales-intake-link-customer-workspace-select"
             name="customerId"
             required
             className={controlClass}

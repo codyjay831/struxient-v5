@@ -10,15 +10,15 @@ import {
 } from "@prisma/client";
 import { randomBytes } from "crypto";
 import {
-  getLeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "@/lib/lead-commercial-progress";
-import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+  getSalesIntakeCommercialProgress,
+  type SalesIntakeProgressQuoteInput,
+} from "@/lib/sales-commercial-progress";
+import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
 import {
-  attachIntakeServiceLocationToCustomer,
-  intakeSnapshotForCustomerFromLead,
+  attachIntakeServiceLocationToCustomerFromSalesIntake,
+  intakeSnapshotForCustomerFromSalesIntake,
   formatPrimaryServiceLocationLineForQuoteNotes,
-} from "@/lib/customer-service-location-from-lead";
+} from "@/lib/customer-service-location-from-sales-intake";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parsePositiveQuantityString, parseUsdStringToCents } from "@/lib/quote-money";
@@ -242,31 +242,31 @@ function parseLineItemTemplateUpsertForm(
 }
 
 function defaultTitleFromContext(params: {
-  lead: { title: string } | null;
+  salesIntake: { title: string } | null;
   customer: { displayName: string } | null;
 }): string {
-  const { lead, customer } = params;
-  if (customer && lead) {
+  const { salesIntake, customer } = params;
+  if (customer && salesIntake) {
     return `Quote — ${customer.displayName}`;
   }
   if (customer) {
     return `Quote — ${customer.displayName}`;
   }
-  if (lead) {
-    return `Quote — ${lead.title}`;
+  if (salesIntake) {
+    return `Quote — ${salesIntake.title}`;
   }
   return "";
 }
 
 /** Minimal DB surface for draft resolution + insert (plain client or interactive tx). */
-type QuoteDraftDb = Pick<typeof db, "lead" | "customer" | "quote">;
+type QuoteDraftDb = Pick<typeof db, "salesIntake" | "customer" | "quote">;
 
 type OrgScope = { id: string };
 
 type ResolvedDraftQuoteInsert = {
   organizationId: string;
   customerId: string | null;
-  leadId: string | null;
+  salesIntakeId: string | null;
   title: string;
   internalNotes: string | null;
 };
@@ -275,28 +275,28 @@ async function resolveCreateQuoteDraftFromFormFields(
   exec: QuoteDraftDb,
   org: OrgScope,
   input: {
-    formLeadId: string | null;
+    formSalesIntakeId: string | null;
     formCustomerId: string | null;
-    /** Trimmed workspace title — empty string lets the server derive from lead/customer. */
+    /** Trimmed workspace title — empty string lets the server derive from sales intake/customer. */
     title: string;
     internalNotes: string | null;
   },
 ): Promise<{ ok: false; error: string } | { ok: true; data: ResolvedDraftQuoteInsert }> {
-  const { formLeadId, formCustomerId, internalNotes } = input;
+  const { formSalesIntakeId, formCustomerId, internalNotes } = input;
   let title = input.title;
 
-  const lead = formLeadId
-    ? await exec.lead.findFirst({
-        where: { id: formLeadId, organizationId: org.id },
+  const salesIntake = formSalesIntakeId
+    ? await exec.salesIntake.findFirst({
+        where: { id: formSalesIntakeId, organizationId: org.id },
         select: { id: true, title: true, customerId: true },
       })
     : null;
 
-  if (formLeadId && !lead) {
+  if (formSalesIntakeId && !salesIntake) {
     return {
       ok: false,
       error:
-        "That lead was not found in your organization. Remove stale context or start from Quotes without a lead link.",
+        "That sales intake was not found in your organization. Remove stale context or start from Quotes without a sales intake link.",
     };
   }
 
@@ -315,33 +315,33 @@ async function resolveCreateQuoteDraftFromFormFields(
     };
   }
 
-  if (lead && customer) {
-    if (lead.customerId != null && lead.customerId !== customer.id) {
+  if (salesIntake && customer) {
+    if (salesIntake.customerId != null && salesIntake.customerId !== customer.id) {
       return {
         ok: false,
         error:
-          "This lead is linked to a different customer than the one submitted. Refresh the page and try again from the lead or customer record.",
+          "This sales intake is linked to a different customer than the one submitted. Refresh the page and try again from the sales intake or customer record.",
       };
     }
   }
 
-  let resolvedLeadId: string | null = lead?.id ?? null;
+  let resolvedSalesIntakeId: string | null = salesIntake?.id ?? null;
   let resolvedCustomerId: string | null = null;
 
-  if (lead && customer) {
+  if (salesIntake && customer) {
     resolvedCustomerId = customer.id;
-  } else if (lead && !customer) {
-    resolvedLeadId = lead.id;
-    if (lead.customerId) {
+  } else if (salesIntake && !customer) {
+    resolvedSalesIntakeId = salesIntake.id;
+    if (salesIntake.customerId) {
       const linkedCustomer = await exec.customer.findFirst({
-        where: { id: lead.customerId, organizationId: org.id },
+        where: { id: salesIntake.customerId, organizationId: org.id },
         select: { id: true },
       });
       resolvedCustomerId = linkedCustomer?.id ?? null;
     } else {
       resolvedCustomerId = null;
     }
-  } else if (!lead && customer) {
+  } else if (!salesIntake && customer) {
     resolvedCustomerId = customer.id;
   }
 
@@ -356,7 +356,7 @@ async function resolveCreateQuoteDraftFromFormFields(
 
   if (!title) {
     title = defaultTitleFromContext({
-      lead,
+      salesIntake,
       customer: customerForTitle,
     });
   }
@@ -364,7 +364,7 @@ async function resolveCreateQuoteDraftFromFormFields(
   if (!title) {
     return {
       ok: false,
-      error: "Title is required when no lead or customer context is attached.",
+      error: "Title is required when no sales intake or customer context is attached.",
     };
   }
 
@@ -373,7 +373,7 @@ async function resolveCreateQuoteDraftFromFormFields(
     data: {
       organizationId: org.id,
       customerId: resolvedCustomerId,
-      leadId: resolvedLeadId,
+      salesIntakeId: resolvedSalesIntakeId,
       title,
       internalNotes,
     },
@@ -399,33 +399,33 @@ function validateResolvedDraftQuoteFields(data: ResolvedDraftQuoteInsert): strin
   return null;
 }
 
-export type PerformCreateQuoteDraftFromLeadResult =
+export type PerformCreateQuoteDraftFromSalesIntakeResult =
   | { ok: true; quoteId: string; reusedExisting: boolean }
   | { ok: false; error: string };
 
 /**
- * Org-scoped draft quote creation anchored to a lead — same resolution defaults
- * as `/quotes/new?leadId=…` and {@link createQuoteDraftAction}, without redirect.
+ * Org-scoped draft quote creation anchored to a sales intake — same resolution defaults
+ * as `/quotes/new?salesIntakeId=…` and {@link createQuoteDraftAction}, without redirect.
  *
- * When {@link getLeadCommercialProgress} already has an active linked quote,
+ * When {@link getSalesIntakeCommercialProgress} already has an active linked quote,
  * returns that id and does not insert (idempotent for double-clicks / races).
  *
  * Uses a serializable transaction so concurrent "Start quote" requests do not
- * reliably create two active drafts for the same lead window.
+ * reliably create two active drafts for the same sales intake window.
  */
-export async function performCreateQuoteDraftFromLead(
-  leadId: string,
-): Promise<PerformCreateQuoteDraftFromLeadResult> {
+export async function performCreateQuoteDraftFromSalesIntake(
+  salesIntakeId: string,
+): Promise<PerformCreateQuoteDraftFromSalesIntakeResult> {
   const ctx = await getRequestContextOrThrow();
-  const id = leadId.trim();
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { ok: false, error: "Missing lead record id." };
+    return { ok: false, error: "Missing sales intake record id." };
   }
 
   try {
     return await db.$transaction(
       async (tx) => {
-        const lead = await tx.lead.findFirst({
+        const salesIntake = await tx.salesIntake.findFirst({
           where: { id, organizationId: ctx.organizationId },
           select: {
             id: true,
@@ -455,11 +455,11 @@ export async function performCreateQuoteDraftFromLead(
           },
         });
 
-        if (!lead) {
-          return { ok: false as const, error: "That lead was not found in your organization." };
+        if (!salesIntake) {
+          return { ok: false as const, error: "That sales intake was not found in your organization." };
         }
 
-        const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+        const progressQuoteInputs: SalesIntakeProgressQuoteInput[] = salesIntake.quotes.map((q) => ({
           id: q.id,
           title: q.title,
           status: q.status,
@@ -472,12 +472,12 @@ export async function performCreateQuoteDraftFromLead(
               : null,
         }));
 
-        const progress = getLeadCommercialProgress({
-          lead: {
-            status: lead.status,
-            customerId: lead.customerId,
-            email: lead.email,
-            phone: lead.phone,
+        const progress = getSalesIntakeCommercialProgress({
+          salesIntake: {
+            status: salesIntake.status,
+            customerId: salesIntake.customerId,
+            email: salesIntake.email,
+            phone: salesIntake.phone,
           },
           quotes: progressQuoteInputs,
         });
@@ -486,7 +486,7 @@ export async function performCreateQuoteDraftFromLead(
           return {
             ok: false as const,
             error:
-              "This lead is archived or closed. Open the full lead record if you need to change its status before starting a quote.",
+              "This sales intake is archived or closed. Open the full sales intake record if you need to change its status before starting a quote.",
           };
         }
 
@@ -498,17 +498,17 @@ export async function performCreateQuoteDraftFromLead(
           };
         }
 
-        let resolvedCustomerId = lead.customerId;
+        let resolvedCustomerId = salesIntake.customerId;
 
         // Atomic Promotion: Create customer if missing
         if (!resolvedCustomerId) {
-          const prep = prepareCustomerFromLead({
-            title: lead.title,
-            contactName: lead.contactName,
-            email: lead.email,
-            phone: lead.phone,
-            notes: lead.notes,
-            source: lead.source,
+          const prep = prepareCustomerFromSalesIntake({
+            title: salesIntake.title,
+            contactName: salesIntake.contactName,
+            email: salesIntake.email,
+            phone: salesIntake.phone,
+            notes: salesIntake.notes,
+            source: salesIntake.source,
           });
 
           if (!prep.ok) {
@@ -524,17 +524,17 @@ export async function performCreateQuoteDraftFromLead(
           resolvedCustomerId = customer.id;
 
           // Carry forward service location
-          await attachIntakeServiceLocationToCustomer(tx, {
+          await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
             organizationId: ctx.organizationId,
             customerId: customer.id,
-            leadId: lead.id,
-            leadSource: lead.source,
-            snapshot: intakeSnapshotForCustomerFromLead(lead),
+            salesIntakeId: salesIntake.id,
+            salesIntakeSource: salesIntake.source,
+            snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
           });
 
-          // Mark lead as CONVERTED
-          await tx.lead.update({
-            where: { id: lead.id },
+          // Mark sales intake as CONVERTED
+          await tx.salesIntake.update({
+            where: { id: salesIntake.id },
             data: {
               customerId: customer.id,
               status: "CONVERTED",
@@ -544,7 +544,7 @@ export async function performCreateQuoteDraftFromLead(
         }
 
         const resolved = await resolveCreateQuoteDraftFromFormFields(tx, { id: ctx.organizationId }, {
-          formLeadId: lead.id,
+          formSalesIntakeId: salesIntake.id,
           formCustomerId: resolvedCustomerId,
           title: "",
           internalNotes: null,
@@ -563,7 +563,7 @@ export async function performCreateQuoteDraftFromLead(
           data: {
             organizationId: resolved.data.organizationId,
             customerId: resolved.data.customerId,
-            leadId: resolved.data.leadId,
+            salesIntakeId: resolved.data.salesIntakeId,
             status: QuoteStatus.DRAFT,
             title: resolved.data.title,
             internalNotes: resolved.data.internalNotes,
@@ -572,8 +572,8 @@ export async function performCreateQuoteDraftFromLead(
           },
         });
 
-        if (lead.suggestedTemplateIds.length > 0) {
-          for (const tid of lead.suggestedTemplateIds) {
+        if (salesIntake.suggestedTemplateIds.length > 0) {
+          for (const tid of salesIntake.suggestedTemplateIds) {
             await performApplyLineItemTemplateToQuoteTx(tx, quote.id, tid, ctx.organizationId);
           }
         }
@@ -622,7 +622,7 @@ export async function performCreateQuoteDraftFromLead(
 
 /**
  * Creates a DRAFT quote for the active development organization.
- * `leadId` / `customerId` in the form are untrusted—revalidated against org scope here.
+ * `salesIntakeId` / `customerId` in the form are untrusted—revalidated against org scope here.
  */
 export async function createQuoteDraftAction(
   _prevState: QuoteFormState,
@@ -630,13 +630,13 @@ export async function createQuoteDraftAction(
 ): Promise<QuoteFormState> {
   const ctx = await getRequestContextOrThrow();
 
-  const formLeadId = trimOrNull(formData.get("leadId"));
+  const formSalesIntakeId = trimOrNull(formData.get("salesIntakeId"));
   const formCustomerId = trimOrNull(formData.get("customerId"));
   const title = trimRequired(formData.get("title"));
   const internalNotes = trimOrNull(formData.get("internalNotes"));
 
   const resolved = await resolveCreateQuoteDraftFromFormFields(db, { id: ctx.organizationId }, {
-    formLeadId,
+    formSalesIntakeId,
     formCustomerId,
     title,
     internalNotes,
@@ -655,7 +655,7 @@ export async function createQuoteDraftAction(
     data: {
       organizationId: resolved.data.organizationId,
       customerId: resolved.data.customerId,
-      leadId: resolved.data.leadId,
+      salesIntakeId: resolved.data.salesIntakeId,
       status: QuoteStatus.DRAFT,
       title: resolved.data.title,
       internalNotes: resolved.data.internalNotes,
@@ -754,10 +754,10 @@ export async function updateDraftQuoteDetailsAction(
 }
 
 /**
- * Appends lead intake notes to internal quote notes.
+ * Appends sales intake notes to internal quote notes.
  * `quoteId` must be supplied via `.bind(null, quote.id)`.
  */
-export async function copyLeadIntakeToQuoteNotesAction(
+export async function copySalesIntakeToQuoteNotesAction(
   quoteId: string,
   _prevState: QuoteFormState,
   formData: FormData,
@@ -774,21 +774,21 @@ export async function copyLeadIntakeToQuoteNotesAction(
     await db.$transaction(async (tx) => {
       const quote = await tx.quote.findFirst({
         where: { id, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
-        select: { internalNotes: true, lead: { select: { notes: true } } },
+        select: { internalNotes: true, salesIntake: { select: { notes: true } } },
       });
 
       if (!quote) {
         throw new Error("QUOTE_NOT_FOUND");
       }
 
-      if (!quote.lead?.notes) {
-        throw new Error("NO_LEAD_NOTES");
+      if (!quote.salesIntake?.notes) {
+        throw new Error("NO_SALES_INTAKE_NOTES");
       }
 
-      const leadNotes = quote.lead.notes;
+      const salesIntakeNotes = quote.salesIntake.notes;
       const existingNotes = quote.internalNotes ?? "";
-      const separator = existingNotes ? "\n\nCopied from lead intake:\n" : "Copied from lead intake:\n";
-      const newNotes = `${existingNotes}${separator}${leadNotes}`;
+      const separator = existingNotes ? "\n\nCopied from sales intake:\n" : "Copied from sales intake:\n";
+      const newNotes = `${existingNotes}${separator}${salesIntakeNotes}`;
 
       if (newNotes.length > QUOTE_FIELD_LIMITS.internalNotes) {
         throw new Error("NOTES_TOO_LONG");
@@ -804,8 +804,8 @@ export async function copyLeadIntakeToQuoteNotesAction(
       if (e.message === "QUOTE_NOT_FOUND") {
         return { error: "Quote not found or not a draft." };
       }
-      if (e.message === "NO_LEAD_NOTES") {
-        return { error: "No intake notes found on the linked lead." };
+      if (e.message === "NO_SALES_INTAKE_NOTES") {
+        return { error: "No intake notes found on the linked sales intake." };
       }
       if (e.message === "NOTES_TOO_LONG") {
         return { error: `Resulting notes would exceed the ${QUOTE_FIELD_LIMITS.internalNotes} character limit.` };
@@ -827,7 +827,7 @@ type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
 /**
  * Org-scoped add of a quote line item. No redirect, no revalidate — composable
  * by both the redirecting full-page action and workspace-safe wrappers used
- * inside QuoteWorkSurface popup/drawer/lead-tab containers.
+ * inside QuoteWorkSurface popup/drawer/sales-intake-tab containers.
  */
 export async function performAddQuoteLineItem(
   quoteId: string,
@@ -1295,7 +1295,7 @@ export async function archiveLineItemTemplateAction(
 /**
  * Org-scoped apply of a Scope Library template to a draft quote. No redirect,
  * no revalidate — composed by both the redirecting full-page action and the
- * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/lead-tab.
+ * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/sales-intake-tab.
  *
  * Copies the template's commercial fields onto a new quote line item, copies
  * any default execution tasks onto the new line, and recalculates quote

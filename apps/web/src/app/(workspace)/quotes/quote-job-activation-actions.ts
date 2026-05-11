@@ -34,7 +34,7 @@ export type QuoteJobActivationFormState = {
  * readiness rules, lineage, and idempotency.
  */
 type PerformActivateQuoteJobResult =
-  | { ok: true; jobId: string; leadId: string | null }
+  | { ok: true; jobId: string; salesIntakeId: string | null }
   | { ok: false; error: string };
 
 /**
@@ -54,7 +54,7 @@ async function performActivateQuoteJob(
   const ctx = await getRequestContextOrThrow();
 
   let createdJobId: string | null = null;
-  let leadIdForRevalidation: string | null = null;
+  let salesIntakeIdForRevalidation: string | null = null;
 
   try {
     createdJobId = await db.$transaction(async (tx) => {
@@ -66,9 +66,9 @@ async function performActivateQuoteJob(
           title: true,
           status: true,
           customerId: true,
-          leadId: true,
+          salesIntakeId: true,
           customer: { select: { organizationId: true } },
-          lead: { select: { organizationId: true } },
+          salesIntake: { select: { organizationId: true } },
           job: { select: { id: true } },
           lineItems: {
             orderBy: [{ sortOrder: "asc" }],
@@ -160,16 +160,16 @@ async function performActivateQuoteJob(
 
       const safeCustomerId =
         quote.customer && quote.customer.organizationId === ctx.organizationId ? quote.customerId : null;
-      const safeLeadId =
-        quote.lead && quote.lead.organizationId === ctx.organizationId ? quote.leadId : null;
-      leadIdForRevalidation = safeLeadId;
+      const safeSalesIntakeId =
+        quote.salesIntake && quote.salesIntake.organizationId === ctx.organizationId ? quote.salesIntakeId : null;
+      salesIntakeIdForRevalidation = safeSalesIntakeId;
 
       const job = await tx.job.create({
         data: {
           organizationId: ctx.organizationId,
           quoteId: quote.id,
           customerId: safeCustomerId,
-          leadId: safeLeadId,
+          salesIntakeId: safeSalesIntakeId,
           title: quote.title,
           status: JobStatus.ACTIVE,
         },
@@ -323,17 +323,17 @@ async function performActivateQuoteJob(
     };
   }
 
-  return { ok: true, jobId: createdJobId, leadId: leadIdForRevalidation };
+  return { ok: true, jobId: createdJobId, salesIntakeId: salesIntakeIdForRevalidation };
 }
 
-function revalidateActivationSurfaces(quoteId: string, jobId: string, leadId: string | null) {
+function revalidateActivationSurfaces(quoteId: string, jobId: string, salesIntakeId: string | null) {
   revalidatePath(`/quotes/${quoteId}`);
   revalidatePath(`/quotes/${quoteId}/execution-review`);
   revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath(jobDetailPath(jobId));
-  if (leadId) {
-    revalidatePath(`/sales/${leadId}`);
+  if (salesIntakeId) {
+    revalidatePath(`/sales/${salesIntakeId}`);
   }
   revalidatePath("/sales");
   revalidatePath("/workstation");
@@ -359,16 +359,16 @@ export async function activateQuoteJobAction(
   if (!result.ok) {
     return { error: result.error };
   }
-  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.leadId);
+  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.salesIntakeId);
   redirect(jobDetailPath(result.jobId));
 }
 
 /**
  * Workspace-safe variant of {@link activateQuoteJobAction} — same readiness
  * rules, same transaction, same lineage, same `Job.quoteId @unique` idempotency
- * — but returns a result object instead of redirecting so the embedded Lead
+ * — but returns a result object instead of redirecting so the embedded Sales Intake
  * Quote tab can show inline success ("Job activated. Open job") without
- * navigating the user out of the Lead workspace.
+ * navigating the user out of the Sales Intake workspace.
  *
  * `quoteId` must be supplied from a server-trusted surface (`.bind(null, ...)`).
  */
@@ -383,7 +383,7 @@ export async function activateQuoteJobWorkspaceAction(
   if (!result.ok) {
     return { success: false, error: result.error };
   }
-  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.leadId);
+  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.salesIntakeId);
   return { success: true, jobId: result.jobId };
 }
 

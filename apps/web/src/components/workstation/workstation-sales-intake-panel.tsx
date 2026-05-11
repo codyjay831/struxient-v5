@@ -1,29 +1,29 @@
 "use client";
 
 /**
- * WorkstationLeadPanel — thin loader-and-bindings wrapper around
- * `LeadWorkSurface(mode="compact")`. Workstation now hosts the same Lead UX as
- * the Leads popup and Lead full page; this file only adapts the inputs.
+ * WorkstationSalesIntakePanel — thin loader-and-bindings wrapper around
+ * `SalesIntakeWorkSurface(mode="compact")`. Workstation now hosts the same Sales Intake UX as
+ * the Sales Intakes popup and Sales Intake full page; this file only adapts the inputs.
  */
 
 import {
-  LeadWorkSurface,
-  type LeadWorkSurfaceActiveQuotePayload,
-  type LeadWorkSurfaceData,
-  type LeadWorkSurfaceProgressAction,
-  type LeadWorkSurfaceQuote,
-  type LeadWorkSurfaceVisitRequest,
-} from "@/components/work-surfaces/lead-work-surface";
+  SalesIntakeWorkSurface,
+  type SalesIntakeWorkSurfaceActiveQuotePayload,
+  type SalesIntakeWorkSurfaceData,
+  type SalesIntakeWorkSurfaceProgressAction,
+  type SalesIntakeWorkSurfaceQuote,
+  type SalesIntakeWorkSurfaceVisitRequest,
+} from "@/components/work-surfaces/sales-intake-work-surface";
 import {
-  type LeadCommercialProgress,
-  type LeadCommercialProgressAction,
-  resolveLeadCommercialProgressActionHref,
-} from "@/lib/lead-commercial-progress";
+  type SalesIntakeCommercialProgress,
+  type SalesIntakeCommercialProgressAction,
+  resolveSalesIntakeCommercialProgressActionHref,
+} from "@/lib/sales-commercial-progress";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
-import type { LeadStatus, LeadSource } from "@prisma/client";
-import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
+import type { SalesIntakeStatus, SalesIntakeSource } from "@prisma/client";
+import type { SalesIntakeServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 
-export type WorkstationLeadPanelQuote = {
+export type WorkstationSalesIntakePanelQuote = {
   id: string;
   title: string;
   statusLabel: string;
@@ -33,44 +33,44 @@ export type WorkstationLeadPanelQuote = {
   href: string;
 };
 
-export type WorkstationLeadPanelProps = {
-  leadId: string;
-  leadTitle: string;
+export type WorkstationSalesIntakePanelProps = {
+  salesIntakeId: string;
+  salesIntakeTitle: string;
   contactName?: string | null;
   email?: string | null;
   phone?: string | null;
   notes: string | null;
-  /** Manual `LeadStatus` enum value (not the derived progress state). */
-  statusValue: LeadStatus;
+  /** Manual `SalesIntakeStatus` enum value (not the derived progress state). */
+  statusValue: SalesIntakeStatus;
   statusLabel: string;
   statusTone: StatusBadgeTone;
   sourceLabel: string;
-  source: LeadSource;
+  source: SalesIntakeSource;
   createdAtLabel: string;
   customerId: string | null;
   customerDisplayName?: string | null;
   customerHref?: string | null;
-  /** Org-scoped customers for optional "link existing"; omitted when lead already has a customer. */
+  /** Org-scoped customers for optional "link existing"; omitted when sales intake already has a customer. */
   customersForLink?: { id: string; displayName: string }[];
   /** Non-archived linked quotes, newest first. */
-  linkedQuotes: WorkstationLeadPanelQuote[];
-  progress: LeadCommercialProgress;
+  linkedQuotes: WorkstationSalesIntakePanelQuote[];
+  progress: SalesIntakeCommercialProgress;
   /** Pre-loaded active-quote QuoteWorkSurface payload (Phase 2 embed). */
-  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
-  /** Same resolution as Leads list / full lead page (intake + legacy notes). */
+  activeQuoteWorkSurface?: SalesIntakeWorkSurfaceActiveQuotePayload | null;
+  /** Same resolution as Sales Intakes list / full sales intake page (intake + legacy notes). */
   jobsiteAddressLine?: string | null;
   /** Pre-loaded service-address context for the Customer Info block. */
-  serviceAddressContext?: LeadServiceAddressContext;
+  serviceAddressContext?: SalesIntakeServiceAddressContext;
   /** Site visit requests (Phase C). */
-  visitRequests?: LeadWorkSurfaceVisitRequest[];
+  visitRequests?: SalesIntakeWorkSurfaceVisitRequest[];
 };
 
 function serializeProgressAction(
-  action: LeadCommercialProgressAction | null,
-  ctx: { leadId: string },
-): LeadWorkSurfaceProgressAction | null {
+  action: SalesIntakeCommercialProgressAction | null,
+  ctx: { salesIntakeId: string },
+): SalesIntakeWorkSurfaceProgressAction | null {
   if (!action) return null;
-  const href = resolveLeadCommercialProgressActionHref(action, ctx);
+  const href = resolveSalesIntakeCommercialProgressActionHref(action, ctx);
   const opensQuoteTab =
     action.kind === "OPEN_DRAFT_QUOTE" ||
     action.kind === "OPEN_QUOTE" ||
@@ -81,9 +81,9 @@ function serializeProgressAction(
   return { href, label: action.label, opensQuoteTab, opensContactTab };
 }
 
-export function WorkstationLeadPanel({
-  leadId,
-  leadTitle,
+export function WorkstationSalesIntakePanel({
+  salesIntakeId,
+  salesIntakeTitle,
   contactName,
   email,
   phone,
@@ -103,10 +103,11 @@ export function WorkstationLeadPanel({
   activeQuoteWorkSurface,
   jobsiteAddressLine,
   serviceAddressContext,
-}: WorkstationLeadPanelProps) {
-  const data: LeadWorkSurfaceData = {
-    id: leadId,
-    title: leadTitle,
+  visitRequests,
+}: WorkstationSalesIntakePanelProps) {
+  const data: SalesIntakeWorkSurfaceData = {
+    id: salesIntakeId,
+    title: salesIntakeTitle,
     contactName: contactName ?? null,
     email: email ?? null,
     phone: phone ?? null,
@@ -121,18 +122,18 @@ export function WorkstationLeadPanel({
     customerDisplayName: customerDisplayName ?? null,
     customerHref: customerHref ?? null,
     createdAtLabel,
-    leadHref: `/sales/${leadId}`,
-    editHref: `/sales/${leadId}/edit`,
-    newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(leadId)}`,
+    salesIntakeHref: `/sales/${salesIntakeId}`,
+    editHref: `/sales/${salesIntakeId}/edit`,
+    newQuoteHref: `/quotes/new?salesIntakeId=${encodeURIComponent(salesIntakeId)}`,
     progressLabel: progress.label,
     progressDescription: progress.description,
     progressTone: progress.badgeTone,
     progressState: progress.state,
     progressPrimaryAction: serializeProgressAction(progress.primaryAction, {
-      leadId,
+      salesIntakeId,
     }),
     progressSecondaryAction: serializeProgressAction(progress.secondaryAction, {
-      leadId,
+      salesIntakeId,
     }),
     activeQuoteId: progress.activeQuote?.id ?? null,
     activeJobId: progress.activeJob?.id ?? null,
@@ -140,7 +141,7 @@ export function WorkstationLeadPanel({
     visitRequests: visitRequests,
   };
 
-  const surfaceQuotes: LeadWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
+  const surfaceQuotes: SalesIntakeWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
     id: q.id,
     title: q.title,
     statusLabel: q.statusLabel,
@@ -151,9 +152,9 @@ export function WorkstationLeadPanel({
   }));
 
   return (
-    <LeadWorkSurface
+    <SalesIntakeWorkSurface
       mode="compact"
-      lead={data}
+      salesIntake={data}
       linkedQuotes={surfaceQuotes}
       customersForLink={customersForLink}
       activeQuoteWorkSurface={activeQuoteWorkSurface}

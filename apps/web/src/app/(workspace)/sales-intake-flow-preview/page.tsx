@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Lead Flow Preview — combined UX prototype.
+ * Sales Intake Flow Preview — combined UX prototype.
  *
  * Behavior:
- * - Compact lead list as the primary scan surface.
- * - Clicking a lead opens a Customer/Lead Workspace in a native <dialog>.
+ * - Compact sales intake list as the primary scan surface.
+ * - Clicking a sales intake opens a Customer/Sales Intake Workspace in a native <dialog>.
  * - Quote work happens inside the workspace (Quote tab), not on a separate page.
  * - "Fix quote", "View quote", "Preview quote" switch to the Quote tab in-place.
  * - "Open full quote page" is available as a secondary/intentional action only.
@@ -34,7 +34,7 @@ type QuoteData = {
   scopeSummary: string | null;
 };
 
-type MockLead = {
+type MockSalesIntake = {
   id: string;
   contact: string;
   project: string;
@@ -91,7 +91,7 @@ const WS_TABS: { id: WorkspaceTab; label: string }[] = [
 
 /* ─── Mock data ──────────────────────────────────────────────────────────── */
 
-const MOCK_LEADS: MockLead[] = [
+const MOCK_SALES_INTAKES: MockSalesIntake[] = [
   /* ── A: Needs customer ─────────────────────────────────────────────── */
   {
     id: "hendricks",
@@ -103,9 +103,9 @@ const MOCK_LEADS: MockLead[] = [
     status: "Needs customer",
     statusTone: "neutral",
     stage: "verify",
-    nextStep: "Create customer from lead",
+    nextStep: "Create customer from sales intake",
     nextStepReason:
-      "This lead has enough intake detail to quote, but it is not attached to a customer record yet.",
+      "This sales intake has enough intake detail to quote, but it is not attached to a customer record yet.",
     risk: "Quote locked",
     primaryAction: "Create customer",
     primaryOpensQuote: false,
@@ -258,7 +258,7 @@ const MOCK_LEADS: MockLead[] = [
       "Service panel upgrade, EV charger, permit required. Customer wants completion before vehicle delivery.",
     internalNotes: null,
     timeline: [
-      "Phone lead entered",
+      "Phone sales intake entered",
       "Customer linked",
       "Quote approved",
       "Deposit pending",
@@ -293,13 +293,13 @@ function dotStyle(tone: StatusBadgeTone): { background: string } {
   return { background: "var(--foreground-subtle)" };
 }
 
-function filterLeads(leads: MockLead[], tab: ListTab): MockLead[] {
+function filterSalesIntakes(salesIntakes: MockSalesIntake[], tab: ListTab): MockSalesIntake[] {
   switch (tab) {
-    case "New":           return leads.filter((l) => l.quote.state === "none");
-    case "Quoted":        return leads.filter((l) => l.quote.state === "draft" || l.quote.state === "sent");
-    case "Won":           return leads.filter((l) => l.quote.state === "approved");
-    case "Action needed": return leads.filter((l) => l.quote.state !== "approved");
-    default:              return leads;
+    case "New":           return salesIntakes.filter((l) => l.quote.state === "none");
+    case "Quoted":        return salesIntakes.filter((l) => l.quote.state === "draft" || l.quote.state === "sent");
+    case "Won":           return salesIntakes.filter((l) => l.quote.state === "approved");
+    case "Action needed": return salesIntakes.filter((l) => l.quote.state !== "approved");
+    default:              return salesIntakes;
   }
 }
 
@@ -424,14 +424,14 @@ function InfoField({
   );
 }
 
-/* ─── Lead list row ──────────────────────────────────────────────────────── */
+/* ─── Sales intake list row ──────────────────────────────────────────────── */
 
-function LeadRow({
-  lead,
+function SalesIntakeRow({
+  salesIntake,
   active,
   onOpen,
 }: {
-  lead: MockLead;
+  salesIntake: MockSalesIntake;
   active: boolean;
   onOpen: () => void;
 }) {
@@ -446,26 +446,26 @@ function LeadRow({
     >
       <div
         className="w-2 h-2 rounded-full shrink-0 mt-0.5"
-        style={dotStyle(lead.statusTone)}
+        style={dotStyle(salesIntake.statusTone)}
       />
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-0.5">
           <span className="text-sm font-semibold text-foreground">
-            {lead.contact}
+            {salesIntake.contact}
           </span>
-          <StatusBadge label={lead.status} tone={lead.statusTone} />
+          <StatusBadge label={salesIntake.status} tone={salesIntake.statusTone} />
         </div>
         <p className="text-xs text-foreground-muted truncate mb-1.5">
-          {lead.project}
+          {salesIntake.project}
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs text-foreground-subtle">
-          <span>{lead.source}</span>
+          <span>{salesIntake.source}</span>
           <span>·</span>
-          <span>{lead.age}</span>
+          <span>{salesIntake.age}</span>
           <span>·</span>
-          <span>{lead.value}</span>
+          <span>{salesIntake.value}</span>
           <span>·</span>
-          <span>{lead.nextStep}</span>
+          <span>{salesIntake.nextStep}</span>
         </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-xs text-foreground-subtle hover:border-border-strong hover:text-foreground transition-colors">
@@ -479,10 +479,10 @@ function LeadRow({
 /* ─── Overview tab ───────────────────────────────────────────────────────── */
 
 function OverviewTab({
-  lead,
+  salesIntake,
   onSwitchToQuote,
 }: {
-  lead: MockLead;
+  salesIntake: MockSalesIntake;
   onSwitchToQuote: () => void;
 }) {
   const quoteStateLabel: Record<QuoteData["state"], string> = {
@@ -502,13 +502,13 @@ function OverviewTab({
               Next step
             </p>
             <h3 className="mt-1.5 text-lg font-semibold text-foreground leading-snug">
-              {lead.nextStep}
+              {salesIntake.nextStep}
             </h3>
             <p className="mt-1 text-sm text-foreground-muted leading-relaxed max-w-xl">
-              {lead.nextStepReason}
+              {salesIntake.nextStepReason}
             </p>
           </div>
-          {lead.risk && (
+          {salesIntake.risk && (
             <div
               className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
               style={{
@@ -517,26 +517,26 @@ function OverviewTab({
                 color:      "#92400e",
               }}
             >
-              {lead.risk}
+              {salesIntake.risk}
             </div>
           )}
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={lead.primaryOpensQuote ? onSwitchToQuote : undefined}
+            onClick={salesIntake.primaryOpensQuote ? onSwitchToQuote : undefined}
             className="rounded-lg bg-foreground text-accent-contrast text-sm font-semibold px-4 py-2.5 hover:opacity-90 transition-opacity flex items-center gap-2"
           >
-            {lead.primaryAction}
+            {salesIntake.primaryAction}
             <ArrowRight className="w-4 h-4 opacity-60" strokeWidth={2} />
           </button>
-          {lead.secondaryAction && (
+          {salesIntake.secondaryAction && (
             <button
               type="button"
-              onClick={lead.secondaryOpensQuote ? onSwitchToQuote : undefined}
+              onClick={salesIntake.secondaryOpensQuote ? onSwitchToQuote : undefined}
               className="rounded-lg border border-border bg-surface text-foreground-muted text-sm px-4 py-2.5 hover:text-foreground hover:border-border-strong transition-colors"
             >
-              {lead.secondaryAction}
+              {salesIntake.secondaryAction}
             </button>
           )}
         </div>
@@ -544,19 +544,19 @@ function OverviewTab({
 
       {/* 4-field summary */}
       <div className="grid grid-cols-4 gap-3">
-        <InfoField label="Customer" value={lead.customer ?? "Not linked"} />
+        <InfoField label="Customer" value={salesIntake.customer ?? "Not linked"} />
         <InfoField
           label="Quote"
-          value={quoteStateLabel[lead.quote.state]}
+          value={quoteStateLabel[salesIntake.quote.state]}
           onClick={onSwitchToQuote}
         />
-        <InfoField label="Source" value={lead.source} />
-        <InfoField label="Job site" value={lead.address ?? "Not set"} />
+        <InfoField label="Source" value={salesIntake.source} />
+        <InfoField label="Job site" value={salesIntake.address ?? "Not set"} />
       </div>
 
       {/* Stage tracker */}
       <div className="rounded-xl border border-border bg-surface px-5 py-4">
-        <StageTracker current={lead.stage} />
+        <StageTracker current={salesIntake.stage} />
       </div>
 
       {/* Job summary + activity */}
@@ -566,14 +566,14 @@ function OverviewTab({
             Job summary
           </p>
           <p className="text-sm text-foreground-muted leading-relaxed">
-            {lead.intakeNotes}
+            {salesIntake.intakeNotes}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className="text-xs font-medium text-foreground-subtle uppercase tracking-wide mb-3">
             Latest movement
           </p>
-          <MiniTimeline timeline={lead.timeline} />
+          <MiniTimeline timeline={salesIntake.timeline} />
         </div>
       </div>
     </div>
@@ -582,7 +582,7 @@ function OverviewTab({
 
 /* ─── Contact tab ────────────────────────────────────────────────────────── */
 
-function ContactTab({ lead }: { lead: MockLead }) {
+function ContactTab({ salesIntake }: { salesIntake: MockSalesIntake }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
@@ -591,10 +591,10 @@ function ContactTab({ lead }: { lead: MockLead }) {
             Email
           </p>
           <a
-            href={`mailto:${lead.email}`}
+            href={`mailto:${salesIntake.email}`}
             className="text-sm text-foreground-muted hover:text-foreground transition-colors break-all"
           >
-            {lead.email}
+            {salesIntake.email}
           </a>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
@@ -602,10 +602,10 @@ function ContactTab({ lead }: { lead: MockLead }) {
             Phone
           </p>
           <a
-            href={`tel:${lead.phone}`}
+            href={`tel:${salesIntake.phone}`}
             className="text-sm text-foreground-muted hover:text-foreground transition-colors"
           >
-            {lead.phone}
+            {salesIntake.phone}
           </a>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
@@ -613,7 +613,7 @@ function ContactTab({ lead }: { lead: MockLead }) {
             Address
           </p>
           <p className="text-sm text-foreground-muted">
-            {lead.address ?? "Not provided"}
+            {salesIntake.address ?? "Not provided"}
           </p>
         </div>
       </div>
@@ -623,9 +623,9 @@ function ContactTab({ lead }: { lead: MockLead }) {
           Customer
         </p>
         <div className="flex items-center justify-between">
-          {lead.customer ? (
+          {salesIntake.customer ? (
             <>
-              <p className="text-sm font-medium text-foreground">{lead.customer}</p>
+              <p className="text-sm font-medium text-foreground">{salesIntake.customer}</p>
               <StatusBadge label="Linked" tone="approved" />
             </>
           ) : (
@@ -635,20 +635,20 @@ function ContactTab({ lead }: { lead: MockLead }) {
                 type="button"
                 className="text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
               >
-                Create customer from lead
+                Create customer from sales intake
               </button>
             </>
           )}
         </div>
       </div>
 
-      {lead.internalNotes && (
+      {salesIntake.internalNotes && (
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className="text-xs font-medium text-foreground-subtle uppercase tracking-wide mb-2">
             Internal notes
           </p>
           <p className="text-sm text-foreground-muted leading-relaxed">
-            {lead.internalNotes}
+            {salesIntake.internalNotes}
           </p>
         </div>
       )}
@@ -658,13 +658,13 @@ function ContactTab({ lead }: { lead: MockLead }) {
 
 /* ─── Activity tab ───────────────────────────────────────────────────────── */
 
-function ActivityTab({ lead }: { lead: MockLead }) {
+function ActivityTab({ salesIntake }: { salesIntake: MockSalesIntake }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
       <p className="text-xs font-medium text-foreground-subtle uppercase tracking-wide mb-4">
         Activity
       </p>
-      <MiniTimeline timeline={lead.timeline} />
+      <MiniTimeline timeline={salesIntake.timeline} />
     </div>
   );
 }
@@ -672,16 +672,16 @@ function ActivityTab({ lead }: { lead: MockLead }) {
 /* ─── Quote tab ──────────────────────────────────────────────────────────── */
 
 function QuoteTab({
-  lead,
+  salesIntake,
   scopeSummary,
   onScopeSummaryChange,
 }: {
-  lead: MockLead;
+  salesIntake: MockSalesIntake;
   scopeSummary: string;
   onScopeSummaryChange: (v: string) => void;
 }) {
-  const { quote } = lead;
-  const canStart = lead.customer !== null;
+  const { quote } = salesIntake;
+  const canStart = salesIntake.customer !== null;
 
   /* Empty state */
   if (quote.state === "none") {
@@ -690,7 +690,7 @@ function QuoteTab({
         <p className="text-sm font-medium text-foreground">No quote started</p>
         <p className="text-xs text-foreground-subtle max-w-xs leading-relaxed">
           {canStart
-            ? "Start a quote for this lead when ready."
+            ? "Start a quote for this sales intake when ready."
             : "Link a customer first, then start a quote."}
         </p>
         <button
@@ -873,19 +873,19 @@ function QuoteTab({
 /* ─── Workspace content (rendered inside <dialog>) ───────────────────────── */
 
 function WorkspaceContent({
-  lead,
+  salesIntake,
   activeTab,
   setActiveTab,
   onClose,
 }: {
-  lead: MockLead;
+  salesIntake: MockSalesIntake;
   activeTab: WorkspaceTab;
   setActiveTab: (t: WorkspaceTab) => void;
   onClose: () => void;
 }) {
   /* Scope summary state lives here so it survives tab switches */
   const [scopeSummary, setScopeSummary] = useState(
-    lead.quote.scopeSummary ?? "",
+    salesIntake.quote.scopeSummary ?? "",
   );
 
   return (
@@ -895,9 +895,9 @@ function WorkspaceContent({
         {/* Top row: badges + value + close */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <StatusBadge label={lead.status} tone={lead.statusTone} />
+            <StatusBadge label={salesIntake.status} tone={salesIntake.statusTone} />
             <span className="text-xs text-foreground-subtle">
-              {lead.source} · {lead.age}
+              {salesIntake.source} · {salesIntake.age}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -906,7 +906,7 @@ function WorkspaceContent({
                 Value
               </p>
               <p className="text-lg font-semibold text-foreground tabular-nums leading-tight">
-                {lead.value}
+                {salesIntake.value}
               </p>
             </div>
             <button
@@ -923,9 +923,9 @@ function WorkspaceContent({
         {/* Identity */}
         <div className="mt-4">
           <h2 className="text-2xl font-semibold text-foreground tracking-tight leading-tight">
-            {lead.customer ?? lead.contact}
+            {salesIntake.customer ?? salesIntake.contact}
           </h2>
-          <p className="text-sm text-foreground-muted mt-0.5">{lead.project}</p>
+          <p className="text-sm text-foreground-muted mt-0.5">{salesIntake.project}</p>
         </div>
 
         {/* Tab bar */}
@@ -952,15 +952,15 @@ function WorkspaceContent({
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {activeTab === "overview" && (
           <OverviewTab
-            lead={lead}
+            salesIntake={salesIntake}
             onSwitchToQuote={() => setActiveTab("quote")}
           />
         )}
-        {activeTab === "contact"  && <ContactTab  lead={lead} />}
-        {activeTab === "activity" && <ActivityTab lead={lead} />}
+        {activeTab === "contact"  && <ContactTab  salesIntake={salesIntake} />}
+        {activeTab === "activity" && <ActivityTab salesIntake={salesIntake} />}
         {activeTab === "quote" && (
           <QuoteTab
-            lead={lead}
+            salesIntake={salesIntake}
             scopeSummary={scopeSummary}
             onScopeSummaryChange={setScopeSummary}
           />
@@ -972,32 +972,32 @@ function WorkspaceContent({
 
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
-export default function LeadFlowPreviewPage() {
+export default function SalesIntakeFlowPreviewPage() {
   const dialogRef   = useRef<HTMLDialogElement>(null);
-  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const [openSalesIntakeId, setOpenSalesIntakeId] = useState<string | null>(null);
   const [activeTab,  setActiveTab]  = useState<WorkspaceTab>("overview");
   const [listTab,    setListTab]    = useState<ListTab>("Action needed");
 
-  const openLead     = MOCK_LEADS.find((l) => l.id === openLeadId) ?? null;
-  const visibleLeads = filterLeads(MOCK_LEADS, listTab);
+  const openSalesIntake     = MOCK_SALES_INTAKES.find((l) => l.id === openSalesIntakeId) ?? null;
+  const visibleSalesIntakes = filterSalesIntakes(MOCK_SALES_INTAKES, listTab);
 
   /* Sync native dialog open/close with React state */
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (openLeadId && !dialog.open) {
+    if (openSalesIntakeId && !dialog.open) {
       dialog.showModal();
-    } else if (!openLeadId && dialog.open) {
+    } else if (!openSalesIntakeId && dialog.open) {
       dialog.close();
     }
-  }, [openLeadId]);
+  }, [openSalesIntakeId]);
 
   /* Sync state when user presses Escape (native cancel event) */
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     function handleCancel() {
-      setOpenLeadId(null);
+      setOpenSalesIntakeId(null);
       setActiveTab("overview");
     }
     dialog.addEventListener("cancel", handleCancel);
@@ -1006,12 +1006,12 @@ export default function LeadFlowPreviewPage() {
 
   function openWorkspace(id: string) {
     setActiveTab("overview");
-    setOpenLeadId(id);
+    setOpenSalesIntakeId(id);
   }
 
   function closeWorkspace() {
     dialogRef.current?.close();
-    setOpenLeadId(null);
+    setOpenSalesIntakeId(null);
     setActiveTab("overview");
   }
 
@@ -1021,29 +1021,29 @@ export default function LeadFlowPreviewPage() {
       {/* ── Preview notice ──────────────────────────────────────────────── */}
       <div className="rounded-lg border border-border bg-surface px-4 py-2.5 flex items-center justify-between gap-4">
         <p className="text-xs text-foreground-muted">
-          <span className="font-semibold text-foreground">Lead Flow Preview</span>
+          <span className="font-semibold text-foreground">Sales Intake Flow Preview</span>
           {" "}· Design exploration · Mock data only · Not connected to production
         </p>
         <span className="text-xs text-foreground-subtle font-mono shrink-0">
-          /lead-flow-preview
+          /sales-intake-flow-preview
         </span>
       </div>
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          Leads
+          Sales Intakes
         </h1>
       </div>
 
-      {/* ── Lead list ───────────────────────────────────────────────────── */}
+      {/* ── Sales intake list ───────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
 
         {/* Search */}
         <div className="px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2 rounded-lg bg-background border border-border px-3 py-2 text-sm text-foreground-subtle">
             <Search className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-            <span>Search leads, customer, address…</span>
+            <span>Search sales intakes, customer, address…</span>
           </div>
         </div>
 
@@ -1067,27 +1067,27 @@ export default function LeadFlowPreviewPage() {
         </div>
 
         {/* Rows */}
-        {visibleLeads.length > 0 ? (
+        {visibleSalesIntakes.length > 0 ? (
           <div className="divide-y divide-border">
-            {visibleLeads.map((lead) => (
-              <LeadRow
-                key={lead.id}
-                lead={lead}
-                active={lead.id === openLeadId}
-                onOpen={() => openWorkspace(lead.id)}
+            {visibleSalesIntakes.map((salesIntake) => (
+              <SalesIntakeRow
+                key={salesIntake.id}
+                salesIntake={salesIntake}
+                active={salesIntake.id === openSalesIntakeId}
+                onOpen={() => openWorkspace(salesIntake.id)}
               />
             ))}
           </div>
         ) : (
           <div className="px-6 py-10 text-center">
             <p className="text-sm text-foreground-subtle">
-              No leads in this filter.
+              No sales intakes in this filter.
             </p>
           </div>
         )}
       </div>
 
-      {/* ── Customer / Lead Workspace modal ─────────────────────────────── */}
+      {/* ── Customer / Sales Intake Workspace modal ─────────────────────── */}
       <dialog
         ref={dialogRef}
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-xl outline-none [&::backdrop]:bg-foreground/30"
@@ -1095,9 +1095,9 @@ export default function LeadFlowPreviewPage() {
           if (e.target === e.currentTarget) closeWorkspace();
         }}
       >
-        {openLead && (
+        {openSalesIntake && (
           <WorkspaceContent
-            lead={openLead}
+            salesIntake={openSalesIntake}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             onClose={closeWorkspace}

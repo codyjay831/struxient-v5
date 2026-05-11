@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
-import type { LeadDetailPayload } from "@/lib/lead-display";
-import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import type { SalesIntakeFormState } from "@/app/(workspace)/sales/sales-form-actions";
+import type { SalesIntakeDetailPayload } from "@/lib/sales-intake-display";
+import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 
 const fieldLabelClass =
@@ -14,30 +14,30 @@ const primaryButtonClass =
 const mutedLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-const initialActionState: LeadFormState = {};
+const initialActionState: SalesIntakeFormState = {};
 
-export function LeadCreateCustomerFromLeadForm({
-  lead,
+export function SalesIntakeCreateCustomerFromSalesIntakeForm({
+  salesIntake,
   formAction,
 }: {
-  lead: LeadDetailPayload;
+  salesIntake: SalesIntakeDetailPayload;
   formAction: (
-    prevState: LeadFormState,
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
+  ) => Promise<SalesIntakeFormState>;
 }) {
   const [state, submitAction, isPending] = useActionState(formAction, initialActionState);
 
-  const jobsiteLine = lead.jobsiteAddressLine?.trim() ?? "";
+  const jobsiteLine = salesIntake.jobsiteAddressLine?.trim() ?? "";
   const hasJobsite = jobsiteLine.length > 0;
 
-  const prepared = prepareCustomerFromLead({
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-    phone: lead.phone,
-    notes: lead.notes,
-    source: lead.source,
+  const prepared = prepareCustomerFromSalesIntake({
+    title: salesIntake.title,
+    contactName: salesIntake.contactName,
+    email: salesIntake.email,
+    phone: salesIntake.phone,
+    notes: salesIntake.notes,
+    source: salesIntake.source,
   });
 
   return (
@@ -58,10 +58,10 @@ export function LeadCreateCustomerFromLeadForm({
         >
           {prepared.error}{" "}
           <Link
-            href={`/sales/${lead.id}/edit`}
+            href={`/sales/${salesIntake.id}/edit`}
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            Edit lead
+            Edit sales intake
           </Link>
         </p>
       ) : (
@@ -103,7 +103,7 @@ export function LeadCreateCustomerFromLeadForm({
                     <p className="text-xs leading-relaxed text-foreground-muted">
                       Add the project address before scheduling or creating a job.
                     </p>
-                    <Link href={`/sales/${lead.id}/edit`} className={mutedLinkClass}>
+                    <Link href={`/sales/${salesIntake.id}/edit`} className={mutedLinkClass}>
                       Add service address
                     </Link>
                   </div>
@@ -139,8 +139,8 @@ export function LeadCreateCustomerFromLeadForm({
         >
           {isPending ? "Creating…" : "Create customer"}
         </button>
-        <Link href={`/sales/${lead.id}/edit`} className={mutedLinkClass}>
-          Edit lead first
+        <Link href={`/sales/${salesIntake.id}/edit`} className={mutedLinkClass}>
+          Edit sales intake first
         </Link>
       </form>
     </div>

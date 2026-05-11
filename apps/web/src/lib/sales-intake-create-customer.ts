@@ -1,17 +1,17 @@
-import type { LeadSource } from "@prisma/client";
+import type { SalesIntakeSource } from "@prisma/client";
 import { CUSTOMER_FIELD_LIMITS } from "@/app/(workspace)/customers/customer-field-limits";
 
-export type LeadRowForCustomerPrep = {
+export type SalesIntakeRowForCustomerPrep = {
   title: string;
   contactName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
   /** When omitted (e.g. older UI callers), public-request note shaping is skipped. */
-  source?: LeadSource;
+  source?: SalesIntakeSource;
 };
 
-export type PreparedCustomerFromLead =
+export type PreparedCustomerFromSalesIntake =
   | {
       ok: true;
       data: {
@@ -57,18 +57,18 @@ function extractPublicIntakeSection(normalizedNotes: string, header: string): st
   return raw && raw.length > 0 ? raw : null;
 }
 
-function buildCustomerNotesFromLead(lead: LeadRowForCustomerPrep): string {
+function buildCustomerNotesFromSalesIntake(salesIntake: SalesIntakeRowForCustomerPrep): string {
   const max = CUSTOMER_FIELD_LIMITS.notes;
-  const leadNotesRaw = trimOrEmpty(lead.notes);
+  const salesIntakeNotesRaw = trimOrEmpty(salesIntake.notes);
 
-  if (lead.source === "PUBLIC_REQUEST_LINK" && leadNotesRaw.includes("[Public Intake Form]")) {
-    const n = leadNotesRaw.replace(/\r\n/g, "\n");
+  if (salesIntake.source === "PUBLIC_REQUEST_LINK" && salesIntakeNotesRaw.includes("[Public Intake Form]")) {
+    const n = salesIntakeNotesRaw.replace(/\r\n/g, "\n");
     const preferredTiming = extractPublicIntakeSection(n, "Preferred timing");
     const requestType = extractPublicIntakeSection(n, "Request type");
     const requestDetails = extractPublicIntakeSection(n, "What you need help with");
 
     const parts = [
-      `Created from public request (lead: "${lead.title}").`,
+      `Created from public request (sales intake: "${salesIntake.title}").`,
       "The service address from the request is saved with this customer.",
     ];
     if (preferredTiming) {
@@ -92,10 +92,10 @@ function buildCustomerNotesFromLead(lead: LeadRowForCustomerPrep): string {
     return body.slice(0, keep) + TRUNC_MARKER;
   }
 
-  const provenance = `Created from lead: "${lead.title}".`;
+  const provenance = `Created from sales intake: "${salesIntake.title}".`;
   let body = provenance;
-  if (leadNotesRaw.length > 0) {
-    body = `${provenance}\n\n${leadNotesRaw}`;
+  if (salesIntakeNotesRaw.length > 0) {
+    body = `${provenance}\n\n${salesIntakeNotesRaw}`;
   }
   if (body.length <= max) {
     return body;
@@ -108,40 +108,40 @@ function buildCustomerNotesFromLead(lead: LeadRowForCustomerPrep): string {
 }
 
 /**
- * Pure mapping + validation for “create Customer from Lead”.
- * Used by the server action and the lead detail preview UI.
+ * Pure mapping + validation for “create Customer from Sales Intake”.
+ * Used by the server action and the sales intake detail preview UI.
  */
-export function prepareCustomerFromLead(lead: LeadRowForCustomerPrep): PreparedCustomerFromLead {
-  const contact = trimOrEmpty(lead.contactName);
-  const displayName = contact.length > 0 ? contact : trimOrEmpty(lead.title);
+export function prepareCustomerFromSalesIntake(salesIntake: SalesIntakeRowForCustomerPrep): PreparedCustomerFromSalesIntake {
+  const contact = trimOrEmpty(salesIntake.contactName);
+  const displayName = contact.length > 0 ? contact : trimOrEmpty(salesIntake.title);
   if (!displayName) {
-    return { ok: false, error: "This lead needs a title to derive a customer display name." };
+    return { ok: false, error: "This sales intake needs a title to derive a customer display name." };
   }
   if (displayName.length > CUSTOMER_FIELD_LIMITS.displayName) {
     return {
       ok: false,
-      error: `Customer display name would exceed ${CUSTOMER_FIELD_LIMITS.displayName} characters. Shorten the lead title or contact name first.`,
+      error: `Customer display name would exceed ${CUSTOMER_FIELD_LIMITS.displayName} characters. Shorten the sales intake title or contact name first.`,
     };
   }
 
-  const email = trimOrNull(lead.email);
+  const email = trimOrNull(salesIntake.email);
   if (email && !isReasonableCustomerEmail(email)) {
     return {
       ok: false,
       error:
-        "This lead has an email that is not valid for a customer record. Fix it on Edit lead, or clear the email, then try again.",
+        "This sales intake has an email that is not valid for a customer record. Fix it on Edit sales intake, or clear the email, then try again.",
     };
   }
 
-  const phone = trimOrNull(lead.phone);
+  const phone = trimOrNull(salesIntake.phone);
   if (phone && phone.length > CUSTOMER_FIELD_LIMITS.phone) {
     return {
       ok: false,
-      error: `Phone is too long for a customer record (max ${CUSTOMER_FIELD_LIMITS.phone} characters). Shorten it on Edit lead first.`,
+      error: `Phone is too long for a customer record (max ${CUSTOMER_FIELD_LIMITS.phone} characters). Shorten it on Edit sales intake first.`,
     };
   }
 
-  const notes = buildCustomerNotesFromLead(lead);
+  const notes = buildCustomerNotesFromSalesIntake(salesIntake);
 
   return {
     ok: true,

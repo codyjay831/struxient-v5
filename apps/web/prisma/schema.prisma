@@ -10,7 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum LeadStatus {
+enum SalesIntakeStatus {
   OPEN
   QUALIFYING
   CONVERTED
@@ -26,7 +26,7 @@ enum NeededByBucket {
   SPECIFIC_DATE
 }
 
-enum LeadSource {
+enum SalesIntakeSource {
   PHONE
   EMAIL
   SMS
@@ -133,13 +133,13 @@ enum JobVisitStatus {
   CANCELED
 }
 
-enum LeadVisitRequestStatus {
+enum SalesVisitRequestStatus {
   PENDING
   CONFIRMED
   CANCELED
 }
 
-enum LeadCustomFieldType {
+enum SalesCustomFieldType {
   TEXT
   NUMBER
   SELECT
@@ -161,7 +161,7 @@ model Organization {
   memberships           Membership[]
   jobIssues             JobIssue[]
   customers             Customer[]
-  leads                 Lead[]
+  salesIntakes          SalesIntake[]
   quotes                Quote[]
   lineItemTemplates     LineItemTemplate[]
   taskTemplates         TaskTemplate[]
@@ -175,8 +175,8 @@ model Organization {
   publicRequestSettings PublicRequestSettings?
   customerServiceLocations CustomerServiceLocation[]
   quoteShareTokens      QuoteShareToken[]
-  leadVisitRequests     LeadVisitRequest[]
-  leadCustomFieldDefs   LeadCustomFieldDef[]
+  salesVisitRequests    SalesVisitRequest[]
+  salesCustomFieldDefs  SalesCustomFieldDef[]
 }
 
 /// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
@@ -211,7 +211,7 @@ model Customer {
   notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  leads          Lead[]
+  salesIntakes   SalesIntake[]
   quotes         Quote[]
   jobs           Job[]
   serviceLocations CustomerServiceLocation[]
@@ -232,8 +232,8 @@ model CustomerServiceLocation {
   organization     Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customerId       String
   customer         Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  createdFromLeadId String?
-  createdFromLead   Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id], onDelete: SetNull)
+  createdFromSalesIntakeId String?
+  createdFromSalesIntake   SalesIntake?                         @relation("ServiceLocationCreatedFromSalesIntake", fields: [createdFromSalesIntakeId], references: [id], onDelete: SetNull)
   formattedAddress String
   addressLine1     String                        @default("")
   addressLine2     String                        @default("")
@@ -266,8 +266,12 @@ enum StaffRole {
 
 model User {
   id            String       @id @default(cuid())
-  email         String       @unique
+  email         String?      @unique
+  emailVerified DateTime?
+  image         String?
   name          String?
+  accounts      Account[]
+  sessions      Session[]
   memberships   Membership[]
   jobIssues     JobIssue[]
   jobActivities JobActivity[]
@@ -277,6 +281,41 @@ model User {
   assignedVisits JobVisit[] @relation("AssignedVisits")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 model Membership {
@@ -294,14 +333,14 @@ model Membership {
   @@index([userId])
 }
 
-model Lead {
+model SalesIntake {
   id             String         @id @default(cuid())
   organizationId String
   organization   Organization   @relation(fields: [organizationId], references: [id])
   customerId     String?
   customer       Customer?      @relation(fields: [customerId], references: [id])
-  status         LeadStatus     @default(OPEN)
-  source         LeadSource     @default(MANUAL)
+  status         SalesIntakeStatus @default(OPEN)
+  source         SalesIntakeSource @default(MANUAL)
   sourceDetail   String?
   title          String
   contactName    String?
@@ -323,9 +362,9 @@ model Lead {
   attachments    Attachment[]
   quotes         Quote[]
   jobs           Job[]
-  createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromLead")
-  visitRequests  LeadVisitRequest[]
-  customFieldValues LeadCustomFieldValue[]
+  createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromSalesIntake")
+  visitRequests  SalesVisitRequest[]
+  customFieldValues SalesCustomFieldValue[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -340,8 +379,8 @@ model Quote {
   organization     Organization   @relation(fields: [organizationId], references: [id])
   customerId       String?
   customer         Customer?      @relation(fields: [customerId], references: [id])
-  leadId           String?
-  lead             Lead?          @relation(fields: [leadId], references: [id])
+  salesIntakeId    String?
+  salesIntake      SalesIntake?          @relation(fields: [salesIntakeId], references: [id])
   status                 QuoteStatus    @default(DRAFT)
   title                  String
   customerDocumentTitle  String?
@@ -359,7 +398,7 @@ model Quote {
 
   @@index([organizationId])
   @@index([customerId])
-  @@index([leadId])
+  @@index([salesIntakeId])
   @@index([status])
 }
 
@@ -561,8 +600,8 @@ model Job {
   quote          Quote        @relation(fields: [quoteId], references: [id])
   customerId     String?
   customer       Customer?    @relation(fields: [customerId], references: [id])
-  leadId         String?
-  lead           Lead?        @relation(fields: [leadId], references: [id])
+  salesIntakeId  String?
+  salesIntake    SalesIntake?        @relation(fields: [salesIntakeId], references: [id])
   title          String
   status         JobStatus    @default(ACTIVE)
   activatedAt    DateTime     @default(now())
@@ -580,7 +619,7 @@ model Job {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([customerId])
-  @@index([leadId])
+  @@index([salesIntakeId])
 }
 
 /// Stage on a job — either a SHARED canonical phase merging tasks from many quote lines,
@@ -766,8 +805,8 @@ model Attachment {
   status          AttachmentStatus @default(READY)
   
   // Explicit nullable foreign keys
-  leadId          String?
-  lead            Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  salesIntakeId   String?
+  salesIntake     SalesIntake?        @relation(fields: [salesIntakeId], references: [id], onDelete: SetNull)
   quoteId         String?
   quote           Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   jobId           String?
@@ -784,7 +823,7 @@ model Attachment {
   updatedAt       DateTime     @updatedAt
 
   @@index([organizationId])
-  @@index([leadId])
+  @@index([salesIntakeId])
   @@index([quoteId])
   @@index([jobId])
   @@index([jobTaskId])
@@ -863,17 +902,17 @@ model JobPaymentRequirement {
   @@index([requiredBeforeStageId])
 }
 
-model LeadVisitRequest {
+model SalesVisitRequest {
   id              String                 @id @default(cuid())
   organizationId  String
   organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leadId          String
-  lead            Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  salesIntakeId   String
+  salesIntake     SalesIntake            @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
   
   requestedDate   DateTime?
   requestedWindow String?               // e.g. "Morning", "Afternoon", "Anytime"
   confirmedDate   DateTime?
-  status          LeadVisitRequestStatus @default(PENDING)
+  status          SalesVisitRequestStatus @default(PENDING)
   
   notes           String?
   
@@ -881,43 +920,43 @@ model LeadVisitRequest {
   updatedAt       DateTime               @updatedAt
 
   @@index([organizationId])
-  @@index([leadId])
+  @@index([salesIntakeId])
   @@index([status])
 }
 
-model LeadCustomFieldDef {
+model SalesCustomFieldDef {
   id              String              @id @default(cuid())
   organizationId  String
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
   key             String              // e.g. "roof-type"
   label           String              // e.g. "Roof Type"
-  type            LeadCustomFieldType
+  type            SalesCustomFieldType
   optionsJson     Json?               // For SELECT type: ["Asphalt", "Metal", "Tile"]
   isRequired      Boolean             @default(false)
   showOnPublicIntake Boolean          @default(true)
   
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  values          LeadCustomFieldValue[]
+  values          SalesCustomFieldValue[]
 
   @@unique([organizationId, key])
   @@index([organizationId])
 }
 
-model LeadCustomFieldValue {
+model SalesCustomFieldValue {
   id              String              @id @default(cuid())
-  leadId          String
-  lead            Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  salesIntakeId   String
+  salesIntake     SalesIntake         @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
   fieldDefId      String
-  fieldDef        LeadCustomFieldDef  @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+  fieldDef        SalesCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
   
   value           String              // Stored as string, parsed based on type
   
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  @@unique([leadId, fieldDefId])
-  @@index([leadId])
+  @@unique([salesIntakeId, fieldDefId])
+  @@index([salesIntakeId])
   @@index([fieldDefId])
 }

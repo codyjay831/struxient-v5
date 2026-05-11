@@ -1,7 +1,6 @@
-import { StaffRole, Job, Quote, Lead, Customer } from "@prisma/client";
+import { StaffRole, Job, Quote, SalesIntake, Customer } from "@prisma/client";
 import { DEV_ORGANIZATION_ID, DEV_USER_ID, DEV_ORGANIZATION_NAME, DEV_ORGANIZATION_SLUG } from "./dev-organization";
-
-
+import { auth } from "@/auth";
 import { db } from "./db";
 
 export interface RequestContext {
@@ -13,8 +12,6 @@ export interface RequestContext {
   authSource: "dev" | "session";
 }
 
-
-
 /**
  * Central resolver for the current request's tenant and user context.
  * 
@@ -22,8 +19,25 @@ export interface RequestContext {
  * In production: Strictly requires a valid session from an auth provider.
  */
 export async function getRequestContextOrThrow(): Promise<RequestContext> {
-  // TODO: Implement real auth provider lookup here (e.g. Auth.js or Clerk)
-  // For now, we only have the dev fallback.
+  const session = await auth();
+
+  if (session?.user?.id) {
+    const membership = await db.membership.findFirst({
+      where: { userId: session.user.id },
+      include: { organization: true },
+    });
+
+    if (membership) {
+      return {
+        organizationId: membership.organizationId,
+        organizationName: membership.organization.name,
+        organizationSlug: membership.organization.slug || "",
+        userId: session.user.id,
+        role: membership.role,
+        authSource: "session",
+      };
+    }
+  }
 
   if (process.env.NODE_ENV !== "production") {
     // Return the stable dev context for local development
@@ -37,8 +51,6 @@ export async function getRequestContextOrThrow(): Promise<RequestContext> {
     };
   }
 
-  // In production, we must not have a silent fallback.
-  // Once an auth provider is added, this will check the session.
   throw new Error("Unauthorized: No active session found and dev fallback is disabled in production.");
 }
 

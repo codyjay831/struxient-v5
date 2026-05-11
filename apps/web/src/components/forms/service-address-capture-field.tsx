@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
+import { SALES_INTAKE_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
 import {
   PUBLIC_INTAKE_SERVICE_LOCATION_SCHEMA_VERSION,
   type PublicIntakeServiceLocationV1,
@@ -124,7 +124,7 @@ export type ServiceAddressCaptureFieldProps = {
 /**
  * One visible “service address / project location” field with optional Places assist
  * on the same input. Structured capture is posted via hidden `publicIntakeServiceLocation`;
- * the visible line uses `serviceAddress` (matches public intake and staff lead forms).
+ * the visible line uses `serviceAddress` (matches public intake and staff sales intake forms).
  */
 export function ServiceAddressCaptureField({
   googleMapsApiKey,
@@ -201,7 +201,7 @@ export function ServiceAddressCaptureField({
           name="serviceAddress"
           type="text"
           required={required}
-          maxLength={LEAD_FIELD_LIMITS.publicIntakeServiceAddress}
+          maxLength={SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress}
           autoComplete="street-address"
           defaultValue={defaultDisplayAddress}
           placeholder={

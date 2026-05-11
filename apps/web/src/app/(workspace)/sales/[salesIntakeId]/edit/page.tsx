@@ -7,28 +7,28 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { Inbox } from "lucide-react";
-import { updateLeadAction } from "../../sales-form-actions";
+import { updateSalesIntakeAction } from "../../sales-form-actions";
 import { SalesRecordForm } from "../../sales-record-form";
 import { parseStoredPublicIntakeServiceLocation } from "@/lib/public-intake-service-location";
 import { loadAvailableLineItemTemplates } from "@/lib/line-item-template-loader";
-import { loadLeadCustomFieldDefs } from "@/lib/lead-custom-field-loader";
+import { loadSalesCustomFieldDefs } from "@/lib/sales-custom-field-loader";
 
 export const dynamic = "force-dynamic";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export default async function EditLeadPage({
+export default async function EditSalesIntakePage({
   params,
 }: {
-  params: Promise<{ leadId: string }>;
+  params: Promise<{ salesIntakeId: string }>;
 }) {
-  const { leadId } = await params;
+  const { salesIntakeId } = await params;
   const ctx = await getRequestContextOrThrow();
-  const [lead, availableTemplates, customFieldDefs] = await Promise.all([
-    db.lead.findFirst({
+  const [salesIntake, availableTemplates, customFieldDefs] = await Promise.all([
+    db.salesIntake.findFirst({
       where: {
-        id: leadId,
+        id: salesIntakeId,
         organizationId: ctx.organizationId,
       },
       include: {
@@ -41,10 +41,10 @@ export default async function EditLeadPage({
       },
     }),
     loadAvailableLineItemTemplates(ctx.organizationId),
-    loadLeadCustomFieldDefs(ctx.organizationId),
+    loadSalesCustomFieldDefs(ctx.organizationId),
   ]);
 
-  if (!lead) {
+  if (!salesIntake) {
     return (
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
@@ -55,11 +55,11 @@ export default async function EditLeadPage({
           ]}
         />
         <PageHeader
-          title="Edit lead"
-          description="No lead exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          title="Edit sales intake"
+          description="No sales intake exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
             <Link href="/sales" className={listLinkClass}>
-              ← Leads list
+              ← Sales intakes list
             </Link>
           }
         />
@@ -67,22 +67,22 @@ export default async function EditLeadPage({
           <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
             Requested id
           </p>
-          <p className="mt-1 break-all font-mono text-sm text-foreground">{leadId}</p>
+          <p className="mt-1 break-all font-mono text-sm text-foreground">{salesIntakeId}</p>
         </WorkspacePanel>
         <EmptyState
           icon={Inbox}
-          title="Lead not found"
-          description="This id is not a lead record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          title="Sales intake not found"
+          description="This id is not a sales intake record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
         >
           <Link href="/sales" className={listLinkClass}>
-            Back to leads
+            Back to sales intakes
           </Link>
         </EmptyState>
       </div>
     );
   }
 
-  const intakeSnap = parseStoredPublicIntakeServiceLocation(lead.publicIntakeServiceLocation);
+  const intakeSnap = parseStoredPublicIntakeServiceLocation(salesIntake.publicIntakeServiceLocation);
   const serviceLocationDefaults =
     intakeSnap &&
     (intakeSnap.formattedAddress.trim().length > 0 || intakeSnap.addressLine1.trim().length > 0)
@@ -99,20 +99,20 @@ export default async function EditLeadPage({
         items={[
           { label: "Sales" },
           { label: "Sales", href: "/sales" },
-          { label: lead.title, href: `/sales/${lead.id}` },
+          { label: salesIntake.title, href: `/sales/${salesIntake.id}` },
           { label: "Edit" },
         ]}
       />
       <PageHeader
-        title={`Edit ${lead.title}`}
+        title={`Edit ${salesIntake.title}`}
         description="Update intake fields for your development organization only. Status and customer link are not editable here yet. Organization cannot be changed from this form."
         actions={
           <>
-            <Link href={`/sales/${lead.id}`} className={listLinkClass}>
-              ← Lead detail
+            <Link href={`/sales/${salesIntake.id}`} className={listLinkClass}>
+              ← Sales intake detail
             </Link>
             <Link href="/sales" className={listLinkClass}>
-              All leads
+              All sales intakes
             </Link>
           </>
         }
@@ -120,38 +120,38 @@ export default async function EditLeadPage({
 
       <WorkspacePanel className="mb-6">
         <SectionHeading
-          title="Lead record"
+          title="Sales intake record"
           description="Title is required. Leave optional fields blank to clear stored values. Empty optional values normalize to null on the server."
         />
         <SalesRecordForm
           mode="edit"
-          updateFormAction={updateLeadAction.bind(null, lead.id)}
-          cancelHref={`/sales/${lead.id}`}
+          updateFormAction={updateSalesIntakeAction.bind(null, salesIntake.id)}
+          cancelHref={`/sales/${salesIntake.id}`}
           googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
           availableTemplates={availableTemplates}
           customFieldDefs={customFieldDefs}
           initial={{
-            title: lead.title,
-            contactName: lead.contactName,
-            email: lead.email,
-            phone: lead.phone,
-            requestType: lead.requestType,
-            neededByBucket: lead.neededByBucket,
-            neededByDate: lead.neededByDate,
-            scopeSummary: lead.scopeSummary,
-            source: lead.source,
-            sourceDetail: lead.sourceDetail,
-            notes: lead.notes,
-            suggestedTemplateIds: lead.suggestedTemplateIds,
-            customFieldValues: lead.customFieldValues.map((v) => ({
+            title: salesIntake.title,
+            contactName: salesIntake.contactName,
+            email: salesIntake.email,
+            phone: salesIntake.phone,
+            requestType: salesIntake.requestType,
+            neededByBucket: salesIntake.neededByBucket,
+            neededByDate: salesIntake.neededByDate,
+            scopeSummary: salesIntake.scopeSummary,
+            source: salesIntake.source,
+            sourceDetail: salesIntake.sourceDetail,
+            notes: salesIntake.notes,
+            suggestedTemplateIds: salesIntake.suggestedTemplateIds,
+            customFieldValues: salesIntake.customFieldValues.map((v) => ({
               fieldDefId: v.fieldDefId,
               value: v.value,
             })),
           }}
-          initialVisitRequest={lead.visitRequests[0] ? {
-            requestedDate: lead.visitRequests[0].requestedDate,
-            requestedWindow: lead.visitRequests[0].requestedWindow,
-            notes: lead.visitRequests[0].notes,
+          initialVisitRequest={salesIntake.visitRequests[0] ? {
+            requestedDate: salesIntake.visitRequests[0].requestedDate,
+            requestedWindow: salesIntake.visitRequests[0].requestedWindow,
+            notes: salesIntake.visitRequests[0].notes,
           } : undefined}
           serviceLocationDefaults={serviceLocationDefaults}
         />

@@ -12,7 +12,7 @@ type Activity = {
   createdAt: Date;
   actorUser: {
     name: string | null;
-    email: string;
+    email: string | null;
   } | null;
 };
 

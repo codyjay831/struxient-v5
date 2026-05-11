@@ -1,19 +1,19 @@
 import {
   type JobStatus,
-  type LeadStatus,
+  type SalesIntakeStatus,
   type QuoteStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 
 /**
- * Derived commercial progress story for a Lead, computed from existing Lead +
+ * Derived commercial progress story for a Sales Intake, computed from existing SalesIntake +
  * related Quote + related Job state. This is intentionally **not** persisted —
  * it is recomputed for display and is independent from the user-set
- * {@link LeadStatus}, which remains a manual lifecycle marker.
+ * {@link SalesIntakeStatus}, which remains a manual lifecycle marker.
  *
  * Pure / deterministic — no Prisma access; safe to unit test.
  */
-export type LeadCommercialProgressState =
+export type SalesIntakeCommercialProgressState =
   | "ADD_CONTACT_INFO"
   | "NEEDS_CUSTOMER"
   | "READY_FOR_QUOTE"
@@ -28,18 +28,18 @@ export type LeadCommercialProgressState =
  * What the next recommended step is in domain terms — the calling UI maps this
  * to a concrete href so URL knowledge stays in the route layer, not here.
  */
-export type LeadCommercialProgressActionKind =
+export type SalesIntakeCommercialProgressActionKind =
   | "EDIT_CONTACT_INFO"
   | "ATTACH_OR_CREATE_CUSTOMER"
   | "START_QUOTE"
-  | "QUALIFY_LEAD"
+  | "QUALIFY_INTAKE"
   | "OPEN_DRAFT_QUOTE"
   | "OPEN_QUOTE"
   | "OPEN_EXECUTION_REVIEW"
   | "OPEN_JOB";
 
-export type LeadCommercialProgressAction = {
-  kind: LeadCommercialProgressActionKind;
+export type SalesIntakeCommercialProgressAction = {
+  kind: SalesIntakeCommercialProgressActionKind;
   label: string;
   /** Set when the action targets a specific quote (open / execution review). */
   targetQuoteId?: string;
@@ -47,8 +47,8 @@ export type LeadCommercialProgressAction = {
   targetJobId?: string;
 };
 
-/** Slim summary of a lead-linked quote; pass only what's needed to derive progress. */
-export type LeadProgressQuoteInput = {
+/** Slim summary of a sales intake-linked quote; pass only what's needed to derive progress. */
+export type SalesIntakeProgressQuoteInput = {
   id: string;
   title: string;
   status: QuoteStatus;
@@ -58,25 +58,25 @@ export type LeadProgressQuoteInput = {
   job: { id: string; status: JobStatus } | null;
 };
 
-export type LeadProgressLeadInput = {
-  status: LeadStatus;
+export type SalesIntakeProgressInput = {
+  status: SalesIntakeStatus;
   customerId: string | null;
   email: string | null;
   phone: string | null;
 };
 
-export type LeadCommercialProgressInput = {
-  lead: LeadProgressLeadInput;
-  quotes: LeadProgressQuoteInput[];
+export type SalesIntakeCommercialProgressInput = {
+  salesIntake: SalesIntakeProgressInput;
+  quotes: SalesIntakeProgressQuoteInput[];
   /**
    * Pre-computed by the route when the active quote has been edited since the
-   * last SEND/APPROVAL checkpoint proof. Optional because the lead list does
+   * last SEND/APPROVAL checkpoint proof. Optional because the list does
    * not pay the extra checkpoint query on every row.
    */
   revisionDriftSinceLastProof?: boolean;
 };
 
-export type LeadCommercialProgressActiveQuote = {
+export type SalesIntakeCommercialProgressActiveQuote = {
   id: string;
   title: string;
   status: QuoteStatus;
@@ -85,26 +85,26 @@ export type LeadCommercialProgressActiveQuote = {
   updatedAt: Date;
 };
 
-export type LeadCommercialProgressActiveJob = {
+export type SalesIntakeCommercialProgressActiveJob = {
   id: string;
   status: JobStatus;
 };
 
-export type LeadCommercialProgress = {
-  state: LeadCommercialProgressState;
+export type SalesIntakeCommercialProgress = {
+  state: SalesIntakeCommercialProgressState;
   /** Short, plain-English headline label — safe to render directly. */
   label: string;
   /** One-sentence supporting copy explaining the state. */
   description: string;
   /** Primary recommended action; null only for terminal states. */
-  primaryAction: LeadCommercialProgressAction | null;
+  primaryAction: SalesIntakeCommercialProgressAction | null;
   /**
    * Secondary action when more than one path is sensible — e.g. "Start quote
    * anyway" while the contact/customer guidance is still surfaced as primary.
    */
-  secondaryAction: LeadCommercialProgressAction | null;
-  activeQuote: LeadCommercialProgressActiveQuote | null;
-  activeJob: LeadCommercialProgressActiveJob | null;
+  secondaryAction: SalesIntakeCommercialProgressAction | null;
+  activeQuote: SalesIntakeCommercialProgressActiveQuote | null;
+  activeJob: SalesIntakeCommercialProgressActiveJob | null;
   /** -1 for terminal states. */
   stepIndex: number;
   totalSteps: number;
@@ -117,7 +117,7 @@ export type LeadCommercialProgress = {
 /** Canonical visible step count in the indicator (Setup → Quote → Sent → Approved → Job). */
 const TOTAL_STEPS = 5;
 
-const STATE_STEP_INDEX: Record<LeadCommercialProgressState, number> = {
+const STATE_STEP_INDEX: Record<SalesIntakeCommercialProgressState, number> = {
   ADD_CONTACT_INFO: 0,
   NEEDS_CUSTOMER: 0,
   READY_FOR_QUOTE: 0,
@@ -129,7 +129,7 @@ const STATE_STEP_INDEX: Record<LeadCommercialProgressState, number> = {
   ARCHIVED: -1,
 };
 
-const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
+const STATE_TONE: Record<SalesIntakeCommercialProgressState, StatusBadgeTone> = {
   ADD_CONTACT_INFO: "draft",
   NEEDS_CUSTOMER: "draft",
   READY_FOR_QUOTE: "sent",
@@ -141,7 +141,7 @@ const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
   ARCHIVED: "neutral",
 };
 
-const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
+const STATE_LABEL: Record<SalesIntakeCommercialProgressState, string> = {
   ADD_CONTACT_INFO: "Needs contact info",
   NEEDS_CUSTOMER: "Needs customer record",
   READY_FOR_QUOTE: "Ready for quote",
@@ -154,7 +154,7 @@ const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
 };
 
 /** Canonical steps the indicator renders, left-to-right. */
-export const LEAD_COMMERCIAL_PROGRESS_STEPS: readonly { key: string; label: string }[] = [
+export const SALES_INTAKE_COMMERCIAL_PROGRESS_STEPS: readonly { key: string; label: string }[] = [
   { key: "setup", label: "Setup" },
   { key: "quote", label: "Quote" },
   { key: "sent", label: "Sent" },
@@ -163,9 +163,9 @@ export const LEAD_COMMERCIAL_PROGRESS_STEPS: readonly { key: string; label: stri
 ] as const;
 
 function pickActiveQuote(
-  quotes: LeadProgressQuoteInput[],
-): LeadProgressQuoteInput | null {
-  let best: LeadProgressQuoteInput | null = null;
+  quotes: SalesIntakeProgressQuoteInput[],
+): SalesIntakeProgressQuoteInput | null {
+  let best: SalesIntakeProgressQuoteInput | null = null;
   for (const q of quotes) {
     if (q.status === ("ARCHIVED" as QuoteStatus)) {
       continue;
@@ -189,8 +189,8 @@ function pickActiveQuote(
 }
 
 function findAnyActiveJobOwnerQuote(
-  quotes: LeadProgressQuoteInput[],
-): LeadProgressQuoteInput | null {
+  quotes: SalesIntakeProgressQuoteInput[],
+): SalesIntakeProgressQuoteInput | null {
   for (const q of quotes) {
     if (q.job && q.job.status === ("ACTIVE" as JobStatus)) {
       return q;
@@ -199,7 +199,7 @@ function findAnyActiveJobOwnerQuote(
   return null;
 }
 
-function toActiveQuote(q: LeadProgressQuoteInput): LeadCommercialProgressActiveQuote {
+function toActiveQuote(q: SalesIntakeProgressQuoteInput): SalesIntakeCommercialProgressActiveQuote {
   return {
     id: q.id,
     title: q.title,
@@ -210,32 +210,32 @@ function toActiveQuote(q: LeadProgressQuoteInput): LeadCommercialProgressActiveQ
   };
 }
 
-function describeQuote(q: LeadCommercialProgressActiveQuote, prefix: string): string {
+function describeQuote(q: SalesIntakeCommercialProgressActiveQuote, prefix: string): string {
   const lineCount = q.lineItemCount;
   const lineNoun = lineCount === 1 ? "line" : "lines";
   return `${prefix} (${lineCount} ${lineNoun}).`;
 }
 
 /**
- * Produce a derived commercial progress story for a Lead.
+ * Produce a derived commercial progress story for a Sales Intake.
  *
  * Active quote selection: most recently updated non-ARCHIVED quote (id sort
  * tiebreaker for determinism). If any linked quote (even archived) has an
  * ACTIVE job, the panel surfaces JOB_ACTIVE so a job that outlived an archived
  * quote isn't lost.
  */
-export function getLeadCommercialProgress(
-  input: LeadCommercialProgressInput,
-): LeadCommercialProgress {
-  const { lead, quotes } = input;
+export function getSalesIntakeCommercialProgress(
+  input: SalesIntakeCommercialProgressInput,
+): SalesIntakeCommercialProgress {
+  const { salesIntake, quotes } = input;
 
-  if (lead.status === ("ARCHIVED" as LeadStatus)) {
+  if (salesIntake.status === ("ARCHIVED" as SalesIntakeStatus)) {
     return makeTerminal({
       state: "ARCHIVED",
-      description: "This lead is archived. Restore it from the lead record to continue.",
+      description: "This intake is archived. Restore it from the record to continue.",
     });
   }
-  if (lead.status === ("LOST" as LeadStatus)) {
+  if (salesIntake.status === ("LOST" as SalesIntakeStatus)) {
     return makeTerminal({
       state: "CLOSED_NOT_A_FIT",
       description: "This opportunity was marked lost. No further commercial action is expected.",
@@ -247,7 +247,7 @@ export function getLeadCommercialProgress(
 
   if (jobOwner && jobOwner.job) {
     const activeQuote = toActiveQuote(jobOwner);
-    const activeJob: LeadCommercialProgressActiveJob = {
+    const activeJob: SalesIntakeCommercialProgressActiveJob = {
       id: jobOwner.job.id,
       status: jobOwner.job.status,
     };
@@ -345,7 +345,7 @@ export function getLeadCommercialProgress(
     };
   }
 
-  if (lead.customerId != null) {
+  if (salesIntake.customerId != null) {
     return {
       state: "READY_FOR_QUOTE",
       label: STATE_LABEL.READY_FOR_QUOTE,
@@ -362,16 +362,16 @@ export function getLeadCommercialProgress(
     };
   }
 
-  const hasContact = Boolean(lead.email) || Boolean(lead.phone);
+  const hasContact = Boolean(salesIntake.email) || Boolean(salesIntake.phone);
 
-  if (lead.status === ("OPEN" as LeadStatus)) {
+  if (salesIntake.status === ("OPEN" as SalesIntakeStatus)) {
     return {
       state: "ADD_CONTACT_INFO",
-      label: "New lead — review intake",
+      label: "New intake — review details",
       description: hasContact
-        ? "Review the intake details, then qualify this lead to move it forward."
-        : "Add an email or phone number and qualify this lead to move it forward.",
-      primaryAction: { kind: "QUALIFY_LEAD", label: "Qualify lead" },
+        ? "Review the intake details, then qualify this record to move it forward."
+        : "Add an email or phone number and qualify this record to move it forward.",
+      primaryAction: { kind: "QUALIFY_INTAKE", label: "Qualify intake" },
       secondaryAction: hasContact
         ? { kind: "ATTACH_OR_CREATE_CUSTOMER", label: "Link customer" }
         : { kind: "EDIT_CONTACT_INFO", label: "Add contact info" },
@@ -424,7 +424,7 @@ export function getLeadCommercialProgress(
 function makeTerminal(args: {
   state: "ARCHIVED" | "CLOSED_NOT_A_FIT";
   description: string;
-}): LeadCommercialProgress {
+}): SalesIntakeCommercialProgress {
   return {
     state: args.state,
     label: STATE_LABEL[args.state],
@@ -445,19 +445,19 @@ function makeTerminal(args: {
  * Resolves an action kind to a concrete href. Lives next to the helper so the
  * panel and list can share URL conventions without re-implementing them.
  */
-export function resolveLeadCommercialProgressActionHref(
-  action: LeadCommercialProgressAction,
-  ctx: { leadId: string },
+export function resolveSalesIntakeCommercialProgressActionHref(
+  action: SalesIntakeCommercialProgressAction,
+  ctx: { salesIntakeId: string },
 ): string {
   switch (action.kind) {
     case "EDIT_CONTACT_INFO":
-      return `/sales/${ctx.leadId}/edit`;
+      return `/sales/${ctx.salesIntakeId}/edit`;
     case "ATTACH_OR_CREATE_CUSTOMER":
-      return `/sales/${ctx.leadId}#customer-link`;
-    case "QUALIFY_LEAD":
-      return `/sales/${ctx.leadId}`;
+      return `/sales/${ctx.salesIntakeId}#customer-link`;
+    case "QUALIFY_INTAKE":
+      return `/sales/${ctx.salesIntakeId}`;
     case "START_QUOTE":
-      return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
+      return `/quotes/new?salesIntakeId=${encodeURIComponent(ctx.salesIntakeId)}`;
     case "OPEN_DRAFT_QUOTE":
     case "OPEN_QUOTE":
       return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/sales?tab=proposals";

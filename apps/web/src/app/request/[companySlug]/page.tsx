@@ -4,7 +4,7 @@ import { getPublicRequestIntakeBundleBySlug } from "@/lib/db";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { toPublicIntakeFormViewModel } from "@/lib/public-request-settings-effective";
 import { PublicRequestForm } from "./public-request-form";
-import { loadLeadCustomFieldDefs } from "@/lib/lead-custom-field-loader";
+import { loadSalesCustomFieldDefs } from "@/lib/sales-custom-field-loader";
 import { loadAvailableLineItemTemplates } from "@/lib/line-item-template-loader";
 
 type PageProps = { params: Promise<{ companySlug: string }> };
@@ -43,7 +43,7 @@ export default async function PublicRequestPage(props: PageProps) {
 
   const view = toPublicIntakeFormViewModel(bundle.intake);
   const [customFieldDefs, availableTemplates] = await Promise.all([
-    loadLeadCustomFieldDefs(bundle.organizationId, { publicOnly: true }),
+    loadSalesCustomFieldDefs(bundle.organizationId, { publicOnly: true }),
     loadAvailableLineItemTemplates(bundle.organizationId),
   ]);
 

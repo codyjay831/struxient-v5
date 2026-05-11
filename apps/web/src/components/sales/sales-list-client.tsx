@@ -1,30 +1,35 @@
 "use client";
 
 /**
- * LeadsListClient — client component for the real Leads page.
+ * SalesIntakesListClient — client component for the real Sales Intakes page.
  *
- * The popup body is rendered by `LeadWorkSurface` (mode="standard"). This file
+ * The popup body is rendered by `SalesIntakeWorkSurface` (mode="standard"). This file
  * owns the list rows + native dialog chrome and adapts the serialized list-row
- * payload into the unified Work Surface props.
+ * payload into the unified Work Surface props. Graduating an intake off the
+ * intake queue must not unmount an open workspace dialog.
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight, Inbox, X } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import {
-  LeadWorkSurface,
-  type LeadWorkSurfaceData,
-  type LeadWorkSurfaceProgressAction,
-  type LeadWorkSurfaceQuote,
-} from "@/components/work-surfaces/lead-work-surface";
+  SalesIntakeWorkSurface,
+  type SalesIntakeWorkSurfaceActiveQuotePayload,
+  type SalesIntakeWorkSurfaceData,
+  type SalesIntakeWorkSurfaceProgressAction,
+  type SalesIntakeWorkSurfaceQuote,
+} from "@/components/work-surfaces/sales-intake-work-surface";
+import { patchSerializedSalesIntakeRowAfterQuoteStarted } from "@/lib/sales-intake-graduation-lifecycle";
 import {
-  loadLeadActiveQuoteWorkSurfaceAction,
-  loadLeadServiceAddressContextAction,
+  loadSalesIntakeActiveQuoteWorkSurfaceAction,
+  loadSalesIntakeServiceAddressContextAction,
 } from "@/app/(workspace)/sales/sales-workspace-actions";
 
 /* ─── Serialized types (computed server-side, passed as plain props) ─────── */
 
-export type SerializedProgressAction = LeadWorkSurfaceProgressAction;
+export type SerializedProgressAction = SalesIntakeWorkSurfaceProgressAction;
 
 export type SerializedQuoteSummary = {
   id: string;
@@ -36,16 +41,16 @@ export type SerializedQuoteSummary = {
   href: string;
 };
 
-import type { LeadSource } from "@prisma/client";
+import type { SalesIntakeSource } from "@prisma/client";
 
-export type SerializedLeadRow = {
+export type SerializedSalesIntakeRow = {
   id: string;
   title: string;
   contactName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
-  source: LeadSource;
+  source: SalesIntakeSource;
   sourceLabel: string;
   statusLabel: string;
   statusTone: StatusBadgeTone;
@@ -55,6 +60,8 @@ export type SerializedLeadRow = {
   createdAtLabel: string;
   /** Server-rendered staleness hint, e.g. `Age 2D 3H`. */
   ageLabel: string;
+  /** Optional value hint, e.g. `$1,200`. */
+  valueLabel?: string | null;
   progressLabel: string;
   progressDescription: string;
   progressTone: StatusBadgeTone;
@@ -66,20 +73,20 @@ export type SerializedLeadRow = {
   /** Non-archived quotes, newest first. */
   quotes: SerializedQuoteSummary[];
   /** /sales/[id] */
-  leadHref: string;
-  /** /quotes/new?leadId=[id] */
+  salesIntakeHref: string;
+  /** /quotes/new?salesIntakeId=[id] */
   newQuoteHref: string;
-  /** Jobsite / project address when known from this lead. */
+  /** Jobsite / project address when known from this sales intake. */
   jobsiteAddressLine: string | null;
 };
 
-/* ─── Adapter: SerializedLeadRow → LeadWorkSurface props ─────────────────── */
+/* ─── Adapter: SerializedSalesIntakeRow → SalesIntakeWorkSurface props ─────────────────── */
 
-function adaptLeadRow(lead: SerializedLeadRow): {
-  data: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
+function adaptSalesIntakeRow(salesIntake: SerializedSalesIntakeRow): {
+  data: SalesIntakeWorkSurfaceData;
+  linkedQuotes: SalesIntakeWorkSurfaceQuote[];
 } {
-  const linkedQuotes: LeadWorkSurfaceQuote[] = lead.quotes.map((q) => ({
+  const linkedQuotes: SalesIntakeWorkSurfaceQuote[] = salesIntake.quotes.map((q) => ({
     id: q.id,
     title: q.title,
     statusLabel: q.statusLabel,
@@ -89,47 +96,47 @@ function adaptLeadRow(lead: SerializedLeadRow): {
     href: q.href,
   }));
 
-  const data: LeadWorkSurfaceData = {
-    id: lead.id,
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-    phone: lead.phone,
-    notes: lead.notes,
-    source: lead.source,
-    sourceLabel: lead.sourceLabel,
-    statusLabel: lead.statusLabel,
-    statusTone: lead.statusTone,
-    customerId: lead.customerId,
-    customerDisplayName: lead.customerDisplayName,
-    customerHref: lead.customerHref,
-    createdAtLabel: lead.createdAtLabel,
-    leadHref: lead.leadHref,
-    editHref: `${lead.leadHref}/edit`,
-    newQuoteHref: lead.newQuoteHref,
-    progressLabel: lead.progressLabel,
-    progressDescription: lead.progressDescription,
-    progressTone: lead.progressTone,
-    progressState: lead.progressState,
-    progressPrimaryAction: lead.progressPrimaryAction,
-    progressSecondaryAction: lead.progressSecondaryAction,
-    activeQuoteId: lead.quotes[0]?.id ?? null,
-    activeJobId: lead.activeJobId,
-    activeJobStatus: lead.activeJobStatus,
-    jobsiteAddressLine: lead.jobsiteAddressLine,
+  const data: SalesIntakeWorkSurfaceData = {
+    id: salesIntake.id,
+    title: salesIntake.title,
+    contactName: salesIntake.contactName,
+    email: salesIntake.email,
+    phone: salesIntake.phone,
+    notes: salesIntake.notes,
+    source: salesIntake.source,
+    sourceLabel: salesIntake.sourceLabel,
+    statusLabel: salesIntake.statusLabel,
+    statusTone: salesIntake.statusTone,
+    customerId: salesIntake.customerId,
+    customerDisplayName: salesIntake.customerDisplayName,
+    customerHref: salesIntake.customerHref,
+    createdAtLabel: salesIntake.createdAtLabel,
+    salesIntakeHref: salesIntake.salesIntakeHref,
+    editHref: `${salesIntake.salesIntakeHref}/edit`,
+    newQuoteHref: salesIntake.newQuoteHref,
+    progressLabel: salesIntake.progressLabel,
+    progressDescription: salesIntake.progressDescription,
+    progressTone: salesIntake.progressTone,
+    progressState: salesIntake.progressState,
+    progressPrimaryAction: salesIntake.progressPrimaryAction,
+    progressSecondaryAction: salesIntake.progressSecondaryAction,
+    activeQuoteId: salesIntake.quotes[0]?.id ?? null,
+    activeJobId: salesIntake.activeJobId,
+    activeJobStatus: salesIntake.activeJobStatus,
+    jobsiteAddressLine: salesIntake.jobsiteAddressLine,
   };
 
   return { data, linkedQuotes };
 }
 
-/* ─── Compact lead row ───────────────────────────────────────────────────── */
+/* ─── Compact sales intake row ───────────────────────────────────────────────────── */
 
-function LeadRow({
-  lead,
+function SalesIntakeRow({
+  salesIntake,
   active,
   onOpen,
 }: {
-  lead: SerializedLeadRow;
+  salesIntake: SerializedSalesIntakeRow;
   active: boolean;
   onOpen: () => void;
 }) {
@@ -145,29 +152,29 @@ function LeadRow({
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-0.5">
           <span className="text-sm font-semibold text-foreground leading-snug">
-            {lead.title}
+            {salesIntake.title}
           </span>
-          <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
+          <StatusBadge label={salesIntake.progressLabel} tone={salesIntake.progressTone} />
         </div>
         <p className="text-xs text-foreground-muted truncate mb-1.5">
-          {lead.contactName ?? lead.email ?? "No contact"}
+          {salesIntake.contactName ?? salesIntake.email ?? "No contact"}
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs text-foreground-subtle">
-          <span>{lead.sourceLabel}</span>
+          <span>{salesIntake.sourceLabel}</span>
           <span>·</span>
-          <span>{lead.ageLabel}</span>
+          <span>{salesIntake.ageLabel}</span>
           <span>·</span>
-          {lead.valueLabel && (
+          {salesIntake.valueLabel && (
             <>
-              <span>{lead.valueLabel}</span>
+              <span>{salesIntake.valueLabel}</span>
               <span>·</span>
             </>
           )}
-          <span>{lead.createdAtLabel}</span>
-          {lead.customerDisplayName && (
+          <span>{salesIntake.createdAtLabel}</span>
+          {salesIntake.customerDisplayName && (
             <>
               <span>·</span>
-              <span>{lead.customerDisplayName}</span>
+              <span>{salesIntake.customerDisplayName}</span>
             </>
           )}
         </div>
@@ -180,33 +187,38 @@ function LeadRow({
   );
 }
 
-/* ─── Workspace content (popup chrome + LeadWorkSurface body) ───────────── */
+/* ─── Workspace content (popup chrome + SalesIntakeWorkSurface body) ───────────── */
 
 function WorkspaceContent({
-  lead,
+  salesIntake,
   onClose,
+  onQuoteStarted,
 }: {
-  lead: SerializedLeadRow;
+  salesIntake: SerializedSalesIntakeRow;
   onClose: () => void;
+  onQuoteStarted: (args: {
+    quoteId: string;
+    activeQuotePayload: SalesIntakeWorkSurfaceActiveQuotePayload | null;
+  }) => void;
 }) {
-  const { data, linkedQuotes } = adaptLeadRow(lead);
+  const { data, linkedQuotes } = adaptSalesIntakeRow(salesIntake);
 
   /* Lazy loader for the active-quote QuoteWorkSurface payload — keeps the
-   * leads-list query slim (no per-row readiness fetches) while still letting
-   * the popup show the same QuoteWorkSurface that Workstation + the Lead
+   * sales-intakes-list query slim (no per-row readiness fetches) while still letting
+   * the popup show the same QuoteWorkSurface that Workstation + the Sales Intake
    * full page show. The server action derives the active quote id itself, so
    * we never trust a client-provided quote id here. */
   const loadActiveQuoteWorkSurface = useCallback(
-    () => loadLeadActiveQuoteWorkSurfaceAction(lead.id),
-    [lead.id],
+    () => loadSalesIntakeActiveQuoteWorkSurfaceAction(salesIntake.id),
+    [salesIntake.id],
   );
 
   /* Same pattern for the Service address context — fetched on first paint of
-   * the Contact tab so the leads-list query stays slim (no per-row service-
+   * the Contact tab so the sales-intakes-list query stays slim (no per-row service-
    * location join). The action is org-scoped server-side. */
   const loadServiceAddressContext = useCallback(
-    () => loadLeadServiceAddressContextAction(lead.id),
-    [lead.id],
+    () => loadSalesIntakeServiceAddressContextAction(salesIntake.id),
+    [salesIntake.id],
   );
 
   return (
@@ -215,19 +227,19 @@ function WorkspaceContent({
       <div className="shrink-0 border-b border-border px-6 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
+            <StatusBadge label={salesIntake.progressLabel} tone={salesIntake.progressTone} />
             <span className="text-xs text-foreground-subtle">
-              {lead.sourceLabel} · {lead.ageLabel}
+              {salesIntake.sourceLabel} · {salesIntake.ageLabel}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {lead.valueLabel && (
+            {salesIntake.valueLabel && (
               <div className="rounded-lg border border-border bg-background px-4 py-2 text-right">
                 <p className="text-[10px] font-medium text-foreground-subtle uppercase tracking-wide leading-none mb-0.5">
                   Value
                 </p>
                 <p className="text-lg font-semibold text-foreground tabular-nums leading-tight">
-                  {lead.valueLabel}
+                  {salesIntake.valueLabel}
                 </p>
               </div>
             )}
@@ -244,22 +256,23 @@ function WorkspaceContent({
 
         <div className="mt-4">
           <h2 className="text-2xl font-semibold text-foreground tracking-tight leading-tight">
-            {lead.customerDisplayName ?? lead.title}
+            {salesIntake.customerDisplayName ?? salesIntake.title}
           </h2>
-          {lead.customerDisplayName && lead.title !== lead.customerDisplayName && (
-            <p className="text-sm text-foreground-muted mt-0.5">{lead.title}</p>
+          {salesIntake.customerDisplayName && salesIntake.title !== salesIntake.customerDisplayName && (
+            <p className="text-sm text-foreground-muted mt-0.5">{salesIntake.title}</p>
           )}
         </div>
       </div>
 
-      {/* ── Body — Lead Work Surface (standard mode) ─────────────────────── */}
+      {/* ── Body — Sales Intake Work Surface (standard mode) ─────────────────────── */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        <LeadWorkSurface
+        <SalesIntakeWorkSurface
           mode="standard"
-          lead={data}
+          salesIntake={data}
           linkedQuotes={linkedQuotes}
           loadActiveQuoteWorkSurface={loadActiveQuoteWorkSurface}
           loadServiceAddressContext={loadServiceAddressContext}
+          onQuoteStarted={onQuoteStarted}
         />
       </div>
     </div>
@@ -268,67 +281,117 @@ function WorkspaceContent({
 
 /* ─── Main export ────────────────────────────────────────────────────────── */
 
-export function LeadsListClient({ leads }: { leads: SerializedLeadRow[] }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
-  const [lastOpenLead, setLastOpenLead] = useState<SerializedLeadRow | null>(null);
+const primaryLinkClass =
+  "inline-flex items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
 
-  const currentOpenLead = leads.find((l) => l.id === openLeadId) ?? null;
+const mutedLinkClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+export function SalesIntakesListClient({
+  salesIntakes,
+  orgHasSalesIntakes,
+}: {
+  salesIntakes: SerializedSalesIntakeRow[];
+  orgHasSalesIntakes: boolean;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [openSalesIntakeId, setOpenSalesIntakeId] = useState<string | null>(null);
+  const [lastOpenSalesIntake, setLastOpenSalesIntake] = useState<SerializedSalesIntakeRow | null>(null);
+
+  const currentOpenSalesIntake = salesIntakes.find((l) => l.id === openSalesIntakeId) ?? null;
 
   useEffect(() => {
-    if (currentOpenLead) {
-      setLastOpenLead(currentOpenLead);
+    if (currentOpenSalesIntake) {
+      setLastOpenSalesIntake(currentOpenSalesIntake);
     }
-  }, [currentOpenLead]);
+  }, [currentOpenSalesIntake]);
 
-  const openLead = openLeadId ? (currentOpenLead || lastOpenLead) : null;
+  const openSalesIntake = openSalesIntakeId ? (currentOpenSalesIntake || lastOpenSalesIntake) : null;
+
+  const handleQuoteStarted = useCallback(
+    (args: {
+      quoteId: string;
+      activeQuotePayload: SalesIntakeWorkSurfaceActiveQuotePayload | null;
+    }) => {
+      setLastOpenSalesIntake((prev) => {
+        if (!prev || prev.id !== openSalesIntakeId) return prev;
+        return patchSerializedSalesIntakeRowAfterQuoteStarted(prev, args);
+      });
+    },
+    [openSalesIntakeId],
+  );
 
   /* Sync native dialog open/close state */
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (openLeadId && !dialog.open) {
+    if (openSalesIntakeId && !dialog.open) {
       dialog.showModal();
-    } else if (!openLeadId && dialog.open) {
+    } else if (!openSalesIntakeId && dialog.open) {
       dialog.close();
     }
-  }, [openLeadId]);
+  }, [openSalesIntakeId]);
 
   /* Reset state when user presses Escape (native cancel) */
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     function handleCancel() {
-      setOpenLeadId(null);
+      setOpenSalesIntakeId(null);
     }
     dialog.addEventListener("cancel", handleCancel);
     return () => dialog.removeEventListener("cancel", handleCancel);
   }, []);
 
   function openWorkspace(id: string) {
-    setOpenLeadId(id);
+    setOpenSalesIntakeId(id);
   }
 
   function closeWorkspace() {
     dialogRef.current?.close();
-    setOpenLeadId(null);
+    setOpenSalesIntakeId(null);
   }
 
   return (
     <>
-      {/* ── Lead rows ─────────────────────────────────────────────────── */}
-      <div className="divide-y divide-border">
-        {leads.map((lead) => (
-          <LeadRow
-            key={lead.id}
-            lead={lead}
-            active={lead.id === openLeadId}
-            onOpen={() => openWorkspace(lead.id)}
-          />
-        ))}
-      </div>
+      {/* ── Sales Intake rows ─────────────────────────────────────────────────── */}
+      {salesIntakes.length === 0 && !openSalesIntakeId ? (
+        <div className="p-6">
+          <EmptyState
+            icon={Inbox}
+            title="Queue is empty"
+            description={
+              orgHasSalesIntakes
+                ? "All active sales intakes have progressed to proposals."
+                : "No sales intakes yet. Add one when a call, walk-in, or message comes in."
+            }
+          >
+            <div className="flex flex-col items-center gap-4">
+              {orgHasSalesIntakes ? (
+                <Link href="/sales?tab=proposals" className={mutedLinkClass}>
+                  View Proposals
+                </Link>
+              ) : null}
+              <Link href="/sales/new" className={primaryLinkClass}>
+                New sales intake
+              </Link>
+            </div>
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {salesIntakes.map((salesIntake) => (
+            <SalesIntakeRow
+              key={salesIntake.id}
+              salesIntake={salesIntake}
+              active={salesIntake.id === openSalesIntakeId}
+              onOpen={() => openWorkspace(salesIntake.id)}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* ── Lead Workspace dialog ──────────────────────────────────────── */}
+      {/* ── Sales Intake Workspace dialog ──────────────────────────────────────── */}
       <dialog
         ref={dialogRef}
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-3xl overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-xl outline-none [&::backdrop]:bg-foreground/25"
@@ -336,13 +399,14 @@ export function LeadsListClient({ leads }: { leads: SerializedLeadRow[] }) {
           if (e.target === e.currentTarget) closeWorkspace();
         }}
       >
-        {openLead && (
-          /* Key by lead.id so internal state (active tab, edit form) resets
-             cleanly when the user opens a different lead. */
+        {openSalesIntake && (
+          /* Key by salesIntake.id so internal state (active tab, edit form) resets
+             cleanly when the user opens a different sales intake. */
           <WorkspaceContent
-            key={openLead.id}
-            lead={openLead}
+            key={openSalesIntake.id}
+            salesIntake={openSalesIntake}
             onClose={closeWorkspace}
+            onQuoteStarted={handleQuoteStarted}
           />
         )}
       </dialog>

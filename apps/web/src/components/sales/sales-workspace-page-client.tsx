@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * LeadWorkspacePageClient — client component for the full Lead record page.
+ * SalesWorkspacePageClient — client component for the full Sales Intake record page.
  *
- * The body is now rendered by `LeadWorkSurface(mode="full")` so the full page
- * shares the canonical Lead UX with the popup and Workstation drawer.
+ * The body is now rendered by `SalesIntakeWorkSurface(mode="full")` so the full page
+ * shares the canonical Sales Intake UX with the popup and Workstation drawer.
  *
  * The shell still renders breadcrumb + identity header outside this component;
  * the surface itself owns the tabs (Overview / Contact / Activity / Quote) and
@@ -13,20 +13,21 @@
 
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 import {
-  LeadWorkSurface,
-  type LeadWorkSurfaceActiveQuotePayload,
-  type LeadWorkSurfaceData,
-  type LeadWorkSurfaceProgressAction,
-  type LeadWorkSurfaceQuote,
-} from "@/components/work-surfaces/lead-work-surface";
-import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
-import type { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
-import type { LeadStatus, LeadSource, NeededByBucket } from "@prisma/client";
-import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
+  SalesIntakeWorkSurface,
+  type SalesIntakeWorkSurfaceActiveQuotePayload,
+  type SalesIntakeWorkSurfaceData,
+  type SalesIntakeWorkSurfaceProgressAction,
+  type SalesIntakeWorkSurfaceQuote,
+  type SalesIntakeWorkSurfaceVisitRequest,
+} from "@/components/work-surfaces/sales-intake-work-surface";
+import type { SalesIntakeFormState } from "@/app/(workspace)/sales/sales-form-actions";
+import type { SalesIntakeCustomerMatchHints } from "@/lib/sales-intake-customer-match-hints";
+import type { SalesIntakeStatus, SalesIntakeSource, NeededByBucket } from "@prisma/client";
+import type { SalesIntakeServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 
 /* ─── Serialized types (computed server-side, passed as plain props) ─────── */
 
-export type SerializedProgressActionFull = LeadWorkSurfaceProgressAction;
+export type SerializedProgressActionFull = SalesIntakeWorkSurfaceProgressAction;
 
 export type SerializedLinkedQuoteFull = {
   id: string;
@@ -43,7 +44,7 @@ export type SerializedLinkedQuoteFull = {
   isApproved: boolean;
 };
 
-export type SerializedLeadFull = {
+export type SerializedSalesIntakeFull = {
   id: string;
   title: string;
   contactName: string | null;
@@ -60,8 +61,8 @@ export type SerializedLeadFull = {
   sourceDetail: string | null;
   statusLabel: string;
   statusTone: StatusBadgeTone;
-  /** Raw LeadStatus string — passed to LeadStatusForm for the select default. */
-  statusValue: LeadStatus;
+  /** Raw SalesIntakeStatus string — passed to SalesIntakeStatusForm for the select default. */
+  statusValue: SalesIntakeStatus;
   customerId: string | null;
   customerDisplayName: string | null;
   customerHref: string | null;
@@ -69,7 +70,7 @@ export type SerializedLeadFull = {
   updatedAtLabel: string;
   convertedAtLabel: string | null;
   showConvertedWithoutCustomerHelper: boolean;
-  leadHref: string;
+  salesIntakeHref: string;
   editHref: string;
   newQuoteHref: string;
   progressLabel: string;
@@ -90,19 +91,19 @@ export type SerializedLeadFull = {
   activeJobId: string | null;
   activeJobStatus: string | null;
   showsRevisionDrift: boolean;
-  /** Canonical lead source — used for customer-from-lead note shaping in workspace UI. */
-  source: LeadSource;
+  /** Canonical sales intake source — used for customer-from-sales-intake note shaping in workspace UI. */
+  source: SalesIntakeSource;
   /** Site visit requests (Phase C). */
-  visitRequests?: LeadWorkSurfaceVisitRequest[];
+  visitRequests?: SalesIntakeWorkSurfaceVisitRequest[];
 };
 
-/* ─── Adapter: SerializedLeadFull → LeadWorkSurface props ────────────────── */
+/* ─── Adapter: SerializedSalesIntakeFull → SalesIntakeWorkSurface props ────────────────── */
 
 function adaptSalesFull(
-  lead: SerializedLeadFull,
+  salesIntake: SerializedSalesIntakeFull,
   linkedQuotes: SerializedLinkedQuoteFull[],
-): { data: LeadWorkSurfaceData; linkedQuotes: LeadWorkSurfaceQuote[] } {
-  const surfaceQuotes: LeadWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
+): { data: SalesIntakeWorkSurfaceData; linkedQuotes: SalesIntakeWorkSurfaceQuote[] } {
+  const surfaceQuotes: SalesIntakeWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
     id: q.id,
     title: q.title,
     statusLabel: q.statusLabel,
@@ -117,51 +118,51 @@ function adaptSalesFull(
     isApproved: q.isApproved,
   }));
 
-  const data: LeadWorkSurfaceData = {
-    id: lead.id,
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-  phone: lead.phone,
-  notes: lead.notes,
-  requestType: lead.requestType,
-  neededByBucket: lead.neededByBucket,
-  neededByDateLabel: lead.neededByDateLabel,
-  scopeSummary: lead.scopeSummary,
-  jobsiteAddressLine: lead.jobsiteAddressLine,
-    intakeServiceLocationLinkedToCustomer: lead.intakeServiceLocationLinkedToCustomer,
-    sourceLabel: lead.sourceLabel,
-    sourceDetail: lead.sourceDetail,
-    statusLabel: lead.statusLabel,
-    statusTone: lead.statusTone,
-    statusValue: lead.statusValue,
-    customerId: lead.customerId,
-    customerDisplayName: lead.customerDisplayName,
-    customerHref: lead.customerHref,
-    createdAtLabel: lead.createdAtLabel,
-    updatedAtLabel: lead.updatedAtLabel,
-    convertedAtLabel: lead.convertedAtLabel,
-    showConvertedWithoutCustomerHelper: lead.showConvertedWithoutCustomerHelper,
-    leadHref: lead.leadHref,
-    editHref: lead.editHref,
-    newQuoteHref: lead.newQuoteHref,
-    progressLabel: lead.progressLabel,
-    progressDescription: lead.progressDescription,
-    progressTone: lead.progressTone,
-    progressState: lead.progressState,
-    progressPrimaryAction: lead.progressPrimaryAction,
-    progressSecondaryAction: lead.progressSecondaryAction,
-    activeQuoteId: lead.activeQuoteId,
-    activeQuoteTitle: lead.activeQuoteTitle,
-    activeQuoteStatusLabel: lead.activeQuoteStatusLabel,
-    activeQuoteTone: lead.activeQuoteTone,
-    activeQuoteTotalCents: lead.activeQuoteTotalCents,
-    activeQuoteLineItemCount: lead.activeQuoteLineItemCount,
-    activeJobId: lead.activeJobId,
-    activeJobStatus: lead.activeJobStatus,
-    showsRevisionDrift: lead.showsRevisionDrift,
-    source: lead.source,
-    visitRequests: lead.visitRequests,
+  const data: SalesIntakeWorkSurfaceData = {
+    id: salesIntake.id,
+    title: salesIntake.title,
+    contactName: salesIntake.contactName,
+    email: salesIntake.email,
+    phone: salesIntake.phone,
+    notes: salesIntake.notes,
+    requestType: salesIntake.requestType,
+    neededByBucket: salesIntake.neededByBucket,
+    neededByDateLabel: salesIntake.neededByDateLabel,
+    scopeSummary: salesIntake.scopeSummary,
+    jobsiteAddressLine: salesIntake.jobsiteAddressLine,
+    intakeServiceLocationLinkedToCustomer: salesIntake.intakeServiceLocationLinkedToCustomer,
+    sourceLabel: salesIntake.sourceLabel,
+    sourceDetail: salesIntake.sourceDetail,
+    statusLabel: salesIntake.statusLabel,
+    statusTone: salesIntake.statusTone,
+    statusValue: salesIntake.statusValue,
+    customerId: salesIntake.customerId,
+    customerDisplayName: salesIntake.customerDisplayName,
+    customerHref: salesIntake.customerHref,
+    createdAtLabel: salesIntake.createdAtLabel,
+    updatedAtLabel: salesIntake.updatedAtLabel,
+    convertedAtLabel: salesIntake.convertedAtLabel,
+    showConvertedWithoutCustomerHelper: salesIntake.showConvertedWithoutCustomerHelper,
+    salesIntakeHref: salesIntake.salesIntakeHref,
+    editHref: salesIntake.editHref,
+    newQuoteHref: salesIntake.newQuoteHref,
+    progressLabel: salesIntake.progressLabel,
+    progressDescription: salesIntake.progressDescription,
+    progressTone: salesIntake.progressTone,
+    progressState: salesIntake.progressState,
+    progressPrimaryAction: salesIntake.progressPrimaryAction,
+    progressSecondaryAction: salesIntake.progressSecondaryAction,
+    activeQuoteId: salesIntake.activeQuoteId,
+    activeQuoteTitle: salesIntake.activeQuoteTitle,
+    activeQuoteStatusLabel: salesIntake.activeQuoteStatusLabel,
+    activeQuoteTone: salesIntake.activeQuoteTone,
+    activeQuoteTotalCents: salesIntake.activeQuoteTotalCents,
+    activeQuoteLineItemCount: salesIntake.activeQuoteLineItemCount,
+    activeJobId: salesIntake.activeJobId,
+    activeJobStatus: salesIntake.activeJobStatus,
+    showsRevisionDrift: salesIntake.showsRevisionDrift,
+    source: salesIntake.source,
+    visitRequests: salesIntake.visitRequests,
   };
 
   return { data, linkedQuotes: surfaceQuotes };
@@ -170,41 +171,41 @@ function adaptSalesFull(
 /* ─── Main export ────────────────────────────────────────────────────────── */
 
 export function SalesWorkspacePageClient({
-  lead,
+  salesIntake,
   linkedQuotes,
   updateStatusAction,
   customersForLink,
-  linkLeadAction,
+  linkSalesIntakeAction,
   matchHints,
   activeQuoteWorkSurface,
   serviceAddressContext,
 }: {
-  lead: SerializedLeadFull;
+  salesIntake: SerializedSalesIntakeFull;
   linkedQuotes: SerializedLinkedQuoteFull[];
   updateStatusAction: (
-    prevState: LeadFormState,
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
+  ) => Promise<SalesIntakeFormState>;
   customersForLink?: { id: string; displayName: string }[];
-  linkLeadAction?: (
-    prevState: LeadFormState,
+  linkSalesIntakeAction?: (
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
-  matchHints?: LeadCustomerMatchHints;
-  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
-  serviceAddressContext?: LeadServiceAddressContext;
+  ) => Promise<SalesIntakeFormState>;
+  matchHints?: SalesIntakeCustomerMatchHints;
+  activeQuoteWorkSurface?: SalesIntakeWorkSurfaceActiveQuotePayload | null;
+  serviceAddressContext?: SalesIntakeServiceAddressContext;
 }) {
-  const { data, linkedQuotes: surfaceQuotes } = adaptSalesFull(lead, linkedQuotes);
+  const { data, linkedQuotes: surfaceQuotes } = adaptSalesFull(salesIntake, linkedQuotes);
 
   return (
-    <LeadWorkSurface
+    <SalesIntakeWorkSurface
       mode="full"
-      lead={data}
+      salesIntake={data}
       linkedQuotes={surfaceQuotes}
       customersForLink={customersForLink}
       matchHints={matchHints}
       updateStatusAction={updateStatusAction}
-      linkLeadAction={linkLeadAction}
+      linkSalesIntakeAction={linkSalesIntakeAction}
       activeQuoteWorkSurface={activeQuoteWorkSurface}
       serviceAddressContext={serviceAddressContext}
     />

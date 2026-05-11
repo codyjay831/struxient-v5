@@ -1,15 +1,15 @@
 "use client";
 
-import { LeadSource, NeededByBucket } from "@prisma/client";
+import { SalesIntakeSource, NeededByBucket } from "@prisma/client";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { ServiceAddressCaptureField } from "@/components/forms/service-address-capture-field";
-import { LEAD_SOURCE_FORM_OPTIONS } from "@/lib/lead-display";
-import { LEAD_FIELD_LIMITS } from "./sales-field-limits";
-import { createLeadAction, type LeadFormState } from "./sales-form-actions";
+import { SALES_INTAKE_SOURCE_FORM_OPTIONS } from "@/lib/sales-intake-display";
+import { SALES_INTAKE_FIELD_LIMITS } from "./sales-field-limits";
+import { createSalesIntakeAction, type SalesIntakeFormState } from "./sales-form-actions";
 import { ChevronRight } from "lucide-react";
 import { MultiFilePicker } from "@/components/forms/multi-file-picker";
-import { getLeadAttachmentUploadUrlAction } from "./sales-attachment-actions";
+import { getSalesIntakeAttachmentUploadUrlAction } from "./sales-attachment-actions";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import { formatMoneyCents } from "@/lib/quote-display";
 import { CustomFieldsForm, type CustomFieldDefPayload, type CustomFieldValuePayload } from "@/components/forms/custom-fields-form";
@@ -45,11 +45,11 @@ export type SalesRecordFormProps =
       googleMapsApiKey: string;
       availableTemplates: LineItemTemplatePickerRow[];
       customFieldDefs: CustomFieldDefPayload[];
-      /** Server-bound `updateLeadAction.bind(null, lead.id)` — record id is not taken from editable form fields. */
+      /** Server-bound `updateSalesIntakeAction.bind(null, salesIntake.id)` — record id is not taken from editable form fields. */
       updateFormAction: (
-        prevState: LeadFormState,
+        prevState: SalesIntakeFormState,
         formData: FormData,
-      ) => Promise<LeadFormState>;
+      ) => Promise<SalesIntakeFormState>;
       initial: {
         title: string;
         contactName: string | null;
@@ -59,7 +59,7 @@ export type SalesRecordFormProps =
         neededByBucket: NeededByBucket | null;
         neededByDate: Date | null;
         scopeSummary: string | null;
-        source: LeadSource;
+        source: SalesIntakeSource;
         sourceDetail: string | null;
         notes: string | null;
         suggestedTemplateIds: string[];
@@ -77,11 +77,11 @@ export type SalesRecordFormProps =
       };
     };
 
-const initialActionState: LeadFormState = {};
+const initialActionState: SalesIntakeFormState = {};
 
 export function SalesRecordForm(props: SalesRecordFormProps) {
   const action =
-    props.mode === "create" ? createLeadAction : props.updateFormAction;
+    props.mode === "create" ? createSalesIntakeAction : props.updateFormAction;
   const [state, formAction, isPending] = useActionState(action, initialActionState);
 
   const defaults =
@@ -96,7 +96,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
           neededByBucket: null as NeededByBucket | null,
           neededByDate: null as Date | null,
           scopeSummary: null as string | null,
-          source: LeadSource.MANUAL,
+          source: SalesIntakeSource.MANUAL,
           sourceDetail: null as string | null,
           notes: null as string | null,
           suggestedTemplateIds: [] as string[],
@@ -123,7 +123,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
     
     for (const file of files) {
       try {
-        const prep = await getLeadAttachmentUploadUrlAction(
+        const prep = await getSalesIntakeAttachmentUploadUrlAction(
           file.name,
           file.type,
           file.size
@@ -177,7 +177,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
             name="title"
             type="text"
             required
-            maxLength={LEAD_FIELD_LIMITS.title}
+            maxLength={SALES_INTAKE_FIELD_LIMITS.title}
             autoComplete="off"
             defaultValue={defaults.title}
             className={controlClass}
@@ -193,7 +193,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
             <input
               name="contactName"
               type="text"
-              maxLength={LEAD_FIELD_LIMITS.contactName}
+              maxLength={SALES_INTAKE_FIELD_LIMITS.contactName}
               autoComplete="name"
               defaultValue={defaults.contactName ?? ""}
               className={controlClass}
@@ -208,7 +208,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
               <input
                 name="email"
                 type="email"
-                maxLength={LEAD_FIELD_LIMITS.email}
+                maxLength={SALES_INTAKE_FIELD_LIMITS.email}
                 autoComplete="email"
                 defaultValue={defaults.email ?? ""}
                 className={controlClass}
@@ -221,7 +221,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
               <input
                 name="phone"
                 type="tel"
-                maxLength={LEAD_FIELD_LIMITS.phone}
+                maxLength={SALES_INTAKE_FIELD_LIMITS.phone}
                 autoComplete="tel"
                 defaultValue={defaults.phone ?? ""}
                 className={controlClass}
@@ -234,7 +234,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
       <div className="rounded-xl border border-border bg-foreground/[0.01] p-4">
         <p className={`${fieldLabelClass} mb-4`}>Address</p>
         <ServiceAddressCaptureField
-          key={props.mode === "edit" ? "lead-svc-edit" : "lead-svc-create"}
+          key={props.mode === "edit" ? "sales-intake-svc-edit" : "sales-intake-svc-create"}
           googleMapsApiKey={props.googleMapsApiKey}
           fieldLabelClass={fieldLabelClass}
           controlClass={controlClass}
@@ -251,7 +251,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
             <input
               name="requestType"
               type="text"
-              maxLength={LEAD_FIELD_LIMITS.requestType}
+              maxLength={SALES_INTAKE_FIELD_LIMITS.requestType}
               autoComplete="off"
               placeholder="e.g. Roof repair, HVAC service"
               defaultValue={defaults.requestType ?? ""}
@@ -298,7 +298,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
           <textarea
             name="scopeSummary"
             rows={3}
-            maxLength={LEAD_FIELD_LIMITS.scopeSummary}
+            maxLength={SALES_INTAKE_FIELD_LIMITS.scopeSummary}
             placeholder="Briefly describe the work requested..."
             defaultValue={defaults.scopeSummary ?? ""}
             className={`${controlClass} resize-y min-h-[5rem]`}
@@ -433,7 +433,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
               <label className="block">
                 <span className={fieldLabelClass}>Source</span>
                 <select name="source" defaultValue={defaults.source} className={controlClass}>
-                  {LEAD_SOURCE_FORM_OPTIONS.map(({ value, label }) => (
+                  {SALES_INTAKE_SOURCE_FORM_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
@@ -447,7 +447,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
                 <input
                   name="sourceDetail"
                   type="text"
-                  maxLength={LEAD_FIELD_LIMITS.sourceDetail}
+                  maxLength={SALES_INTAKE_FIELD_LIMITS.sourceDetail}
                   autoComplete="off"
                   placeholder="Optional — e.g. referrer or campaign"
                   defaultValue={defaults.sourceDetail ?? ""}
@@ -465,7 +465,7 @@ export function SalesRecordForm(props: SalesRecordFormProps) {
           <textarea
             name="notes"
             rows={4}
-            maxLength={LEAD_FIELD_LIMITS.notes}
+            maxLength={SALES_INTAKE_FIELD_LIMITS.notes}
             placeholder="Internal notes for your team..."
             defaultValue={defaults.notes ?? ""}
             className={`${controlClass} resize-y min-h-[6rem]`}

@@ -155,9 +155,9 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       <section className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Offerings & Capability Tags</h2>
-          <p className="mt-1 text-sm text-foreground-muted">
-            Service badges shown on your public intake form to build trust (e.g., "Licensed", "Insured", "24/7").
-          </p>
+        <p className="mt-1 text-sm text-foreground-muted">
+          Service badges shown on your public intake form to build trust (e.g., &quot;Licensed&quot;, &quot;Insured&quot;, &quot;24/7&quot;).
+        </p>
         </div>
         <div>
           <label className="block">

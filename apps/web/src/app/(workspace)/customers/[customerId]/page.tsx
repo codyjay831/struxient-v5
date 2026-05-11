@@ -14,10 +14,10 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
-  formatLeadSource,
-  formatLeadStatus,
-  leadStatusBadgeTone,
-} from "@/lib/lead-display";
+  formatSalesIntakeSource,
+  formatSalesIntakeStatus,
+  salesIntakeStatusBadgeTone,
+} from "@/lib/sales-intake-display";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -64,7 +64,7 @@ export default async function CustomerDetailPage({
         },
         orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
         include: {
-          createdFromLead: {
+          createdFromSalesIntake: {
             select: { id: true, title: true, source: true },
           },
         },
@@ -119,7 +119,7 @@ export default async function CustomerDetailPage({
   const createdLabel = new Date(customer.createdAt).toLocaleString();
   const updatedLabel = new Date(customer.updatedAt).toLocaleString();
 
-  const linkedLeads = await db.lead.findMany({
+  const linkedSalesIntakes = await db.salesIntake.findMany({
     where: {
       organizationId: ctx.organizationId,
       customerId: customer.id,
@@ -173,7 +173,7 @@ export default async function CustomerDetailPage({
 
   const lastContact = [
     customer.updatedAt,
-    ...linkedLeads.map((l) => l.updatedAt),
+    ...linkedSalesIntakes.map((l) => l.updatedAt),
     ...linkedQuotes.map((q) => q.updatedAt),
     ...linkedJobs.map((j) => j.updatedAt),
   ].reduce((max, curr) => (curr > max ? curr : max), customer.createdAt);
@@ -184,14 +184,14 @@ export default async function CustomerDetailPage({
     year: "numeric",
   });
 
-  const linkedLeadCount = linkedLeads.length;
+  const linkedSalesIntakeCount = linkedSalesIntakes.length;
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
-  /* Steer users back to the Lead workspace for active sales work. The Lead
+  /* Steer users back to the Sales Intake workspace for active sales work. The Sales Intake
      workspace is the primary place to build/send quotes, capture address, and
      activate jobs — the customer profile is the saved history view. If there
-     is an in-progress lead, primary CTA is "Open lead", not "Create quote". */
-  const activeLead = linkedLeads.find(
+     is an in-progress sales intake, primary CTA is "Open sales intake", not "Create quote". */
+  const activeSalesIntake = linkedSalesIntakes.find(
     (l) => l.status === "OPEN" || l.status === "QUALIFYING",
   ) ?? null;
 
@@ -241,12 +241,12 @@ export default async function CustomerDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {activeLead && (
+          {activeSalesIntake && (
             <Link
-              href={`/sales/${activeLead.id}`}
+              href={`/sales/${activeSalesIntake.id}`}
               className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
             >
-              Open active lead
+              Open active sales intake
               <ArrowUpRight className="ml-1.5 size-3.5" />
             </Link>
           )}
@@ -384,7 +384,7 @@ export default async function CustomerDetailPage({
               longitude: loc.longitude,
               source: loc.source,
               isPrimary: loc.isPrimary,
-              createdFromLead: loc.createdFromLead,
+              createdFromSalesIntake: loc.createdFromSalesIntake,
             }))}
           />
         </section>
@@ -451,30 +451,30 @@ export default async function CustomerDetailPage({
                   aria-hidden
                 />
                 <span className="text-xs font-medium text-foreground-muted group-open:text-foreground transition-colors">
-                  View archived leads, closed quotes, and completed jobs
+                  View archived sales intakes, closed quotes, and completed jobs
                 </span>
               </summary>
               <div className="mt-6 space-y-8 border-t border-border pt-6">
-                {/* Leads History */}
+                {/* Sales Intakes History */}
                 <div>
                   <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
-                    Leads
+                    Sales Intakes
                   </h3>
-                  {linkedLeads.length === 0 ? (
-                    <p className="text-xs text-foreground-subtle px-1">No leads on file.</p>
+                  {linkedSalesIntakes.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle px-1">No sales intakes on file.</p>
                   ) : (
                     <ul className="divide-y divide-border rounded-lg border border-border">
-                      {linkedLeads.map((l) => (
+                      {linkedSalesIntakes.map((l) => (
                         <li key={l.id} className="flex items-center justify-between px-3 py-2.5">
                           <div className="min-w-0 flex-1">
                             <Link href={`/sales/${l.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
                               {l.title}
                             </Link>
                             <p className="text-[10px] text-foreground-subtle mt-0.5">
-                              Created {new Date(l.createdAt).toLocaleDateString()} · {formatLeadSource(l.source)}
+                              Created {new Date(l.createdAt).toLocaleDateString()} · {formatSalesIntakeSource(l.source)}
                             </p>
                           </div>
-                          <StatusBadge label={formatLeadStatus(l.status)} tone={leadStatusBadgeTone(l.status)} />
+                          <StatusBadge label={formatSalesIntakeStatus(l.status)} tone={salesIntakeStatusBadgeTone(l.status)} />
                         </li>
                       ))}
                     </ul>

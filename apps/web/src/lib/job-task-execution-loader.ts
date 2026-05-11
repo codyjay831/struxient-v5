@@ -38,7 +38,7 @@ export async function loadJobTaskExecutionPayload(
               },
             },
           },
-          lead: {
+          salesIntake: {
             select: {
               id: true,
               title: true,
@@ -80,24 +80,25 @@ export async function loadJobTaskExecutionPayload(
   const job = task.job;
   const safeCustomer =
     job.customer && job.customer.organizationId === organizationId ? job.customer : null;
-  const safeLead = job.lead && job.lead.organizationId === organizationId ? job.lead : null;
+  const safeSalesIntake =
+    job.salesIntake && job.salesIntake.organizationId === organizationId ? job.salesIntake : null;
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: safeCustomer?.serviceLocations ?? [],
-    leadRow: safeLead
+    salesIntakeRow: safeSalesIntake
       ? {
-          publicIntakeServiceLocation: safeLead.publicIntakeServiceLocation,
-          notes: safeLead.notes,
+          publicIntakeServiceLocation: safeSalesIntake.publicIntakeServiceLocation,
+          notes: safeSalesIntake.notes,
         }
       : null,
   });
-  const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
+  const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
   const jobContextLabel = secondaryIdentity
     ? `${primaryIdentity} · ${secondaryIdentity}`
     : primaryIdentity;
 
   const customerId = safeCustomer?.id ?? null;
-  const leadEditHref = safeLead ? `/sales/${safeLead.id}/edit` : null;
+  const salesIntakeEditHref = safeSalesIntake ? `/sales/${safeSalesIntake.id}/edit` : null;
 
   const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
     if (p.status !== JobPaymentRequirementStatus.DUE) return false;
@@ -115,7 +116,7 @@ export async function loadJobTaskExecutionPayload(
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
-    leadEditHref,
+    salesIntakeEditHref,
     jobHref: `/jobs/${job.id}`,
     task: {
       id: task.id,

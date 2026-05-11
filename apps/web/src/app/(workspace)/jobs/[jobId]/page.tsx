@@ -80,7 +80,7 @@ export default async function JobDetailPage({
           },
         },
       },
-      lead: {
+      salesIntake: {
         select: {
           id: true,
           title: true,
@@ -202,21 +202,21 @@ export default async function JobDetailPage({
   const safeQuote = job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
   const safeCustomer =
     job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
-  const safeLead = job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
+  const safeSalesIntake = job.salesIntake && job.salesIntake.organizationId === ctx.organizationId ? job.salesIntake : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: safeCustomer?.serviceLocations ?? [],
-    leadRow: safeLead
+    salesIntakeRow: safeSalesIntake
       ? {
-          publicIntakeServiceLocation: safeLead.publicIntakeServiceLocation,
-          notes: safeLead.notes,
+          publicIntakeServiceLocation: safeSalesIntake.publicIntakeServiceLocation,
+          notes: safeSalesIntake.notes,
         }
       : null,
   });
   const jobCustomerId = safeCustomer?.id ?? null;
-  const jobLeadEditHref = safeLead ? `/sales/${safeLead.id}/edit` : null;
+  const jobSalesIntakeEditHref = safeSalesIntake ? `/sales/${safeSalesIntake.id}/edit` : null;
 
-  const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
+  const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
 
   const sharedStages = job.stages.filter((s) => s.blockType === JobStageBlockType.SHARED);
@@ -294,7 +294,7 @@ export default async function JobDetailPage({
       <JobJobsitePanel
         jobsiteAddressLine={jobsiteAddressLine}
         customerId={jobCustomerId}
-        leadEditHref={jobLeadEditHref}
+        salesIntakeEditHref={jobSalesIntakeEditHref}
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -322,11 +322,11 @@ export default async function JobDetailPage({
             </dd>
           </div>
           <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Lead</dt>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Sales intake</dt>
             <dd className="mt-0.5 text-foreground">
-              {safeLead ? (
-                <Link href={`/sales/${safeLead.id}`} className="underline-offset-4 hover:underline">
-                  {safeLead.title}
+              {safeSalesIntake ? (
+                <Link href={`/sales/${safeSalesIntake.id}`} className="underline-offset-4 hover:underline">
+                  {safeSalesIntake.title}
                 </Link>
               ) : (
                 "—"
@@ -430,7 +430,7 @@ export default async function JobDetailPage({
                             }
                             jobsiteAddressLine={jobsiteAddressLine}
                             customerId={jobCustomerId}
-                            leadEditHref={jobLeadEditHref}
+                            salesIntakeEditHref={jobSalesIntakeEditHref}
                             task={{ ...task, paymentBlockers: taskPaymentBlockers }}
                           />
                         </li>
@@ -490,7 +490,7 @@ export default async function JobDetailPage({
                                   }
                                   jobsiteAddressLine={jobsiteAddressLine}
                                   customerId={jobCustomerId}
-                                  leadEditHref={jobLeadEditHref}
+                                  salesIntakeEditHref={jobSalesIntakeEditHref}
                                   task={{ ...task, paymentBlockers: taskPaymentBlockers }}
                                 />
                               </li>

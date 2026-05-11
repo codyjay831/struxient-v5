@@ -238,8 +238,8 @@ function IssueCard({
                   <span className="text-foreground">{issue.followUpTask.title}</span>
                 </div>
                 <StatusBadge
-                  label={formatJobTaskStatus(issue.followUpTask.status as any)}
-                  tone={jobTaskStatusBadgeTone(issue.followUpTask.status as any)}
+                  label={formatJobTaskStatus(issue.followUpTask.status as JobTaskStatus)}
+                  tone={jobTaskStatusBadgeTone(issue.followUpTask.status as JobTaskStatus)}
                   className="text-[0.6rem]"
                 />
               </div>

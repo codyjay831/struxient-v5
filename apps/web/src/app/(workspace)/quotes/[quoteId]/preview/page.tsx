@@ -195,7 +195,7 @@ export default async function QuoteLiveProposalPreviewPage({
           </p>
         </div>
 
-        {preview.customer || preview.lead ? (
+        {preview.customer || preview.salesIntake ? (
           <div className="border-b border-border py-6">
             <SectionHeading
               title="Prepared for"
@@ -209,8 +209,8 @@ export default async function QuoteLiveProposalPreviewPage({
                 </dd>
               </div>
               <div>
-                <dt className={fieldLabelClass}>Inquiry title</dt>
-                <dd className="mt-1 text-sm text-foreground">{preview.lead?.title ?? "—"}</dd>
+                <dt className={fieldLabelClass}>Sales intake title</dt>
+                <dd className="mt-1 text-sm text-foreground">{preview.salesIntake?.title ?? "—"}</dd>
               </div>
             </dl>
           </div>

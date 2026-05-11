@@ -24,7 +24,7 @@ export const quoteSelectForCustomerProposalCheckpoint = {
       organizationId: true,
     },
   },
-  lead: {
+  salesIntake: {
     select: {
       title: true,
       organizationId: true,
@@ -62,7 +62,7 @@ export type QuoteRowForLiveCustomerPreviewPage = Prisma.QuoteGetPayload<{
   select: typeof quoteSelectForLiveCustomerPreviewPage;
 }>;
 
-/** Maps a checkpoint- or preview-shaped quote row to preview input (org-scoped customer/lead). */
+/** Maps a checkpoint- or preview-shaped quote row to preview input (org-scoped customer/sales intake). */
 export function quoteRowToCustomerPreviewInput(
   row: QuoteRowForCustomerProposalCheckpoint | QuoteRowForLiveCustomerPreviewPage,
   orgId: string,
@@ -71,14 +71,14 @@ export function quoteRowToCustomerPreviewInput(
     row.customer && row.customer.organizationId === orgId
       ? { displayName: row.customer.displayName }
       : null;
-  const lead =
-    row.lead && row.lead.organizationId === orgId ? { title: row.lead.title } : null;
+  const salesIntake =
+    row.salesIntake && row.salesIntake.organizationId === orgId ? { title: row.salesIntake.title } : null;
   return {
     id: row.id,
     title: row.title,
     customerDocumentTitle: row.customerDocumentTitle,
     customer,
-    lead,
+    salesIntake,
     lineItems: row.lineItems.map((line) => ({
       id: line.id,
       sortOrder: line.sortOrder,
@@ -106,7 +106,7 @@ type WirePreviewDocument = {
   quoteId: string;
   documentTitle: string;
   customer: { displayName: string } | null;
-  lead: { title: string } | null;
+  salesIntake: { title: string } | null;
   lineItems: WirePreviewLine[];
   subtotalCents: number;
   totalCents: number;
@@ -131,7 +131,7 @@ export function serializeCustomerPreviewDocumentForCheckpoint(
       quoteId: document.quoteId,
       documentTitle: document.documentTitle,
       customer: document.customer,
-      lead: document.lead,
+      salesIntake: document.salesIntake,
       lineItems: document.lineItems.map((l) => ({ ...l })),
       subtotalCents: document.subtotalCents,
       totalCents: document.totalCents,
@@ -151,7 +151,7 @@ function revivePreviewDocument(wire: WirePreviewDocument): QuoteCustomerPreviewD
     quoteId: wire.quoteId,
     documentTitle: wire.documentTitle,
     customer: wire.customer,
-    lead: wire.lead,
+    salesIntake: wire.salesIntake,
     lineItems: wire.lineItems,
     subtotalCents: wire.subtotalCents,
     totalCents: wire.totalCents,
@@ -222,9 +222,9 @@ export function parseQuoteSendCheckpointSnapshot(
   if (customer != null && (!isRecord(customer) || typeof customer.displayName !== "string")) {
     return { ok: false, error: "Checkpoint customer context is invalid." };
   }
-  const lead = d.lead;
-  if (lead != null && (!isRecord(lead) || typeof lead.title !== "string")) {
-    return { ok: false, error: "Checkpoint lead context is invalid." };
+  const salesIntake = d.salesIntake;
+  if (salesIntake != null && (!isRecord(salesIntake) || typeof salesIntake.title !== "string")) {
+    return { ok: false, error: "Checkpoint sales intake context is invalid." };
   }
 
   const wire: WirePreviewDocument = {
@@ -235,7 +235,7 @@ export function parseQuoteSendCheckpointSnapshot(
       customer == null
         ? null
         : { displayName: (customer as { displayName: string }).displayName },
-    lead: lead == null ? null : { title: (lead as { title: string }).title },
+    salesIntake: salesIntake == null ? null : { title: (salesIntake as { title: string }).title },
     lineItems: d.lineItems as WirePreviewLine[],
     subtotalCents: d.subtotalCents,
     totalCents: d.totalCents,

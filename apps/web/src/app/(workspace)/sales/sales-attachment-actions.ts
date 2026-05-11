@@ -5,7 +5,7 @@ import { AttachmentStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 import { requireCurrentSession } from "@/lib/session";
 
-export type LeadUploadAttachmentState = {
+export type SalesIntakeUploadAttachmentState = {
   error?: string;
   success?: boolean;
   attachmentId?: string;
@@ -13,11 +13,11 @@ export type LeadUploadAttachmentState = {
   storageProvider?: "local" | "gcs";
 };
 
-export async function getLeadAttachmentUploadUrlAction(
+export async function getSalesIntakeAttachmentUploadUrlAction(
   fileName: string,
   contentType: string,
   fileSize: number,
-): Promise<LeadUploadAttachmentState> {
+): Promise<SalesIntakeUploadAttachmentState> {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
@@ -72,7 +72,7 @@ export async function getLeadAttachmentUploadUrlAction(
       storageProvider: provider instanceof LocalStorageProvider ? "local" : "gcs",
     };
   } catch (e) {
-    console.error("Failed to generate lead upload URL", e);
+    console.error("Failed to generate sales intake upload URL", e);
     return { error: "Failed to prepare upload. Please try again." };
   }
 }

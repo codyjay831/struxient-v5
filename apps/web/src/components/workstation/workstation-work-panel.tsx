@@ -48,7 +48,7 @@ export function WorkstationWorkPanel({
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex items-center gap-3">
                 <span className="text-[0.65rem] font-bold uppercase tracking-[0.15em] text-foreground-subtle">
-                  {item.kind}
+                  {item.kind.replace("-", " ")}
                 </span>
                 {item.status && (
                   <StatusBadge label={item.status} tone="neutral" />
@@ -111,7 +111,7 @@ export function WorkstationWorkPanel({
                   href={item.href}
                   className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {item.kind === "quote" ? "Open quote record" : item.kind === "lead" ? "Open lead workspace" : "Open full record"}
+                  {item.kind === "quote" ? "Open quote record" : item.kind === "sales-intake" ? "Open sales intake workspace" : "Open full record"}
                   <ArrowRight className="size-4" />
                 </Link>
               )}

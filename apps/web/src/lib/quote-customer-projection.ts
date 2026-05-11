@@ -28,7 +28,7 @@ export type QuoteCustomerPreviewInput = {
   title: string;
   customerDocumentTitle: string | null;
   customer: { displayName: string } | null;
-  lead: { title: string } | null;
+  salesIntake: { title: string } | null;
   lineItems: QuoteCustomerPreviewLineInput[];
   subtotalCents: number;
   totalCents: number;
@@ -61,7 +61,7 @@ export type QuoteCustomerPreviewDocument = {
   /** Resolved proposal document title: customerDocumentTitle ?? title. */
   documentTitle: string;
   customer: { displayName: string } | null;
-  lead: { title: string } | null;
+  salesIntake: { title: string } | null;
   lineItems: QuoteCustomerPreviewLine[];
   subtotalCents: number;
   totalCents: number;
@@ -164,7 +164,7 @@ export function buildCustomerQuotePreviewDocument(
       quoteId: quote.id,
       documentTitle,
       customer: quote.customer,
-      lead: quote.lead,
+      salesIntake: quote.salesIntake,
       lineItems: mapped,
       subtotalCents: quote.subtotalCents,
       totalCents: quote.totalCents,

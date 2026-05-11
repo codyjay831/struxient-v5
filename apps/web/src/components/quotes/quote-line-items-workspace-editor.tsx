@@ -3,11 +3,11 @@
 /**
  * QuoteLineItemsWorkspaceEditor — workspace-safe Scope tab body.
  *
- * Used inside QuoteWorkSurface in `standard` (Quotes popup, Lead Quote tab)
+ * Used inside QuoteWorkSurface in `standard` (Quotes popup, Sales Intake Quote tab)
  * and `compact` (Workstation drawer) modes when the quote is editable
  * (DRAFT). Calls the workspace-safe `*WorkspaceAction` server actions which
  * return `{ success } | { error }` instead of `redirect()`, so the
- * surrounding popup/drawer/lead-tab stays open after add/edit/delete and
+ * surrounding popup/drawer/sales-intake-tab stays open after add/edit/delete and
  * after applying a Scope Library template.
  *
  * Full-mode (the `/quotes/[id]` page) still uses

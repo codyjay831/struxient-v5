@@ -3,8 +3,8 @@ import {
   LineItemTemplateTaskSource,
   Prisma,
   PrismaClient,
-  LeadSource,
-  LeadStatus,
+  SalesIntakeSource,
+  SalesIntakeStatus,
   QuoteStatus,
   StaffRole,
   TaskTemplateCategory,
@@ -148,13 +148,13 @@ async function main() {
   }
 
   const convertedAt = new Date("2026-05-01T15:00:00.000Z");
-  const devLeads = [
+  const devSalesIntakes = [
     {
       id: "dev-lead-open-website",
       organizationId: devOrg.id,
       customerId: null as string | null,
-      status: LeadStatus.OPEN,
-      source: LeadSource.WEBSITE,
+      status: SalesIntakeStatus.OPEN,
+      source: SalesIntakeSource.WEBSITE,
       sourceDetail: "Contact form — commercial roof replacement",
       title: "Website: roof replacement inquiry",
       contactName: "Jordan Lee",
@@ -167,8 +167,8 @@ async function main() {
       id: "dev-lead-qualifying-referral",
       organizationId: devOrg.id,
       customerId: null,
-      status: LeadStatus.QUALIFYING,
-      source: LeadSource.REFERRAL,
+      status: SalesIntakeStatus.QUALIFYING,
+      source: SalesIntakeSource.REFERRAL,
       sourceDetail: "Referred by Riverside Builders",
       title: "Referral: tenant improvement fit-out",
       contactName: "Alex Morgan",
@@ -181,8 +181,8 @@ async function main() {
       id: "dev-lead-converted-acme",
       organizationId: devOrg.id,
       customerId: "dev-customer-acme",
-      status: LeadStatus.CONVERTED,
-      source: LeadSource.PHONE,
+      status: SalesIntakeStatus.CONVERTED,
+      source: SalesIntakeSource.PHONE,
       sourceDetail: null,
       title: "Phone intake — Acme follow-up",
       contactName: "Pat Acme",
@@ -195,8 +195,8 @@ async function main() {
       id: "dev-lead-open-walkin",
       organizationId: devOrg.id,
       customerId: null,
-      status: LeadStatus.OPEN,
-      source: LeadSource.WALK_IN,
+      status: SalesIntakeStatus.OPEN,
+      source: SalesIntakeSource.WALK_IN,
       sourceDetail: null,
       title: "Walk-in: service call scheduling",
       contactName: null,
@@ -207,8 +207,8 @@ async function main() {
     },
   ] as const;
 
-  for (const row of devLeads) {
-    await prisma.lead.upsert({
+  for (const row of devSalesIntakes) {
+    await prisma.salesIntake.upsert({
       where: { id: row.id },
       update: {
         organizationId: row.organizationId,
@@ -232,11 +232,11 @@ async function main() {
       id: "dev-quote-title-only",
       organizationId: devOrg.id,
       customerId: null as string | null,
-      leadId: null as string | null,
+      salesIntakeId: null as string | null,
       status: QuoteStatus.DRAFT,
       title: "[dev seed] Title-only draft quote",
       internalNotes:
-        "[dev seed] No customer or lead; title satisfies the draft-only rule for orphan shells.",
+        "[dev seed] No customer or sales intake; title satisfies the draft-only rule for orphan shells.",
       subtotalCents: 0,
       totalCents: 0,
     },
@@ -244,9 +244,9 @@ async function main() {
       id: "dev-quote-lead-website",
       organizationId: devOrg.id,
       customerId: null,
-      leadId: "dev-lead-open-website",
+      salesIntakeId: "dev-lead-open-website",
       status: QuoteStatus.DRAFT,
-      title: "[dev seed] Lead-only draft (website roof inquiry)",
+      title: "[dev seed] Sales intake-only draft (website roof inquiry)",
       internalNotes: "[dev seed] Linked to dev-lead-open-website for read-path testing.",
       subtotalCents: 0,
       totalCents: 0,
@@ -255,7 +255,7 @@ async function main() {
       id: "dev-quote-customer-globex",
       organizationId: devOrg.id,
       customerId: "dev-customer-globex",
-      leadId: null,
+      salesIntakeId: null,
       status: QuoteStatus.DRAFT,
       title: "[dev seed] Customer-only draft (Globex)",
       internalNotes: "[dev seed] Linked to dev-customer-globex for read-path testing.",
@@ -266,10 +266,10 @@ async function main() {
       id: "dev-quote-archived-sample",
       organizationId: devOrg.id,
       customerId: null,
-      leadId: null,
+      salesIntakeId: null,
       status: QuoteStatus.ARCHIVED,
       title: "[dev seed] Archived sample quote",
-      internalNotes: "[dev seed] Archived status for badge testing—no customer or lead.",
+      internalNotes: "[dev seed] Archived status for badge testing—no customer or sales intake.",
       subtotalCents: 0,
       totalCents: 0,
     },
@@ -277,7 +277,7 @@ async function main() {
       id: "dev-quote-acme-with-lines",
       organizationId: devOrg.id,
       customerId: "dev-customer-acme",
-      leadId: "dev-lead-converted-acme",
+      salesIntakeId: "dev-lead-converted-acme",
       status: QuoteStatus.DRAFT,
       title: "[dev seed] Acme quote with line items",
       internalNotes:
@@ -294,7 +294,7 @@ async function main() {
       update: {
         organizationId: q.organizationId,
         customerId: q.customerId,
-        leadId: q.leadId,
+        salesIntakeId: q.salesIntakeId,
         status: q.status,
         title: q.title,
         internalNotes: q.internalNotes,
@@ -305,7 +305,7 @@ async function main() {
         id: q.id,
         organizationId: q.organizationId,
         customerId: q.customerId,
-        leadId: q.leadId,
+        salesIntakeId: q.salesIntakeId,
         status: q.status,
         title: q.title,
         internalNotes: q.internalNotes,
@@ -502,41 +502,41 @@ async function main() {
     },
   });
 
-  const demoLeads = [
+  const demoSalesIntakes = [
     {
       id: "dev-lead-unlinked-demo",
-      title: "Demo Lead — Unlinked (Needs Customer)",
-      status: LeadStatus.OPEN,
-      source: LeadSource.WEBSITE,
+      title: "Demo Sales Intake — Unlinked (Needs Customer)",
+      status: SalesIntakeStatus.OPEN,
+      source: SalesIntakeSource.WEBSITE,
       contactName: "Unlinked User",
       email: "unlinked@example.com",
       organizationId: devOrg.id,
     },
     {
       id: "dev-lead-linked-no-quote",
-      title: "Demo Lead — Linked (Ready for Quote)",
-      status: LeadStatus.QUALIFYING,
-      source: LeadSource.REFERRAL,
+      title: "Demo Sales Intake — Linked (Ready for Quote)",
+      status: SalesIntakeStatus.QUALIFYING,
+      source: SalesIntakeSource.REFERRAL,
       customerId: demoCustomer.id,
       contactName: "No Quote User",
       organizationId: devOrg.id,
     },
     {
       id: "dev-lead-linked-draft-quote",
-      title: "Demo Lead — Linked (Has Draft Quote)",
-      status: LeadStatus.QUALIFYING,
-      source: LeadSource.PHONE,
+      title: "Demo Sales Intake — Linked (Has Draft Quote)",
+      status: SalesIntakeStatus.QUALIFYING,
+      source: SalesIntakeSource.PHONE,
       customerId: demoCustomer.id,
       contactName: "Draft Quote User",
       organizationId: devOrg.id,
     },
   ];
 
-  for (const lead of demoLeads) {
-    await prisma.lead.upsert({
-      where: { id: lead.id },
-      update: lead,
-      create: lead,
+  for (const salesIntake of demoSalesIntakes) {
+    await prisma.salesIntake.upsert({
+      where: { id: salesIntake.id },
+      update: salesIntake,
+      create: salesIntake,
     });
   }
 
@@ -546,7 +546,7 @@ async function main() {
       title: "Demo Quote — Execution Showcase",
       status: QuoteStatus.APPROVED,
       customerId: demoCustomer.id,
-      leadId: "dev-lead-linked-draft-quote",
+      salesIntakeId: "dev-lead-linked-draft-quote",
       totalCents: 1250000,
       organizationId: devOrg.id,
     },
@@ -555,13 +555,13 @@ async function main() {
       title: "Demo Quote — Execution Showcase",
       status: QuoteStatus.APPROVED,
       customerId: demoCustomer.id,
-      leadId: "dev-lead-linked-draft-quote",
+      salesIntakeId: "dev-lead-linked-draft-quote",
       totalCents: 1250000,
       organizationId: devOrg.id,
     },
   });
 
-  console.log("[dev seed] Demo leads and quote created.");
+  console.log("[dev seed] Demo sales intakes and quote created.");
 
   const demoJob = await prisma.job.upsert({
     where: { id: "dev-job-demo-execution" },
@@ -570,7 +570,7 @@ async function main() {
       status: JobStatus.ACTIVE,
       quoteId: demoQuote.id,
       customerId: demoCustomer.id,
-      leadId: "dev-lead-linked-draft-quote",
+      salesIntakeId: "dev-lead-linked-draft-quote",
       organizationId: devOrg.id,
     },
     create: {
@@ -579,7 +579,7 @@ async function main() {
       status: JobStatus.ACTIVE,
       quoteId: demoQuote.id,
       customerId: demoCustomer.id,
-      leadId: "dev-lead-linked-draft-quote",
+      salesIntakeId: "dev-lead-linked-draft-quote",
       organizationId: devOrg.id,
     },
   });

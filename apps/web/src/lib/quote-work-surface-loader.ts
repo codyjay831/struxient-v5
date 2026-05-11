@@ -26,7 +26,7 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type {
   QuoteWorkspaceCheckpointPayload,
-  QuoteWorkspaceLeadIntake,
+  QuoteWorkspaceSalesIntake,
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
@@ -46,7 +46,7 @@ export type QuoteWorkSurfaceLoaderResult = {
 
 /**
  * Org-scoped fetch + derive of everything `QuoteWorkSurface` needs across all
- * containers (Workstation drawer, Lead Quote tab embed, Quotes list popup,
+ * containers (Workstation drawer, Sales Intake Quote tab embed, Quotes list popup,
  * full Quote page).
  *
  * The result intentionally bundles three layers:
@@ -89,8 +89,8 @@ export async function loadQuoteWorkSurface(
           },
         },
       },
-      leadId: true,
-      lead: {
+      salesIntakeId: true,
+      salesIntake: {
         select: {
           id: true,
           title: true,
@@ -138,26 +138,26 @@ export async function loadQuoteWorkSurface(
         phone: rawCustomer.phone,
       }
     : null;
-  const rawLead =
-    row.lead && row.lead.organizationId === orgId ? row.lead : null;
-  const lead = rawLead
+  const rawSalesIntake =
+    row.salesIntake && row.salesIntake.organizationId === orgId ? row.salesIntake : null;
+  const salesIntake = rawSalesIntake
     ? {
-        id: rawLead.id,
-        title: rawLead.title,
-        notes: rawLead.notes,
-        source: rawLead.source,
-        contactName: rawLead.contactName,
-        email: rawLead.email,
-        phone: rawLead.phone,
+        id: rawSalesIntake.id,
+        title: rawSalesIntake.title,
+        notes: rawSalesIntake.notes,
+        source: rawSalesIntake.source,
+        contactName: rawSalesIntake.contactName,
+        email: rawSalesIntake.email,
+        phone: rawSalesIntake.phone,
       }
     : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: rawCustomer?.serviceLocations ?? [],
-    leadRow: rawLead
+    salesIntakeRow: rawSalesIntake
       ? {
-          publicIntakeServiceLocation: rawLead.publicIntakeServiceLocation,
-          notes: rawLead.notes,
+          publicIntakeServiceLocation: rawSalesIntake.publicIntakeServiceLocation,
+          notes: rawSalesIntake.notes,
         }
       : null,
   });
@@ -265,7 +265,7 @@ export async function loadQuoteWorkSurface(
   });
 
   /* ── QuoteWorkSurfaceData (identity + summary) ────────────────────────── */
-  const primaryTitle = lead?.title || customer?.displayName || row.title;
+  const primaryTitle = salesIntake?.title || customer?.displayName || row.title;
   const subtitle = row.title !== primaryTitle ? row.title : null;
 
   const quote: QuoteWorkSurfaceData = {
@@ -279,9 +279,9 @@ export async function loadQuoteWorkSurface(
     customerId: customer?.id ?? null,
     customerDisplayName: customer?.displayName ?? null,
     customerHref: customer ? `/customers/${customer.id}` : null,
-    leadId: lead?.id ?? null,
-    leadTitle: lead?.title ?? null,
-    leadHref: lead ? `/sales/${lead.id}` : null,
+    salesIntakeId: salesIntake?.id ?? null,
+    salesIntakeTitle: salesIntake?.title ?? null,
+    salesIntakeHref: salesIntake ? `/sales/${salesIntake.id}` : null,
     totalCents: row.totalCents,
     subtotalCents: row.subtotalCents,
     lineItemCount: row.lineItems.length,
@@ -380,24 +380,28 @@ export async function loadQuoteWorkSurface(
             defaultCustomerIncludedNotes: true,
             defaultCustomerExcludedNotes: true,
             defaultCustomerPresentationGroup: true,
+            priceBufferPercentage: true,
+            tags: true,
           },
         })
       ).map((t) => {
         const lineTotal = computeLineTotalCents(t.defaultQuantity, t.defaultUnitAmountCents);
         return {
-        id: t.id,
-        description: t.description,
-        defaultQuantityDisplay: t.defaultQuantity.toString(),
-        defaultUnitAmountCents: t.defaultUnitAmountCents,
-        defaultLineTotalCents: lineTotal.ok ? lineTotal.lineTotalCents : 0,
-        hasCustomerProposalDefaults: Boolean(
-          t.defaultCustomerScopeTitle ||
-            t.defaultCustomerScopeDescription ||
-            t.defaultCustomerIncludedNotes ||
-            t.defaultCustomerExcludedNotes ||
-            t.defaultCustomerPresentationGroup,
-        ),
-      };
+          id: t.id,
+          description: t.description,
+          defaultQuantityDisplay: t.defaultQuantity.toString(),
+          defaultUnitAmountCents: t.defaultUnitAmountCents,
+          defaultLineTotalCents: lineTotal.ok ? lineTotal.lineTotalCents : 0,
+          priceBufferPercentage: t.priceBufferPercentage,
+          tags: t.tags,
+          hasCustomerProposalDefaults: Boolean(
+            t.defaultCustomerScopeTitle ||
+              t.defaultCustomerScopeDescription ||
+              t.defaultCustomerIncludedNotes ||
+              t.defaultCustomerExcludedNotes ||
+              t.defaultCustomerPresentationGroup,
+          ),
+        };
       })
     : [];
 
@@ -443,16 +447,16 @@ export async function loadQuoteWorkSurface(
   const sendCheckpoints = sendCheckpointRows.map(toCheckpointPayload);
   const approvalCheckpoints = approvalCheckpointRows.map(toCheckpointPayload);
 
-  const leadIntake: QuoteWorkspaceLeadIntake | null = lead
+  const salesIntakePayload: QuoteWorkspaceSalesIntake | null = salesIntake
     ? {
-        id: lead.id,
-        title: lead.title,
-        href: `/sales/${lead.id}`,
-        notes: lead.notes,
-        source: lead.source,
-        contactName: lead.contactName,
-        email: lead.email,
-        phone: lead.phone,
+        id: salesIntake.id,
+        title: salesIntake.title,
+        href: `/sales/${salesIntake.id}`,
+        notes: salesIntake.notes,
+        source: salesIntake.source,
+        contactName: salesIntake.contactName,
+        email: salesIntake.email,
+        phone: salesIntake.phone,
       }
     : null;
 
@@ -462,7 +466,7 @@ export async function loadQuoteWorkSurface(
     isArchived,
     customerDocumentTitle: row.customerDocumentTitle,
     internalNotes: row.internalNotes,
-    hasLeadNotes: Boolean(lead?.notes),
+    hasSalesIntakeNotes: Boolean(salesIntake?.notes),
     subtotalCents: row.subtotalCents,
     totalCents: row.totalCents,
     lineItems,
@@ -471,7 +475,7 @@ export async function loadQuoteWorkSurface(
     reusableTaskOptions,
     customerName: customer?.displayName ?? null,
     customerHref: customer ? `/customers/${customer.id}` : null,
-    leadIntake,
+    salesIntake: salesIntakePayload,
     sendCheckpoints,
     approvalCheckpoints,
     createdAtIso: row.createdAt.toISOString(),

@@ -30,7 +30,7 @@ export default async function WorkstationJobsLensPage({
     where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE },
     include: {
       customer: true,
-      lead: true,
+      salesIntake: true,
     }
   });
 
@@ -61,7 +61,7 @@ export default async function WorkstationJobsLensPage({
               id: `job-${selectedJob!.id}`,
               kind: "job",
               title: selectedJob!.title,
-              subtitle: selectedJob!.customer?.displayName || selectedJob!.lead?.title || undefined,
+              subtitle: selectedJob!.customer?.displayName || selectedJob!.salesIntake?.title || undefined,
               status: selectedJob!.status,
               priority: "medium",
               group: "active",
@@ -91,7 +91,7 @@ export default async function WorkstationJobsLensPage({
                   id: itemId,
                   kind: "job",
                   title: job.title,
-                  subtitle: job.customer?.displayName || job.lead?.title || "No linked record",
+                  subtitle: job.customer?.displayName || job.salesIntake?.title || "No linked record",
                   priority: attentionItem?.priority || "medium",
                   lens: attentionItem?.lens || "today",
                   filterCategory: "jobs",

@@ -1,17 +1,17 @@
 "use client";
 
 /**
- * LeadWorkSurface — the canonical Lead work UX, regardless of container.
+ * SalesIntakeWorkSurface — the canonical Sales Intake work UX, regardless of container.
  *
- * Same lead, same work surface. Different container, same behavior.
+ * Same sales intake, same work surface. Different container, same behavior.
  *
  * Modes change spacing/layout only. They never remove core actions.
  *
  *   compact   — Workstation drawer (narrow, tight padding)
- *   standard  — Leads page popup (the visual reference)
- *   full      — Lead full page (wider, with optional record-detail summary)
+ *   standard  — Sales Intakes page popup (the visual reference)
+ *   full      — Sales Intake full page (wider, with optional record-detail summary)
  *
- * The popup at `LeadsListClient` is the visual reference; this component is a
+ * The popup at `SalesIntakesListClient` is the visual reference; this component is a
  * faithful extraction of that UX so all three containers share it.
  */
 import { forwardRef, useCallback, useEffect, useRef, useState, useActionState } from "react";
@@ -28,43 +28,42 @@ import {
 } from "lucide-react";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import {
-  createQuoteFromLeadWorkspaceAction,
-  loadLeadActiveQuoteWorkSurfaceAction,
-  updateLeadContactWorkspaceAction,
-  type LeadServiceAddressContext,
-  type LoadLeadServiceAddressContextResult,
+  createQuoteFromSalesIntakeWorkspaceAction,
+  loadSalesIntakeActiveQuoteWorkSurfaceAction,
+  updateSalesIntakeContactWorkspaceAction,
+  type SalesIntakeServiceAddressContext,
+  type LoadSalesIntakeServiceAddressContextResult,
   type WorkspaceFormState,
 } from "@/app/(workspace)/sales/sales-workspace-actions";
 import {
-  LeadServiceAddressBlock,
-  type LeadServiceAddressBlockHandle,
+  SalesIntakeServiceAddressBlock,
+  type SalesIntakeServiceAddressBlockHandle,
 } from "@/components/sales/sales-service-address-block";
-import { LeadCustomerAttachCard } from "@/components/sales/sales-customer-attach-card";
+import { SalesIntakeCustomerAttachCard } from "@/components/sales/sales-customer-attach-card";
 import {
-  LeadLinkCustomerForm,
-  LeadLinkCustomerWorkspaceForm,
+  SalesIntakeLinkCustomerForm,
 } from "@/components/sales/sales-link-customer-form";
-import { LeadStatusForm } from "@/components/sales/sales-status-form";
-import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
-import type { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
+import { SalesIntakeStatusForm } from "@/components/sales/sales-status-form";
+import type { SalesIntakeFormState } from "@/app/(workspace)/sales/sales-form-actions";
+import type { SalesIntakeCustomerMatchHints } from "@/lib/sales-intake-customer-match-hints";
 import {
-  resolveLeadCommercialProgressActionHref,
-  type LeadCommercialProgressAction,
-} from "@/lib/lead-commercial-progress";
-import type { LeadStatus, LeadSource, LeadVisitRequestStatus } from "@prisma/client";
+  resolveSalesIntakeCommercialProgressActionHref,
+  type SalesIntakeCommercialProgressAction,
+} from "@/lib/sales-commercial-progress";
+import type { SalesIntakeStatus, SalesIntakeSource, SalesVisitRequestStatus } from "@prisma/client";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type { QuoteReadiness } from "@/lib/quote-readiness";
 import type { QuoteWorkspaceTabData } from "@/lib/quote-workspace-payload";
 
-/** Serializable lead visit request for the work surface. */
-export type LeadWorkSurfaceVisitRequest = {
+/** Serializable sales intake visit request for the work surface. */
+export type SalesIntakeWorkSurfaceVisitRequest = {
   id: string;
   requestedDate: Date | null;
   requestedDateLabel: string | null;
   requestedWindow: string | null;
   confirmedDate: Date | null;
-  status: LeadVisitRequestStatus;
+  status: SalesVisitRequestStatus;
   notes: string | null;
   createdAt: Date;
 };
@@ -77,33 +76,33 @@ export type LeadWorkSurfaceVisitRequest = {
  * Mirrors `QuoteWorkSurfaceLoaderResult` so the lazy loader path can pipe
  * straight through.
  */
-export type LeadWorkSurfaceActiveQuotePayload = {
+export type SalesIntakeWorkSurfaceActiveQuotePayload = {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
 };
 
 /**
- * Result shape for the lazy active-quote loader (used by the Leads list popup,
+ * Result shape for the lazy active-quote loader (used by the Sales Intakes list popup,
  * which doesn't preload readiness per row). Containers that already have the
  * payload server-side pass `activeQuoteWorkSurface` directly and skip this.
  */
-export type LeadWorkSurfaceActiveQuoteLoadResult =
-  | { ok: true; payload: LeadWorkSurfaceActiveQuotePayload | null }
+export type SalesIntakeWorkSurfaceActiveQuoteLoadResult =
+  | { ok: true; payload: SalesIntakeWorkSurfaceActiveQuotePayload | null }
   | { ok: false; error: string };
 
 /** Internal lazy-load state machine for the active-quote payload. */
 type ActiveQuoteLazyState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "loaded"; payload: LeadWorkSurfaceActiveQuotePayload | null }
+  | { kind: "loaded"; payload: SalesIntakeWorkSurfaceActiveQuotePayload | null }
   | { kind: "error"; message: string };
 
 /* ─── Public types ──────────────────────────────────────────────────────── */
 
-export type LeadWorkSurfaceMode = "compact" | "standard" | "full";
+export type SalesIntakeWorkSurfaceMode = "compact" | "standard" | "full";
 
-export type LeadWorkSurfaceProgressAction = {
+export type SalesIntakeWorkSurfaceProgressAction = {
   href: string;
   label: string;
   /** OPEN_DRAFT_QUOTE / OPEN_QUOTE / START_QUOTE → switch to Quote tab. */
@@ -112,7 +111,7 @@ export type LeadWorkSurfaceProgressAction = {
   opensContactTab: boolean;
 };
 
-export type LeadWorkSurfaceQuote = {
+export type SalesIntakeWorkSurfaceQuote = {
   id: string;
   title: string;
   statusLabel: string;
@@ -128,7 +127,7 @@ export type LeadWorkSurfaceQuote = {
   isApproved?: boolean;
 };
 
-export type LeadWorkSurfaceData = {
+export type SalesIntakeWorkSurfaceData = {
   id: string;
   title: string;
   contactName: string | null;
@@ -140,19 +139,19 @@ export type LeadWorkSurfaceData = {
   neededByBucket?: string | null;
   neededByDateLabel?: string | null;
   scopeSummary?: string | null;
-  /** Jobsite / project address line when known (from lead intake or customer profile). */
+  /** Jobsite / project address line when known (from sales intake intake or customer profile). */
   jobsiteAddressLine?: string | null;
   intakeServiceLocationLinkedToCustomer?: boolean;
   sourceLabel: string;
   /** Canonical enum — optional on lightweight shells (list popup, workstation). */
-  source?: LeadSource;
+  source?: SalesIntakeSource;
   /** Optional, full mode only. */
   sourceDetail?: string | null;
-  /** Manual LeadStatus enum label (not the derived progress label). */
+  /** Manual SalesIntakeStatus enum label (not the derived progress label). */
   statusLabel: string;
   statusTone: StatusBadgeTone;
-  /** Manual LeadStatus enum value — required when `updateStatusAction` is set. */
-  statusValue?: LeadStatus;
+  /** Manual SalesIntakeStatus enum value — required when `updateStatusAction` is set. */
+  statusValue?: SalesIntakeStatus;
   customerId: string | null;
   customerDisplayName: string | null;
   customerHref: string | null;
@@ -163,7 +162,7 @@ export type LeadWorkSurfaceData = {
   convertedAtLabel?: string | null;
   /** Optional, full mode only. */
   showConvertedWithoutCustomerHelper?: boolean;
-  leadHref: string;
+  salesIntakeHref: string;
   editHref: string;
   newQuoteHref: string;
   /* Derived commercial progress (driver of CTA card + tab switching). */
@@ -171,8 +170,8 @@ export type LeadWorkSurfaceData = {
   progressDescription: string;
   progressTone: StatusBadgeTone;
   progressState: string;
-  progressPrimaryAction: LeadWorkSurfaceProgressAction | null;
-  progressSecondaryAction: LeadWorkSurfaceProgressAction | null;
+  progressPrimaryAction: SalesIntakeWorkSurfaceProgressAction | null;
+  progressSecondaryAction: SalesIntakeWorkSurfaceProgressAction | null;
   /* Active record context (used by full-mode summary cards + compact-mode hint). */
   activeQuoteId: string | null;
   activeQuoteTitle?: string | null;
@@ -185,76 +184,81 @@ export type LeadWorkSurfaceData = {
   /** Active quote edited since last commercial proof. */
   showsRevisionDrift?: boolean;
   /** Site visit requests (Phase C). */
-  visitRequests?: LeadWorkSurfaceVisitRequest[];
+  visitRequests?: SalesIntakeWorkSurfaceVisitRequest[];
 };
 
-export type LeadWorkSurfaceTab = "overview" | "contact" | "activity" | "quote";
+export type SalesIntakeWorkSurfaceTab = "overview" | "contact" | "activity" | "quote";
 
-export type LeadWorkSurfaceProps = {
-  mode: LeadWorkSurfaceMode;
-  lead: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
+export type SalesIntakeWorkSurfaceProps = {
+  mode: SalesIntakeWorkSurfaceMode;
+  salesIntake: SalesIntakeWorkSurfaceData;
+  linkedQuotes: SalesIntakeWorkSurfaceQuote[];
   /** Org-scoped customers used by the link-existing form (full mode redirect form, or compact/standard workspace form). */
   customersForLink?: { id: string; displayName: string }[];
   /** Customer match hints — only meaningful when no customer is linked yet. Full mode renders them. */
-  matchHints?: LeadCustomerMatchHints;
-  /** Bound `updateLeadStatusAction.bind(null, leadId)` — full-mode status form (redirects on success). */
+  matchHints?: SalesIntakeCustomerMatchHints;
+  /** Bound `updateSalesIntakeStatusAction.bind(null, salesIntakeId)` — full-mode status form (redirects on success). */
   updateStatusAction?: (
-    prevState: LeadFormState,
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
-  /** Bound `linkLeadToCustomerAction.bind(null, leadId)` — full-mode redirecting link form. */
-  linkLeadAction?: (
-    prevState: LeadFormState,
+  ) => Promise<SalesIntakeFormState>;
+  /** Bound `linkSalesIntakeToCustomerAction.bind(null, salesIntakeId)` — full-mode redirecting link form. */
+  linkSalesIntakeAction?: (
+    prevState: SalesIntakeFormState,
     formData: FormData,
-  ) => Promise<LeadFormState>;
+  ) => Promise<SalesIntakeFormState>;
   /** Initial tab (defaults to "overview"). */
-  initialTab?: LeadWorkSurfaceTab;
+  initialTab?: SalesIntakeWorkSurfaceTab;
   /**
-   * Pre-loaded active-quote QuoteWorkSurface payload — when provided
-   * (including explicit `null` to mean "no active quote"), the surface uses
-   * it directly and does NOT call `loadActiveQuoteWorkSurface`.
+   * Pre-loaded active-quote QuoteWorkSurface payload for the active linked quote. When
+   * provided, the Quote tab renders `<QuoteWorkSurface mode="standard" />` for
+   * the active quote; falls back to today's simpler quote cards when absent.
    *
-   * Workstation lead drawer + Lead full page pass this. The Leads list popup
+   * Workstation sales intake drawer + Sales Intake full page pass this. The Sales Intakes list popup
    * leaves it `undefined` and supplies a lazy loader instead.
    */
-  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
+  activeQuoteWorkSurface?: SalesIntakeWorkSurfaceActiveQuotePayload | null;
   /**
    * Lazy loader for the active-quote payload — invoked once the first time
    * the user opens the Quote tab, only when `activeQuoteWorkSurface` is
-   * `undefined` and the lead has at least one linked quote. The result is
+   * `undefined` and the sales intake has at least one linked quote. The result is
    * cached at this surface's lifetime, so tab switches don't refetch.
    *
-   * Used by the Leads list popup so the leads-list query doesn't have to
+   * Used by the Sales Intakes list popup so the sales-intakes-list query doesn't have to
    * preload quote readiness for every row.
    */
-  loadActiveQuoteWorkSurface?: () => Promise<LeadWorkSurfaceActiveQuoteLoadResult>;
+  loadActiveQuoteWorkSurface?: () => Promise<SalesIntakeWorkSurfaceActiveQuoteLoadResult>;
   /**
-   * Pre-loaded service-address context for the Lead workspace Customer Info
-   * area — render `<LeadServiceAddressBlock>` inline. Lead full page and
-   * Workstation lead drawer pass this directly.
+   * Pre-loaded service-address context for the Sales Intake workspace Customer Info
+   * area — render `<SalesIntakeServiceAddressBlock>` inline. Sales Intake full page and
+   * Workstation sales intake drawer pass this directly.
    */
-  serviceAddressContext?: LeadServiceAddressContext;
+  serviceAddressContext?: SalesIntakeServiceAddressContext;
   /**
-   * Lazy loader for the service-address context — used by the Leads list
+   * Lazy loader for the service-address context — used by the Sales Intakes list
    * popup so the list query doesn't have to fetch every customer's service
    * locations up front. Skipped when `serviceAddressContext` is provided.
    */
-  loadServiceAddressContext?: () => Promise<LoadLeadServiceAddressContextResult>;
+  loadServiceAddressContext?: () => Promise<LoadSalesIntakeServiceAddressContextResult>;
+  /** Popup host can patch its open row snapshot when a quote is created in-place. */
+  onQuoteStarted?: (args: {
+    quoteId: string;
+    activeQuotePayload: SalesIntakeWorkSurfaceActiveQuotePayload | null;
+  }) => void;
 };
 
 /* ─── Helpers exported for container serialization ─────────────────────── */
 
 /**
- * Helper for server containers to convert a `LeadCommercialProgressAction`
+ * Helper for server containers to convert a `SalesIntakeCommercialProgressAction`
  * into the serialized shape this surface expects (href + tab-switch flags).
  */
-export function serializeLeadProgressAction(
-  action: LeadCommercialProgressAction | null,
-  ctx: { leadId: string },
-): LeadWorkSurfaceProgressAction | null {
+export function serializeSalesIntakeProgressAction(
+  action: SalesIntakeCommercialProgressAction | null,
+  ctx: { salesIntakeId: string },
+): SalesIntakeWorkSurfaceProgressAction | null {
   if (!action) return null;
-  const href = resolveLeadCommercialProgressActionHref(action, ctx);
+  const href = resolveSalesIntakeCommercialProgressActionHref(action, ctx);
   const opensQuoteTab =
     action.kind === "OPEN_DRAFT_QUOTE" ||
     action.kind === "OPEN_QUOTE" ||
@@ -267,7 +271,7 @@ export function serializeLeadProgressAction(
 
 /* ─── Shared classnames ─────────────────────────────────────────────────── */
 
-const TABS: { id: LeadWorkSurfaceTab; label: string }[] = [
+const TABS: { id: SalesIntakeWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "contact", label: "Contact" },
   { id: "quote", label: "Quote" },
@@ -300,17 +304,17 @@ function formatMoney(cents: number): string {
 /* ─── Inline contact edit form (faithfully copied from popup) ──────────── */
 
 function EditContactForm({
-  lead,
+  salesIntake,
   onSuccess,
   onCancel,
   fieldIdPrefix,
 }: {
-  lead: LeadWorkSurfaceData;
+  salesIntake: SalesIntakeWorkSurfaceData;
   onSuccess: () => void;
   onCancel: () => void;
   fieldIdPrefix: string;
 }) {
-  const boundAction = updateLeadContactWorkspaceAction.bind(null, lead.id);
+  const boundAction = updateSalesIntakeContactWorkspaceAction.bind(null, salesIntake.id);
   const [state, dispatch, isPending] = useActionState<WorkspaceFormState, FormData>(
     boundAction,
     {},
@@ -334,7 +338,7 @@ function EditContactForm({
             id={`${fieldIdPrefix}-contactName`}
             name="contactName"
             type="text"
-            defaultValue={lead.contactName ?? ""}
+            defaultValue={salesIntake.contactName ?? ""}
             className={inputClass}
             placeholder="Name"
           />
@@ -350,7 +354,7 @@ function EditContactForm({
             id={`${fieldIdPrefix}-email`}
             name="email"
             type="email"
-            defaultValue={lead.email ?? ""}
+            defaultValue={salesIntake.email ?? ""}
             className={inputClass}
             placeholder="email@example.com"
           />
@@ -366,7 +370,7 @@ function EditContactForm({
             id={`${fieldIdPrefix}-phone`}
             name="phone"
             type="tel"
-            defaultValue={lead.phone ?? ""}
+            defaultValue={salesIntake.phone ?? ""}
             className={inputClass}
             placeholder="(555) 000-0000"
           />
@@ -403,16 +407,16 @@ function EditContactForm({
 /* ─── Next step card (popup style — single eyebrow, no required/optional clutter) ── */
 
 function NextStepCard({
-  lead,
+  salesIntake,
   onSwitchToSection,
 }: {
-  lead: LeadWorkSurfaceData;
+  salesIntake: SalesIntakeWorkSurfaceData;
   onSwitchToSection: (section: "quote" | "contact") => void;
 }) {
-  const { progressPrimaryAction: primary, progressSecondaryAction: secondary } = lead;
+  const { progressPrimaryAction: primary, progressSecondaryAction: secondary } = salesIntake;
 
   function renderAction(
-    action: LeadWorkSurfaceProgressAction,
+    action: SalesIntakeWorkSurfaceProgressAction,
     variant: "primary" | "secondary",
   ) {
     const cls = variant === "primary" ? primaryBtnClass : secondaryBtnClass;
@@ -454,20 +458,20 @@ function NextStepCard({
         <p className={sectionLabelClass}>Next action</p>
       </div>
       <h3 className="text-lg font-semibold text-foreground leading-snug">
-        {lead.progressLabel}
+        {salesIntake.progressLabel}
       </h3>
       <p className="mt-1 text-sm text-foreground-muted leading-relaxed">
-        {lead.progressDescription}
+        {salesIntake.progressDescription}
       </p>
 
-      {lead.activeJobId && (
+      {salesIntake.activeJobId && (
         <div className="mt-4 rounded-lg border border-border bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
           <div>
             <p className={sectionLabelClass}>Active job</p>
             <p className="mt-0.5 text-sm font-medium text-foreground capitalize">
-              {lead.activeJobStatus
-                ? lead.activeJobStatus.charAt(0).toUpperCase() +
-                  lead.activeJobStatus.slice(1).toLowerCase()
+              {salesIntake.activeJobStatus
+                ? salesIntake.activeJobStatus.charAt(0).toUpperCase() +
+                  salesIntake.activeJobStatus.slice(1).toLowerCase()
                 : "Active"}
             </p>
           </div>
@@ -489,15 +493,15 @@ function NextStepCard({
 
 function OverviewTab({
   mode,
-  lead,
+  salesIntake,
   linkedQuotes,
   updateStatusAction,
   onSwitchToSection,
 }: {
-  mode: LeadWorkSurfaceMode;
-  lead: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
-  updateStatusAction?: LeadWorkSurfaceProps["updateStatusAction"];
+  mode: SalesIntakeWorkSurfaceMode;
+  salesIntake: SalesIntakeWorkSurfaceData;
+  linkedQuotes: SalesIntakeWorkSurfaceQuote[];
+  updateStatusAction?: SalesIntakeWorkSurfaceProps["updateStatusAction"];
   onSwitchToSection: (section: "quote" | "contact") => void;
 }) {
   const isFull = mode === "full";
@@ -506,12 +510,12 @@ function OverviewTab({
     linkedQuotes.length > 0 ? linkedQuotes[0].statusLabel : "Not started";
 
   /* Full mode shows a "Received" tile (matches today's full page); other modes
-     show the manual lead status badge (matches the popup). */
+     show the manual sales intake status badge (matches the popup). */
   return (
     <div className="space-y-4">
       {mode !== "full" && (
         <NextStepCard
-          lead={lead}
+          salesIntake={salesIntake}
           onSwitchToSection={onSwitchToSection}
         />
       )}
@@ -525,7 +529,7 @@ function OverviewTab({
         >
           <p className={`${sectionLabelClass} mb-0.5`}>Customer</p>
           <p className="text-sm font-medium text-foreground truncate">
-            {lead.customerDisplayName ?? "Not linked"}
+            {salesIntake.customerDisplayName ?? "Not linked"}
           </p>
         </button>
         <button
@@ -538,23 +542,23 @@ function OverviewTab({
         </button>
         <div className="rounded-lg border border-border bg-surface p-3">
           <p className={`${sectionLabelClass} mb-0.5`}>Source</p>
-          <p className="text-sm font-medium text-foreground">{lead.sourceLabel}</p>
+          <p className="text-sm font-medium text-foreground">{salesIntake.sourceLabel}</p>
         </div>
         {isFull ? (
           <div className="rounded-lg border border-border bg-surface p-3">
             <p className={`${sectionLabelClass} mb-0.5`}>Received</p>
-            <p className="text-sm font-medium text-foreground">{lead.createdAtLabel}</p>
+            <p className="text-sm font-medium text-foreground">{salesIntake.createdAtLabel}</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-surface p-3">
             <p className={`${sectionLabelClass} mb-0.5`}>Status</p>
-            <StatusBadge label={lead.statusLabel} tone={lead.statusTone} />
+            <StatusBadge label={salesIntake.statusLabel} tone={salesIntake.statusTone} />
           </div>
         )}
       </div>
 
       {/* Site Visit Request (Phase C) */}
-      {lead.visitRequests && lead.visitRequests.some(vr => vr.status === "PENDING") && (
+      {salesIntake.visitRequests && salesIntake.visitRequests.some(vr => vr.status === "PENDING") && (
         <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <CalendarDays className="size-4 text-accent" />
@@ -563,7 +567,7 @@ function OverviewTab({
             </p>
           </div>
           
-          {lead.visitRequests.filter(vr => vr.status === "PENDING").map(vr => (
+          {salesIntake.visitRequests.filter(vr => vr.status === "PENDING").map(vr => (
             <div key={vr.id} className="space-y-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -610,7 +614,7 @@ function OverviewTab({
         <div className="flex items-center justify-between">
           <p className={sectionLabelClass}>Request details</p>
           <Link
-            href={lead.editHref}
+            href={salesIntake.editHref}
             className="inline-flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground transition-colors"
           >
             <Pencil className="w-3 h-3" strokeWidth={1.5} />
@@ -622,33 +626,33 @@ function OverviewTab({
           <div>
             <p className={`${sectionLabelClass} mb-0.5`}>Request type</p>
             <p className="text-sm font-medium text-foreground">
-              {lead.requestType ?? "Not specified"}
+              {salesIntake.requestType ?? "Not specified"}
             </p>
           </div>
           <div>
             <p className={`${sectionLabelClass} mb-0.5`}>Needed by</p>
             <p className="text-sm font-medium text-foreground">
-              {lead.neededByBucket === "SPECIFIC_DATE" && lead.neededByDateLabel
-                ? lead.neededByDateLabel
-                : lead.neededByBucket ?? "Not specified"}
+              {salesIntake.neededByBucket === "SPECIFIC_DATE" && salesIntake.neededByDateLabel
+                ? salesIntake.neededByDateLabel
+                : salesIntake.neededByBucket ?? "Not specified"}
             </p>
           </div>
         </div>
 
-        {lead.scopeSummary && (
+        {salesIntake.scopeSummary && (
           <div>
             <p className={`${sectionLabelClass} mb-1`}>Scope summary</p>
             <p className="text-sm leading-relaxed text-foreground-muted whitespace-pre-wrap">
-              {lead.scopeSummary}
+              {salesIntake.scopeSummary}
             </p>
           </div>
         )}
 
-        {lead.notes && (
+        {salesIntake.notes && (
           <div>
             <p className={`${sectionLabelClass} mb-1`}>Internal notes</p>
             <p className="text-sm leading-relaxed text-foreground-muted whitespace-pre-wrap">
-              {lead.notes}
+              {salesIntake.notes}
             </p>
           </div>
         )}
@@ -664,15 +668,15 @@ function OverviewTab({
                 aria-hidden
               />
               <span className={sectionLabelClass}>Record details</span>
-              <StatusBadge label={lead.statusLabel} tone={lead.statusTone} />
+              <StatusBadge label={salesIntake.statusLabel} tone={salesIntake.statusTone} />
               <span className="ml-auto text-[0.65rem] text-foreground-subtle">
-                {lead.createdAtLabel}
+                {salesIntake.createdAtLabel}
               </span>
             </summary>
 
             <div className="mt-4 space-y-5 border-t border-border pt-4">
               {/* Manual status */}
-              {lead.statusValue && updateStatusAction && (
+              {salesIntake.statusValue && updateStatusAction && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                     Manual status
@@ -681,7 +685,7 @@ function OverviewTab({
                     Used for your own pipeline tracking. The next step above is derived
                     automatically.
                   </p>
-                  {lead.showConvertedWithoutCustomerHelper && (
+                  {salesIntake.showConvertedWithoutCustomerHelper && (
                     <p className="mt-2 rounded-lg border border-border border-l-[3px] border-l-accent bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
                       <span className="font-medium text-foreground">
                         Converted without a linked customer.
@@ -689,8 +693,8 @@ function OverviewTab({
                       Linking or creating a customer is a separate explicit step.
                     </p>
                   )}
-                  <LeadStatusForm
-                    currentStatus={lead.statusValue}
+                  <SalesIntakeStatusForm
+                    currentStatus={salesIntake.statusValue}
                     formAction={updateStatusAction}
                   />
                 </div>
@@ -700,19 +704,19 @@ function OverviewTab({
               <dl className="grid gap-2 text-xs sm:grid-cols-2">
                 <div>
                   <dt className={sectionLabelClass}>Created</dt>
-                  <dd className="mt-0.5 text-foreground-muted">{lead.createdAtLabel}</dd>
+                  <dd className="mt-0.5 text-foreground-muted">{salesIntake.createdAtLabel}</dd>
                 </div>
-                {lead.updatedAtLabel && (
+                {salesIntake.updatedAtLabel && (
                   <div>
                     <dt className={sectionLabelClass}>Updated</dt>
-                    <dd className="mt-0.5 text-foreground-muted">{lead.updatedAtLabel}</dd>
+                    <dd className="mt-0.5 text-foreground-muted">{salesIntake.updatedAtLabel}</dd>
                   </div>
                 )}
-                {lead.convertedAtLabel && (
+                {salesIntake.convertedAtLabel && (
                   <div className="sm:col-span-2">
                     <dt className={sectionLabelClass}>Converted</dt>
                     <dd className="mt-0.5 text-foreground-muted">
-                      {lead.convertedAtLabel}
+                      {salesIntake.convertedAtLabel}
                     </dd>
                   </div>
                 )}
@@ -722,7 +726,7 @@ function OverviewTab({
               <div>
                 <p className={sectionLabelClass}>Record ID</p>
                 <p className="mt-1 break-all font-mono text-xs text-foreground-muted">
-                  {lead.id}
+                  {salesIntake.id}
                 </p>
               </div>
             </div>
@@ -733,10 +737,10 @@ function OverviewTab({
       {/* Footer link — popup/compact link out to full page; full mode links to edit. */}
       <div className="pt-1">
         <Link
-          href={isFull ? lead.editHref : lead.leadHref}
+          href={isFull ? salesIntake.editHref : salesIntake.salesIntakeHref}
           className="inline-flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
         >
-          {isFull ? "Edit full lead record" : "Open full lead record"}
+          {isFull ? "Edit full sales intake record" : "Open full sales intake record"}
           <ArrowUpRight className="w-3 h-3" strokeWidth={1.5} />
         </Link>
       </div>
@@ -747,24 +751,22 @@ function OverviewTab({
 /* ─── Contact tab ──────────────────────────────────────────────────────── */
 
 const ContactTab = forwardRef<
-  LeadServiceAddressBlockHandle,
+  SalesIntakeServiceAddressBlockHandle,
   {
-    mode: LeadWorkSurfaceMode;
-    lead: LeadWorkSurfaceData;
+    mode: SalesIntakeWorkSurfaceMode;
+    salesIntake: SalesIntakeWorkSurfaceData;
     customersForLink?: { id: string; displayName: string }[];
-    matchHints?: LeadCustomerMatchHints;
-    linkLeadAction?: LeadWorkSurfaceProps["linkLeadAction"];
+    matchHints?: SalesIntakeCustomerMatchHints;
+    linkSalesIntakeAction?: SalesIntakeWorkSurfaceProps["linkSalesIntakeAction"];
     onRefresh: () => void;
-    serviceAddressContext?: LeadServiceAddressContext;
-    loadServiceAddressContext?: () => Promise<LoadLeadServiceAddressContextResult>;
+    serviceAddressContext?: SalesIntakeServiceAddressContext;
+    loadServiceAddressContext?: () => Promise<LoadSalesIntakeServiceAddressContextResult>;
   }
 >(function ContactTab(
   {
     mode,
-    lead,
-    customersForLink,
+    salesIntake,
     matchHints,
-    linkLeadAction,
     onRefresh,
     serviceAddressContext,
     loadServiceAddressContext,
@@ -772,11 +774,11 @@ const ContactTab = forwardRef<
   serviceAddressBlockRef,
 ) {
   const isFull = mode === "full";
-  const hasContactInfo = Boolean(lead.email) || Boolean(lead.phone);
-  /* Auto-expand the edit form when the lead has no contact info. Lazy initial
+  const hasContactInfo = Boolean(salesIntake.email) || Boolean(salesIntake.phone);
+  /* Auto-expand the edit form when the sales intake has no contact info. Lazy initial
      state so it's set once per surface mount. */
   const [isEditingContact, setIsEditingContact] = useState(
-    () => lead.progressState === "ADD_CONTACT_INFO" && !hasContactInfo,
+    () => salesIntake.progressState === "ADD_CONTACT_INFO" && !hasContactInfo,
   );
 
   function handleContactSaved() {
@@ -807,27 +809,27 @@ const ContactTab = forwardRef<
 
         {isEditingContact ? (
           <EditContactForm
-            lead={lead}
+            salesIntake={salesIntake}
             onSuccess={handleContactSaved}
             onCancel={() => setIsEditingContact(false)}
-            fieldIdPrefix={`lead-${mode}`}
+            fieldIdPrefix={`sales-intake-${mode}`}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <p className={`${sectionLabelClass} mb-0.5`}>Name</p>
               <p className="text-sm font-medium text-foreground">
-                {lead.contactName ?? "Not provided"}
+                {salesIntake.contactName ?? "Not provided"}
               </p>
             </div>
             <div>
               <p className={`${sectionLabelClass} mb-0.5`}>Email</p>
-              {lead.email ? (
+              {salesIntake.email ? (
                 <a
-                  href={`mailto:${lead.email}`}
+                  href={`mailto:${salesIntake.email}`}
                   className="text-sm text-foreground hover:text-accent transition-colors break-all"
                 >
-                  {lead.email}
+                  {salesIntake.email}
                 </a>
               ) : (
                 <p className="text-sm text-foreground-muted">Not provided</p>
@@ -835,12 +837,12 @@ const ContactTab = forwardRef<
             </div>
             <div>
               <p className={`${sectionLabelClass} mb-0.5`}>Phone</p>
-              {lead.phone ? (
+              {salesIntake.phone ? (
                 <a
-                  href={`tel:${lead.phone}`}
+                  href={`tel:${salesIntake.phone}`}
                   className="text-sm text-foreground hover:text-accent transition-colors"
                 >
-                  {lead.phone}
+                  {salesIntake.phone}
                 </a>
               ) : (
                 <p className="text-sm text-foreground-muted">Not provided</p>
@@ -851,7 +853,7 @@ const ContactTab = forwardRef<
       </div>
 
       {/* ── Customer ─────────────────────────────────────────────────────── */}
-      {lead.customerId ? (
+      {salesIntake.customerId ? (
         <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -861,7 +863,7 @@ const ContactTab = forwardRef<
               <div>
                 <p className={sectionLabelClass}>Linked customer</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {lead.customerDisplayName}
+                  {salesIntake.customerDisplayName}
                 </p>
                 <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success-strong">
                   <Check className="size-3" />
@@ -870,14 +872,14 @@ const ContactTab = forwardRef<
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {lead.customerHref && (
-                <Link href={lead.customerHref} className={mutedLinkClass}>
+              {salesIntake.customerHref && (
+                <Link href={salesIntake.customerHref} className={mutedLinkClass}>
                   View record
                   <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
                 </Link>
               )}
               {isFull && (
-                <Link href={lead.editHref} className={mutedLinkClass}>
+                <Link href={salesIntake.editHref} className={mutedLinkClass}>
                   Change link
                 </Link>
               )}
@@ -926,32 +928,32 @@ const ContactTab = forwardRef<
             </div>
           )}
 
-          <LeadCustomerAttachCard
-            lead={{
-              id: lead.id,
-              title: lead.title,
-              contactName: lead.contactName,
-              email: lead.email,
-              phone: lead.phone,
-              notes: lead.notes,
-              source: lead.source,
-              jobsiteAddressLine: lead.jobsiteAddressLine ?? null,
+          <SalesIntakeCustomerAttachCard
+            salesIntake={{
+              id: salesIntake.id,
+              title: salesIntake.title,
+              contactName: salesIntake.contactName,
+              email: salesIntake.email,
+              phone: salesIntake.phone,
+              notes: salesIntake.notes,
+              source: salesIntake.source,
+              jobsiteAddressLine: salesIntake.jobsiteAddressLine ?? null,
             }}
-            editLeadHref={lead.editHref}
+            editSalesIntakeHref={salesIntake.editHref}
             onSuccess={onRefresh}
           />
         </div>
       )}
 
       {/* ── Service address ──────────────────────────────────────────────── */}
-      <LeadServiceAddressBlock
+      <SalesIntakeServiceAddressBlock
         ref={serviceAddressBlockRef}
-        leadId={lead.id}
-        leadEditHref={lead.editHref}
+        salesIntakeId={salesIntake.id}
+        salesIntakeEditHref={salesIntake.editHref}
         context={serviceAddressContext}
         loadContext={loadServiceAddressContext}
-        fallbackAddressLine={lead.jobsiteAddressLine ?? null}
-        hasLinkedCustomer={lead.customerId != null}
+        fallbackAddressLine={salesIntake.jobsiteAddressLine ?? null}
+        hasLinkedCustomer={salesIntake.customerId != null}
         onMutated={onRefresh}
       />
     </div>
@@ -962,12 +964,12 @@ const ContactTab = forwardRef<
 
 function ActivityTab({
   mode,
-  lead,
+  salesIntake,
   linkedQuotes,
 }: {
-  mode: LeadWorkSurfaceMode;
-  lead: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
+  mode: SalesIntakeWorkSurfaceMode;
+  salesIntake: SalesIntakeWorkSurfaceData;
+  linkedQuotes: SalesIntakeWorkSurfaceQuote[];
 }) {
   const isFull = mode === "full";
   return (
@@ -978,31 +980,31 @@ function ActivityTab({
           <div className="flex items-start gap-2.5">
             <div className="w-2 h-2 rounded-full bg-border-strong mt-1.5 shrink-0" />
             <div>
-              <span className="text-sm text-foreground-subtle">Lead created</span>
+              <span className="text-sm text-foreground-subtle">Sales Intake created</span>
               <span className="text-xs text-foreground-subtle ml-1.5">
-                · {lead.createdAtLabel}
+                · {salesIntake.createdAtLabel}
               </span>
             </div>
           </div>
 
-          {isFull && lead.convertedAtLabel && lead.customerDisplayName && (
+          {isFull && salesIntake.convertedAtLabel && salesIntake.customerDisplayName && (
             <div className="flex items-start gap-2.5">
               <div className="w-2 h-2 rounded-full bg-border-strong mt-1.5 shrink-0" />
               <div>
                 <span className="text-sm text-foreground-subtle">
-                  Customer linked · {lead.customerDisplayName}
+                  Customer linked · {salesIntake.customerDisplayName}
                 </span>
                 <span className="text-xs text-foreground-subtle ml-1.5">
-                  · {lead.convertedAtLabel}
+                  · {salesIntake.convertedAtLabel}
                 </span>
               </div>
             </div>
           )}
-          {!isFull && lead.customerDisplayName && (
+          {!isFull && salesIntake.customerDisplayName && (
             <div className="flex items-start gap-2.5">
               <div className="w-2 h-2 rounded-full bg-border-strong mt-1.5 shrink-0" />
               <span className="text-sm text-foreground-subtle">
-                Customer linked · {lead.customerDisplayName}
+                Customer linked · {salesIntake.customerDisplayName}
               </span>
             </div>
           )}
@@ -1033,10 +1035,10 @@ function ActivityTab({
         <p className="text-xs text-foreground-subtle">
           Full activity log is available on the{" "}
           <Link
-            href={lead.leadHref}
+            href={salesIntake.salesIntakeHref}
             className="underline underline-offset-2 hover:text-foreground transition-colors"
           >
-            lead record
+            sales intake record
           </Link>
           .
         </p>
@@ -1049,7 +1051,7 @@ function ActivityTab({
 
 function QuoteTab({
   mode,
-  lead,
+  salesIntake,
   linkedQuotes,
   activeQuoteWorkSurface,
   isLoadingActiveQuote,
@@ -1061,10 +1063,10 @@ function QuoteTab({
   onStartQuote,
   onRequestServiceAddress,
 }: {
-  mode: LeadWorkSurfaceMode;
-  lead: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
-  activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
+  mode: SalesIntakeWorkSurfaceMode;
+  salesIntake: SalesIntakeWorkSurfaceData;
+  linkedQuotes: SalesIntakeWorkSurfaceQuote[];
+  activeQuoteWorkSurface?: SalesIntakeWorkSurfaceActiveQuotePayload | null;
   isLoadingActiveQuote: boolean;
   activeQuoteError: string | null;
   onSwitchToContact: () => void;
@@ -1072,7 +1074,7 @@ function QuoteTab({
   isStartQuotePending: boolean;
   startQuoteError: string | null;
   onStartQuote: () => void;
-  /** Routes the embedded Quote's missing-address CTA back to the Lead Customer Info block. */
+  /** Routes the embedded Quote's missing-address CTA back to the Sales Intake Customer Info block. */
   onRequestServiceAddress: () => void;
 }) {
   const isFull = mode === "full";
@@ -1093,7 +1095,7 @@ function QuoteTab({
       );
     }
 
-    const hasCustomer = lead.customerId != null;
+    const hasCustomer = salesIntake.customerId != null;
     return (
       <div className="space-y-4">
         <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
@@ -1105,7 +1107,7 @@ function QuoteTab({
             <p className="text-xs text-foreground-muted max-w-xs leading-relaxed">
               {hasCustomer
                 ? "The customer is linked. You can now start a draft quote to begin pricing the work."
-                : "Start a draft quote for this lead. You can link a customer later on the Contact tab."}
+                : "Start a draft quote for this sales intake. You can link a customer later on the Contact tab."}
             </p>
           </div>
           <div className="flex flex-col items-center gap-3 pt-2">
@@ -1143,7 +1145,7 @@ function QuoteTab({
 
           <div className="pt-4 border-t border-border w-full max-w-[200px]">
             <Link
-              href={lead.newQuoteHref}
+              href={salesIntake.newQuoteHref}
               className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-foreground-subtle hover:text-foreground transition-colors"
             >
               Full quote builder
@@ -1164,8 +1166,8 @@ function QuoteTab({
    * While the lazy loader is in flight we don't yet know the active quote
    * id, so we use the most-recent linked quote as the *presumed* active id
    * to keep the additional-cards layout stable across loading/loaded. The
-   * leads list serializer filters archived first, so `linkedQuotes[0]` is
-   * the same row `getLeadCommercialProgress` picks. */
+   * sales intakes list serializer filters archived first, so `linkedQuotes[0]` is
+   * the same row `getSalesIntakeCommercialProgress` picks. */
   const presumedActiveId =
     activeQuoteWorkSurface?.quote.id ?? linkedQuotes[0]?.id ?? null;
   const additionalQuotes = presumedActiveId
@@ -1182,7 +1184,7 @@ function QuoteTab({
           readiness={activeQuoteWorkSurface.readiness}
           workspaceTabs={activeQuoteWorkSurface.workspaceTabs}
           onWorkSurfaceMutated={onActiveQuoteMutated}
-          embeddedInLead
+          embeddedInSalesIntake
           onRequestServiceAddress={onRequestServiceAddress}
         />
       ) : isLoadingActiveQuote ? (
@@ -1242,7 +1244,7 @@ function QuoteTab({
           </div>
 
           {/* Full mode shows per-quote action buttons when status hints are passed
-              (matches today's full lead page). All modes show the "Open full quote
+              (matches today's full sales intake page). All modes show the "Open full quote
               page" link to preserve today's behavior. */}
           {isFull && (q.isDraft || q.isApproved) ? (
             <div className="px-4 pb-3 flex flex-wrap gap-2">
@@ -1279,7 +1281,7 @@ function QuoteTab({
 
       <div className="pt-1">
         <Link
-          href={lead.newQuoteHref}
+          href={salesIntake.newQuoteHref}
           className="inline-flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground underline underline-offset-2 transition-colors"
         >
           Start additional quote
@@ -1292,23 +1294,24 @@ function QuoteTab({
 
 /* ─── Main export ──────────────────────────────────────────────────────── */
 
-export function LeadWorkSurface({
+export function SalesIntakeWorkSurface({
   mode,
-  lead,
+  salesIntake,
   linkedQuotes,
   customersForLink,
   matchHints,
   updateStatusAction,
-  linkLeadAction,
+  linkSalesIntakeAction,
   initialTab = "overview",
   activeQuoteWorkSurface,
   loadActiveQuoteWorkSurface,
   serviceAddressContext,
   loadServiceAddressContext,
-}: LeadWorkSurfaceProps) {
+  onQuoteStarted,
+}: SalesIntakeWorkSurfaceProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<LeadWorkSurfaceTab>(initialTab);
-  const serviceAddressBlockRef = useRef<LeadServiceAddressBlockHandle | null>(null);
+  const [activeTab, setActiveTab] = useState<SalesIntakeWorkSurfaceTab>(initialTab);
+  const serviceAddressBlockRef = useRef<SalesIntakeServiceAddressBlockHandle | null>(null);
 
   const requestRef = useRef<HTMLDivElement>(null);
   const contactRef = useRef<HTMLDivElement>(null);
@@ -1355,7 +1358,7 @@ export function LeadWorkSurface({
     setPendingServiceAddressFocus(true);
   }, [mode, scrollToSection]);
   const [postCreateActiveQuote, setPostCreateActiveQuote] =
-    useState<LeadWorkSurfaceActiveQuotePayload | null>(null);
+    useState<SalesIntakeWorkSurfaceActiveQuotePayload | null>(null);
   const [isStartQuotePending, setIsStartQuotePending] = useState(false);
   const [startQuoteError, setStartQuoteError] = useState<string | null>(null);
   const [showGraduationPopup, setShowGraduationPopup] = useState(false);
@@ -1366,16 +1369,16 @@ export function LeadWorkSurface({
   /* Lazy load active-quote payload when:
    *   - parent did NOT preload it (activeQuoteWorkSurface === undefined)
    *   - a loader was provided
-   *   - the lead has at least one linked quote
+   *   - the sales intake has at least one linked quote
    *   - the user has opened the Quote tab at least once in this surface
    *
    * The state is hoisted here so switching tabs back to Quote does not
-   * refetch. The whole surface remounts (via key={lead.id} on the popup
-   * container) when the user opens a different lead, which resets this state.
+   * refetch. The whole surface remounts (via key={salesIntake.id} on the popup
+   * container) when the user opens a different sales intake, which resets this state.
    *
-   * Also re-callable after a workspace-safe quote mutation so the Lead
+   * Also re-callable after a workspace-safe quote mutation so the Sales Intake
    * Quote tab can refresh embedded quote scope/readiness without forcing
-   * the user to re-open the lead. Older responses are dropped via
+   * the user to re-open the sales intake. Older responses are dropped via
    * `loadIdRef` so they cannot overwrite newer state.
    */
   const [activeQuoteState, setActiveQuoteState] = useState<ActiveQuoteLazyState>({
@@ -1384,14 +1387,20 @@ export function LeadWorkSurface({
   const loadIdRef = useRef(0);
 
   const parentProvidedActiveQuote = activeQuoteWorkSurface !== undefined;
+  const previousSalesIntakeIdRef = useRef<string | null>(null);
 
+  /* Intake→quote graduation: reset post-create state only when the open sales
+   * intake identity changes, not when the surface remounts after router.refresh(). */
   useEffect(() => {
+    const previousId = previousSalesIntakeIdRef.current;
+    previousSalesIntakeIdRef.current = salesIntake.id;
+    if (previousId === null || previousId === salesIntake.id) return;
     void Promise.resolve().then(() => {
       setPostCreateActiveQuote(null);
       setStartQuoteError(null);
       setShowGraduationPopup(false);
     });
-  }, [lead.id]);
+  }, [salesIntake.id]);
 
   useEffect(() => {
     if (!activeQuoteWorkSurface) return;
@@ -1400,37 +1409,46 @@ export function LeadWorkSurface({
     });
   }, [activeQuoteWorkSurface]);
 
+  const refreshAfterGraduation = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
+  const handleDismissGraduation = useCallback(() => {
+    setShowGraduationPopup(false);
+    refreshAfterGraduation();
+  }, [refreshAfterGraduation]);
+
   const handleStartQuote = useCallback(async () => {
     setStartQuoteError(null);
     setIsStartQuotePending(true);
     try {
-      const res = await createQuoteFromLeadWorkspaceAction(lead.id);
+      const res = await createQuoteFromSalesIntakeWorkspaceAction(salesIntake.id);
       if (!res.success) {
         setStartQuoteError(res.error);
         return;
       }
-      const loaded = await loadLeadActiveQuoteWorkSurfaceAction(lead.id);
-      if (loaded.ok && loaded.payload) {
-        setPostCreateActiveQuote(loaded.payload);
+      const loaded = await loadSalesIntakeActiveQuoteWorkSurfaceAction(salesIntake.id);
+      const activeQuotePayload = loaded.ok ? loaded.payload : null;
+      if (activeQuotePayload) {
+        setPostCreateActiveQuote(activeQuotePayload);
       }
 
-      // Show graduation popup if not suppressed
-      if (typeof window !== "undefined") {
-        const suppressed = localStorage.getItem("suppress-graduation-popup") === "true";
-        if (!suppressed) {
-          setShowGraduationPopup(true);
-        }
+      setActiveTab("quote");
+      onQuoteStarted?.({ quoteId: res.quoteId, activeQuotePayload });
+
+      const suppressed =
+        typeof window !== "undefined" &&
+        localStorage.getItem("suppress-graduation-popup") === "true";
+      if (suppressed) {
+        refreshAfterGraduation();
+        return;
       }
 
-      /* Defer refresh so React applies postCreate state before RSC invalidation;
-       * Workstation also keeps the drawer when the lead leaves the feed. */
-      queueMicrotask(() => {
-        router.refresh();
-      });
+      setShowGraduationPopup(true);
     } finally {
       setIsStartQuotePending(false);
     }
-  }, [lead.id, router]);
+  }, [salesIntake.id, onQuoteStarted, refreshAfterGraduation]);
 
   const runActiveQuoteLoad = useCallback(
     (showSpinner: boolean) => {
@@ -1482,7 +1500,7 @@ export function LeadWorkSurface({
   /* Called after a workspace-safe mutation (e.g. quote line item add/edit/
    * delete inside the embedded QuoteWorkSurface). Re-fetches the lazy
    * payload (if applicable) and `router.refresh()`s for the SSR-rendered
-   * Lead full page case. */
+   * Sales Intake full page case. */
   const handleActiveQuoteMutated = useCallback(() => {
     if (!parentProvidedActiveQuote) {
       runActiveQuoteLoad(false);
@@ -1544,7 +1562,7 @@ export function LeadWorkSurface({
         {activeTab === "overview" && (
           <OverviewTab
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             linkedQuotes={linkedQuotes}
             updateStatusAction={updateStatusAction}
             onSwitchToSection={(section) => setActiveTab(section === "quote" ? "quote" : "contact")}
@@ -1554,10 +1572,10 @@ export function LeadWorkSurface({
           <ContactTab
             ref={serviceAddressBlockRef}
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             customersForLink={customersForLink}
             matchHints={matchHints}
-            linkLeadAction={linkLeadAction}
+            linkSalesIntakeAction={linkSalesIntakeAction}
             onRefresh={() => router.refresh()}
             serviceAddressContext={serviceAddressContext}
             loadServiceAddressContext={loadServiceAddressContext}
@@ -1566,7 +1584,7 @@ export function LeadWorkSurface({
         {activeTab === "quote" && (
           <QuoteTab
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             linkedQuotes={linkedQuotes}
             activeQuoteWorkSurface={effectiveActiveQuotePayload}
             isLoadingActiveQuote={isLoadingActiveQuote}
@@ -1580,7 +1598,7 @@ export function LeadWorkSurface({
           />
         )}
         {activeTab === "activity" && (
-          <ActivityTab mode={mode} lead={lead} linkedQuotes={linkedQuotes} />
+          <ActivityTab mode={mode} salesIntake={salesIntake} linkedQuotes={linkedQuotes} />
         )}
 
         {showGraduationPopup && (
@@ -1589,24 +1607,26 @@ export function LeadWorkSurface({
               <div className="flex size-12 items-center justify-center rounded-full bg-success/10 text-success mb-4">
                 <Check className="size-6" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Lead Promoted!</h3>
+              <h3 className="text-lg font-semibold text-foreground">Sales Intake Promoted!</h3>
               <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
-                This lead has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
+                This sales intake has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
               </p>
               <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
                 You can continue working on the quote right here.
               </p>
               <div className="mt-6 flex flex-col gap-3">
                 <button
-                  onClick={() => setShowGraduationPopup(false)}
+                  type="button"
+                  onClick={handleDismissGraduation}
                   className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast hover:opacity-90 transition-opacity"
                 >
                   Got it
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     localStorage.setItem("suppress-graduation-popup", "true");
-                    setShowGraduationPopup(false);
+                    handleDismissGraduation();
                   }}
                   className="text-xs text-foreground-subtle hover:text-foreground transition-colors"
                 >
@@ -1628,7 +1648,7 @@ export function LeadWorkSurface({
         <section ref={requestRef} className="scroll-mt-8">
           <OverviewTab
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             linkedQuotes={linkedQuotes}
             updateStatusAction={updateStatusAction}
             onSwitchToSection={scrollToSection}
@@ -1646,10 +1666,10 @@ export function LeadWorkSurface({
           <ContactTab
             ref={serviceAddressBlockRef}
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             customersForLink={customersForLink}
             matchHints={matchHints}
-            linkLeadAction={linkLeadAction}
+            linkSalesIntakeAction={linkSalesIntakeAction}
             onRefresh={() => router.refresh()}
             serviceAddressContext={serviceAddressContext}
             loadServiceAddressContext={loadServiceAddressContext}
@@ -1666,7 +1686,7 @@ export function LeadWorkSurface({
           </div>
           <QuoteTab
             mode={mode}
-            lead={lead}
+            salesIntake={salesIntake}
             linkedQuotes={linkedQuotes}
             activeQuoteWorkSurface={effectiveActiveQuotePayload}
             isLoadingActiveQuote={isLoadingActiveQuote}
@@ -1688,14 +1708,14 @@ export function LeadWorkSurface({
               Activity
             </h2>
           </div>
-          <ActivityTab mode={mode} lead={lead} linkedQuotes={linkedQuotes} />
+          <ActivityTab mode={mode} salesIntake={salesIntake} linkedQuotes={linkedQuotes} />
         </section>
       </div>
 
       {/* Right Rail (Sticky) */}
       <aside className="sticky top-8 space-y-6">
         <NextStepCard
-          lead={lead}
+          salesIntake={salesIntake}
           onSwitchToSection={scrollToSection}
         />
 
@@ -1738,24 +1758,26 @@ export function LeadWorkSurface({
             <div className="flex size-12 items-center justify-center rounded-full bg-success/10 text-success mb-4">
               <Check className="size-6" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground">Lead Promoted!</h3>
+            <h3 className="text-lg font-semibold text-foreground">Sales Intake Promoted!</h3>
             <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
-              This lead has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
+              This sales intake has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
             </p>
             <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
               You can continue working on the quote right here.
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <button
-                onClick={() => setShowGraduationPopup(false)}
+                type="button"
+                onClick={handleDismissGraduation}
                 className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast hover:opacity-90 transition-opacity"
               >
                 Got it
               </button>
               <button
+                type="button"
                 onClick={() => {
                   localStorage.setItem("suppress-graduation-popup", "true");
-                  setShowGraduationPopup(false);
+                  handleDismissGraduation();
                 }}
                 className="text-xs text-foreground-subtle hover:text-foreground transition-colors"
               >

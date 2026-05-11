@@ -1,23 +1,23 @@
-import type { LeadSource, LeadStatus, NeededByBucket, LeadVisitRequestStatus } from "@prisma/client";
+import type { SalesIntakeSource, SalesIntakeStatus, NeededByBucket, SalesVisitRequestStatus } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 
-/** Serializable lead visit request (Phase C site visits). */
-export type LeadVisitRequestPayload = {
+/** Serializable sales intake visit request (Phase C site visits). */
+export type SalesVisitRequestPayload = {
   id: string;
   requestedDate: Date | null;
   requestedWindow: string | null;
   confirmedDate: Date | null;
-  status: LeadVisitRequestStatus;
+  status: SalesVisitRequestStatus;
   notes: string | null;
   createdAt: Date;
 };
 
-/** Serializable lead row for the detail shell (server-fetched, org-scoped). */
-export type LeadDetailPayload = {
+/** Serializable sales intake row for the detail shell (server-fetched, org-scoped). */
+export type SalesIntakeDetailPayload = {
   id: string;
   title: string;
-  status: LeadStatus;
-  source: LeadSource;
+  status: SalesIntakeStatus;
+  source: SalesIntakeSource;
   sourceDetail: string | null;
   contactName: string | null;
   email: string | null;
@@ -27,9 +27,9 @@ export type LeadDetailPayload = {
   neededByBucket: NeededByBucket | null;
   neededByDate: Date | null;
   scopeSummary: string | null;
-  /** Where work happens: structured lead intake and legacy public-request notes when needed. */
+  /** Where work happens: structured intake and legacy public-request notes when needed. */
   jobsiteAddressLine: string | null;
-  /** True when a linked customer already reflects this lead's intake service location. */
+  /** True when a linked customer already reflects this intake's service location. */
   intakeServiceLocationLinkedToCustomer: boolean;
   customerId: string | null;
   convertedAt: Date | null;
@@ -37,10 +37,10 @@ export type LeadDetailPayload = {
   updatedAt: Date;
   customer: { id: string; displayName: string } | null;
   /** Site visit requests (Phase C). */
-  visitRequests: LeadVisitRequestPayload[];
+  visitRequests: SalesVisitRequestPayload[];
 };
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+const STATUS_LABELS: Record<SalesIntakeStatus, string> = {
   OPEN: "Open",
   QUALIFYING: "Qualifying",
   CONVERTED: "Converted",
@@ -48,7 +48,7 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   ARCHIVED: "Archived",
 };
 
-const SOURCE_LABELS: Record<LeadSource, string> = {
+const SOURCE_LABELS: Record<SalesIntakeSource, string> = {
   PHONE: "Phone",
   EMAIL: "Email",
   SMS: "SMS",
@@ -61,7 +61,7 @@ const SOURCE_LABELS: Record<LeadSource, string> = {
 };
 
 /** Stable order for the create-form source select (MANUAL first as default intake). */
-export const LEAD_SOURCE_FORM_OPTIONS: { value: LeadSource; label: string }[] = (
+export const SALES_INTAKE_SOURCE_FORM_OPTIONS: { value: SalesIntakeSource; label: string }[] = (
   [
     "MANUAL",
     "PHONE",
@@ -72,26 +72,26 @@ export const LEAD_SOURCE_FORM_OPTIONS: { value: LeadSource; label: string }[] = 
     "REFERRAL",
     "WALK_IN",
     "OTHER",
-  ] as const satisfies readonly LeadSource[]
+  ] as const satisfies readonly SalesIntakeSource[]
 ).map((value) => ({ value, label: SOURCE_LABELS[value] }));
 
-/** Stable order for status transitions on lead detail (manual lifecycle). */
-export const LEAD_STATUS_FORM_OPTIONS: { value: LeadStatus; label: string }[] = (
-  ["OPEN", "QUALIFYING", "CONVERTED", "LOST", "ARCHIVED"] as const satisfies readonly LeadStatus[]
+/** Stable order for status transitions on intake detail (manual lifecycle). */
+export const SALES_INTAKE_STATUS_FORM_OPTIONS: { value: SalesIntakeStatus; label: string }[] = (
+  ["OPEN", "QUALIFYING", "CONVERTED", "LOST", "ARCHIVED"] as const satisfies readonly SalesIntakeStatus[]
 ).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
 /** Counted as “open pipeline” for lightweight org metrics (excludes CONVERTED, LOST, ARCHIVED). */
-export const LEAD_PIPELINE_OPEN_STATUSES = ["OPEN", "QUALIFYING"] as const satisfies readonly LeadStatus[];
+export const SALES_INTAKE_PIPELINE_OPEN_STATUSES = ["OPEN", "QUALIFYING"] as const satisfies readonly SalesIntakeStatus[];
 
-export function formatLeadStatus(status: LeadStatus): string {
+export function formatSalesIntakeStatus(status: SalesIntakeStatus): string {
   return STATUS_LABELS[status];
 }
 
-export function formatLeadSource(source: LeadSource): string {
+export function formatSalesIntakeSource(source: SalesIntakeSource): string {
   return SOURCE_LABELS[source];
 }
 
-export function leadStatusBadgeTone(status: LeadStatus): StatusBadgeTone {
+export function salesIntakeStatusBadgeTone(status: SalesIntakeStatus): StatusBadgeTone {
   switch (status) {
     case "CONVERTED":
       return "approved";

@@ -67,9 +67,9 @@ export function QuoteWorkspaceShell({
               ← Workstation
             </Link>
           ) : null}
-          {quote.leadHref ? (
-            <Link href={quote.leadHref} className={listLinkClass}>
-              ← Lead
+          {quote.salesIntakeHref ? (
+            <Link href={quote.salesIntakeHref} className={listLinkClass}>
+              ← Sales intake
             </Link>
           ) : null}
           <Link href="/sales?tab=proposals" className={listLinkClass}>

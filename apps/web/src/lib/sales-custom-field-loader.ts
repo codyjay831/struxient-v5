@@ -2,11 +2,11 @@ import "server-only";
 import { db } from "@/lib/db";
 import type { CustomFieldDefPayload } from "@/components/forms/custom-fields-form";
 
-export async function loadLeadCustomFieldDefs(
+export async function loadSalesCustomFieldDefs(
   orgId: string,
   options: { publicOnly?: boolean } = {},
 ): Promise<CustomFieldDefPayload[]> {
-  const rows = await db.leadCustomFieldDef.findMany({
+  const rows = await db.salesCustomFieldDef.findMany({
     where: {
       organizationId: orgId,
       ...(options.publicOnly ? { showOnPublicIntake: true } : {}),

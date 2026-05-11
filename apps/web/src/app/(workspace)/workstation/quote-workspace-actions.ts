@@ -4,7 +4,7 @@
  * Workstation-safe quote actions: same commercial rules as `quote-form-actions`
  * send/approve/line-item flows, but return structured `{ success } | { error }`
  * state instead of `redirect()` so the Quotes popup, Workstation drawer, and
- * Lead Quote tab can stay open after a mutation. Full quote pages still use
+ * Sales Intake Quote tab can stay open after a mutation. Full quote pages still use
  * the redirecting form variants when convenient.
  */
 

@@ -3,7 +3,7 @@
 /**
  * QuoteWorkspacePageClient — client component for the full Quote record page.
  *
- * Renders a tabbed workspace (Overview, Scope, Customer & Lead, Send & Accept,
+ * Renders a tabbed workspace (Overview, Scope, Customer & Sales Intake, Send & Accept,
  * Record) that sits below the server-rendered identity header and readiness panel.
  * Receives pre-fetched data directly — Date objects are serialized transparently
  * by Next.js App Router across the server→client boundary.
@@ -11,7 +11,7 @@
  * Tab overview:
  *   Overview       — status, total, lines, linked context, readiness summary
  *   Scope          — QuoteDraftWorkspaceControls (draft) or read-only line items
- *   Customer&Lead  — customer card, lead context, intake notes
+ *   Customer&Sales Intake — customer card, sales intake context, intake notes
  *   Send & Accept  — commercial checkpoints, proposal preview link
  *   Record         — archive controls, internal notes, record details, activity
  */
@@ -71,7 +71,7 @@ type QuoteWorkspaceTab = "overview" | "scope" | "context" | "sendaccept" | "reco
 const WS_TABS: { id: QuoteWorkspaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
-  { id: "context", label: "Customer & Lead" },
+  { id: "context", label: "Customer & Sales Intake" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },
 ];
@@ -122,7 +122,7 @@ function OverviewTab({
       </div>
 
       {/* ── Linked context compact ──────────────────────────────────────── */}
-      {(quote.customer || quote.lead) && (
+      {(quote.customer || quote.salesIntake) && (
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className={`${sectionLabelClass} mb-3`}>Linked context</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -138,18 +138,18 @@ function OverviewTab({
                 </Link>
               </div>
             )}
-            {quote.lead && (
+            {quote.salesIntake && (
               <div>
-                <p className={`${sectionLabelClass} mb-0.5`}>Lead</p>
+                <p className={`${sectionLabelClass} mb-0.5`}>Sales intake</p>
                 <Link
-                  href={`/sales/${quote.lead.id}`}
+                  href={`/sales/${quote.salesIntake.id}`}
                   className="text-sm font-medium text-foreground hover:underline underline-offset-2 inline-flex items-center gap-1"
                 >
-                  {quote.lead.title}
+                  {quote.salesIntake.title}
                   <ArrowUpRight className="w-3 h-3 opacity-50" strokeWidth={1.5} />
                 </Link>
-                {quote.lead.contactName && (
-                  <p className="text-xs text-foreground-muted mt-0.5">{quote.lead.contactName}</p>
+                {quote.salesIntake.contactName && (
+                  <p className="text-xs text-foreground-muted mt-0.5">{quote.salesIntake.contactName}</p>
                 )}
               </div>
             )}
@@ -243,7 +243,7 @@ function ScopeTab({
         initialTitle={quote.title}
         initialInternalNotes={quote.internalNotes}
         initialCustomerDocumentTitle={quote.customerDocumentTitle}
-        hasLeadNotes={Boolean(quote.lead?.notes)}
+        hasSalesIntakeNotes={Boolean(quote.salesIntake?.notes)}
         subtotalCents={quote.subtotalCents}
         totalCents={quote.totalCents}
         lineItems={quote.lineItems}
@@ -311,11 +311,11 @@ function ScopeTab({
   );
 }
 
-/* ─── Tab: Customer & Lead ───────────────────────────────────────────────── */
+/* ─── Tab: Customer & Sales Intake ───────────────────────────────────────── */
 
 function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
   const hasCustomer = quote.customer != null;
-  const hasLead = quote.lead != null;
+  const hasSalesIntake = quote.salesIntake != null;
 
   return (
     <div className="space-y-4">
@@ -356,50 +356,50 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
         )}
       </WorkspacePanel>
 
-      {/* ── Lead ─────────────────────────────────────────────────────────── */}
+      {/* ── Sales intake ─────────────────────────────────────────────────── */}
       <WorkspacePanel>
         <SectionHeading
-          title="Lead"
-          description="The lead this quote is tied to. Intake notes and contact context are shown when linked."
+          title="Sales intake"
+          description="The sales intake this quote is tied to. Intake notes and contact context are shown when linked."
         />
-        {hasLead ? (
+        {hasSalesIntake ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
               <div>
-                <p className={sectionLabelClass}>Linked lead</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{quote.lead!.title}</p>
+                <p className={sectionLabelClass}>Linked sales intake</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{quote.salesIntake!.title}</p>
               </div>
-              <Link href={`/sales/${quote.lead!.id}`} className={listLinkClass}>
-                Lead record
+              <Link href={`/sales/${quote.salesIntake!.id}`} className={listLinkClass}>
+                Sales intake record
                 <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
               </Link>
             </div>
 
-            {/* Lead intake context */}
+            {/* Sales intake context */}
             <div className="rounded-lg border border-border bg-foreground/[0.01] px-4 py-5">
               <h4 className="mb-4 text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                Lead intake context
+                Sales intake context
               </h4>
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-4">
-                  {quote.lead!.source && (
+                  {quote.salesIntake!.source && (
                     <div>
                       <p className={sectionLabelClass}>Source</p>
-                      <p className="mt-1 text-sm text-foreground">{quote.lead!.source}</p>
+                      <p className="mt-1 text-sm text-foreground">{quote.salesIntake!.source}</p>
                     </div>
                   )}
-                  {(quote.lead!.contactName || quote.lead!.email || quote.lead!.phone) && (
+                  {(quote.salesIntake!.contactName || quote.salesIntake!.email || quote.salesIntake!.phone) && (
                     <div>
                       <p className={sectionLabelClass}>Contact</p>
                       <div className="mt-1 space-y-0.5 text-sm">
-                        {quote.lead!.contactName && (
-                          <p className="text-foreground">{quote.lead!.contactName}</p>
+                        {quote.salesIntake!.contactName && (
+                          <p className="text-foreground">{quote.salesIntake!.contactName}</p>
                         )}
-                        {quote.lead!.email && (
-                          <p className="text-foreground-muted">{quote.lead!.email}</p>
+                        {quote.salesIntake!.email && (
+                          <p className="text-foreground-muted">{quote.salesIntake!.email}</p>
                         )}
-                        {quote.lead!.phone && (
-                          <p className="text-foreground-muted">{quote.lead!.phone}</p>
+                        {quote.salesIntake!.phone && (
+                          <p className="text-foreground-muted">{quote.salesIntake!.phone}</p>
                         )}
                       </div>
                     </div>
@@ -408,9 +408,9 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
                 <div>
                   <p className={sectionLabelClass}>Intake notes</p>
                   <div className="mt-2">
-                    {quote.lead!.notes ? (
+                    {quote.salesIntake!.notes ? (
                       <div className="rounded border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-foreground">
-                        {quote.lead!.notes}
+                        {quote.salesIntake!.notes}
                       </div>
                     ) : (
                       <p className="text-sm text-foreground-muted italic">No intake notes provided.</p>
@@ -422,12 +422,12 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-6 text-center">
-            <p className="text-sm text-foreground-muted">No lead linked to this quote.</p>
+            <p className="text-sm text-foreground-muted">No sales intake linked to this quote.</p>
             <p className="mt-1 text-xs text-foreground-subtle">
-              Linking is optional. Use it when this quote comes from a tracked lead.
+              Linking is optional. Use it when this quote comes from a tracked sales intake.
             </p>
             <Link href="/sales" className={`mt-4 ${listLinkClass}`}>
-              Leads
+              Sales intakes
             </Link>
           </div>
         )}

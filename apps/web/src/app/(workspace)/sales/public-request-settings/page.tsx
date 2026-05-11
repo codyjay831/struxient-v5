@@ -55,7 +55,7 @@ export default async function PublicRequestSettingsPage() {
         description="Configure your Public Request Link and Public Intake Form copy. These settings apply to the public-facing intake surface for this organization."
         actions={
           <Link href="/sales" className={listLinkClass}>
-            ← Back to Leads
+            ← Back to Sales Intakes
           </Link>
         }
       />

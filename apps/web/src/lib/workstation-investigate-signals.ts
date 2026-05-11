@@ -4,12 +4,12 @@
  *
  * No persistence layer, no Prisma model, no separate workflow engine. Signals
  * are either derived from the small slice of org data Workstation already reads
- * (currently lead-linkage counts) or shown as clearly-labelled previews of
+ * (currently sales-intake-linkage counts) or shown as clearly-labelled previews of
  * categories the lane will surface once detection is wired.
  */
 
 export type WorkstationInvestigateRecordType =
-  | "lead"
+  | "sales-intake"
   | "quote"
   | "job"
   | "customer"
@@ -108,10 +108,10 @@ export const WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS: readonly WorkstationInvest
     recordLabel: "Activity — recent message",
     reason:
       "A customer message may mention rescheduling, access, or a question. Activity parsing is not wired yet.",
-    suggestedAction: "Open the related lead or job and confirm a follow-up step.",
+    suggestedAction: "Open the related sales intake or job and confirm a follow-up step.",
     severity: "low",
     href: "/sales",
-    primaryActionLabel: "Open leads",
+    primaryActionLabel: "Open sales intakes",
     secondaryHref: "/jobs",
     secondaryActionLabel: "Open jobs",
     origin: "preview",
@@ -119,13 +119,13 @@ export const WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS: readonly WorkstationInvest
 ];
 
 export type WorkstationInvestigateDerivedInputs = {
-  /** Org-scoped count of leads with `customerId === null`. */
-  unlinkedLeads: number;
+  /** Org-scoped count of sales intakes with `customerId === null`. */
+  unlinkedSalesIntakes: number;
 };
 
 /**
  * Builds the live Investigate signals from the small slice of real data
- * Workstation already reads. Today only lead-customer linkage is available;
+ * Workstation already reads. Today only sales-intake-customer linkage is available;
  * extend this as more derivation is added.
  */
 export function buildWorkstationInvestigateDerivedSignals(
@@ -133,23 +133,23 @@ export function buildWorkstationInvestigateDerivedSignals(
 ): WorkstationInvestigateSignal[] {
   const signals: WorkstationInvestigateSignal[] = [];
 
-  if (inputs.unlinkedLeads > 0) {
-    const isOne = inputs.unlinkedLeads === 1;
+  if (inputs.unlinkedSalesIntakes > 0) {
+    const isOne = inputs.unlinkedSalesIntakes === 1;
     signals.push({
-      id: "derived-unlinked-leads",
-      recordType: "lead",
+      id: "derived-unlinked-sales-intakes",
+      recordType: "sales-intake",
       title: isOne
-        ? "Lead needs customer match"
-        : `${inputs.unlinkedLeads} leads need customer match`,
-      recordLabel: isOne ? "Lead — no linked customer" : "Leads — no linked customer",
+        ? "Sales intake needs customer match"
+        : `${inputs.unlinkedSalesIntakes} sales intakes need customer match`,
+      recordLabel: isOne ? "Sales intake — no linked customer" : "Sales intakes — no linked customer",
       reason: isOne
-        ? "A lead has no linked customer. The contact may already exist."
-        : `${inputs.unlinkedLeads} leads have no linked customer. The contacts may already exist.`,
+        ? "A sales intake has no linked customer. The contact may already exist."
+        : `${inputs.unlinkedSalesIntakes} sales intakes have no linked customer. The contacts may already exist.`,
       suggestedAction:
-        "Open the lead and link, create, or confirm the customer before acting on it.",
+        "Open the sales intake and link, create, or confirm the customer before acting on it.",
       severity: "medium",
       href: "/sales",
-      primaryActionLabel: isOne ? "Review unlinked lead" : "Review unlinked leads",
+      primaryActionLabel: isOne ? "Review unlinked sales intake" : "Review unlinked sales intakes",
       secondaryHref: "/customers",
       secondaryActionLabel: "Open customers",
       origin: "derived",

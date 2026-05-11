@@ -1,17 +1,17 @@
 /**
  * Intake → customer service location carry-forward.
  *
- * Stored intake address: primarily `Lead.publicIntakeServiceLocation` (JSON snapshot).
- * Legacy/public-intake rows may only have the address embedded in `Lead.notes` under
- * "Service / project location:" — see {@link extractServiceLocationFromPublicLeadNotes}.
+ * Stored intake address: primarily `SalesIntake.publicIntakeServiceLocation` (JSON snapshot).
+ * Legacy/public-intake rows may only have the address embedded in `SalesIntake.notes` under
+ * "Service / project location:" — see {@link extractServiceLocationFromPublicSalesIntakeNotes}.
  *
- * `CustomerServiceLocation` rows are created from {@link attachIntakeServiceLocationToCustomer}
- * when a lead is linked or a customer is created-from-lead (see lead-form-actions /
- * leads-workspace-actions). Rows are org-scoped and optionally tied to provenance via
- * `createdFromLeadId`.
+ * `CustomerServiceLocation` rows are created from {@link attachIntakeServiceLocationToCustomerFromSalesIntake}
+ * when a record is linked or a customer is created-from-intake (see sales-form-actions /
+ * sales-workspace-actions). Rows are org-scoped and optionally tied to provenance via
+ * `createdFromSalesIntakeId`.
  */
 
-import type { LeadSource, Prisma, PrismaClient } from "@prisma/client";
+import type { SalesIntakeSource, Prisma, PrismaClient } from "@prisma/client";
 import { CustomerServiceLocationSource } from "@prisma/client";
 import {
   buildManualPublicIntakeSnapshotFromFreeText,
@@ -30,9 +30,9 @@ export function addressesDedupEquivalent(a: string, b: string): boolean {
 
 /**
  * Best-effort extraction of the public-intake "Service / project location" block from legacy
- * `Lead.notes` when `publicIntakeServiceLocation` was not stored or failed to parse.
+ * `SalesIntake.notes` when `publicIntakeServiceLocation` was not stored or failed to parse.
  */
-export function extractServiceLocationFromPublicLeadNotes(notes: string | null): string | null {
+export function extractServiceLocationFromPublicSalesIntakeNotes(notes: string | null): string | null {
   if (!notes?.includes("[Public Intake Form]")) {
     return null;
   }
@@ -51,7 +51,7 @@ export function extractServiceLocationFromPublicLeadNotes(notes: string | null):
   return t.length > 0 ? t : null;
 }
 
-export function intakeSnapshotForCustomerFromLead(row: {
+export function intakeSnapshotForCustomerFromSalesIntake(row: {
   publicIntakeServiceLocation: Prisma.JsonValue | null;
   notes: string | null;
 }): PublicIntakeServiceLocationV1 | null {
@@ -62,37 +62,37 @@ export function intakeSnapshotForCustomerFromLead(row: {
       return parsed;
     }
   }
-  const legacy = extractServiceLocationFromPublicLeadNotes(row.notes);
+  const legacy = extractServiceLocationFromPublicSalesIntakeNotes(row.notes);
   if (!legacy) {
     return null;
   }
   return buildManualPublicIntakeSnapshotFromFreeText(legacy);
 }
 
-function serviceLocationLabelFromLeadSource(source: LeadSource): string {
-  return source === "PUBLIC_REQUEST_LINK" ? "From public request" : "From linked lead";
+function serviceLocationLabelFromSalesIntakeSource(source: SalesIntakeSource): string {
+  return source === "PUBLIC_REQUEST_LINK" ? "From public request" : "From linked intake";
 }
 
 export type UpsertCustomerServiceLocationSnapshotParams = {
   organizationId: string;
   customerId: string;
   snapshot: PublicIntakeServiceLocationV1;
-  /** Optional row label (e.g. lead provenance). */
+  /** Optional row label (e.g. intake provenance). */
   label: string | null;
   /** When set, duplicate rows may receive this provenance stamp. */
-  createdFromLeadId: string | null;
+  createdFromSalesIntakeId: string | null;
 };
 
 /**
  * Creates a {@link CustomerServiceLocation} from a normalized intake-style snapshot when
  * not a duplicate (google place id or normalized formatted line). Updates provenance on
- * an existing duplicate match when {@link createdFromLeadId} is set.
+ * an existing duplicate match when {@link createdFromSalesIntakeId} is set.
  */
 export async function upsertCustomerServiceLocationFromIntakeSnapshot(
   tx: Prisma.TransactionClient,
   params: UpsertCustomerServiceLocationSnapshotParams,
 ): Promise<{ created: boolean; skippedDuplicate: boolean }> {
-  const { organizationId, customerId, snapshot, label, createdFromLeadId } = params;
+  const { organizationId, customerId, snapshot, label, createdFromSalesIntakeId } = params;
 
   const placeId = snapshot.googlePlaceId?.trim() ?? "";
   const dedupFmt = normalizeAddressDedupKey(snapshot.formattedAddress, snapshot.addressLine1);
@@ -105,14 +105,14 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
 
   const existing = await tx.customerServiceLocation.findMany({
     where: { organizationId, customerId },
-    select: { id: true, formattedAddress: true, googlePlaceId: true, createdFromLeadId: true },
+    select: { id: true, formattedAddress: true, googlePlaceId: true, createdFromSalesIntakeId: true },
   });
 
-  async function stampProvenanceOnDuplicate(dupId: string, dupCreatedFromLeadId: string | null) {
-    if (createdFromLeadId != null && dupCreatedFromLeadId == null) {
+  async function stampProvenanceOnDuplicate(dupId: string, dupCreatedFromSalesIntakeId: string | null) {
+    if (createdFromSalesIntakeId != null && dupCreatedFromSalesIntakeId == null) {
       await tx.customerServiceLocation.update({
         where: { id: dupId },
-        data: { createdFromLeadId },
+        data: { createdFromSalesIntakeId },
       });
     }
   }
@@ -120,7 +120,7 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
   if (placeId.length > 0) {
     const dup = existing.find((e) => (e.googlePlaceId ?? "").trim() === placeId);
     if (dup) {
-      await stampProvenanceOnDuplicate(dup.id, dup.createdFromLeadId);
+      await stampProvenanceOnDuplicate(dup.id, dup.createdFromSalesIntakeId);
       return { created: false, skippedDuplicate: true };
     }
   }
@@ -129,7 +129,7 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
       (e) => normalizeAddressDedupKey(e.formattedAddress, "") === dedupFmt,
     );
     if (dup) {
-      await stampProvenanceOnDuplicate(dup.id, dup.createdFromLeadId);
+      await stampProvenanceOnDuplicate(dup.id, dup.createdFromSalesIntakeId);
       return { created: false, skippedDuplicate: true };
     }
   }
@@ -148,7 +148,7 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
     data: {
       organizationId,
       customerId,
-      createdFromLeadId,
+      createdFromSalesIntakeId,
       formattedAddress: formatted,
       addressLine1: snapshot.addressLine1.trim() || formatted,
       addressLine2: snapshot.addressLine2 ?? "",
@@ -172,17 +172,17 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
  * Persists intake-derived service location on the customer when not a duplicate.
  * Coordinates are stored for display only — not for protected decisions.
  */
-export async function attachIntakeServiceLocationToCustomer(
+export async function attachIntakeServiceLocationToCustomerFromSalesIntake(
   tx: Prisma.TransactionClient,
   params: {
     organizationId: string;
     customerId: string;
-    leadId: string;
-    leadSource: LeadSource;
+    salesIntakeId: string;
+    salesIntakeSource: SalesIntakeSource;
     snapshot: PublicIntakeServiceLocationV1 | null;
   },
 ): Promise<{ created: boolean; skippedDuplicate: boolean }> {
-  const { organizationId, customerId, leadId, leadSource, snapshot } = params;
+  const { organizationId, customerId, salesIntakeId, salesIntakeSource, snapshot } = params;
   if (!snapshot) {
     return { created: false, skippedDuplicate: false };
   }
@@ -191,8 +191,8 @@ export async function attachIntakeServiceLocationToCustomer(
     organizationId,
     customerId,
     snapshot,
-    label: serviceLocationLabelFromLeadSource(leadSource),
-    createdFromLeadId: leadId,
+    label: serviceLocationLabelFromSalesIntakeSource(salesIntakeSource),
+    createdFromSalesIntakeId: salesIntakeId,
   });
 }
 
@@ -206,13 +206,13 @@ export function formatPrimaryServiceLocationLineForQuoteNotes(
 
 type DbLike = Pick<PrismaClient, "customerServiceLocation">;
 
-/** True if this lead's intake address is represented on the customer (new row or deduped match). */
-export async function intakeServiceLocationReflectedOnCustomer(
+/** True if this intake's address is represented on the customer (new row or deduped match). */
+export async function intakeServiceLocationReflectedOnCustomerFromSalesIntake(
   db: DbLike,
   params: {
     organizationId: string;
     customerId: string;
-    leadId: string;
+    salesIntakeId: string;
     publicIntakeServiceLocation: Prisma.JsonValue | null;
     notes: string | null;
   },
@@ -221,13 +221,13 @@ export async function intakeServiceLocationReflectedOnCustomer(
     where: {
       organizationId: params.organizationId,
       customerId: params.customerId,
-      createdFromLeadId: params.leadId,
+      createdFromSalesIntakeId: params.salesIntakeId,
     },
   });
   if (linked > 0) {
     return true;
   }
-  const snap = intakeSnapshotForCustomerFromLead({
+  const snap = intakeSnapshotForCustomerFromSalesIntake({
     publicIntakeServiceLocation: params.publicIntakeServiceLocation,
     notes: params.notes,
   });

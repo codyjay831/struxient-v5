@@ -3,14 +3,14 @@
 // TODO: Add server-side rate limiting (per IP / per slug) when traffic warrants it.
 
 import {
-  LeadSource,
-  LeadStatus,
+  SalesIntakeSource,
+  SalesIntakeStatus,
   NeededByBucket,
   Prisma,
   QuoteStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
+import { SALES_INTAKE_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { effectivePublicRequestSettingsFromRow } from "@/lib/public-request-settings-effective";
 import { requestTypeLabelByValue } from "@/lib/public-request-settings-validation";
@@ -20,7 +20,7 @@ import {
   type PublicIntakeServiceLocationV1,
 } from "@/lib/public-intake-service-location";
 import { performApplyLineItemTemplateToQuoteTx } from "@/lib/quote-line-item-template-apply-tx";
-import { notifyLeadSubmitted } from "@/lib/notifications";
+import { notifySalesIntakeSubmitted } from "@/lib/notifications";
 import { headers } from "next/headers";
 
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -28,7 +28,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 5;
 
-export type PublicLeadIntakeState = {
+export type PublicSalesIntakeState = {
   error?: string;
   success?: boolean;
 };
@@ -52,16 +52,16 @@ function enforceMaxLength(
   label: string,
   value: string,
   max: number,
-): PublicLeadIntakeState | null {
+): PublicSalesIntakeState | null {
   if (value.length > max) {
     return { error: `${label} is too long (max ${max} characters).` };
   }
   return null;
 }
 
-/** Same pragmatic rule as internal lead create/update. */
+/** Same pragmatic rule as internal sales intake create/update. */
 function isReasonableEmail(value: string): boolean {
-  if (value.length > LEAD_FIELD_LIMITS.email) {
+  if (value.length > SALES_INTAKE_FIELD_LIMITS.email) {
     return false;
   }
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -114,14 +114,14 @@ function buildPublicIntakeNotes(parts: {
 }
 
 /**
- * Creates a lead for the organization resolved from `companySlug` (re-resolved server-side).
+ * Creates a sales intake for the organization resolved from `companySlug` (re-resolved server-side).
  * `companySlug` must be bound from the server-rendered route param — never from a hidden form field.
  */
-export async function submitPublicLeadIntakeAction(
+export async function submitPublicSalesIntakeAction(
   companySlug: string,
-  _prevState: PublicLeadIntakeState,
+  _prevState: PublicSalesIntakeState,
   formData: FormData,
-): Promise<PublicLeadIntakeState> {
+): Promise<PublicSalesIntakeState> {
   void _prevState;
 
   const attachmentIdsRaw = trimOrEmpty(formData.get("attachmentIds"));
@@ -170,6 +170,9 @@ export async function submitPublicLeadIntakeAction(
           submitButtonText: true,
           requestTypeOptionsJson: true,
           instantQuoteConfigJson: true,
+          instantQuoteEnabled: true,
+          showInstantQuoteDetails: true,
+          offerings: true,
         },
       },
     },
@@ -234,12 +237,12 @@ export async function submitPublicLeadIntakeAction(
   }
 
   for (const [label, value, max] of [
-    ["Name", contactName, LEAD_FIELD_LIMITS.contactName],
-    ["Email", email, LEAD_FIELD_LIMITS.email],
-    ["Phone", phone, LEAD_FIELD_LIMITS.phone],
-    ["Service / project location", serviceAddress, LEAD_FIELD_LIMITS.publicIntakeServiceAddress],
-    ["Preferred timing", preferredTiming, LEAD_FIELD_LIMITS.publicIntakePreferredTiming],
-    ["Request details", requestDetails, LEAD_FIELD_LIMITS.publicIntakeRequestDetails],
+    ["Name", contactName, SALES_INTAKE_FIELD_LIMITS.contactName],
+    ["Email", email, SALES_INTAKE_FIELD_LIMITS.email],
+    ["Phone", phone, SALES_INTAKE_FIELD_LIMITS.phone],
+    ["Service / project location", serviceAddress, SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress],
+    ["Preferred timing", preferredTiming, SALES_INTAKE_FIELD_LIMITS.publicIntakePreferredTiming],
+    ["Request details", requestDetails, SALES_INTAKE_FIELD_LIMITS.publicIntakeRequestDetails],
   ] as const) {
     const err = enforceMaxLength(label, value, max);
     if (err) {
@@ -258,14 +261,14 @@ export async function submitPublicLeadIntakeAction(
     requestDetails,
     requestTypeLabel,
   });
-  if (notes.length > LEAD_FIELD_LIMITS.notes) {
+  if (notes.length > SALES_INTAKE_FIELD_LIMITS.notes) {
     return { error: "Your message is too long. Please shorten the description and try again." };
   }
 
   const titleBase = `Public request — ${contactName}`;
   const title =
-    titleBase.length > LEAD_FIELD_LIMITS.title
-      ? `${titleBase.slice(0, LEAD_FIELD_LIMITS.title - 1)}…`
+    titleBase.length > SALES_INTAKE_FIELD_LIMITS.title
+      ? `${titleBase.slice(0, SALES_INTAKE_FIELD_LIMITS.title - 1)}…`
       : titleBase;
 
   const neededByBucket = (Object.values(NeededByBucket) as string[]).includes(neededByBucketRaw) ? (neededByBucketRaw as NeededByBucket) : null;
@@ -274,14 +277,14 @@ export async function submitPublicLeadIntakeAction(
   const publicIntakeClientKey = parsePublicIntakeClientKey(trimOrEmpty(formData.get("publicIntakeClientKey")));
 
   if (publicIntakeClientKey) {
-    const existingLead = await db.lead.findFirst({
+    const existingSalesIntake = await db.salesIntake.findFirst({
       where: {
         organizationId: record.id,
         publicIntakeClientKey,
       },
       select: { id: true },
     });
-    if (existingLead) {
+    if (existingSalesIntake) {
       return { success: true };
     }
   }
@@ -304,21 +307,21 @@ export async function submitPublicLeadIntakeAction(
     ? `\n\n[System] Likely existing customer matches: ${likelyMatches.map(m => m.displayName).join(", ")}`
     : "";
 
-  let createdLeadId: string | null = null;
+  let createdSalesIntakeId: string | null = null;
 
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.create({
+      const salesIntake = await tx.salesIntake.create({
         data: {
           organizationId: record.id,
           title,
           contactName,
           email,
           phone,
-          source: LeadSource.PUBLIC_REQUEST_LINK,
+          source: SalesIntakeSource.PUBLIC_REQUEST_LINK,
           sourceDetail: "Public Intake Form",
           notes: notes + duplicateNote,
-          status: LeadStatus.OPEN,
+          status: SalesIntakeStatus.OPEN,
           publicIntakeServiceLocation:
             publicIntakeServiceLocation as unknown as Prisma.InputJsonValue,
           requestType: requestTypeLabel,
@@ -328,18 +331,18 @@ export async function submitPublicLeadIntakeAction(
           publicIntakeClientKey,
         },
       });
-      createdLeadId = lead.id;
+      createdSalesIntakeId = salesIntake.id;
 
       if (attachmentIds.length > 0) {
         await tx.attachment.updateMany({
           where: {
             id: { in: attachmentIds },
             organizationId: record.id,
-            leadId: null, // Security: only update if not already associated
+            salesIntakeId: null, // Security: only update if not already associated
           },
           data: {
-            leadId: lead.id,
-            status: "READY", // Mark as ready when lead is submitted
+            salesIntakeId: salesIntake.id,
+            status: "READY", // Mark as ready when sales intake is submitted
           },
         });
       }
@@ -353,10 +356,10 @@ export async function submitPublicLeadIntakeAction(
           }
         }
 
-        await tx.leadVisitRequest.create({
+        await tx.salesVisitRequest.create({
           data: {
             organizationId: record.id,
-            leadId: lead.id,
+            salesIntakeId: salesIntake.id,
             requestedDate,
             requestedWindow,
             notes: visitNotes,
@@ -381,7 +384,7 @@ export async function submitPublicLeadIntakeAction(
           const quote = await tx.quote.create({
             data: {
               organizationId: record.id,
-              leadId: lead.id,
+              salesIntakeId: salesIntake.id,
               status: QuoteStatus.DRAFT,
               title: `Instant Quote — ${contactName}`,
               subtotalCents: 0,
@@ -397,9 +400,9 @@ export async function submitPublicLeadIntakeAction(
 
       for (const [fieldDefId, value] of Object.entries(customFields)) {
         if (value.trim()) {
-          await tx.leadCustomFieldValue.create({
+          await tx.salesCustomFieldValue.create({
             data: {
-              leadId: lead.id,
+              salesIntakeId: salesIntake.id,
               fieldDefId,
               value: value.trim(),
             },
@@ -417,10 +420,10 @@ export async function submitPublicLeadIntakeAction(
   }
 
   // Non-blocking notification
-  if (createdLeadId) {
-    void notifyLeadSubmitted({
+  if (createdSalesIntakeId) {
+    void notifySalesIntakeSubmitted({
       organizationId: record.id,
-      leadId: createdLeadId,
+      salesIntakeId: createdSalesIntakeId,
       contactName,
       email,
       phone,

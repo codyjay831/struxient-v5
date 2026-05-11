@@ -29,7 +29,7 @@ type Visit = {
   notes: string | null;
   assignedUser: {
     name: string | null;
-    email: string;
+    email: string | null;
   } | null;
 };
 
@@ -208,7 +208,7 @@ export function JobVisitManager({
                 </div>
                 {visit.notes && (
                   <p className="mt-2 text-xs italic text-foreground-subtle">
-                    "{visit.notes}"
+                    &quot;{visit.notes}&quot;
                   </p>
                 )}
               </div>

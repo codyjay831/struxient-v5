@@ -121,7 +121,7 @@ export function sanitizePublicIntakeServiceLocationFromClient(
   };
 }
 
-/** Reads a value stored on `Lead.publicIntakeServiceLocation`. */
+/** Reads a value stored on `SalesIntake.publicIntakeServiceLocation`. */
 export function parseStoredPublicIntakeServiceLocation(
   value: unknown,
 ): PublicIntakeServiceLocationV1 | null {

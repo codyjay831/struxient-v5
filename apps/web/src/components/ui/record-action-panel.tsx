@@ -13,7 +13,7 @@ export type RecordActionPanelProps = {
    * "full" = Full page (can be same as standard but maybe more padding)
    */
   density?: "compact" | "standard" | "full";
-  kind: "lead" | "quote";
+  kind: "salesIntake" | "quote";
   status: {
     label: string;
     tone: StatusBadgeTone;

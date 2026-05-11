@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect, useTransition, useActionState } from "react";
 import { Search, UserRound, Check, X, ArrowRight, Loader2 } from "lucide-react";
 import { 
-  searchCustomersForLeadAttachAction, 
-  linkLeadToCustomerWorkspaceAction,
+  searchCustomersForSalesIntakeAttachAction, 
+  linkSalesIntakeToCustomerWorkspaceAction,
   type CustomerSearchMatch,
   type WorkspaceFormState
 } from "@/app/(workspace)/sales/sales-workspace-actions";
-import { LeadWorkspaceCustomerCreateInline, type LeadWorkspaceCustomerCreateLeadInput } from "./sales-workspace-customer-create-inline";
+import { SalesIntakeWorkspaceCustomerCreateInline, type SalesIntakeWorkspaceCustomerCreateSalesIntakeInput } from "./sales-workspace-customer-create-inline";
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -17,19 +17,19 @@ const primaryBtnClass =
   "rounded-lg bg-accent text-accent-contrast text-xs font-medium px-3 py-2 hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5";
 
 /**
- * Single card for attaching a customer to a lead.
+ * Single card for attaching a customer to a sales intake.
  * 
  * Replaces the stacked create-inline card and link-existing details block.
  * Provides autocomplete search against existing customers; falls back to
  * the inline create card when no search is active.
  */
-export function LeadCustomerAttachCard({
-  lead,
-  editLeadHref,
+export function SalesIntakeCustomerAttachCard({
+  salesIntake,
+  editSalesIntakeHref,
   onSuccess,
 }: {
-  lead: LeadWorkspaceCustomerCreateLeadInput;
-  editLeadHref: string;
+  salesIntake: SalesIntakeWorkspaceCustomerCreateSalesIntakeInput;
+  editSalesIntakeHref: string;
   onSuccess: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -46,7 +46,7 @@ export function LeadCustomerAttachCard({
     }
 
     startSearch(async () => {
-      const res = await searchCustomersForLeadAttachAction(q);
+      const res = await searchCustomersForSalesIntakeAttachAction(q);
       if (res.ok) {
         setMatches(res.matches);
         setSearchError(null);
@@ -56,7 +56,7 @@ export function LeadCustomerAttachCard({
     });
   }, []);
 
-  const boundLinkAction = linkLeadToCustomerWorkspaceAction.bind(null, lead.id);
+  const boundLinkAction = linkSalesIntakeToCustomerWorkspaceAction.bind(null, salesIntake.id);
   const [linkState, linkDispatch, isLinkPending] = useActionState<WorkspaceFormState, FormData>(
     boundLinkAction,
     {},
@@ -188,9 +188,9 @@ export function LeadCustomerAttachCard({
       </div>
 
       {!query.trim() && (
-        <LeadWorkspaceCustomerCreateInline
-          lead={lead}
-          editLeadHref={editLeadHref}
+        <SalesIntakeWorkspaceCustomerCreateInline
+          salesIntake={salesIntake}
+          editSalesIntakeHref={editSalesIntakeHref}
           onSuccess={onSuccess}
         />
       )}

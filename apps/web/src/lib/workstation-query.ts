@@ -1,6 +1,6 @@
 import {
   JobStatus,
-  LeadStatus,
+  SalesIntakeStatus,
   QuoteStatus,
   JobIssueSeverity,
   JobIssueStatus,
@@ -13,9 +13,9 @@ import {
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
+import { getSalesIntakeCommercialProgress } from "@/lib/sales-commercial-progress";
 import {
-  buildLeadRecordActionState,
+  buildSalesIntakeRecordActionState,
   buildQuoteRecordActionState,
   toEmbeddedWorkflow,
   type WorkItemEmbeddedWorkflow,
@@ -23,7 +23,7 @@ import {
 import { deriveTaskState, taskStateLabel } from "./task-readiness";
 
 export type WorkstationWorkItemKind =
-  | "lead"
+  | "sales-intake"
   | "quote"
   | "job"
   | "task"
@@ -50,7 +50,7 @@ export type WorkstationLens =
 
 export type WorkstationFilterCategory =
   | "all"
-  | "leads"
+  | "salesIntakes"
   | "quotes"
   | "jobs"
   | "tasks"
@@ -84,7 +84,7 @@ export type WorkstationSummary = {
   investigateCount: number;
   activeJobsCount: number;
   openTasksCount: number;
-  openLeadsQuotesCount: number;
+  openSalesIntakesQuotesCount: number;
   scheduledTodayCount: number;
   dailyLogsToReviewCount: number;
 };
@@ -117,7 +117,7 @@ function lanesForQuoteWorkflow(
   return { ...base, lens };
 }
 
-function lanesForLeadWorkflow(
+function lanesForSalesIntakeWorkflow(
   workflow: WorkItemEmbeddedWorkflow,
   isUnlinked: boolean,
 ): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
@@ -156,9 +156,9 @@ export function compareWorkstationSalesIntakeOrder(
 export async function queryWorkstationWorkItems(organizationId: string): Promise<WorkstationWorkItem[]> {
   const items: WorkstationWorkItem[] = [];
 
-  // 1. Leads
-  const leads = await db.lead.findMany({
-    where: { organizationId, status: { in: [LeadStatus.OPEN, LeadStatus.QUALIFYING] } },
+  // 1. Sales Intakes
+  const salesIntakes = await db.salesIntake.findMany({
+    where: { organizationId, status: { in: [SalesIntakeStatus.OPEN, SalesIntakeStatus.QUALIFYING] } },
     include: {
       customer: true,
       visitRequests: {
@@ -175,20 +175,20 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     },
   });
 
-  for (const lead of leads) {
-    const isUnlinked = lead.customerId === null;
-    const hasActiveQuote = lead.quotes.length > 0;
+  for (const salesIntake of salesIntakes) {
+    const isUnlinked = salesIntake.customerId === null;
+    const hasActiveQuote = salesIntake.quotes.length > 0;
 
     if (hasActiveQuote) continue;
 
-    const progress = getLeadCommercialProgress({
-      lead: {
-        status: lead.status,
-        customerId: lead.customerId,
-        email: lead.email,
-        phone: lead.phone,
+    const progress = getSalesIntakeCommercialProgress({
+      salesIntake: {
+        status: salesIntake.status,
+        customerId: salesIntake.customerId,
+        email: salesIntake.email,
+        phone: salesIntake.phone,
       },
-      quotes: lead.quotes.map((q) => ({
+      quotes: salesIntake.quotes.map((q) => ({
         id: q.id,
         title: q.title,
         status: q.status,
@@ -199,41 +199,41 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       })),
     });
 
-    const recordState = buildLeadRecordActionState({
-      leadId: lead.id,
-      title: lead.title,
-      subtitle: lead.contactName || lead.email || lead.phone || undefined,
+    const recordState = buildSalesIntakeRecordActionState({
+      salesIntakeId: salesIntake.id,
+      title: salesIntake.title,
+      subtitle: salesIntake.contactName || salesIntake.email || salesIntake.phone || undefined,
       progress,
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority, lens } = lanesForLeadWorkflow(workflow, isUnlinked);
+    const { group, priority, lens } = lanesForSalesIntakeWorkflow(workflow, isUnlinked);
 
-    // Prioritize leads with pending visit requests
-    const pendingVisit = lead.visitRequests[0];
+    // Prioritize sales intakes with pending visit requests
+    const pendingVisit = salesIntake.visitRequests[0];
     const effectivePriority = pendingVisit ? "critical" : priority;
     const effectiveGroup = pendingVisit ? "investigate" : group;
     const effectiveLens = pendingVisit ? "attention" : lens;
     const effectiveReason = pendingVisit 
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
       : workflow.reason;
-    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Leads.");
+    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Sales Intakes.");
 
     items.push({
-      id: `lead-${lead.id}`,
-      kind: "lead",
-      title: lead.title,
-      subtitle: lead.contactName || lead.email || lead.phone || undefined,
-      status: lead.status,
+      id: `sales-intake-${salesIntake.id}`,
+      kind: "sales-intake",
+      title: salesIntake.title,
+      subtitle: salesIntake.contactName || salesIntake.email || salesIntake.phone || undefined,
+      status: salesIntake.status,
       priority: effectivePriority,
       group: effectiveGroup,
       lens: effectiveLens,
-      filterCategory: "leads",
+      filterCategory: "salesIntakes",
       reason: effectiveReason,
       nextStep: effectiveNextStep,
-      recordId: lead.id,
-      href: `/sales/${lead.id}`,
-      updatedAt: lead.updatedAt,
+      recordId: salesIntake.id,
+      href: `/sales/${salesIntake.id}`,
+      updatedAt: salesIntake.updatedAt,
       workflow,
     });
   }
@@ -243,7 +243,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     where: { organizationId, status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] } },
     include: {
       customer: true,
-      lead: true,
+      salesIntake: true,
       job: true,
       checkpoints: {
         where: { kind: QuoteCheckpointKind.APPROVAL },
@@ -295,10 +295,10 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
 
     if (readiness.state === "JOB_ACTIVE" || readiness.state === "ARCHIVED") continue;
 
-    const primaryIdentity = quote.lead?.title || quote.customer?.displayName || quote.title;
+    const primaryIdentity = quote.salesIntake?.title || quote.customer?.displayName || quote.title;
     const secondaryIdentity = quote.title !== primaryIdentity ? quote.title : null;
 
-    const parentLabel = quote.customer?.displayName || quote.lead?.title || undefined;
+    const parentLabel = quote.customer?.displayName || quote.salesIntake?.title || undefined;
     const subtitle = secondaryIdentity
       ? `Quote: ${secondaryIdentity}`
       : quote.customer?.displayName || undefined;
@@ -308,7 +308,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       title: primaryIdentity,
       subtitle,
       customerId: quote.customerId,
-      leadId: quote.leadId,
+      salesIntakeId: quote.salesIntakeId,
       readiness,
     });
     const workflow = toEmbeddedWorkflow(recordState);
@@ -331,9 +331,9 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       reason: isCustomerAccepted ? "Accepted by customer via portal." : workflow.reason,
       nextStep: workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
-      parentRecordId: quote.customerId || quote.leadId || undefined,
+      parentRecordId: quote.customerId || quote.salesIntakeId || undefined,
       parentLabel,
-      href: quote.leadId ? `/sales/${quote.leadId}` : `/quotes/${quote.id}`,
+      href: quote.salesIntakeId ? `/sales/${quote.salesIntakeId}` : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
       workflow,
     });
@@ -344,7 +344,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     where: { organizationId, status: JobStatus.ACTIVE },
     include: {
       customer: true,
-      lead: true,
+      salesIntake: true,
       tasks: {
         where: { completedAt: null },
         include: { 
@@ -381,7 +381,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   for (const job of jobs) {
     const unpaidRequirements = job.paymentRequirements.filter(p => p.status === JobPaymentRequirementStatus.DUE);
     const isJobBlocked = job.issues.length > 0 || unpaidRequirements.length > 0;
-    const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+    const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
     const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
     // 3a. Scheduling Signals
@@ -452,7 +452,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         reason: payment.requiredBeforeStageId ? "Payment required before next stage." : "Required payment is due.",
         nextStep: "Record payment or waive.",
         recordId: job.id,
-        parentRecordId: job.customerId || job.leadId || undefined,
+        parentRecordId: job.customerId || job.salesIntakeId || undefined,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: payment.updatedAt,
@@ -476,7 +476,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
           reason: "Active job with open tasks has no upcoming visits.",
           nextStep: "Schedule a job visit.",
           recordId: job.id,
-          parentRecordId: job.customerId || job.leadId || undefined,
+          parentRecordId: job.customerId || job.salesIntakeId || undefined,
           parentLabel: primaryJobIdentity,
           href: `/jobs/${job.id}`,
           updatedAt: job.updatedAt,
@@ -495,7 +495,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
 
     for (const task of sortedTasks) {
       const isPrimary = task.id === primaryTaskId;
-      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+      const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
       const taskPaymentBlockers = unpaidRequirements.filter((p) => {
@@ -564,7 +564,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     }
 
     if (job.tasks.length === 0) {
-      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
+      const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
       items.push({
@@ -580,7 +580,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
         reason: "Active job has no remaining TODO or IN_PROGRESS tasks.",
         nextStep: "Review job completion or add tasks.",
         recordId: job.id,
-        parentRecordId: job.customerId || job.leadId || undefined,
+        parentRecordId: job.customerId || job.salesIntakeId || undefined,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
@@ -600,7 +600,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       job: {
         include: {
           customer: true,
-          lead: true,
+          salesIntake: true,
         },
       },
     },
@@ -609,7 +609,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   });
 
   for (const issue of issues) {
-    const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
+    const primaryJobIdentity = issue.job.salesIntake?.title || issue.job.customer?.displayName || issue.job.title;
     const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
 
     items.push({
@@ -642,7 +642,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       job: {
         include: {
           customer: true,
-          lead: true,
+          salesIntake: true,
         },
       },
       requiredBeforeStage: true,
@@ -652,7 +652,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   });
 
   for (const payment of duePayments) {
-    const primaryJobIdentity = payment.job.lead?.title || payment.job.customer?.displayName || payment.job.title;
+    const primaryJobIdentity = payment.job.salesIntake?.title || payment.job.customer?.displayName || payment.job.title;
     const secondaryJobIdentity = payment.job.title !== primaryJobIdentity ? payment.job.title : null;
 
     const amountLabel = payment.amountCents
@@ -693,7 +693,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       job: {
         include: {
           customer: true,
-          lead: true,
+          salesIntake: true,
         },
       },
     },
@@ -702,7 +702,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   });
 
   for (const log of draftLogs) {
-    const primaryJobIdentity = log.job.lead?.title || log.job.customer?.displayName || log.job.title;
+    const primaryJobIdentity = log.job.salesIntake?.title || log.job.customer?.displayName || log.job.title;
     const secondaryJobIdentity = log.job.title !== primaryJobIdentity ? log.job.title : null;
 
     items.push({
@@ -735,7 +735,7 @@ export function getWorkstationSummary(items: WorkstationWorkItem[]): Workstation
       items.filter((i) => i.kind === "job" || i.kind === "task").map((i) => i.parentRecordId || i.recordId),
     ).size,
     openTasksCount: items.filter((i) => i.kind === "task").length,
-    openLeadsQuotesCount: items.filter((i) => i.kind === "lead" || i.kind === "quote").length,
+    openSalesIntakesQuotesCount: items.filter((i) => i.kind === "sales-intake" || i.kind === "quote").length,
     scheduledTodayCount: items.filter((i) => i.kind === "schedule" && i.status === "Today").length,
     dailyLogsToReviewCount: items.filter((i) => i.kind === "daily-log").length,
   };

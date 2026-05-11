@@ -31,7 +31,7 @@ type DailyJobLog = {
   reviewedAt: Date | null;
   reviewedByUser: {
     name: string | null;
-    email: string;
+    email: string | null;
   } | null;
 };
 
@@ -127,7 +127,7 @@ export function DailyJobLogManager({
           className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <Plus className="size-3.5" />
-          Create today's log
+          Create today&apos;s log
         </button>
       </div>
 
@@ -136,7 +136,7 @@ export function DailyJobLogManager({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">Create draft for today</p>
-              <p className="text-xs text-foreground-subtle">This will generate a summary from today's recorded activity.</p>
+              <p className="text-xs text-foreground-subtle">This will generate a summary from today&apos;s recorded activity.</p>
             </div>
             <div className="flex gap-2">
               <button

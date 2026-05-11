@@ -45,7 +45,7 @@ export function PublicRequestLinkPanel({
         Your <span className="text-foreground">Public Intake Form</span> is a controlled
         customer-facing door — not a generic form builder.{" "}
         <span className="text-foreground">Intake Requirements</span> stay fixed in this version so
-        every submission creates a proper lead in Struxient.
+        every submission creates a proper sales intake in Struxient.
       </p>
 
       {!slug ? (

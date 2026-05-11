@@ -52,7 +52,7 @@ export function TaskWorkSurface({
   jobContextLabel,
   jobsiteAddressLine,
   customerId,
-  leadEditHref,
+  salesIntakeEditHref,
   jobHref,
   task: initialTask,
   clearWorkstationSelectionOnComplete,
@@ -290,8 +290,8 @@ export function TaskWorkSurface({
                   Add service address
                 </button>
               ) : null}
-              {!customerId && leadEditHref ? (
-                <Link href={leadEditHref} className={addressPrimaryBtnClass}>
+              {!customerId && salesIntakeEditHref ? (
+                <Link href={salesIntakeEditHref} className={addressPrimaryBtnClass}>
                   Add on request
                 </Link>
               ) : null}

@@ -1,31 +1,31 @@
 import Link from "next/link";
 import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
-import { LeadWorkspaceShell } from "@/components/shells/lead-workspace-shell";
+import { SalesIntakeWorkspaceShell } from "@/components/shells/sales-intake-workspace-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { findCustomerMatchHints } from "@/lib/lead-customer-match-hints";
+import { findCustomerMatchHints } from "@/lib/sales-intake-customer-match-hints";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import {
-  intakeSnapshotForCustomerFromLead,
-} from "@/lib/customer-service-location-from-lead";
-import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
-import type { LeadDetailPayload } from "@/lib/lead-display";
+  intakeSnapshotForCustomerFromSalesIntake,
+} from "@/lib/customer-service-location-from-sales-intake";
+import type { SalesIntakeServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
+import type { SalesIntakeDetailPayload } from "@/lib/sales-intake-display";
 import {
-  getLeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "@/lib/lead-commercial-progress";
+  getSalesIntakeCommercialProgress,
+  type SalesIntakeProgressQuoteInput,
+} from "@/lib/sales-commercial-progress";
 import { db } from "@/lib/db";
-import { jobsiteLineFromLeadIntake } from "@/lib/jobsite-address";
-import { intakeServiceLocationReflectedOnCustomer } from "@/lib/customer-service-location-from-lead";
+import { jobsiteLineFromSalesIntake } from "@/lib/jobsite-address";
+import { intakeServiceLocationReflectedOnCustomerFromSalesIntake } from "@/lib/customer-service-location-from-sales-intake";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Inbox } from "lucide-react";
 import {
-  createCustomerFromLeadAction,
-  linkLeadToCustomerAction,
-  updateLeadStatusAction,
+  createCustomerFromSalesIntakeAction,
+  linkSalesIntakeToCustomerAction,
+  updateSalesIntakeStatusAction,
 } from "../sales-form-actions";
 
 export const dynamic = "force-dynamic";
@@ -39,15 +39,15 @@ const CUSTOMER_HINT_FETCH_CAP = 500;
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export default async function LeadDetailPage({
+export default async function SalesIntakeDetailPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ leadId: string }>;
+  params: Promise<{ salesIntakeId: string }>;
   searchParams?: Promise<{ from?: string; section?: string }>;
 }) {
   const emptySearchParams: { from?: string; section?: string } = {};
-  const [{ leadId }, sq] = await Promise.all([
+  const [{ salesIntakeId }, sq] = await Promise.all([
     params,
     searchParams ?? Promise.resolve(emptySearchParams),
   ]);
@@ -55,9 +55,9 @@ export default async function LeadDetailPage({
   const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
   const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
   const ctx = await getRequestContextOrThrow();
-  const row = await db.lead.findFirst({
+  const row = await db.salesIntake.findFirst({
     where: {
-      id: leadId,
+      id: salesIntakeId,
       organizationId: ctx.organizationId,
     },
     include: {
@@ -82,11 +82,11 @@ export default async function LeadDetailPage({
         />
         <PageHeader
           eyebrow="Sales"
-          title="Lead"
-          description="No lead exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          title="Sales Intake"
+          description="No sales intake exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
             <Link href="/sales" className={listLinkClass}>
-              ← Leads list
+              ← Sales intakes list
             </Link>
           }
         />
@@ -94,15 +94,15 @@ export default async function LeadDetailPage({
           <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
             Requested id
           </p>
-          <p className="mt-1 break-all font-mono text-sm text-foreground">{leadId}</p>
+          <p className="mt-1 break-all font-mono text-sm text-foreground">{salesIntakeId}</p>
         </WorkspacePanel>
         <EmptyState
           icon={Inbox}
-          title="Lead not found"
-          description="This id is not a lead record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          title="Sales intake not found"
+          description="This id is not a sales intake record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
         >
           <Link href="/sales" className={listLinkClass}>
-            Back to leads
+            Back to sales intakes
           </Link>
         </EmptyState>
       </div>
@@ -116,16 +116,16 @@ export default async function LeadDetailPage({
 
   const intakeServiceLocationLinkedToCustomer =
     row.customerId != null
-      ? await intakeServiceLocationReflectedOnCustomer(db, {
-          organizationId: ctx.organizationId,
-          customerId: row.customerId,
-          leadId: row.id,
-          publicIntakeServiceLocation: row.publicIntakeServiceLocation,
-          notes: row.notes,
-        })
+      ? await intakeServiceLocationReflectedOnCustomerFromSalesIntake(db, {
+                    organizationId: ctx.organizationId,
+                    customerId: row.customerId,
+                    salesIntakeId: row.id,
+                    publicIntakeServiceLocation: row.publicIntakeServiceLocation,
+                    notes: row.notes,
+                  })
       : false;
 
-  const lead: LeadDetailPayload = {
+  const salesIntake: SalesIntakeDetailPayload = {
     id: row.id,
     title: row.title,
     status: row.status,
@@ -139,7 +139,7 @@ export default async function LeadDetailPage({
     neededByBucket: row.neededByBucket,
     neededByDate: row.neededByDate,
     scopeSummary: row.scopeSummary,
-    jobsiteAddressLine: jobsiteLineFromLeadIntake({
+    jobsiteAddressLine: jobsiteLineFromSalesIntake({
       publicIntakeServiceLocation: row.publicIntakeServiceLocation,
       notes: row.notes,
     }),
@@ -170,7 +170,7 @@ export default async function LeadDetailPage({
   const linkedQuotes = await db.quote.findMany({
     where: {
       organizationId: ctx.organizationId,
-      leadId: row.id,
+      salesIntakeId: row.id,
     },
     orderBy: { updatedAt: "desc" },
     select: {
@@ -184,7 +184,7 @@ export default async function LeadDetailPage({
     },
   });
 
-  const progressQuoteInputs: LeadProgressQuoteInput[] = linkedQuotes.map((q) => ({
+  const progressQuoteInputs: SalesIntakeProgressQuoteInput[] = linkedQuotes.map((q) => ({
     id: q.id,
     title: q.title,
     status: q.status,
@@ -197,8 +197,8 @@ export default async function LeadDetailPage({
         : null,
   }));
 
-  const provisionalProgress = getLeadCommercialProgress({
-    lead: {
+  const provisionalProgress = getSalesIntakeCommercialProgress({
+    salesIntake: {
       status: row.status,
       customerId: row.customerId,
       email: row.email,
@@ -230,8 +230,8 @@ export default async function LeadDetailPage({
     );
   }
 
-  const commercialProgress = getLeadCommercialProgress({
-    lead: {
+  const commercialProgress = getSalesIntakeCommercialProgress({
+    salesIntake: {
       status: row.status,
       customerId: row.customerId,
       email: row.email,
@@ -250,7 +250,7 @@ export default async function LeadDetailPage({
     lineItemCount: q._count.lineItems,
   }));
 
-  /* Pre-load active-quote QuoteWorkSurface payload so the Lead Quote tab
+  /* Pre-load active-quote QuoteWorkSurface payload so the Sales Intake Quote tab
    * embeds <QuoteWorkSurface mode="standard" /> with the same readiness state
    * the Quote full page sees. */
   const activeQuoteId = commercialProgress.activeQuote?.id ?? null;
@@ -258,10 +258,10 @@ export default async function LeadDetailPage({
     ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
     : null;
 
-  /* Pre-load Service address context for the Lead workspace Customer Info
+  /* Pre-load Service address context for the Sales Intake workspace Customer Info
    * block. Loads the linked customer's service-location rows when present,
-   * otherwise carries the lead's intake snapshot for the unlinked editor. */
-  const intakeSnapshot = intakeSnapshotForCustomerFromLead({
+   * otherwise carries the sales intake's intake snapshot for the unlinked editor. */
+  const intakeSnapshot = intakeSnapshotForCustomerFromSalesIntake({
     publicIntakeServiceLocation: row.publicIntakeServiceLocation,
     notes: row.notes,
   });
@@ -274,7 +274,7 @@ export default async function LeadDetailPage({
       }
     : { defaultDisplayAddress: "", structuredJson: "" };
 
-  let serviceAddressContext: LeadServiceAddressContext;
+  let serviceAddressContext: SalesIntakeServiceAddressContext;
   if (row.customerId) {
     const customerLocations = await db.customerServiceLocation.findMany({
       where: { customerId: row.customerId, organizationId: ctx.organizationId },
@@ -293,7 +293,7 @@ export default async function LeadDetailPage({
         longitude: true,
         source: true,
         isPrimary: true,
-        createdFromLead: { select: { id: true, title: true, source: true } },
+        createdFromSalesIntake: { select: { id: true, title: true, source: true } },
       },
     });
     serviceAddressContext = {
@@ -314,11 +314,11 @@ export default async function LeadDetailPage({
           longitude: loc.longitude,
           source: loc.source,
           isPrimary: loc.isPrimary,
-          createdFromLead: loc.createdFromLead
+          createdFromSalesIntake: loc.createdFromSalesIntake
             ? {
-                id: loc.createdFromLead.id,
-                title: loc.createdFromLead.title,
-                source: loc.createdFromLead.source,
+                id: loc.createdFromSalesIntake.id,
+                title: loc.createdFromSalesIntake.title,
+                source: loc.createdFromSalesIntake.source,
               }
             : null,
         })),
@@ -352,9 +352,9 @@ export default async function LeadDetailPage({
   }
 
   return (
-    <LeadWorkspaceShell
-      lead={lead}
-      updateStatusAction={updateLeadStatusAction.bind(null, row.id)}
+    <SalesIntakeWorkspaceShell
+      salesIntake={salesIntake}
+      updateStatusAction={updateSalesIntakeStatusAction.bind(null, row.id)}
       linkedQuotes={linkedQuotesForShell}
       commercialProgress={commercialProgress}
       returnHref={returnHref}
@@ -363,8 +363,8 @@ export default async function LeadDetailPage({
       {...(showLinkForm
         ? {
             customersForLink,
-            linkLeadAction: linkLeadToCustomerAction.bind(null, row.id),
-            createFromLeadAction: createCustomerFromLeadAction.bind(null, row.id),
+            linkSalesIntakeAction: linkSalesIntakeToCustomerAction.bind(null, row.id),
+            createFromSalesIntakeAction: createCustomerFromSalesIntakeAction.bind(null, row.id),
             matchHints,
           }
         : {})}

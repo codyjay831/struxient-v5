@@ -15,7 +15,7 @@ import { UserCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 
-import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
+import { SALES_INTAKE_PIPELINE_OPEN_STATUSES } from "@/lib/sales-intake-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 
 export const dynamic = "force-dynamic";
@@ -32,27 +32,27 @@ export default async function CustomersPage({
   const fromWorkstation = sq.from === "workstation";
   const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
   const ctx = await getRequestContextOrThrow();
-  const [customers, totalLeads, unlinkedLeads, openPipelineLeads] = await Promise.all([
+  const [customers, totalSalesIntakes, unlinkedSalesIntakes, openPipelineSalesIntakes] = await Promise.all([
     db.customer.findMany({
       where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
       include: {
         _count: {
-          select: { leads: true },
+          select: { salesIntakes: true },
         },
       },
     }),
-    db.lead.count({ where: { organizationId: ctx.organizationId } }),
-    db.lead.count({ where: { organizationId: ctx.organizationId, customerId: null } }),
-    db.lead.count({
+    db.salesIntake.count({ where: { organizationId: ctx.organizationId } }),
+    db.salesIntake.count({ where: { organizationId: ctx.organizationId, customerId: null } }),
+    db.salesIntake.count({
       where: {
         organizationId: ctx.organizationId,
-        status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
+        status: { in: [...SALES_INTAKE_PIPELINE_OPEN_STATUSES] },
       },
     }),
   ]);
 
-  const customersWithLinkedLead = customers.filter((c) => c._count.leads > 0).length;
+  const customersWithLinkedSalesIntake = customers.filter((c) => c._count.salesIntakes > 0).length;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -61,7 +61,7 @@ export default async function CustomersPage({
       />
       <PageHeader
         title="Customers"
-        description="Relationship records for this organization—identity and contact live here; linked intake appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
+        description="Relationship records for this organization—identity and contact live here; linked sales intake appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
         actions={
           <>
             {fromWorkstation ? (
@@ -82,10 +82,10 @@ export default async function CustomersPage({
 
       <HandoffPanel
         title="Relationship context"
-        description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes are live under Sales; job, schedule, and payment routes are reserved shells—not auto-wired from this page."
+        description="Customer rows are the anchor for durable identity; linked sales intakes are real today. Quotes are live under Sales; job, schedule, and payment routes are reserved shells—not auto-wired from this page."
       >
         <Link href="/sales" className={handoffMutedLinkClass}>
-          Sales: Leads
+          Sales: Sales Intakes
         </Link>
         <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
           Sales: Quotes
@@ -98,27 +98,27 @@ export default async function CustomersPage({
       <section className="mb-10">
         <SectionHeading
           title="Organization snapshot"
-          description="Real Lead + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
+          description="Real Sales Intake + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
         />
         <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li>
             <SignalCard label="Customers" value={String(customers.length)} hint="Rows in this org." />
           </li>
           <li>
-            <SignalCard label="Leads (all)" value={String(totalLeads)} hint="Intake records in this org." />
+            <SignalCard label="Sales Intakes (all)" value={String(totalSalesIntakes)} hint="Intake records in this org." />
           </li>
           <li>
             <SignalCard
-              label="Open pipeline leads"
-              value={String(openPipelineLeads)}
+              label="Open pipeline sales intakes"
+              value={String(openPipelineSalesIntakes)}
               hint="Status Open or Qualifying—manual lifecycle."
             />
           </li>
           <li>
             <SignalCard
-              label="Unlinked leads"
-              value={String(unlinkedLeads)}
-              hint="No customerId yet; link or create from each lead’s page."
+              label="Unlinked sales intakes"
+              value={String(unlinkedSalesIntakes)}
+              hint="No customerId yet; link or create from each sales intake’s page."
             />
           </li>
         </ul>
@@ -134,8 +134,8 @@ export default async function CustomersPage({
           </li>
         </ul>
         <p className="mt-3 text-xs text-foreground-muted">
-          Customers with at least one linked lead:{" "}
-          <span className="font-medium text-foreground">{customersWithLinkedLead}</span>
+          Customers with at least one linked sales intake:{" "}
+          <span className="font-medium text-foreground">{customersWithLinkedSalesIntake}</span>
         </p>
       </section>
 
@@ -154,7 +154,7 @@ export default async function CustomersPage({
 
       <SectionHeading
         title="Customer records"
-        description="Each row opens the customer detail page. Linked leads counts come from the Lead → Customer link in this org only."
+        description="Each row opens the customer detail page. Linked sales intakes counts come from the Sales Intake → Customer link in this org only."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -164,7 +164,7 @@ export default async function CustomersPage({
               <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                 <th className="pb-3 pr-4 font-medium">Customer</th>
                 <th className="pb-3 pr-4 font-medium">Contact</th>
-                <th className="pb-3 pr-4 font-medium">Linked leads</th>
+                <th className="pb-3 pr-4 font-medium">Linked sales intakes</th>
                 <th className="pb-3 font-medium">Created</th>
               </tr>
             </thead>
@@ -189,11 +189,11 @@ export default async function CustomersPage({
                     <div className="text-xs text-foreground-subtle">{customer.phone || "—"}</div>
                   </td>
                   <td className="py-4 pr-4 text-foreground-muted">
-                    {customer._count.leads === 0 ? (
+                    {customer._count.salesIntakes === 0 ? (
                       <span className="text-foreground-subtle">0</span>
                     ) : (
                       <span className="font-medium tabular-nums text-foreground">
-                        {customer._count.leads}
+                        {customer._count.salesIntakes}
                       </span>
                     )}
                   </td>
@@ -210,7 +210,7 @@ export default async function CustomersPage({
             <EmptyState
               icon={UserCircle}
               title="No customer rows yet"
-              description="Create a customer to anchor identity and contact; link intake from each lead’s detail page when you are ready—no sample rows."
+              description="Create a customer to anchor identity and contact; link intake from each sales intake’s detail page when you are ready—no sample rows."
             >
               <Link href="/customers/new" className={handoffPrimaryLinkClass}>
                 New customer

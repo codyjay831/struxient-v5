@@ -1,4 +1,4 @@
-import { JobTaskStatus, JobIssueStatus, JobIssueSeverity, JobPaymentRequirementStatus } from "@prisma/client";
+import { JobTaskStatus, JobIssueStatus, JobIssueSeverity, JobPaymentRequirementStatus, Prisma } from "@prisma/client";
 
 export type TaskDerivedState =
   | "COMPLETED"
@@ -15,7 +15,7 @@ export type TaskCompletionRequirements = {
 export type TaskReadinessInput = {
   completedAt: Date | null;
   completionNote: string | null;
-  completionRequirementsJson: any;
+  completionRequirementsJson: unknown;
   attachments: { id: string }[];
   issues: {
     status: JobIssueStatus;

@@ -1,26 +1,26 @@
 "use server";
 
-import { LeadSource, LeadStatus, NeededByBucket, Prisma } from "@prisma/client";
+import { SalesIntakeSource, SalesIntakeStatus, NeededByBucket, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
-import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
 import {
-  attachIntakeServiceLocationToCustomer,
-  intakeSnapshotForCustomerFromLead,
-} from "@/lib/customer-service-location-from-lead";
+  attachIntakeServiceLocationToCustomerFromSalesIntake,
+  intakeSnapshotForCustomerFromSalesIntake,
+} from "@/lib/customer-service-location-from-sales-intake";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
-import { LEAD_FIELD_LIMITS } from "./sales-field-limits";
+import { SALES_INTAKE_FIELD_LIMITS } from "./sales-field-limits";
 
 
-class CreateFromLeadTransactionError extends Error {
+class CreateFromSalesIntakeTransactionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "CreateFromLeadTransactionError";
+    this.name = "CreateFromSalesIntakeTransactionError";
   }
 }
 
-export type LeadFormState = {
+export type SalesIntakeFormState = {
   error?: string;
 };
 
@@ -46,7 +46,7 @@ function trimOrEmpty(value: FormDataEntryValue | null): string {
   return value.trim();
 }
 
-function enforceMaxLength(label: string, value: string, max: number): LeadFormState | null {
+function enforceMaxLength(label: string, value: string, max: number): SalesIntakeFormState | null {
   if (value.length > max) {
     return { error: `${label} is too long (max ${max} characters).` };
   }
@@ -55,54 +55,54 @@ function enforceMaxLength(label: string, value: string, max: number): LeadFormSt
 
 /** Same pragmatic rule as customer create/update. */
 function isReasonableEmail(value: string): boolean {
-  if (value.length > LEAD_FIELD_LIMITS.email) {
+  if (value.length > SALES_INTAKE_FIELD_LIMITS.email) {
     return false;
   }
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-const LEAD_SOURCE_SET = new Set<string>(Object.values(LeadSource));
+const SALES_INTAKE_SOURCE_SET = new Set<string>(Object.values(SalesIntakeSource));
 
-const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
+const SALES_INTAKE_STATUS_SET = new Set<string>(Object.values(SalesIntakeStatus));
 
-function parseLeadSource(raw: FormDataEntryValue | null): LeadSource {
+function parseSalesIntakeSource(raw: FormDataEntryValue | null): SalesIntakeSource {
   if (raw == null || typeof raw !== "string") {
-    return LeadSource.MANUAL;
+    return SalesIntakeSource.MANUAL;
   }
   const v = raw.trim();
-  if (!v || !LEAD_SOURCE_SET.has(v)) {
-    return LeadSource.MANUAL;
+  if (!v || !SALES_INTAKE_SOURCE_SET.has(v)) {
+    return SalesIntakeSource.MANUAL;
   }
-  return v as LeadSource;
+  return v as SalesIntakeSource;
 }
 
 /**
  * On update, missing or invalid `source` values keep the stored enum — safer than forcing
  * MANUAL when the field is absent or tampered with (create still defaults to MANUAL).
  */
-function parseLeadSourceForUpdate(
+function parseSalesIntakeSourceForUpdate(
   raw: FormDataEntryValue | null,
-  previous: LeadSource,
-): LeadSource {
+  previous: SalesIntakeSource,
+): SalesIntakeSource {
   if (raw == null || typeof raw !== "string") {
     return previous;
   }
   const v = raw.trim();
-  if (!v || !LEAD_SOURCE_SET.has(v)) {
+  if (!v || !SALES_INTAKE_SOURCE_SET.has(v)) {
     return previous;
   }
-  return v as LeadSource;
+  return v as SalesIntakeSource;
 }
 
-export async function createLeadAction(
-  _prevState: LeadFormState,
+export async function createSalesIntakeAction(
+  _prevState: SalesIntakeFormState,
   formData: FormData,
-): Promise<LeadFormState> {
+): Promise<SalesIntakeFormState> {
   const title = trimRequired(formData.get("title"));
   if (!title) {
     return { error: "Title is required." };
   }
-  const titleErr = enforceMaxLength("Title", title, LEAD_FIELD_LIMITS.title);
+  const titleErr = enforceMaxLength("Title", title, SALES_INTAKE_FIELD_LIMITS.title);
   if (titleErr) {
     return titleErr;
   }
@@ -132,16 +132,16 @@ export async function createLeadAction(
     }
   }
   const notes = trimOrNull(formData.get("notes"));
-  const source = parseLeadSource(formData.get("source"));
+  const source = parseSalesIntakeSource(formData.get("source"));
 
   if (contactName) {
-    const err = enforceMaxLength("Contact name", contactName, LEAD_FIELD_LIMITS.contactName);
+    const err = enforceMaxLength("Contact name", contactName, SALES_INTAKE_FIELD_LIMITS.contactName);
     if (err) {
       return err;
     }
   }
   if (email) {
-    const err = enforceMaxLength("Email", email, LEAD_FIELD_LIMITS.email);
+    const err = enforceMaxLength("Email", email, SALES_INTAKE_FIELD_LIMITS.email);
     if (err) {
       return err;
     }
@@ -150,31 +150,31 @@ export async function createLeadAction(
     }
   }
   if (phone) {
-    const err = enforceMaxLength("Phone", phone, LEAD_FIELD_LIMITS.phone);
+    const err = enforceMaxLength("Phone", phone, SALES_INTAKE_FIELD_LIMITS.phone);
     if (err) {
       return err;
     }
   }
   if (requestType) {
-    const err = enforceMaxLength("Request type", requestType, LEAD_FIELD_LIMITS.requestType);
+    const err = enforceMaxLength("Request type", requestType, SALES_INTAKE_FIELD_LIMITS.requestType);
     if (err) {
       return err;
     }
   }
   if (scopeSummary) {
-    const err = enforceMaxLength("Scope summary", scopeSummary, LEAD_FIELD_LIMITS.scopeSummary);
+    const err = enforceMaxLength("Scope summary", scopeSummary, SALES_INTAKE_FIELD_LIMITS.scopeSummary);
     if (err) {
       return err;
     }
   }
   if (sourceDetail) {
-    const err = enforceMaxLength("Source detail", sourceDetail, LEAD_FIELD_LIMITS.sourceDetail);
+    const err = enforceMaxLength("Source detail", sourceDetail, SALES_INTAKE_FIELD_LIMITS.sourceDetail);
     if (err) {
       return err;
     }
   }
   if (notes) {
-    const err = enforceMaxLength("Notes", notes, LEAD_FIELD_LIMITS.notes);
+    const err = enforceMaxLength("Notes", notes, SALES_INTAKE_FIELD_LIMITS.notes);
     if (err) {
       return err;
     }
@@ -197,9 +197,9 @@ export async function createLeadAction(
   const attachmentIds = attachmentIdsRaw ? attachmentIdsRaw.split(",") : [];
 
   const { snapshot, serviceAddressText } = resolveServiceLocationSnapshotFromFormData(formData);
-  if (serviceAddressText.length > LEAD_FIELD_LIMITS.publicIntakeServiceAddress) {
+  if (serviceAddressText.length > SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress) {
     return {
-      error: `Service address is too long (max ${LEAD_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
+      error: `Service address is too long (max ${SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
     };
   }
   const hasStructuredAddress = Boolean(
@@ -207,8 +207,8 @@ export async function createLeadAction(
       (snapshot.formattedAddress.trim().length > 0 || snapshot.addressLine1.trim().length > 0),
   );
 
-  const lead = await db.$transaction(async (tx) => {
-    const l = await tx.lead.create({
+  const salesIntake = await db.$transaction(async (tx) => {
+    const l = await tx.salesIntake.create({
       data: {
         organizationId: ctx.organizationId,
         title,
@@ -235,10 +235,10 @@ export async function createLeadAction(
         where: {
           id: { in: attachmentIds },
           organizationId: ctx.organizationId,
-          leadId: null,
+          salesIntakeId: null,
         },
         data: {
-          leadId: l.id,
+          salesIntakeId: l.id,
           status: "READY",
         },
       });
@@ -253,10 +253,10 @@ export async function createLeadAction(
         }
       }
 
-      await tx.leadVisitRequest.create({
+      await tx.salesVisitRequest.create({
         data: {
           organizationId: ctx.organizationId,
-          leadId: l.id,
+          salesIntakeId: l.id,
           requestedDate,
           requestedWindow,
           notes: visitNotes,
@@ -266,9 +266,9 @@ export async function createLeadAction(
 
     for (const [fieldDefId, value] of Object.entries(customFields)) {
       if (value.trim()) {
-        await tx.leadCustomFieldValue.create({
+        await tx.salesCustomFieldValue.create({
           data: {
-            leadId: l.id,
+            salesIntakeId: l.id,
             fieldDefId,
             value: value.trim(),
           },
@@ -280,21 +280,21 @@ export async function createLeadAction(
   });
 
 
-  redirect(`/sales/${lead.id}`);
+  redirect(`/sales/${salesIntake.id}`);
 }
 
 /**
- * `leadId` must be supplied via `.bind(null, lead.id)` from the lead detail route.
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` from the sales intake detail route.
  * Updates only `status` — does not touch customerId, convertedAt, or other fields.
  */
-export async function updateLeadStatusAction(
-  leadId: string,
-  _prevState: LeadFormState,
+export async function updateSalesIntakeStatusAction(
+  salesIntakeId: string,
+  _prevState: SalesIntakeFormState,
   formData: FormData,
-): Promise<LeadFormState> {
-  const id = leadId.trim();
+): Promise<SalesIntakeFormState> {
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales intake record id." };
   }
 
   const rawStatus = formData.get("status");
@@ -302,28 +302,28 @@ export async function updateLeadStatusAction(
     return { error: "Choose a status, then try again." };
   }
   const v = rawStatus.trim();
-  if (!v || !LEAD_STATUS_SET.has(v)) {
+  if (!v || !SALES_INTAKE_STATUS_SET.has(v)) {
     return {
       error:
         "That status is not valid. Choose Open, Qualifying, Converted, Lost, or Archived.",
     };
   }
-  const status = v as LeadStatus;
+  const status = v as SalesIntakeStatus;
 
   const ctx = await getRequestContextOrThrow();
 
-  const exists = await db.lead.findFirst({
+  const exists = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!exists) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
-  const result = await db.lead.updateMany({
+  const result = await db.salesIntake.updateMany({
     where: {
       id,
       organizationId: ctx.organizationId,
@@ -335,7 +335,7 @@ export async function updateLeadStatusAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -343,37 +343,37 @@ export async function updateLeadStatusAction(
 }
 
 /**
- * `leadId` must be supplied via `.bind(null, lead.id)` from the edit route so the record key
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` from the edit route so the record key
  * cannot be swapped client-side to update a different row in the same org.
  */
-export async function updateLeadAction(
-  leadId: string,
-  _prevState: LeadFormState,
+export async function updateSalesIntakeAction(
+  salesIntakeId: string,
+  _prevState: SalesIntakeFormState,
   formData: FormData,
-): Promise<LeadFormState> {
-  const id = leadId.trim();
+): Promise<SalesIntakeFormState> {
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales intake record id." };
   }
 
   const title = trimRequired(formData.get("title"));
   if (!title) {
     return { error: "Title is required." };
   }
-  const titleErr = enforceMaxLength("Title", title, LEAD_FIELD_LIMITS.title);
+  const titleErr = enforceMaxLength("Title", title, SALES_INTAKE_FIELD_LIMITS.title);
   if (titleErr) {
     return titleErr;
   }
 
   const ctx = await getRequestContextOrThrow();
-  const existing = await db.lead.findFirst({
+  const existing = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { source: true },
   });
   if (!existing) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -400,16 +400,16 @@ export async function updateLeadAction(
     }
   }
   const notes = trimOrNull(formData.get("notes"));
-  const source = parseLeadSourceForUpdate(formData.get("source"), existing.source);
+  const source = parseSalesIntakeSourceForUpdate(formData.get("source"), existing.source);
 
   if (contactName) {
-    const err = enforceMaxLength("Contact name", contactName, LEAD_FIELD_LIMITS.contactName);
+    const err = enforceMaxLength("Contact name", contactName, SALES_INTAKE_FIELD_LIMITS.contactName);
     if (err) {
       return err;
     }
   }
   if (email) {
-    const err = enforceMaxLength("Email", email, LEAD_FIELD_LIMITS.email);
+    const err = enforceMaxLength("Email", email, SALES_INTAKE_FIELD_LIMITS.email);
     if (err) {
       return err;
     }
@@ -418,31 +418,31 @@ export async function updateLeadAction(
     }
   }
   if (phone) {
-    const err = enforceMaxLength("Phone", phone, LEAD_FIELD_LIMITS.phone);
+    const err = enforceMaxLength("Phone", phone, SALES_INTAKE_FIELD_LIMITS.phone);
     if (err) {
       return err;
     }
   }
   if (requestType) {
-    const err = enforceMaxLength("Request type", requestType, LEAD_FIELD_LIMITS.requestType);
+    const err = enforceMaxLength("Request type", requestType, SALES_INTAKE_FIELD_LIMITS.requestType);
     if (err) {
       return err;
     }
   }
   if (scopeSummary) {
-    const err = enforceMaxLength("Scope summary", scopeSummary, LEAD_FIELD_LIMITS.scopeSummary);
+    const err = enforceMaxLength("Scope summary", scopeSummary, SALES_INTAKE_FIELD_LIMITS.scopeSummary);
     if (err) {
       return err;
     }
   }
   if (sourceDetail) {
-    const err = enforceMaxLength("Source detail", sourceDetail, LEAD_FIELD_LIMITS.sourceDetail);
+    const err = enforceMaxLength("Source detail", sourceDetail, SALES_INTAKE_FIELD_LIMITS.sourceDetail);
     if (err) {
       return err;
     }
   }
   if (notes) {
-    const err = enforceMaxLength("Notes", notes, LEAD_FIELD_LIMITS.notes);
+    const err = enforceMaxLength("Notes", notes, SALES_INTAKE_FIELD_LIMITS.notes);
     if (err) {
       return err;
     }
@@ -466,9 +466,9 @@ export async function updateLeadAction(
   const attachmentIds = attachmentIdsRaw ? attachmentIdsRaw.split(",") : [];
 
   const { snapshot, serviceAddressText } = resolveServiceLocationSnapshotFromFormData(formData);
-  if (serviceAddressText.length > LEAD_FIELD_LIMITS.publicIntakeServiceAddress) {
+  if (serviceAddressText.length > SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress) {
     return {
-      error: `Service address is too long (max ${LEAD_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
+      error: `Service address is too long (max ${SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
     };
   }
 
@@ -485,7 +485,7 @@ export async function updateLeadAction(
   }
 
   const result = await db.$transaction(async (tx) => {
-    const res = await tx.lead.updateMany({
+    const res = await tx.salesIntake.updateMany({
       where: {
         id,
         organizationId: ctx.organizationId,
@@ -514,10 +514,10 @@ export async function updateLeadAction(
         where: {
           id: { in: attachmentIds },
           organizationId: ctx.organizationId,
-          leadId: null,
+          salesIntakeId: null,
         },
         data: {
-          leadId: id,
+          salesIntakeId: id,
           status: "READY",
         },
       });
@@ -533,13 +533,13 @@ export async function updateLeadAction(
       }
 
       // v1: update only creates if none exists, or updates the latest pending one
-      const existing = await tx.leadVisitRequest.findFirst({
-        where: { leadId: id, status: "PENDING" },
+      const existing = await tx.salesVisitRequest.findFirst({
+        where: { salesIntakeId: id, status: "PENDING" },
         orderBy: { createdAt: "desc" },
       });
 
       if (existing) {
-        await tx.leadVisitRequest.update({
+        await tx.salesVisitRequest.update({
           where: { id: existing.id },
           data: {
             requestedDate,
@@ -548,10 +548,10 @@ export async function updateLeadAction(
           },
         });
       } else {
-        await tx.leadVisitRequest.create({
+        await tx.salesVisitRequest.create({
           data: {
             organizationId: ctx.organizationId,
-            leadId: id,
+            salesIntakeId: id,
             requestedDate,
             requestedWindow,
             notes: visitNotes,
@@ -562,14 +562,14 @@ export async function updateLeadAction(
 
     for (const [fieldDefId, value] of Object.entries(customFields)) {
       if (value.trim()) {
-        await tx.leadCustomFieldValue.upsert({
-          where: { leadId_fieldDefId: { leadId: id, fieldDefId } },
+        await tx.salesCustomFieldValue.upsert({
+          where: { salesIntakeId_fieldDefId: { salesIntakeId: id, fieldDefId } },
           update: { value: value.trim() },
-          create: { leadId: id, fieldDefId, value: value.trim() },
+          create: { salesIntakeId: id, fieldDefId, value: value.trim() },
         });
       } else {
-        await tx.leadCustomFieldValue.deleteMany({
-          where: { leadId: id, fieldDefId },
+        await tx.salesCustomFieldValue.deleteMany({
+          where: { salesIntakeId: id, fieldDefId },
         });
       }
     }
@@ -581,7 +581,7 @@ export async function updateLeadAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -589,17 +589,17 @@ export async function updateLeadAction(
 }
 
 /**
- * `leadId` must be supplied via `.bind(null, lead.id)` from the lead detail route.
- * Links an org-scoped customer to a lead that is not yet linked (`customerId` null only).
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` from the sales intake detail route.
+ * Links an org-scoped customer to a sales intake that is not yet linked (`customerId` null only).
  */
-export async function linkLeadToCustomerAction(
-  leadId: string,
-  _prevState: LeadFormState,
+export async function linkSalesIntakeToCustomerAction(
+  salesIntakeId: string,
+  _prevState: SalesIntakeFormState,
   formData: FormData,
-): Promise<LeadFormState> {
-  const id = leadId.trim();
+): Promise<SalesIntakeFormState> {
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales intake record id." };
   }
 
   const customerIdRaw = trimRequired(formData.get("customerId"));
@@ -622,29 +622,29 @@ export async function linkLeadToCustomerAction(
     };
   }
 
-  const leadPeek = await db.lead.findFirst({
+  const salesIntakePeek = await db.salesIntake.findFirst({
     where: {
       id,
       organizationId: ctx.organizationId,
     },
     select: { customerId: true },
   });
-  if (!leadPeek) {
+  if (!salesIntakePeek) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
-  if (leadPeek.customerId != null) {
+  if (salesIntakePeek.customerId != null) {
     return {
-      error: "This lead is already linked to a customer. Unlinking is not available yet.",
+      error: "This sales intake is already linked to a customer. Unlinking is not available yet.",
     };
   }
 
   const convertedAt = new Date();
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
+      const salesIntake = await tx.salesIntake.findFirst({
         where: {
           id,
           organizationId: ctx.organizationId,
@@ -652,12 +652,12 @@ export async function linkLeadToCustomerAction(
         },
         select: { id: true, notes: true, publicIntakeServiceLocation: true, source: true },
       });
-      if (!lead) {
-        throw new CreateFromLeadTransactionError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+      if (!salesIntake) {
+        throw new CreateFromSalesIntakeTransactionError(
+          "This sales intake could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      const result = await tx.lead.updateMany({
+      const result = await tx.salesIntake.updateMany({
         where: {
           id,
           organizationId: ctx.organizationId,
@@ -670,20 +670,20 @@ export async function linkLeadToCustomerAction(
         },
       });
       if (result.count === 0) {
-        throw new CreateFromLeadTransactionError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+        throw new CreateFromSalesIntakeTransactionError(
+          "This sales intake could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      await attachIntakeServiceLocationToCustomer(tx, {
+      await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
-        leadId: id,
-        leadSource: lead.source,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
+        salesIntakeId: id,
+        salesIntakeSource: salesIntake.source,
+        snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
       });
     });
   } catch (e) {
-    if (e instanceof CreateFromLeadTransactionError) {
+    if (e instanceof CreateFromSalesIntakeTransactionError) {
       return { error: e.message };
     }
     throw e;
@@ -693,26 +693,26 @@ export async function linkLeadToCustomerAction(
 }
 
 /**
- * `leadId` must be supplied via `.bind(null, lead.id)` from the lead detail route.
- * Creates a Customer from the lead’s fields and links the lead in one transaction.
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` from the sales intake detail route.
+ * Creates a Customer from the sales intake’s fields and links the sales intake in one transaction.
  */
-export async function createCustomerFromLeadAction(
-  leadId: string,
-  _prevState: LeadFormState,
+export async function createCustomerFromSalesIntakeAction(
+  salesIntakeId: string,
+  _prevState: SalesIntakeFormState,
   _formData: FormData,
-): Promise<LeadFormState> {
+): Promise<SalesIntakeFormState> {
   void _prevState;
   void _formData;
-  const id = leadId.trim();
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales intake record id." };
   }
 
   const ctx = await getRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
+      const salesIntake = await tx.salesIntake.findFirst({
         where: { id, organizationId: ctx.organizationId },
         select: {
           customerId: true,
@@ -726,20 +726,20 @@ export async function createCustomerFromLeadAction(
         },
       });
 
-      if (!lead) {
-        throw new CreateFromLeadTransactionError(
-          "This lead was not found in your organization.",
+      if (!salesIntake) {
+        throw new CreateFromSalesIntakeTransactionError(
+          "This sales intake was not found in your organization.",
         );
       }
-      if (lead.customerId != null) {
-        throw new CreateFromLeadTransactionError(
-          "This lead is already linked to a customer.",
+      if (salesIntake.customerId != null) {
+        throw new CreateFromSalesIntakeTransactionError(
+          "This sales intake is already linked to a customer.",
         );
       }
 
-      const prep = prepareCustomerFromLead(lead);
+      const prep = prepareCustomerFromSalesIntake(salesIntake);
       if (!prep.ok) {
-        throw new CreateFromLeadTransactionError(prep.error);
+        throw new CreateFromSalesIntakeTransactionError(prep.error);
       }
 
       const customer = await tx.customer.create({
@@ -750,7 +750,7 @@ export async function createCustomerFromLeadAction(
       });
 
       const convertedAt = new Date();
-      const result = await tx.lead.updateMany({
+      const result = await tx.salesIntake.updateMany({
         where: {
           id,
           organizationId: ctx.organizationId,
@@ -765,21 +765,21 @@ export async function createCustomerFromLeadAction(
 
 
       if (result.count === 0) {
-        throw new CreateFromLeadTransactionError(
-          "Could not link this lead—it may have been linked elsewhere. Refresh and try again.",
+        throw new CreateFromSalesIntakeTransactionError(
+          "Could not link this sales intake—it may have been linked elsewhere. Refresh and try again.",
         );
       }
 
-      await attachIntakeServiceLocationToCustomer(tx, {
+      await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
-        leadId: id,
-        leadSource: lead.source,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
+        salesIntakeId: id,
+        salesIntakeSource: salesIntake.source,
+        snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
       });
     });
   } catch (e) {
-    if (e instanceof CreateFromLeadTransactionError) {
+    if (e instanceof CreateFromSalesIntakeTransactionError) {
       return { error: e.message };
     }
     throw e;

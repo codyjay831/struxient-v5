@@ -35,7 +35,7 @@ export function WorkspaceBreadcrumb({ items }: { items: WorkspaceBreadcrumbItem[
                   className={[
                     "min-w-0",
                     isLast
-                      ? /^Quote\s|^Lead\s|^Job\s|^Customer\s/.test(item.label)
+                      ? /^Quote\s|^Sales Intake\s|^Job\s|^Customer\s/.test(item.label)
                         ? "max-w-full break-all font-mono text-xs font-medium tracking-normal text-foreground-muted"
                         : "text-foreground-muted"
                       : "shrink-0 text-foreground-subtle",

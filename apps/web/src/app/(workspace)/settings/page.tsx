@@ -28,7 +28,7 @@ export default function SettingsPage() {
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
           Settings shapes how Struxient behaves for you and your company later. It does
-          not hold leads, quotes, customers, jobs, or Workstation attention—those stay
+          not hold sales intakes, quotes, customers, jobs, or Workstation attention—those stay
           in their own parts of the app.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">

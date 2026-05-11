@@ -17,6 +17,10 @@ import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projecti
 import { revalidatePath } from "next/cache";
 import { notifyQuoteAccepted } from "@/lib/notifications";
 import { headers } from "next/headers";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const MAX_REQUESTS_PER_WINDOW = 10;
 
 export type QuoteAcceptState = {
   error?: string;
@@ -36,6 +40,12 @@ export async function requestQuoteChangesAction(
   const message = formData.get("message") as string;
   if (!message || message.trim().length < 5) {
     return { error: "Please provide a brief description of the changes you'd like to see." };
+  }
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  if (!(await checkRateLimit(ip, { windowMs: RATE_LIMIT_WINDOW_MS, max: MAX_REQUESTS_PER_WINDOW, keyPrefix: "quote-request-changes" }))) {
+    return { error: "Too many requests. Please try again in an hour." };
   }
 
   try {
@@ -96,6 +106,12 @@ export async function acceptQuoteFromTokenAction(
   const acceptedByName = formData.get("acceptedByName") as string;
   if (!acceptedByName || acceptedByName.trim().length < 2) {
     return { error: "Please enter your full name to accept the proposal." };
+  }
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  if (!(await checkRateLimit(ip, { windowMs: RATE_LIMIT_WINDOW_MS, max: MAX_REQUESTS_PER_WINDOW, keyPrefix: "quote-accept" }))) {
+    return { error: "Too many requests. Please try again in an hour." };
   }
 
   try {

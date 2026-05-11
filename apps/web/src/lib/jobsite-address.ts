@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
+import { intakeSnapshotForCustomerFromSalesIntake } from "@/lib/customer-service-location-from-sales-intake";
 
 export type CustomerJobsiteLocationRow = {
   formattedAddress: string;
@@ -27,13 +27,13 @@ export function jobsiteLineFromCustomerLocations(
 }
 
 /**
- * Display line for where work happens from a lead row (structured field + legacy notes).
+ * Display line for where work happens from a sales intake row (structured field + legacy notes).
  */
-export function jobsiteLineFromLeadIntake(row: {
+export function jobsiteLineFromSalesIntake(row: {
   publicIntakeServiceLocation: Prisma.JsonValue | null;
   notes: string | null;
 }): string | null {
-  const snap = intakeSnapshotForCustomerFromLead(row);
+  const snap = intakeSnapshotForCustomerFromSalesIntake(row);
   if (!snap) {
     return null;
   }
@@ -42,11 +42,11 @@ export function jobsiteLineFromLeadIntake(row: {
 }
 
 /**
- * Prefer customer profile locations; otherwise fall back to the linked lead’s intake address.
+ * Prefer customer profile locations; otherwise fall back to the linked sales intake’s intake address.
  */
 export function resolveJobsiteLineForQuoteOrJob(params: {
   customerLocations: CustomerJobsiteLocationRow[];
-  leadRow: {
+  salesIntakeRow: {
     publicIntakeServiceLocation: Prisma.JsonValue | null;
     notes: string | null;
   } | null;
@@ -55,8 +55,8 @@ export function resolveJobsiteLineForQuoteOrJob(params: {
   if (fromCustomer) {
     return fromCustomer;
   }
-  if (params.leadRow) {
-    return jobsiteLineFromLeadIntake(params.leadRow);
+  if (params.salesIntakeRow) {
+    return jobsiteLineFromSalesIntake(params.salesIntakeRow);
   }
   return null;
 }

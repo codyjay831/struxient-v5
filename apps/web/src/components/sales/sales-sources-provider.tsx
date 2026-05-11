@@ -10,12 +10,12 @@ import {
 import { X } from "lucide-react";
 import { handoffMutedLinkClass } from "@/components/ui/handoff-panel";
 
-const LeadSourcesCtx = createContext<{ open: () => void } | null>(null);
+const SalesIntakeSourcesCtx = createContext<{ open: () => void } | null>(null);
 
-function useLeadSourcesOpen() {
-  const ctx = useContext(LeadSourcesCtx);
+function useSalesIntakeSourcesOpen() {
+  const ctx = useContext(SalesIntakeSourcesCtx);
   if (!ctx) {
-    throw new Error("Lead Sources controls require LeadSourcesProvider.");
+    throw new Error("Sales Intake Sources controls require SalesIntakeSourcesProvider.");
   }
   return ctx.open;
 }
@@ -26,7 +26,7 @@ const secondaryToolbarButtonClass =
 const dialogFooterButtonClass =
   "inline-flex items-center rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-[0.65rem] font-medium text-foreground-subtle transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export function LeadSourcesProvider({
+export function SalesIntakeSourcesProvider({
   children,
   sourcesPanel,
 }: {
@@ -45,11 +45,11 @@ export function LeadSourcesProvider({
   }, []);
 
   return (
-    <LeadSourcesCtx.Provider value={{ open }}>
+    <SalesIntakeSourcesCtx.Provider value={{ open }}>
       {children}
       <dialog
         ref={dialogRef}
-        aria-labelledby="lead-sources-title"
+        aria-labelledby="sales-intake-sources-title"
         className="z-50 w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-lg outline-none ring-offset-background [&::backdrop]:bg-foreground/25"
         onClick={(e) => {
           if (e.target === e.currentTarget) close();
@@ -59,20 +59,20 @@ export function LeadSourcesProvider({
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <h2
-                id="lead-sources-title"
+                id="sales-intake-sources-title"
                 className="text-sm font-semibold tracking-tight text-foreground"
               >
-                Lead Sources
+                Sales Intake Sources
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                Lead intake sources — set up how leads come into Struxient.
+                Sales intake sources — set up how sales intakes come into Struxient.
               </p>
             </div>
             <button
               type="button"
               onClick={close}
               className="shrink-0 rounded-md p-1 text-foreground-subtle transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-              aria-label="Close Lead Sources"
+              aria-label="Close Sales Intake Sources"
             >
               <X className="size-4" strokeWidth={1.5} aria-hidden />
             </button>
@@ -87,20 +87,20 @@ export function LeadSourcesProvider({
           </div>
         </div>
       </dialog>
-    </LeadSourcesCtx.Provider>
+    </SalesIntakeSourcesCtx.Provider>
   );
 }
 
-export function LeadSourcesToolbarButton() {
-  const open = useLeadSourcesOpen();
+export function SalesIntakeSourcesToolbarButton() {
+  const open = useSalesIntakeSourcesOpen();
   return (
     <button type="button" className={secondaryToolbarButtonClass} onClick={open}>
-      Lead Sources
+      Intake Sources
     </button>
   );
 }
 
-export function LeadSourcesManageButton({
+export function SalesIntakeSourcesManageButton({
   label = "Manage sources",
   className,
 }: {
@@ -108,7 +108,7 @@ export function LeadSourcesManageButton({
   /** Merged after base classes (e.g. shrink-0). */
   className?: string;
 }) {
-  const open = useLeadSourcesOpen();
+  const open = useSalesIntakeSourcesOpen();
   return (
     <button
       type="button"

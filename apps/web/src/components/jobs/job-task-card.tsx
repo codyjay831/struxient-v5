@@ -21,7 +21,7 @@ export function JobTaskCard({
   jobContextLabel,
   jobsiteAddressLine,
   customerId,
-  leadEditHref,
+  salesIntakeEditHref,
   task,
 }: {
   jobId: string;
@@ -30,7 +30,7 @@ export function JobTaskCard({
   jobContextLabel: string;
   jobsiteAddressLine: string | null;
   customerId: string | null;
-  leadEditHref: string | null;
+  salesIntakeEditHref: string | null;
   task: Task;
 }) {
   const router = useRouter();
@@ -48,7 +48,7 @@ export function JobTaskCard({
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
-    leadEditHref,
+    salesIntakeEditHref,
     jobHref: `/jobs/${jobId}`,
     task,
   };

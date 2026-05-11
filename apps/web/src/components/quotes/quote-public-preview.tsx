@@ -175,31 +175,33 @@ export function QuotePublicPreview({
               </p>
 
               <form action={formAction} className="space-y-6">
-                <div>
-                  <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-2">
-                    Your full name
-                  </label>
-                  <input
-                    name="acceptedByName"
-                    type="text"
-                    required
-                    placeholder="Type your name to sign"
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-foreground-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10 transition-all"
-                  />
-                </div>
+                <div className="max-w-md">
+                  <div>
+                    <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-2">
+                      Your full name
+                    </label>
+                    <input
+                      name="acceptedByName"
+                      type="text"
+                      required
+                      placeholder="Type your name to sign"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-foreground-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10 transition-all"
+                    />
+                  </div>
 
-                <div className="flex items-start gap-3">
-                  <input
-                    id="terms"
-                    name="terms"
-                    type="checkbox"
-                    required
-                    className="mt-1 size-4 rounded border-border text-accent focus:ring-accent"
-                  />
-                  <label htmlFor="terms" className="text-xs text-foreground-muted leading-relaxed">
-                    I agree to the scope of work, pricing, and terms outlined in this proposal. 
-                    I understand that this electronic signature is legally binding.
-                  </label>
+                  <div className="mt-6 flex items-start gap-3">
+                    <input
+                      id="terms"
+                      name="terms"
+                      type="checkbox"
+                      required
+                      className="mt-1 size-4 rounded border-border text-accent focus:ring-accent"
+                    />
+                    <label htmlFor="terms" className="text-xs text-foreground-muted leading-relaxed">
+                      I agree to the scope of work, pricing, and terms outlined in this proposal. 
+                      I understand that this electronic signature is legally binding.
+                    </label>
+                  </div>
                 </div>
 
                 {state.error && (
@@ -208,33 +210,34 @@ export function QuotePublicPreview({
                   </p>
                 )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-8 py-3 text-sm font-bold text-accent-contrast hover:opacity-90 disabled:opacity-50 transition-all shadow-md active:scale-[0.98]"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      Accept Proposal
-                      <Check className="size-4" />
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowChangeRequest(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-bold text-foreground hover:bg-foreground/[0.02] transition-all active:scale-[0.98]"
-                >
-                  Request Changes
-                </button>
-              </div>
-            </form>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-8 py-3 text-sm font-bold text-accent-contrast hover:opacity-90 disabled:opacity-50 transition-all shadow-md active:scale-[0.98]"
+                  >
+                    {isPending ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Accept Proposal
+                        <Check className="size-4" />
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowChangeRequest(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-bold text-foreground hover:bg-foreground/[0.02] transition-all active:scale-[0.98]"
+                  >
+                    Request Changes
+                  </button>
+                </div>
+              </form>
+            </div>
 
             {showChangeRequest && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
@@ -252,7 +255,7 @@ export function QuotePublicPreview({
                   </div>
                   
                   <p className="text-sm text-foreground-muted mb-6 leading-relaxed">
-                    Tell the company what you'd like to change in this proposal. They will receive your message and can send you an updated version.
+                    Tell the company what you&apos;d like to change in this proposal. They will receive your message and can send you an updated version.
                   </p>
 
                   <form action={changeFormAction} className="space-y-6">

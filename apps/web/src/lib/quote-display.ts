@@ -14,10 +14,10 @@ export type QuoteListRowPayload = {
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; displayName: string } | null;
-  lead: { id: string; title: string } | null;
+  salesIntake: { id: string; title: string } | null;
 };
 
-/** Minimal quote row for lead/customer detail sidebars (org-scoped). */
+/** Minimal quote row for sales intake/customer detail sidebars (org-scoped). */
 export type QuoteLinkedSummary = {
   id: string;
   title: string;
@@ -73,9 +73,9 @@ export type QuoteDetailPayload = {
   createdAt: Date;
   updatedAt: Date;
   customerId: string | null;
-  leadId: string | null;
+  salesIntakeId: string | null;
   customer: { id: string; displayName: string } | null;
-  lead: {
+  salesIntake: {
     id: string;
     title: string;
     notes: string | null;

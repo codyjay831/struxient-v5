@@ -1,16 +1,16 @@
 "use client";
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
-import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
+import { SALES_INTAKE_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
 import type { PublicIntakeFormViewModel } from "@/lib/public-request-settings-effective";
 import {
-  submitPublicLeadIntakeAction,
-  type PublicLeadIntakeState,
-} from "./public-lead-intake-actions";
+  submitPublicSalesIntakeAction,
+  type PublicSalesIntakeState,
+} from "./public-sales-intake-actions";
 import { PublicIntakeServiceAddressField } from "./public-intake-service-address-field";
 import { NeededByBucket } from "@prisma/client";
 import { MultiFilePicker } from "@/components/forms/multi-file-picker";
-import { getPublicLeadAttachmentUploadUrlAction } from "./public-attachment-actions";
+import { getPublicSalesIntakeAttachmentUploadUrlAction } from "./public-attachment-actions";
 import { CustomFieldsForm, type CustomFieldDefPayload } from "@/components/forms/custom-fields-form";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-loader";
 import { formatMoneyCents } from "@/lib/quote-display";
@@ -34,7 +34,7 @@ const NEEDED_BY_BUCKET_OPTIONS: { value: NeededByBucket; label: string }[] = [
   { value: "SPECIFIC_DATE", label: "Specific date" },
 ];
 
-const initialState: PublicLeadIntakeState = {};
+const initialState: PublicSalesIntakeState = {};
 
 export function PublicRequestForm({
   companySlug,
@@ -52,7 +52,7 @@ export function PublicRequestForm({
   /** Browser-safe key for Places Autocomplete only; omit or empty to use manual address only. */
   googleMapsApiKey?: string;
 }) {
-  const boundSubmit = submitPublicLeadIntakeAction.bind(null, companySlug);
+  const boundSubmit = submitPublicSalesIntakeAction.bind(null, companySlug);
   const [state, formAction, isPending] = useActionState(boundSubmit, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const headingId = useId();
@@ -85,7 +85,7 @@ export function PublicRequestForm({
     
     for (const file of files) {
       try {
-        const prep = await getPublicLeadAttachmentUploadUrlAction(
+        const prep = await getPublicSalesIntakeAttachmentUploadUrlAction(
           companySlug,
           file.name,
           file.type,
@@ -220,7 +220,7 @@ export function PublicRequestForm({
               name="contactName"
               type="text"
               required={step === 1}
-              maxLength={LEAD_FIELD_LIMITS.contactName}
+              maxLength={SALES_INTAKE_FIELD_LIMITS.contactName}
               autoComplete="name"
               className={controlClass}
             />
@@ -235,7 +235,7 @@ export function PublicRequestForm({
                 name="email"
                 type="email"
                 required={step === 1}
-                maxLength={LEAD_FIELD_LIMITS.email}
+                maxLength={SALES_INTAKE_FIELD_LIMITS.email}
                 autoComplete="email"
                 className={controlClass}
               />
@@ -248,7 +248,7 @@ export function PublicRequestForm({
                 name="phone"
                 type="tel"
                 required={step === 1}
-                maxLength={LEAD_FIELD_LIMITS.phone}
+                maxLength={SALES_INTAKE_FIELD_LIMITS.phone}
                 autoComplete="tel"
                 className={controlClass}
               />
@@ -289,7 +289,7 @@ export function PublicRequestForm({
               name="requestDetails"
               required={step === 2}
               rows={5}
-              maxLength={LEAD_FIELD_LIMITS.publicIntakeRequestDetails}
+              maxLength={SALES_INTAKE_FIELD_LIMITS.publicIntakeRequestDetails}
               placeholder="Briefly describe the work requested..."
               className={`${controlClass} min-h-[8rem] resize-y`}
             />
@@ -414,7 +414,7 @@ export function PublicRequestForm({
             <input
               name="preferredTiming"
               type="text"
-              maxLength={LEAD_FIELD_LIMITS.publicIntakePreferredTiming}
+              maxLength={SALES_INTAKE_FIELD_LIMITS.publicIntakePreferredTiming}
               placeholder="e.g. weekday mornings, after 3pm"
               className={controlClass}
             />

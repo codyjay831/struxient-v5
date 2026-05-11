@@ -3,11 +3,11 @@ import { Briefcase, CircleAlert, FileText } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
-  LEAD_COMMERCIAL_PROGRESS_STEPS,
-  resolveLeadCommercialProgressActionHref,
-  type LeadCommercialProgress,
-  type LeadCommercialProgressAction,
-} from "@/lib/lead-commercial-progress";
+  SALES_INTAKE_COMMERCIAL_PROGRESS_STEPS,
+  resolveSalesIntakeCommercialProgressActionHref,
+  type SalesIntakeCommercialProgress,
+  type SalesIntakeCommercialProgressAction,
+} from "@/lib/sales-commercial-progress";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -25,14 +25,14 @@ const cardLinkClass =
 
 function ActionLink({
   action,
-  leadId,
+  salesIntakeId,
   variant,
 }: {
-  action: LeadCommercialProgressAction;
-  leadId: string;
+  action: SalesIntakeCommercialProgressAction;
+  salesIntakeId: string;
   variant: "primary" | "secondary";
 }) {
-  const href = resolveLeadCommercialProgressActionHref(action, { leadId });
+  const href = resolveSalesIntakeCommercialProgressActionHref(action, { salesIntakeId });
   return (
     <Link
       href={href}
@@ -60,7 +60,7 @@ function StepIndicator({
     );
   }
 
-  const steps = LEAD_COMMERCIAL_PROGRESS_STEPS.slice(0, totalSteps);
+  const steps = SALES_INTAKE_COMMERCIAL_PROGRESS_STEPS.slice(0, totalSteps);
 
   return (
     <ol
@@ -106,7 +106,7 @@ function ActiveQuoteCard({
   quote,
   showsRevisionDrift,
 }: {
-  quote: NonNullable<LeadCommercialProgress["activeQuote"]>;
+  quote: NonNullable<SalesIntakeCommercialProgress["activeQuote"]>;
   showsRevisionDrift: boolean;
 }) {
   const updated = new Date(quote.updatedAt).toLocaleString();
@@ -151,7 +151,7 @@ function ActiveQuoteCard({
 function ActiveJobCard({
   job,
 }: {
-  job: NonNullable<LeadCommercialProgress["activeJob"]>;
+  job: NonNullable<SalesIntakeCommercialProgress["activeJob"]>;
 }) {
   return (
     <Link href={`/jobs/${job.id}`} className={cardLinkClass}>
@@ -183,12 +183,12 @@ function ActiveJobCard({
   );
 }
 
-export function LeadCommercialProgressPanel({
+export function SalesIntakeCommercialProgressPanel({
   progress,
-  leadId,
+  salesIntakeId,
 }: {
-  progress: LeadCommercialProgress;
-  leadId: string;
+  progress: SalesIntakeCommercialProgress;
+  salesIntakeId: string;
 }) {
   const hasCards = progress.activeQuote != null || progress.activeJob != null;
 
@@ -199,7 +199,7 @@ export function LeadCommercialProgressPanel({
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Lead progress
+          Sales Intake progress
         </h2>
         <StatusBadge label={progress.label} tone={progress.badgeTone} />
       </div>
@@ -236,14 +236,14 @@ export function LeadCommercialProgressPanel({
           {progress.primaryAction ? (
             <ActionLink
               action={progress.primaryAction}
-              leadId={leadId}
+              salesIntakeId={salesIntakeId}
               variant="primary"
             />
           ) : null}
           {progress.secondaryAction ? (
             <ActionLink
               action={progress.secondaryAction}
-              leadId={leadId}
+              salesIntakeId={salesIntakeId}
               variant="secondary"
             />
           ) : null}

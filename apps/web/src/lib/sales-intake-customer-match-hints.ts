@@ -1,4 +1,4 @@
-import { normalizeEmailForMatch, normalizePhoneDigits } from "./lead-customer-contact-normalize";
+import { normalizeEmailForMatch, normalizePhoneDigits } from "./sales-intake-customer-contact-normalize";
 
 export type CustomerMatchHint = {
   id: string;
@@ -9,7 +9,7 @@ export type CustomerMatchHint = {
   matchOn: "email" | "phone" | "both";
 };
 
-export type LeadCustomerMatchHints =
+export type SalesIntakeCustomerMatchHints =
   | { kind: "skipped-no-contact" }
   | {
       kind: "checked";
@@ -34,14 +34,14 @@ type CustomerRow = {
  */
 export function findCustomerMatchHints(
   customers: CustomerRow[],
-  leadEmail: string | null | undefined,
-  leadPhone: string | null | undefined,
+  salesIntakeEmail: string | null | undefined,
+  salesIntakePhone: string | null | undefined,
   fetchCap: number,
-): LeadCustomerMatchHints {
-  const leadNormEmail = normalizeEmailForMatch(leadEmail);
-  const leadNormPhone = normalizePhoneDigits(leadPhone);
+): SalesIntakeCustomerMatchHints {
+  const salesIntakeNormEmail = normalizeEmailForMatch(salesIntakeEmail);
+  const salesIntakeNormPhone = normalizePhoneDigits(salesIntakePhone);
 
-  if (!leadNormEmail && !leadNormPhone) {
+  if (!salesIntakeNormEmail && !salesIntakeNormPhone) {
     return { kind: "skipped-no-contact" };
   }
 
@@ -52,8 +52,8 @@ export function findCustomerMatchHints(
   for (const c of customers) {
     const ce = normalizeEmailForMatch(c.email);
     const cp = normalizePhoneDigits(c.phone);
-    const emailMatch = Boolean(leadNormEmail && ce && ce === leadNormEmail);
-    const phoneMatch = Boolean(leadNormPhone && cp && cp === leadNormPhone);
+    const emailMatch = Boolean(salesIntakeNormEmail && ce && ce === salesIntakeNormEmail);
+    const phoneMatch = Boolean(salesIntakeNormPhone && cp && cp === salesIntakeNormPhone);
     if (!emailMatch && !phoneMatch) {
       continue;
     }

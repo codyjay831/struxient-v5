@@ -104,7 +104,7 @@ export function quoteListWhere(
             },
           },
           {
-            lead: {
+            salesIntake: {
               is: {
                 OR: [
                   { title: { contains: term, mode: "insensitive" } },

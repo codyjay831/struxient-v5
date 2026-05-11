@@ -17,11 +17,11 @@ export const WORKSTATION_COPY = {
     previewLabel: "Preview",
     previewTooltip: "Illustrative preview — not derived from live data yet",
     previewSectionTitle: "Coming soon — preview signals",
-    previewSectionLead:
+    previewSectionSalesIntake:
       "These cards show the categories the Investigate lane will surface once duplicate detection, quote readiness scans, payment review, and activity feeds are wired. Not derived from live records.",
     emptyTitle: "No investigation signals right now.",
     emptyDescription:
-      "Struxient will surface unclear, risky, or missing-context items here before they become tasks. Only org-scoped lead linkage is wired today.",
+      "Struxient will surface unclear, risky, or missing-context items here before they become tasks. Only org-scoped sales intake linkage is wired today.",
   },
 
   /** Severity wording used in AttentionCard pills and elsewhere. */
@@ -55,7 +55,7 @@ export const WORKSTATION_COPY = {
   continuation: {
     backToToday: "Back to Workstation Today",
     backToWorkstation: "← Workstation",
-    openLeads: "Open leads",
+    openSalesIntakes: "Open sales intakes",
     openCustomers: "Open customers",
     openQuotes: "Open quotes",
     openJobs: "Open jobs",

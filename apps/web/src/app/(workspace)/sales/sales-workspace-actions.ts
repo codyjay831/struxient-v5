@@ -1,35 +1,35 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { performCreateQuoteDraftFromLead } from "@/app/(workspace)/quotes/quote-form-actions";
+import { performCreateQuoteDraftFromSalesIntake } from "@/app/(workspace)/quotes/quote-form-actions";
 
 /**
- * Workspace-safe lead server actions.
+ * Workspace-safe sales intake server actions.
  *
- * These mirror the logic in `lead-form-actions.ts` but return a result object
+ * These mirror the logic in `sales-form-actions.ts` but return a result object
  * instead of calling `redirect()`, so they can be used from the in-place
- * Customer/Lead Workspace dialog without navigating away.  After a successful
+ * Customer/Sales Intake Workspace dialog without navigating away.  After a successful
  * action the caller is responsible for calling `router.refresh()` to reload
  * server-component data.
  */
 
 import {
   CustomerServiceLocationSource,
-  LeadSource,
-  LeadStatus,
+  SalesIntakeSource,
+  SalesIntakeStatus,
   Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
 import {
-  attachIntakeServiceLocationToCustomer,
-  intakeSnapshotForCustomerFromLead,
-} from "@/lib/customer-service-location-from-lead";
+  attachIntakeServiceLocationToCustomerFromSalesIntake,
+  intakeSnapshotForCustomerFromSalesIntake,
+} from "@/lib/customer-service-location-from-sales-intake";
 import {
-  getLeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "@/lib/lead-commercial-progress";
+  getSalesIntakeCommercialProgress,
+  type SalesIntakeProgressQuoteInput,
+} from "@/lib/sales-commercial-progress";
 import {
   loadQuoteWorkSurface,
   type QuoteWorkSurfaceLoaderResult,
@@ -39,9 +39,9 @@ import {
   parseStoredPublicIntakeServiceLocation,
   type PublicIntakeServiceLocationV1,
 } from "@/lib/public-intake-service-location";
-import { LEAD_FIELD_LIMITS } from "./sales-field-limits";
+import { SALES_INTAKE_FIELD_LIMITS } from "./sales-field-limits";
 
-const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
+const SALES_INTAKE_STATUS_SET = new Set<string>(Object.values(SalesIntakeStatus));
 
 export type WorkspaceFormState = {
   error?: string;
@@ -49,19 +49,19 @@ export type WorkspaceFormState = {
 };
 
 /**
- * Result type for {@link loadLeadActiveQuoteWorkSurfaceAction}.
+ * Result type for {@link loadSalesIntakeActiveQuoteWorkSurfaceAction}.
  * Read-only loader; never throws across the action boundary.
  */
-export type LoadLeadActiveQuoteWorkSurfaceResult =
+export type LoadSalesIntakeActiveQuoteWorkSurfaceResult =
   | { ok: true; payload: QuoteWorkSurfaceLoaderResult | null }
   | { ok: false; error: string };
 
-export type CreateQuoteFromLeadWorkspaceResult =
+export type CreateQuoteFromSalesIntakeWorkspaceResult =
   | { success: true; quoteId: string }
   | { success: false; error: string };
 
-function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string) {
-  const lid = leadId.trim();
+function revalidateSalesIntakeAndQuoteSurfaces(salesIntakeId: string, quoteId: string) {
+  const lid = salesIntakeId.trim();
   const qid = quoteId.trim();
   revalidatePath("/sales");
   if (lid) {
@@ -77,21 +77,21 @@ function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string) {
 }
 
 /**
- * Creates (or reuses) the org-scoped active draft quote for a lead — same rules
- * as `/quotes/new?leadId=…` without redirecting. Caller should `router.refresh()`
+ * Creates (or reuses) the org-scoped active draft quote for a sales intake — same rules
+ * as `/quotes/new?salesIntakeId=…` without redirecting. Caller should `router.refresh()`
  * and reload the active quote payload for the embedded {@link QuoteWorkSurface}.
  *
- * `leadId` must be supplied from a trusted server-rendered surface (bound in
+ * `salesIntakeId` must be supplied from a trusted server-rendered surface (bound in
  * the client), never from an arbitrary org id.
  */
-export async function createQuoteFromLeadWorkspaceAction(
-  leadId: string,
-): Promise<CreateQuoteFromLeadWorkspaceResult> {
-  const result = await performCreateQuoteDraftFromLead(leadId);
+export async function createQuoteFromSalesIntakeWorkspaceAction(
+  salesIntakeId: string,
+): Promise<CreateQuoteFromSalesIntakeWorkspaceResult> {
+  const result = await performCreateQuoteDraftFromSalesIntake(salesIntakeId);
   if (!result.ok) {
     return { success: false, error: result.error };
   }
-  revalidateLeadAndQuoteSurfaces(leadId, result.quoteId);
+  revalidateSalesIntakeAndQuoteSurfaces(salesIntakeId, result.quoteId);
   return { success: true, quoteId: result.quoteId };
 }
 
@@ -109,25 +109,25 @@ function trimOrNull(value: FormDataEntryValue | null): string | null {
 }
 
 function isReasonableEmail(value: string): boolean {
-  if (value.length > LEAD_FIELD_LIMITS.email) return false;
+  if (value.length > SALES_INTAKE_FIELD_LIMITS.email) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 /**
- * Creates a Customer from lead data and links the lead in one transaction.
+ * Creates a Customer from sales intake data and links the sales intake in one transaction.
  * Returns `{ success: true }` on success instead of redirecting.
- * `leadId` must be supplied via `.bind(null, lead.id)` before passing to
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` before passing to
  * `useActionState`.
  */
-export async function createCustomerFromLeadWorkspaceAction(
-  leadId: string,
+export async function createCustomerFromSalesIntakeWorkspaceAction(
+  salesIntakeId: string,
   _prevState: WorkspaceFormState,
   _formData: FormData,
 ): Promise<WorkspaceFormState> {
   void _prevState;
   void _formData;
-  const id = leadId.trim();
-  if (!id) return { error: "Missing lead record id." };
+  const id = salesIntakeId.trim();
+  if (!id) return { error: "Missing sales intake record id." };
 
   const ctx = await getRequestContextOrThrow();
 
@@ -135,7 +135,7 @@ export async function createCustomerFromLeadWorkspaceAction(
 
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
+      const salesIntake = await tx.salesIntake.findFirst({
         where: { id, organizationId: ctx.organizationId },
         select: {
           customerId: true,
@@ -149,14 +149,14 @@ export async function createCustomerFromLeadWorkspaceAction(
         },
       });
 
-      if (!lead) {
-        throw new WorkspaceTxError("This lead was not found in your organization.");
+      if (!salesIntake) {
+        throw new WorkspaceTxError("This sales intake was not found in your organization.");
       }
-      if (lead.customerId != null) {
-        throw new WorkspaceTxError("This lead is already linked to a customer.");
+      if (salesIntake.customerId != null) {
+        throw new WorkspaceTxError("This sales intake is already linked to a customer.");
       }
 
-      const prep = prepareCustomerFromLead(lead);
+      const prep = prepareCustomerFromSalesIntake(salesIntake);
       if (!prep.ok) {
         throw new WorkspaceTxError(prep.error);
       }
@@ -169,23 +169,23 @@ export async function createCustomerFromLeadWorkspaceAction(
       });
       createdCustomerId = customer.id;
 
-      const result = await tx.lead.updateMany({
+      const result = await tx.salesIntake.updateMany({
         where: { id, organizationId: ctx.organizationId, customerId: null },
         data: { customerId: customer.id, convertedAt: new Date() },
       });
 
       if (result.count === 0) {
         throw new WorkspaceTxError(
-          "Could not link this lead—it may have been linked already. Refresh and try again.",
+          "Could not link this sales intake—it may have been linked already. Refresh and try again.",
         );
       }
 
-      await attachIntakeServiceLocationToCustomer(tx, {
+      await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
-        leadId: id,
-        leadSource: lead.source,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
+        salesIntakeId: id,
+        salesIntakeSource: salesIntake.source,
+        snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
       });
     });
   } catch (e) {
@@ -212,17 +212,17 @@ function trimRequired(value: FormDataEntryValue | null): string {
 }
 
 /**
- * Links an org-scoped customer to a lead with `customerId` null.
+ * Links an org-scoped customer to a sales intake with `customerId` null.
  * Returns `{ success: true }` instead of redirecting — caller should `router.refresh()`.
- * `leadId` must be supplied via `.bind(null, lead.id)`.
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)`.
  */
-export async function linkLeadToCustomerWorkspaceAction(
-  leadId: string,
+export async function linkSalesIntakeToCustomerWorkspaceAction(
+  salesIntakeId: string,
   _prevState: WorkspaceFormState,
   formData: FormData,
 ): Promise<WorkspaceFormState> {
-  const id = leadId.trim();
-  if (!id) return { error: "Missing lead record id." };
+  const id = salesIntakeId.trim();
+  if (!id) return { error: "Missing sales intake record id." };
 
   const customerIdRaw = trimRequired(formData.get("customerId"));
   if (!customerIdRaw) {
@@ -241,47 +241,47 @@ export async function linkLeadToCustomerWorkspaceAction(
     };
   }
 
-  const leadPeek = await db.lead.findFirst({
+  const salesIntakePeek = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { customerId: true },
   });
-  if (!leadPeek) {
+  if (!salesIntakePeek) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
-  if (leadPeek.customerId != null) {
-    return { error: "This lead is already linked to a customer. Unlinking is not available yet." };
+  if (salesIntakePeek.customerId != null) {
+    return { error: "This sales intake is already linked to a customer. Unlinking is not available yet." };
   }
 
   const convertedAt = new Date();
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
+      const salesIntake = await tx.salesIntake.findFirst({
         where: { id, organizationId: ctx.organizationId, customerId: null },
         select: { id: true, notes: true, publicIntakeServiceLocation: true, source: true },
       });
-      if (!lead) {
+      if (!salesIntake) {
         throw new WorkspaceTxError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This sales intake could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      const result = await tx.lead.updateMany({
+      const result = await tx.salesIntake.updateMany({
         where: { id, organizationId: ctx.organizationId, customerId: null },
         data: { customerId: customer.id, convertedAt },
       });
       if (result.count === 0) {
         throw new WorkspaceTxError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This sales intake could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      await attachIntakeServiceLocationToCustomer(tx, {
+      await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
-        leadId: id,
-        leadSource: lead.source,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
+        salesIntakeId: id,
+        salesIntakeSource: salesIntake.source,
+        snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
       });
     });
   } catch (e) {
@@ -301,18 +301,18 @@ export async function linkLeadToCustomerWorkspaceAction(
 }
 
 /**
- * Updates only `status` for an org-scoped lead (same rules as `updateLeadStatusAction` in
- * `lead-form-actions.ts`) but returns `{ success: true }` instead of redirecting.
- * `leadId` must be supplied via `.bind(null, lead.id)`.
+ * Updates only `status` for an org-scoped sales intake (same rules as `updateSalesIntakeStatusAction` in
+ * `sales-form-actions.ts`) but returns `{ success: true }` instead of redirecting.
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)`.
  */
-export async function updateLeadStatusWorkspaceAction(
-  leadId: string,
+export async function updateSalesIntakeStatusWorkspaceAction(
+  salesIntakeId: string,
   _prevState: WorkspaceFormState,
   formData: FormData,
 ): Promise<WorkspaceFormState> {
-  const id = leadId.trim();
+  const id = salesIntakeId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales intake record id." };
   }
 
   const rawStatus = formData.get("status");
@@ -320,28 +320,28 @@ export async function updateLeadStatusWorkspaceAction(
     return { error: "Choose a status, then try again." };
   }
   const v = rawStatus.trim();
-  if (!v || !LEAD_STATUS_SET.has(v)) {
+  if (!v || !SALES_INTAKE_STATUS_SET.has(v)) {
     return {
       error:
         "That status is not valid. Choose Open, Qualifying, Converted, Lost, or Archived.",
     };
   }
-  const status = v as LeadStatus;
+  const status = v as SalesIntakeStatus;
 
   const ctx = await getRequestContextOrThrow();
 
-  const exists = await db.lead.findFirst({
+  const exists = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
   if (!exists) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
-  const result = await db.lead.updateMany({
+  const result = await db.salesIntake.updateMany({
     where: {
       id,
       organizationId: ctx.organizationId,
@@ -352,7 +352,7 @@ export async function updateLeadStatusWorkspaceAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This sales intake was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -360,58 +360,58 @@ export async function updateLeadStatusWorkspaceAction(
 }
 
 /**
- * Updates a lead's contact fields (name, email, phone) in-place.
+ * Updates a sales intake's contact fields (name, email, phone) in-place.
  * Returns `{ success: true }` on success instead of redirecting.
- * `leadId` must be supplied via `.bind(null, lead.id)`.
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)`.
  */
-export async function updateLeadContactWorkspaceAction(
-  leadId: string,
+export async function updateSalesIntakeContactWorkspaceAction(
+  salesIntakeId: string,
   _prevState: WorkspaceFormState,
   formData: FormData,
 ): Promise<WorkspaceFormState> {
-  const id = leadId.trim();
-  if (!id) return { error: "Missing lead record id." };
+  const id = salesIntakeId.trim();
+  if (!id) return { error: "Missing sales intake record id." };
 
   const ctx = await getRequestContextOrThrow();
 
-  const exists = await db.lead.findFirst({
+  const exists = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
-  if (!exists) return { error: "Lead not found in your organization." };
+  if (!exists) return { error: "Sales intake not found in your organization." };
 
   const contactName = trimOrNull(formData.get("contactName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
 
-  if (contactName && contactName.length > LEAD_FIELD_LIMITS.contactName) {
+  if (contactName && contactName.length > SALES_INTAKE_FIELD_LIMITS.contactName) {
     return {
-      error: `Contact name is too long (max ${LEAD_FIELD_LIMITS.contactName} characters).`,
+      error: `Contact name is too long (max ${SALES_INTAKE_FIELD_LIMITS.contactName} characters).`,
     };
   }
   if (email && !isReasonableEmail(email)) {
     return { error: "Enter a valid email address, or leave the field blank." };
   }
-  if (phone && phone.length > LEAD_FIELD_LIMITS.phone) {
+  if (phone && phone.length > SALES_INTAKE_FIELD_LIMITS.phone) {
     return {
-      error: `Phone is too long (max ${LEAD_FIELD_LIMITS.phone} characters).`,
+      error: `Phone is too long (max ${SALES_INTAKE_FIELD_LIMITS.phone} characters).`,
     };
   }
 
-  const result = await db.lead.updateMany({
+  const result = await db.salesIntake.updateMany({
     where: { id, organizationId: ctx.organizationId },
     data: { contactName, email, phone },
   });
 
   if (result.count === 0) {
-    return { error: "Lead not found or could not be updated." };
+    return { error: "Sales intake not found or could not be updated." };
   }
 
   return { success: true };
 }
 
 /**
- * Result type for {@link searchCustomersForLeadAttachAction}.
+ * Result type for {@link searchCustomersForSalesIntakeAttachAction}.
  */
 export type CustomerSearchMatch = {
   id: string;
@@ -421,17 +421,17 @@ export type CustomerSearchMatch = {
   phone: string | null;
 };
 
-export type SearchCustomersForLeadAttachResult =
+export type SearchCustomersForSalesIntakeAttachResult =
   | { ok: true; matches: CustomerSearchMatch[] }
   | { ok: false; error: string };
 
 /**
  * Searches for customers in the current organization by name, company, email, or phone.
- * Used by the Lead workspace Customer attach card for autocomplete.
+ * Used by the Sales Intake workspace Customer attach card for autocomplete.
  */
-export async function searchCustomersForLeadAttachAction(
+export async function searchCustomersForSalesIntakeAttachAction(
   query: string,
-): Promise<SearchCustomersForLeadAttachResult> {
+): Promise<SearchCustomersForSalesIntakeAttachResult> {
   const q = query.trim();
   if (!q) return { ok: true, matches: [] };
 
@@ -466,33 +466,33 @@ export async function searchCustomersForLeadAttachAction(
 }
 
 /**
- * Read-only loader for the Leads list popup Quote tab.
+ * Read-only loader for the Sales Intakes list popup Quote tab.
  *
- * Lazily produces a `QuoteWorkSurface` payload for the selected lead's active
- * linked quote *without* preloading readiness for every lead row. Containers
- * that already have the payload server-side (Workstation lead drawer, Lead
+ * Lazily produces a `QuoteWorkSurface` payload for the selected sales intake's active
+ * linked quote *without* preloading readiness for every sales intake row. Containers
+ * that already have the payload server-side (Workstation sales intake drawer, Sales Intake
  * full page) do not need this — they pass `activeQuoteWorkSurface` directly.
  *
  * Security:
  *   - org-scoped via `getRequestContextOrThrow`
  *   - never trusts a client-supplied quote id; the active quote is derived
- *     server-side from the lead's quotes using the same
- *     `getLeadCommercialProgress` logic the other containers use
+ *     server-side from the sales intake's quotes using the same
+ *     `getSalesIntakeCommercialProgress` logic the other containers use
  *   - read-only — no mutations, no `revalidatePath`, no `redirect`
  *   - `loadQuoteWorkSurface` re-validates the quote's organization scope
  *
- * Returns `{ ok: true, payload: null }` when the lead has no active quote
+ * Returns `{ ok: true, payload: null }` when the sales intake has no active quote
  * (e.g. only archived quotes or no quotes at all).
  */
-export async function loadLeadActiveQuoteWorkSurfaceAction(
-  leadId: string,
-): Promise<LoadLeadActiveQuoteWorkSurfaceResult> {
-  const id = leadId.trim();
-  if (!id) return { ok: false, error: "Missing lead id." };
+export async function loadSalesIntakeActiveQuoteWorkSurfaceAction(
+  salesIntakeId: string,
+): Promise<LoadSalesIntakeActiveQuoteWorkSurfaceResult> {
+  const id = salesIntakeId.trim();
+  if (!id) return { ok: false, error: "Missing sales intake id." };
 
   const ctx = await getRequestContextOrThrow();
 
-  const lead = await db.lead.findFirst({
+  const salesIntake = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: {
       status: true,
@@ -514,11 +514,11 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     },
   });
 
-  if (!lead) {
-    return { ok: false, error: "Lead not found in your organization." };
+  if (!salesIntake) {
+    return { ok: false, error: "Sales intake not found in your organization." };
   }
 
-  const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+  const progressQuoteInputs: SalesIntakeProgressQuoteInput[] = salesIntake.quotes.map((q) => ({
     id: q.id,
     title: q.title,
     status: q.status,
@@ -531,12 +531,12 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
         : null,
   }));
 
-  const progress = getLeadCommercialProgress({
-    lead: {
-      status: lead.status,
-      customerId: lead.customerId,
-      email: lead.email,
-      phone: lead.phone,
+  const progress = getSalesIntakeCommercialProgress({
+    salesIntake: {
+      status: salesIntake.status,
+      customerId: salesIntake.customerId,
+      email: salesIntake.email,
+      phone: salesIntake.phone,
     },
     quotes: progressQuoteInputs,
   });
@@ -552,14 +552,14 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
 /* ─── Service address ownership (Phase 2) ──────────────────────────────── */
 
 /**
- * Serializable shape returned by {@link loadLeadServiceAddressContextAction}.
+ * Serializable shape returned by {@link loadSalesIntakeServiceAddressContextAction}.
  *
  * `customer` carries the linked-customer service-locations panel data when a
  * customer is linked. `intake.defaultDisplayAddress` / `intake.structuredJson`
- * carry the lead's own intake address for the unlinked case (and as a hint
+ * carry the sales intake's own intake address for the unlinked case (and as a hint
  * even when linked, for empty-state CTAs).
  */
-export type LeadServiceLocationRowPayload = {
+export type SalesIntakeServiceLocationRowPayload = {
   id: string;
   formattedAddress: string;
   addressLine1: string;
@@ -573,15 +573,15 @@ export type LeadServiceLocationRowPayload = {
   longitude: number | null;
   source: CustomerServiceLocationSource;
   isPrimary: boolean;
-  createdFromLead: { id: string; title: string; source: LeadSource } | null;
+  createdFromSalesIntake: { id: string; title: string; source: SalesIntakeSource } | null;
 };
 
-export type LeadServiceAddressContext = {
-  /** When set, the Lead is linked to a customer; render the customer locations panel. */
+export type SalesIntakeServiceAddressContext = {
+  /** When set, the Sales Intake is linked to a customer; render the customer locations panel. */
   customer: {
     customerId: string;
     customerHref: string;
-    serviceLocations: LeadServiceLocationRowPayload[];
+    serviceLocations: SalesIntakeServiceLocationRowPayload[];
   } | null;
   /** Always present so the unlinked inline editor can prefill, and so
    * post-link callers can compare against the customer's existing rows. */
@@ -591,15 +591,15 @@ export type LeadServiceAddressContext = {
   };
 };
 
-export type LoadLeadServiceAddressContextResult =
-  | { ok: true; context: LeadServiceAddressContext }
+export type LoadSalesIntakeServiceAddressContextResult =
+  | { ok: true; context: SalesIntakeServiceAddressContext }
   | { ok: false; error: string };
 
-function intakePayloadFromLeadRow(row: {
+function intakePayloadFromSalesIntakeRow(row: {
   publicIntakeServiceLocation: Prisma.JsonValue | null;
   notes: string | null;
 }): { defaultDisplayAddress: string; structuredJson: string } {
-  const snapshot = intakeSnapshotForCustomerFromLead({
+  const snapshot = intakeSnapshotForCustomerFromSalesIntake({
     publicIntakeServiceLocation: row.publicIntakeServiceLocation,
     notes: row.notes,
   });
@@ -609,20 +609,20 @@ function intakePayloadFromLeadRow(row: {
 }
 
 /**
- * Read-only loader for the Lead workspace Service address block.
+ * Read-only loader for the Sales Intake workspace Service address block.
  *
  * Returns the linked customer's service-location rows when applicable plus
  * the intake snapshot for prefill — never trusts a client-supplied customer
  * id, never mutates. Org-scoped via `getRequestContextOrThrow`.
  */
-export async function loadLeadServiceAddressContextAction(
-  leadId: string,
-): Promise<LoadLeadServiceAddressContextResult> {
-  const id = leadId.trim();
-  if (!id) return { ok: false, error: "Missing lead id." };
+export async function loadSalesIntakeServiceAddressContextAction(
+  salesIntakeId: string,
+): Promise<LoadSalesIntakeServiceAddressContextResult> {
+  const id = salesIntakeId.trim();
+  if (!id) return { ok: false, error: "Missing sales intake id." };
 
   const ctx = await getRequestContextOrThrow();
-  const lead = await db.lead.findFirst({
+  const salesIntake = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: {
       customerId: true,
@@ -648,7 +648,7 @@ export async function loadLeadServiceAddressContextAction(
               longitude: true,
               source: true,
               isPrimary: true,
-              createdFromLead: { select: { id: true, title: true, source: true } },
+              createdFromSalesIntake: { select: { id: true, title: true, source: true } },
             },
           },
         },
@@ -656,25 +656,25 @@ export async function loadLeadServiceAddressContextAction(
     },
   });
 
-  if (!lead) return { ok: false, error: "Lead not found in your organization." };
+  if (!salesIntake) return { ok: false, error: "Sales intake not found in your organization." };
 
-  const intake = intakePayloadFromLeadRow({
-    publicIntakeServiceLocation: lead.publicIntakeServiceLocation,
-    notes: lead.notes,
+  const intake = intakePayloadFromSalesIntakeRow({
+    publicIntakeServiceLocation: salesIntake.publicIntakeServiceLocation,
+    notes: salesIntake.notes,
   });
 
   if (
-    lead.customerId &&
-    lead.customer &&
-    lead.customer.organizationId === ctx.organizationId
+    salesIntake.customerId &&
+    salesIntake.customer &&
+    salesIntake.customer.organizationId === ctx.organizationId
   ) {
     return {
       ok: true,
       context: {
         customer: {
-          customerId: lead.customer.id,
-          customerHref: `/customers/${lead.customer.id}`,
-          serviceLocations: lead.customer.serviceLocations.map((loc) => ({
+          customerId: salesIntake.customer.id,
+          customerHref: `/customers/${salesIntake.customer.id}`,
+          serviceLocations: salesIntake.customer.serviceLocations.map((loc) => ({
             id: loc.id,
             formattedAddress: loc.formattedAddress,
             addressLine1: loc.addressLine1,
@@ -688,11 +688,11 @@ export async function loadLeadServiceAddressContextAction(
             longitude: loc.longitude,
             source: loc.source,
             isPrimary: loc.isPrimary,
-            createdFromLead: loc.createdFromLead
+            createdFromSalesIntake: loc.createdFromSalesIntake
               ? {
-                  id: loc.createdFromLead.id,
-                  title: loc.createdFromLead.title,
-                  source: loc.createdFromLead.source,
+                  id: loc.createdFromSalesIntake.id,
+                  title: loc.createdFromSalesIntake.title,
+                  source: loc.createdFromSalesIntake.source,
                 }
               : null,
           })),
@@ -711,42 +711,42 @@ function trimOrEmpty(value: FormDataEntryValue | null): string {
 }
 
 /**
- * Updates `Lead.publicIntakeServiceLocation` for an unlinked lead in-place.
- * Used by the Lead workspace Service address block when no customer is linked
- * yet — same parsing path as the staff lead form (`updateLeadAction`) and the
+ * Updates `SalesIntake.publicIntakeServiceLocation` for an unlinked sales intake in-place.
+ * Used by the Sales Intake workspace Service address block when no customer is linked
+ * yet — same parsing path as the staff sales intake form (`updateSalesIntakeAction`) and the
  * public intake form, so the snapshot is identical regardless of entry point.
  *
  * Returns `{ success: true }` on success instead of redirecting.
- * `leadId` must be supplied via `.bind(null, lead.id)` or as the first arg
+ * `salesIntakeId` must be supplied via `.bind(null, salesIntake.id)` or as the first arg
  * from a server-trusted surface — never trust a client-supplied id.
  *
  * If the visible address field is cleared (empty string), the snapshot is
  * cleared (`Prisma.JsonNull`). Empty + already-empty is rejected so the user
  * gets a clear message instead of a no-op success.
  */
-export async function updateLeadServiceAddressWorkspaceAction(
-  leadId: string,
+export async function updateSalesIntakeServiceAddressWorkspaceAction(
+  salesIntakeId: string,
   _prevState: WorkspaceFormState,
   formData: FormData,
 ): Promise<WorkspaceFormState> {
   void _prevState;
-  const id = leadId.trim();
-  if (!id) return { error: "Missing lead record id." };
+  const id = salesIntakeId.trim();
+  if (!id) return { error: "Missing sales intake record id." };
 
   const ctx = await getRequestContextOrThrow();
-  const existing = await db.lead.findFirst({
+  const existing = await db.salesIntake.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, publicIntakeServiceLocation: true },
   });
-  if (!existing) return { error: "Lead not found in your organization." };
+  if (!existing) return { error: "Sales intake not found in your organization." };
 
   const rawLocationJson = trimOrEmpty(formData.get("publicIntakeServiceLocation"));
   const { snapshot, serviceAddressText } =
     resolveServiceLocationSnapshotFromFormData(formData);
 
-  if (serviceAddressText.length > LEAD_FIELD_LIMITS.publicIntakeServiceAddress) {
+  if (serviceAddressText.length > SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress) {
     return {
-      error: `Service address is too long (max ${LEAD_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
+      error: `Service address is too long (max ${SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
     };
   }
 
@@ -778,38 +778,38 @@ export async function updateLeadServiceAddressWorkspaceAction(
     };
   }
 
-  const result = await db.lead.updateMany({
+  const result = await db.salesIntake.updateMany({
     where: { id, organizationId: ctx.organizationId },
     data: { publicIntakeServiceLocation },
   });
 
   if (result.count === 0) {
-    return { error: "Lead not found or could not be updated." };
+    return { error: "Sales intake not found or could not be updated." };
   }
 
-  /* If the lead is already linked to a customer, propagate the new intake
+  /* If the sales intake is already linked to a customer, propagate the new intake
    * snapshot to that customer's service locations using the same dedupe path
-   * the link / create-customer flows use. Keeps lead-level edits in sync
+   * the link / create-customer flows use. Keeps sales intake-level edits in sync
    * with the customer profile without forcing the user to re-link. */
   if (savedSnapshot) {
-    const linked = await db.lead.findFirst({
+    const linked = await db.salesIntake.findFirst({
       where: { id, organizationId: ctx.organizationId },
       select: { customerId: true, source: true },
     });
     if (linked?.customerId) {
       try {
         await db.$transaction(async (tx) => {
-          await attachIntakeServiceLocationToCustomer(tx, {
+          await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
             organizationId: ctx.organizationId,
             customerId: linked.customerId as string,
-            leadId: id,
-            leadSource: linked.source,
+            salesIntakeId: id,
+            salesIntakeSource: linked.source,
             snapshot: savedSnapshot,
           });
         });
       } catch {
-        /* Soft-fail propagation — lead update already succeeded; the user can
-         * still see the new intake address on the lead, and the customer
+        /* Soft-fail propagation — sales intake update already succeeded; the user can
+         * still see the new intake address on the sales intake, and the customer
          * sync will reconcile on next link / refresh. */
       }
     }

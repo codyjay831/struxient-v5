@@ -34,7 +34,7 @@ export default async function JobsPage() {
         quoteId: true,
         quote: { select: { id: true, title: true, organizationId: true } },
         customer: { select: { id: true, displayName: true, organizationId: true } },
-        lead: { select: { id: true, title: true, organizationId: true } },
+        salesIntake: { select: { id: true, title: true, organizationId: true } },
         _count: { select: { tasks: true, stages: true } },
       },
     }),
@@ -91,22 +91,22 @@ export default async function JobsPage() {
               job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
             const safeCustomer =
               job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
-            const safeLead =
-              job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
+            const safeSalesIntake =
+              job.salesIntake && job.salesIntake.organizationId === ctx.organizationId ? job.salesIntake : null;
 
             
-            const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
+            const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
             const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
 
             const contextBits: string[] = [];
             if (safeCustomer) {
               contextBits.push(`Customer: ${safeCustomer.displayName}`);
             }
-            if (safeLead) {
-              contextBits.push(`Lead: ${safeLead.title}`);
+            if (safeSalesIntake) {
+              contextBits.push(`Sales Intake: ${safeSalesIntake.title}`);
             }
             if (contextBits.length === 0) {
-              contextBits.push("No customer or lead linked");
+              contextBits.push("No customer or sales intake linked");
             }
             return (
               <li key={job.id} className="px-4 py-4">

@@ -16,7 +16,7 @@ const listLinkClass =
 
 /**
  * Full Quote page. The page is now a thin host: load via `loadQuoteWorkSurface`
- * (the same loader Workstation, the Lead Quote tab, and the Quotes popup use)
+ * (the same loader Workstation, the Sales Intake Quote tab, and the Quotes popup use)
  * and hand the payload to `QuoteWorkspaceShell`, which renders
  * `<QuoteWorkSurface mode="full" />` as the entire workspace body. There is no
  * separate full-page client to maintain.

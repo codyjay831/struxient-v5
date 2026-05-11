@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 const triggerClass =
   "inline-flex items-center rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-[0.65rem] font-medium text-foreground-subtle transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export function LeadsScaffoldingDialog() {
+export function SalesIntakeScaffoldingDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   function open() {
@@ -24,7 +24,7 @@ export function LeadsScaffoldingDialog() {
       </button>
       <dialog
         ref={dialogRef}
-        aria-labelledby="leads-scaffolding-title"
+        aria-labelledby="sales-intake-scaffolding-title"
         className="z-50 w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-lg outline-none ring-offset-background [&::backdrop]:bg-foreground/25"
         onClick={(e) => {
           if (e.target === e.currentTarget) close();
@@ -33,7 +33,7 @@ export function LeadsScaffoldingDialog() {
         <div className="flex max-h-[min(32rem,90vh)] flex-col">
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <h2
-              id="leads-scaffolding-title"
+              id="sales-intake-scaffolding-title"
               className="text-sm font-semibold tracking-tight text-foreground"
             >
               Scaffolding needed
@@ -49,7 +49,7 @@ export function LeadsScaffoldingDialog() {
           </div>
           <div className="overflow-y-auto px-5 py-4">
             <p className="text-sm leading-relaxed text-foreground-muted">
-              Development-only notes for the lead intake area. These are not
+              Development-only notes for the sales intake area. These are not
               customer-facing UI.
             </p>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-foreground-muted">
@@ -58,12 +58,12 @@ export function LeadsScaffoldingDialog() {
                 context is connected.
               </li>
               <li>
-                Public Request Link (`/request/[companySlug]`) creates leads with source{" "}
+                Public Request Link (`/request/[companySlug]`) creates sales intakes with source{" "}
                 <span className="font-mono text-[0.7rem]">PUBLIC_REQUEST_LINK</span>. Other
                 channels (email, phone, SMS, imports) are still planned.
               </li>
               <li>
-                Channel integrations are not connected; the Lead Sources modal&apos;s
+                Channel integrations are not connected; the Sales Intake Sources modal&apos;s
                 &quot;CSV import (soon)&quot; and future integrations intentionally do nothing in this
                 build.
               </li>

@@ -1,23 +1,23 @@
 "use client";
 
 /**
- * LeadServiceAddressBlock — Lead workspace Customer Info / Contact-tab block
- * that owns the Service address UX inside the Lead workspace.
+ * SalesIntakeServiceAddressBlock — Sales Intake workspace Customer Info / Contact-tab block
+ * that owns the Service address UX inside the Sales Intake workspace.
  *
- * The component picks the correct UX for the lead's current state:
+ * The component picks the correct UX for the sales intake's current state:
  *
  *   - Linked customer  → reuses CustomerServiceLocationsPanel (writes go to
  *                         CustomerServiceLocation via the existing org-scoped
  *                         service-location actions; dedupe + primary toggling
  *                         are preserved).
- *   - Unlinked lead    → small inline editor that posts to
- *                         updateLeadServiceAddressWorkspaceAction (writes go
- *                         to Lead.publicIntakeServiceLocation using the same
- *                         parsing path the staff lead form uses).
+ *   - Unlinked sales intake → small inline editor that posts to
+ *                         updateSalesIntakeServiceAddressWorkspaceAction (writes go
+ *                         to SalesIntake.publicIntakeServiceLocation using the same
+ *                         parsing path the staff sales intake form uses).
  *
  * The block is fully optional — if no `context` and no `loadContext` is
  * provided, it shows a plain read-only line + a footer link to the full
- * lead record so existing compact callers don't break.
+ * sales intake record so existing compact callers don't break.
  *
  * Copy follows the locked product copy ("Service address", "Service address
  * needed", "Add the project address before scheduling or creating a job.",
@@ -35,10 +35,10 @@ import {
 } from "@/components/customers/customer-service-locations-panel";
 import { ServiceAddressCaptureField } from "@/components/forms/service-address-capture-field";
 import {
-  updateLeadServiceAddressWorkspaceAction,
-  type LeadServiceAddressContext,
-  type LeadServiceLocationRowPayload,
-  type LoadLeadServiceAddressContextResult,
+  updateSalesIntakeServiceAddressWorkspaceAction,
+  type SalesIntakeServiceAddressContext,
+  type SalesIntakeServiceLocationRowPayload,
+  type LoadSalesIntakeServiceAddressContextResult,
   type WorkspaceFormState,
 } from "@/app/(workspace)/sales/sales-workspace-actions";
 
@@ -60,21 +60,21 @@ const mutedFooterLinkClass =
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 
-export type { LeadServiceAddressContext, LeadServiceLocationRowPayload };
+export type { SalesIntakeServiceAddressContext, SalesIntakeServiceLocationRowPayload };
 
-export type LeadServiceAddressBlockHandle = {
+export type SalesIntakeServiceAddressBlockHandle = {
   /** Scrolls the block into view and emphasizes it (used by Quote tab nudge). */
   focus: () => void;
 };
 
-export type LeadServiceAddressBlockProps = {
-  leadId: string;
+export type SalesIntakeServiceAddressBlockProps = {
+  salesIntakeId: string;
   /** /sales/[id]/edit — used by the read-only footer link. */
-  leadEditHref: string;
-  /** Pre-loaded context (Lead full page + Workstation drawer pass this). */
-  context?: LeadServiceAddressContext;
-  /** Lazy loader (Leads list popup passes this — leaves `context` undefined). */
-  loadContext?: () => Promise<LoadLeadServiceAddressContextResult>;
+  salesIntakeEditHref: string;
+  /** Pre-loaded context (Sales Intake full page + Workstation drawer pass this). */
+  context?: SalesIntakeServiceAddressContext;
+  /** Lazy loader (Sales Intakes list popup passes this — leaves `context` undefined). */
+  loadContext?: () => Promise<LoadSalesIntakeServiceAddressContextResult>;
   /** Header-line read-only fallback when context isn't available yet. */
   fallbackAddressLine?: string | null;
   /** Whether a linked customer exists (drives copy when context is loading). */
@@ -83,17 +83,17 @@ export type LeadServiceAddressBlockProps = {
   onMutated?: () => void;
 };
 
-/* ─── Inline editor for unlinked leads (writes to Lead.publicIntakeServiceLocation) ── */
+/* ─── Inline editor for unlinked sales intakes (writes to SalesIntake.publicIntakeServiceLocation) ── */
 
-function LeadIntakeServiceAddressInlineEditor({
-  leadId,
+function SalesIntakeServiceAddressInlineEditor({
+  salesIntakeId,
   defaultDisplayAddress,
   initialStructuredJson,
   onSuccess,
   onCancel,
   isInitialEntry,
 }: {
-  leadId: string;
+  salesIntakeId: string;
   defaultDisplayAddress: string;
   initialStructuredJson: string;
   onSuccess: () => void;
@@ -101,10 +101,10 @@ function LeadIntakeServiceAddressInlineEditor({
   isInitialEntry: boolean;
 }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-  /* Stable per-lead key — the whole editor unmounts when its parent toggles
+  /* Stable per-sales intake key — the whole editor unmounts when its parent toggles
    * `isEditingIntake`, so we don't need a per-mount nonce here. */
-  const formKey = `lead-svc-${leadId}`;
-  const boundAction = updateLeadServiceAddressWorkspaceAction.bind(null, leadId);
+  const formKey = `sales-intake-svc-${salesIntakeId}`;
+  const boundAction = updateSalesIntakeServiceAddressWorkspaceAction.bind(null, salesIntakeId);
   const [state, dispatch, isPending] = useActionState<WorkspaceFormState, FormData>(
     boundAction,
     {},
@@ -189,13 +189,13 @@ function MissingAddressEmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-export const LeadServiceAddressBlock = forwardRef<
-  LeadServiceAddressBlockHandle,
-  LeadServiceAddressBlockProps
->(function LeadServiceAddressBlock(
+export const SalesIntakeServiceAddressBlock = forwardRef<
+  SalesIntakeServiceAddressBlockHandle,
+  SalesIntakeServiceAddressBlockProps
+>(function SalesIntakeServiceAddressBlock(
   {
-    leadId,
-    leadEditHref,
+    salesIntakeId,
+    salesIntakeEditHref,
     context: passedContext,
     loadContext,
     fallbackAddressLine,
@@ -208,16 +208,16 @@ export const LeadServiceAddressBlock = forwardRef<
   const containerRef = useRef<HTMLDivElement>(null);
   const headingId = useId();
 
-  /* Lazy-load state for popup container (Leads list dialog) — preloaded
-   * containers (Lead full page, Workstation drawer) pass `context` directly
+  /* Lazy-load state for popup container (Sales Intakes list dialog) — preloaded
+   * containers (Sales Intake full page, Workstation drawer) pass `context` directly
    * and skip the loader entirely. */
-  const [lazyContext, setLazyContext] = useState<LeadServiceAddressContext | null>(null);
+  const [lazyContext, setLazyContext] = useState<SalesIntakeServiceAddressContext | null>(null);
   const [lazyError, setLazyError] = useState<string | null>(null);
   const [isLazyLoading, setIsLazyLoading] = useState(false);
   const loadIdRef = useRef(0);
   const [emphasized, setEmphasized] = useState(false);
 
-  const effectiveContext: LeadServiceAddressContext | null =
+  const effectiveContext: SalesIntakeServiceAddressContext | null =
     passedContext ?? lazyContext;
 
   useImperativeHandle(
@@ -253,7 +253,7 @@ export const LeadServiceAddressBlock = forwardRef<
         const message =
           err instanceof Error
             ? err.message
-            : "Couldn't load the service address right now. Open the full lead record to manage it.";
+            : "Couldn't load the service address right now. Open the full sales intake record to manage it.";
         setLazyError(message);
       })
       .finally(() => {
@@ -280,7 +280,7 @@ export const LeadServiceAddressBlock = forwardRef<
     };
   }, [passedContext, loadContext, lazyContext, isLazyLoading, runLoad]);
 
-  /* Local state for the unlinked-lead inline editor. */
+  /* Local state for the unlinked-sales intake inline editor. */
   const [isEditingIntake, setIsEditingIntake] = useState(false);
 
   function handleMutated() {
@@ -312,8 +312,8 @@ export const LeadServiceAddressBlock = forwardRef<
           </p>
           <p className="text-xs text-foreground-muted">
             {lazyError}{" "}
-            <Link href={leadEditHref} className="underline underline-offset-2">
-              Open the full lead record
+            <Link href={salesIntakeEditHref} className="underline underline-offset-2">
+              Open the full sales intake record
             </Link>{" "}
             to manage the address.
           </p>
@@ -333,7 +333,7 @@ export const LeadServiceAddressBlock = forwardRef<
       );
     }
     /* No loader provided and no preloaded context: show a read-only line
-     * (when known) plus a link out to the full lead record. */
+     * (when known) plus a link out to the full sales intake record. */
     return (
       <div ref={containerRef} className={containerClass} aria-labelledby={headingId}>
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -351,8 +351,8 @@ export const LeadServiceAddressBlock = forwardRef<
           </p>
         )}
         <div className="mt-3">
-          <Link href={leadEditHref} className={mutedFooterLinkClass}>
-            Manage in the full lead record
+          <Link href={salesIntakeEditHref} className={mutedFooterLinkClass}>
+            Manage in the full sales intake record
             <ArrowUpRight className="size-3" strokeWidth={1.5} />
           </Link>
         </div>
@@ -378,7 +378,7 @@ export const LeadServiceAddressBlock = forwardRef<
         longitude: loc.longitude,
         source: loc.source,
         isPrimary: loc.isPrimary,
-        createdFromLead: loc.createdFromLead,
+        createdFromSalesIntake: loc.createdFromSalesIntake,
       }));
 
     return (
@@ -397,7 +397,7 @@ export const LeadServiceAddressBlock = forwardRef<
     );
   }
 
-  /* ── Unlinked lead: inline editor against Lead.publicIntakeServiceLocation ── */
+  /* ── Unlinked sales intake: inline editor against SalesIntake.publicIntakeServiceLocation ── */
   const intakeDisplay = effectiveContext.intake.defaultDisplayAddress.trim();
   const hasIntake = intakeDisplay.length > 0;
 
@@ -410,8 +410,8 @@ export const LeadServiceAddressBlock = forwardRef<
       </div>
 
       {isEditingIntake ? (
-        <LeadIntakeServiceAddressInlineEditor
-          leadId={leadId}
+        <SalesIntakeServiceAddressInlineEditor
+          salesIntakeId={salesIntakeId}
           defaultDisplayAddress={effectiveContext.intake.defaultDisplayAddress}
           initialStructuredJson={effectiveContext.intake.structuredJson}
           isInitialEntry={!hasIntake}

@@ -6,7 +6,7 @@ import {
   deleteQuoteLineItemAction,
   updateDraftQuoteDetailsAction,
   updateQuoteLineItemAction,
-  copyLeadIntakeToQuoteNotesAction,
+  copySalesIntakeToQuoteNotesAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
@@ -66,13 +66,13 @@ function QuoteDraftDetailsForm({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasLeadNotes,
+  hasSalesIntakeNotes,
 }: {
   quoteId: string;
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasLeadNotes: boolean;
+  hasSalesIntakeNotes: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateDraftQuoteDetailsAction.bind(null, quoteId),
@@ -80,7 +80,7 @@ function QuoteDraftDetailsForm({
   );
 
   const [copyState, copyAction, isCopyPending] = useActionState(
-    copyLeadIntakeToQuoteNotesAction.bind(null, quoteId),
+    copySalesIntakeToQuoteNotesAction.bind(null, quoteId),
     initialActionState,
   );
 
@@ -110,13 +110,13 @@ function QuoteDraftDetailsForm({
           <label className="block">
             <div className="flex items-center justify-between">
               <span className={fieldLabelClass}>Internal quote notes (staff-only)</span>
-              {hasLeadNotes && (
+              {hasSalesIntakeNotes && (
                 <div className="flex items-center gap-2">
                   <button
                     formAction={copyAction}
                     disabled={isCopyPending}
                     className="text-[10px] font-medium text-foreground-subtle underline decoration-border underline-offset-2 hover:decoration-foreground disabled:opacity-50"
-                    title="Append lead intake notes to this field. Does not overwrite existing text."
+                    title="Append sales intake notes to this field. Does not overwrite existing text."
                   >
                     {isCopyPending ? "Copying..." : "Copy intake into quote notes"}
                   </button>
@@ -365,7 +365,7 @@ export type QuoteDraftWorkspaceControlsProps = {
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasLeadNotes: boolean;
+  hasSalesIntakeNotes: boolean;
   subtotalCents: number;
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
@@ -383,7 +383,7 @@ export function QuoteDraftWorkspaceControls({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasLeadNotes,
+  hasSalesIntakeNotes,
   subtotalCents,
   totalCents,
   lineItems,
@@ -404,7 +404,7 @@ export function QuoteDraftWorkspaceControls({
         initialTitle={initialTitle}
         initialInternalNotes={initialInternalNotes}
         initialCustomerDocumentTitle={initialCustomerDocumentTitle}
-        hasLeadNotes={hasLeadNotes}
+        hasSalesIntakeNotes={hasSalesIntakeNotes}
       />
 
       <WorkspacePanel id={id} className="border-border-strong shadow-md ring-1 ring-ring/30">

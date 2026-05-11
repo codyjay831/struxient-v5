@@ -5,7 +5,7 @@
  * pass cleanly through:
  *   - server-component → client-component (RSC payload)
  *   - server action return value (e.g. `loadQuoteWorkSurfaceAction` for the
- *     Quotes list popup, `loadLeadActiveQuoteWorkSurfaceAction` for the Leads
+ *     Quotes list popup, `loadSalesIntakeActiveQuoteWorkSurfaceAction` for the Sales Intakes
  *     popup Quote tab)
  *
  * All `Date` values are pre-converted to ISO strings + display labels so the
@@ -32,8 +32,8 @@ export type QuoteWorkspaceCheckpointPayload = {
   source?: "STAFF" | "CUSTOMER_PORTAL";
 };
 
-/** Lead intake context shown inside the Customer & Lead tab. */
-export type QuoteWorkspaceLeadIntake = {
+/** Sales intake context shown inside the Customer & Sales Intake tab. */
+export type QuoteWorkspaceSalesIntake = {
   id: string;
   title: string;
   href: string;
@@ -46,7 +46,7 @@ export type QuoteWorkspaceLeadIntake = {
 
 /**
  * Everything `QuoteWorkSurface` needs to render its workspace tabs (Overview,
- * Scope, Customer & Lead, Send & Accept, Record). Identity + totals + readiness
+ * Scope, Customer & Sales Intake, Send & Accept, Record). Identity + totals + readiness
  * already live on `QuoteWorkSurfaceData` / `QuoteReadiness` and are passed
  * separately.
  */
@@ -60,7 +60,7 @@ export type QuoteWorkspaceTabData = {
   /* Scope tab */
   customerDocumentTitle: string | null;
   internalNotes: string | null;
-  hasLeadNotes: boolean;
+  hasSalesIntakeNotes: boolean;
   subtotalCents: number;
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
@@ -68,10 +68,10 @@ export type QuoteWorkspaceTabData = {
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
 
-  /* Customer & Lead tab */
+  /* Customer & Sales Intake tab */
   customerName: string | null;
   customerHref: string | null;
-  leadIntake: QuoteWorkspaceLeadIntake | null;
+  salesIntake: QuoteWorkspaceSalesIntake | null;
 
   /* Send & Accept tab */
   sendCheckpoints: QuoteWorkspaceCheckpointPayload[];

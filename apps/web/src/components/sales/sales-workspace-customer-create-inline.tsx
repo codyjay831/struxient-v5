@@ -1,25 +1,25 @@
 "use client";
 
-import { LeadSource } from "@prisma/client";
+import { SalesIntakeSource } from "@prisma/client";
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
 import { ArrowRight, UserRound } from "lucide-react";
-import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import {
-  createCustomerFromLeadWorkspaceAction,
+  createCustomerFromSalesIntakeWorkspaceAction,
   type WorkspaceFormState,
 } from "@/app/(workspace)/sales/sales-workspace-actions";
 
-export type LeadWorkspaceCustomerCreateLeadInput = {
+export type SalesIntakeWorkspaceCustomerCreateSalesIntakeInput = {
   id: string;
   title: string;
   contactName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
-  source?: LeadSource;
-  /** Same resolved line as `LeadWorkSurfaceData.jobsiteAddressLine` / quote & job surfaces. */
+  source?: SalesIntakeSource;
+  /** Same resolved line as `SalesIntakeWorkSurfaceData.jobsiteAddressLine` / quote & job surfaces. */
   jobsiteAddressLine?: string | null;
 };
 
@@ -30,21 +30,21 @@ const secondaryBtnClass =
   "rounded-lg border border-border bg-surface text-foreground-muted text-xs px-3 py-2 hover:text-foreground hover:border-border-strong transition-colors";
 
 /**
- * In-place create-customer surface used by Leads workspace and Workstation.
+ * In-place create-customer surface used by Sales Intakes workspace and Workstation.
  * Uses workspace-safe server action + caller `onSuccess` (typically `router.refresh()`).
  */
-export function LeadWorkspaceCustomerCreateInline({
-  lead,
-  editLeadHref,
+export function SalesIntakeWorkspaceCustomerCreateInline({
+  salesIntake,
+  editSalesIntakeHref,
   onSuccess,
 }: {
-  lead: LeadWorkspaceCustomerCreateLeadInput;
-  editLeadHref: string;
+  salesIntake: SalesIntakeWorkspaceCustomerCreateSalesIntakeInput;
+  editSalesIntakeHref: string;
   onSuccess: () => void;
 }) {
-  const jobsiteLine = lead.jobsiteAddressLine?.trim() ?? "";
+  const jobsiteLine = salesIntake.jobsiteAddressLine?.trim() ?? "";
   const hasJobsite = jobsiteLine.length > 0;
-  const boundAction = createCustomerFromLeadWorkspaceAction.bind(null, lead.id);
+  const boundAction = createCustomerFromSalesIntakeWorkspaceAction.bind(null, salesIntake.id);
   const [state, dispatch, isPending] = useActionState<WorkspaceFormState, FormData>(
     boundAction,
     {},
@@ -54,13 +54,13 @@ export function LeadWorkspaceCustomerCreateInline({
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
 
-  const prepared = prepareCustomerFromLead({
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-    phone: lead.phone,
-    notes: lead.notes,
-    source: lead.source ?? LeadSource.MANUAL,
+  const prepared = prepareCustomerFromSalesIntake({
+    title: salesIntake.title,
+    contactName: salesIntake.contactName,
+    email: salesIntake.email,
+    phone: salesIntake.phone,
+    notes: salesIntake.notes,
+    source: salesIntake.source ?? SalesIntakeSource.MANUAL,
   });
 
   const phonePreview =
@@ -83,10 +83,10 @@ export function LeadWorkspaceCustomerCreateInline({
         <div className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-danger">
           {prepared.error}{" "}
           <Link
-            href={editLeadHref}
+            href={editSalesIntakeHref}
             className="font-medium text-foreground underline underline-offset-2 hover:opacity-80"
           >
-            Edit lead
+            Edit sales intake
           </Link>
         </div>
       ) : (
@@ -132,10 +132,10 @@ export function LeadWorkspaceCustomerCreateInline({
                     No service address found for this request. Add one before scheduling or
                     creating a job.{" "}
                     <Link
-                      href={editLeadHref}
+                      href={editSalesIntakeHref}
                       className="font-medium text-foreground underline underline-offset-2 hover:opacity-80"
                     >
-                      Edit lead
+                      Edit sales intake
                     </Link>
                   </p>
                 )}
@@ -165,7 +165,7 @@ export function LeadWorkspaceCustomerCreateInline({
           {isPending ? "Creating…" : "Confirm & Create"}
           {!isPending && <ArrowRight className="size-3.5 opacity-70" />}
         </button>
-        <Link href={editLeadHref} className={secondaryBtnClass}>
+        <Link href={editSalesIntakeHref} className={secondaryBtnClass}>
           Edit details
         </Link>
       </form>

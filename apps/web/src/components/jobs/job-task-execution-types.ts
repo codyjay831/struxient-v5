@@ -34,12 +34,12 @@ export type JobTaskExecutionPayload = {
   jobStageId: string;
   stageTitle: string;
   jobContextLabel: string;
-  /** Jobsite / project address for field context (customer profile or lead intake). */
+  /** Jobsite / project address for field context (customer profile or sales intake). */
   jobsiteAddressLine: string | null;
   /** When set, the crew can add a saved service address from this task panel. */
   customerId: string | null;
   /** Staff path to add a structured address on the linked request when there is no customer yet. */
-  leadEditHref: string | null;
+  salesIntakeEditHref: string | null;
   jobHref: string;
   task: JobTaskExecutionTask;
 };
