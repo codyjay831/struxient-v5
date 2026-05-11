@@ -102,7 +102,7 @@ export default function TasksDeferredPage() {
         <Link href="/jobs" className={handoffMutedLinkClass}>
           Jobs
         </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
+        <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
           Quotes
         </Link>
       </HandoffPanel>

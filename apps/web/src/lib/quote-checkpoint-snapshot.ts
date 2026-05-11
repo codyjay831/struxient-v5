@@ -11,6 +11,7 @@ export const QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 1;
 /** Prisma `select` for quotes when building SEND checkpoint payloads — mirrors preview route (no internalNotes). */
 export const quoteSelectForCustomerProposalCheckpoint = {
   id: true,
+  organizationId: true,
   title: true,
   customerDocumentTitle: true,
   subtotalCents: true,

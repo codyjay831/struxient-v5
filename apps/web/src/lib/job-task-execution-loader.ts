@@ -1,6 +1,7 @@
 import { JobIssueStatus, JobPaymentRequirementStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
+import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 
 /**
  * Loads a single job task with the same facts used for readiness on the job page,
@@ -26,8 +27,26 @@ export async function loadJobTaskExecutionPayload(
         select: {
           id: true,
           title: true,
-          customer: { select: { displayName: true, organizationId: true } },
-          lead: { select: { title: true, organizationId: true } },
+          customer: {
+            select: {
+              id: true,
+              displayName: true,
+              organizationId: true,
+              serviceLocations: {
+                orderBy: { isPrimary: "desc" },
+                select: { formattedAddress: true, addressLine1: true, isPrimary: true },
+              },
+            },
+          },
+          lead: {
+            select: {
+              id: true,
+              title: true,
+              organizationId: true,
+              notes: true,
+              publicIntakeServiceLocation: true,
+            },
+          },
           paymentRequirements: {
             orderBy: [{ createdAt: "desc" }],
             select: {
@@ -62,11 +81,23 @@ export async function loadJobTaskExecutionPayload(
   const safeCustomer =
     job.customer && job.customer.organizationId === organizationId ? job.customer : null;
   const safeLead = job.lead && job.lead.organizationId === organizationId ? job.lead : null;
+  const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    customerLocations: safeCustomer?.serviceLocations ?? [],
+    leadRow: safeLead
+      ? {
+          publicIntakeServiceLocation: safeLead.publicIntakeServiceLocation,
+          notes: safeLead.notes,
+        }
+      : null,
+  });
   const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
   const jobContextLabel = secondaryIdentity
     ? `${primaryIdentity} · ${secondaryIdentity}`
     : primaryIdentity;
+
+  const customerId = safeCustomer?.id ?? null;
+  const leadEditHref = safeLead ? `/sales/${safeLead.id}/edit` : null;
 
   const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
     if (p.status !== JobPaymentRequirementStatus.DUE) return false;
@@ -82,6 +113,9 @@ export async function loadJobTaskExecutionPayload(
     jobStageId: task.jobStage.id,
     stageTitle: task.jobStage.title,
     jobContextLabel,
+    jobsiteAddressLine,
+    customerId,
+    leadEditHref,
     jobHref: `/jobs/${job.id}`,
     task: {
       id: task.id,

@@ -4,6 +4,8 @@ import { getPublicRequestIntakeBundleBySlug } from "@/lib/db";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { toPublicIntakeFormViewModel } from "@/lib/public-request-settings-effective";
 import { PublicRequestForm } from "./public-request-form";
+import { loadLeadCustomFieldDefs } from "@/lib/lead-custom-field-loader";
+import { loadAvailableLineItemTemplates } from "@/lib/line-item-template-loader";
 
 type PageProps = { params: Promise<{ companySlug: string }> };
 
@@ -40,6 +42,10 @@ export default async function PublicRequestPage(props: PageProps) {
   }
 
   const view = toPublicIntakeFormViewModel(bundle.intake);
+  const [customFieldDefs, availableTemplates] = await Promise.all([
+    loadLeadCustomFieldDefs(bundle.organizationId, { publicOnly: true }),
+    loadAvailableLineItemTemplates(bundle.organizationId),
+  ]);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background text-foreground">
@@ -80,6 +86,8 @@ export default async function PublicRequestPage(props: PageProps) {
             companySlug={bundle.companySlug}
             organizationDisplayName={bundle.organizationDisplayName}
             intake={view}
+            customFieldDefs={customFieldDefs}
+            availableTemplates={availableTemplates}
             googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
           />
         </div>

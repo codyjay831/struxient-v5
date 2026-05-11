@@ -31,6 +31,9 @@ import {
   leadStatusBadgeTone,
 } from "@/lib/lead-display";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
+import { jobsiteLineFromLeadIntake } from "@/lib/jobsite-address";
+import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
+import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 import { 
   WorkstationFocusCard, 
   WorkstationQueueItem, 
@@ -175,7 +178,7 @@ export default async function WorkstationTodayLensPage({
           title="Authoritative record routes"
           description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work."
         >
-          <Link href="/quotes" className={handoffMutedLinkClass}>
+          <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
             Quotes
           </Link>
           <Link href="/customers" className={handoffMutedLinkClass}>
@@ -255,11 +258,21 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
       source: true,
       customerId: true,
       createdAt: true,
+      publicIntakeServiceLocation: true,
       customer: { select: { id: true, displayName: true } },
+      visitRequests: {
+        where: { status: "PENDING" },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
   if (!lead) return null;
+
+  const jobsiteAddressLine = jobsiteLineFromLeadIntake({
+    publicIntakeServiceLocation: lead.publicIntakeServiceLocation,
+    notes: lead.notes,
+  });
 
   const linkedQuotes = await db.quote.findMany({
     where: { leadId: lead.id, organizationId: ctx.organizationId },
@@ -315,7 +328,7 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
       statusTone: quoteStatusBadgeTone(q.status),
       totalCents: q.totalCents,
       lineItemCount: q._count.lineItems,
-      href: `/quotes/${q.id}`,
+      href: `/sales?tab=proposals/${q.id}`,
     }));
 
   /* Embed QuoteWorkSurface(standard) inside the Lead Quote tab when an active
@@ -325,6 +338,76 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
   const activeQuoteWorkSurface = activeQuoteId
     ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
     : null;
+
+  /* Pre-load Service address context for the Lead workspace Customer Info
+   * block (same shape the Lead full page passes). */
+  const intakeSnapshot = intakeSnapshotForCustomerFromLead({
+    publicIntakeServiceLocation: lead.publicIntakeServiceLocation,
+    notes: lead.notes,
+  });
+  const intakeForBlock = intakeSnapshot
+    ? {
+        defaultDisplayAddress:
+          intakeSnapshot.formattedAddress.trim() ||
+          intakeSnapshot.addressLine1.trim(),
+        structuredJson: JSON.stringify(intakeSnapshot),
+      }
+    : { defaultDisplayAddress: "", structuredJson: "" };
+
+  let serviceAddressContext: LeadServiceAddressContext;
+  if (lead.customerId) {
+    const customerLocations = await db.customerServiceLocation.findMany({
+      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        formattedAddress: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        postalCode: true,
+        country: true,
+        googlePlaceId: true,
+        latitude: true,
+        longitude: true,
+        source: true,
+        isPrimary: true,
+        createdFromLead: { select: { id: true, title: true, source: true } },
+      },
+    });
+    serviceAddressContext = {
+      customer: {
+        customerId: lead.customerId,
+        customerHref: `/customers/${lead.customerId}`,
+        serviceLocations: customerLocations.map((loc) => ({
+          id: loc.id,
+          formattedAddress: loc.formattedAddress,
+          addressLine1: loc.addressLine1,
+          addressLine2: loc.addressLine2,
+          city: loc.city,
+          state: loc.state,
+          postalCode: loc.postalCode,
+          country: loc.country,
+          googlePlaceId: loc.googlePlaceId,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          source: loc.source,
+          isPrimary: loc.isPrimary,
+          createdFromLead: loc.createdFromLead
+            ? {
+                id: loc.createdFromLead.id,
+                title: loc.createdFromLead.title,
+                source: loc.createdFromLead.source,
+              }
+            : null,
+        })),
+      },
+      intake: intakeForBlock,
+    };
+  } else {
+    serviceAddressContext = { customer: null, intake: intakeForBlock };
+  }
 
 
   return (
@@ -339,6 +422,7 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
       statusLabel={formatLeadStatus(lead.status)}
       statusTone={leadStatusBadgeTone(lead.status)}
       sourceLabel={formatLeadSource(lead.source)}
+      source={lead.source}
       createdAtLabel={lead.createdAt.toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
@@ -351,6 +435,24 @@ async function LeadDetailWrapper({ leadId }: { leadId: string }) {
       linkedQuotes={surfaceQuotes}
       progress={progress}
       activeQuoteWorkSurface={activeQuoteWorkSurface}
+      jobsiteAddressLine={jobsiteAddressLine}
+      serviceAddressContext={serviceAddressContext}
+      visitRequests={lead.visitRequests.map((vr) => ({
+        id: vr.id,
+        requestedDate: vr.requestedDate,
+        requestedDateLabel: vr.requestedDate
+          ? vr.requestedDate.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })
+          : null,
+        requestedWindow: vr.requestedWindow,
+        confirmedDate: vr.confirmedDate,
+        status: vr.status,
+        notes: vr.notes,
+        createdAt: vr.createdAt,
+      }))}
     />
   );
 }

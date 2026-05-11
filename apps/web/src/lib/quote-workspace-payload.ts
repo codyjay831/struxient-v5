@@ -28,6 +28,8 @@ export type QuoteWorkspaceCheckpointPayload = {
   createdAtLabel: string;
   quoteUpdatedAtAtCaptureIso: string | null;
   quoteUpdatedAtAtCaptureLabel: string | null;
+  /** Source of the checkpoint (Phase F). */
+  source?: "STAFF" | "CUSTOMER_PORTAL";
 };
 
 /** Lead intake context shown inside the Customer & Lead tab. */

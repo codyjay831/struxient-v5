@@ -85,6 +85,55 @@ export function validateRequestTypeOptionsJson(raw: unknown): ValidatedRequestTy
   return { ok: true, options };
 }
 
+const MAX_INSTANT_QUOTE_TEMPLATE_IDS_PER_TYPE = 24;
+const MAX_CANDIDATE_TEMPLATE_ID_LENGTH = 64;
+
+/**
+ * Normalizes `instantQuoteConfigJson` from the database for safe reads.
+ * Invalid shapes yield `{}` entries skipped per-key; never throws.
+ */
+export function parseInstantQuoteConfigJson(
+  raw: Prisma.JsonValue | null | undefined,
+): Record<string, string[]> {
+  if (raw == null) {
+    return {};
+  }
+  if (!isRecord(raw)) {
+    return {};
+  }
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof k !== "string") {
+      continue;
+    }
+    const key = k.trim().toLowerCase();
+    if (!key || key.length > PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeValue) {
+      continue;
+    }
+    if (!Array.isArray(v)) {
+      continue;
+    }
+    const ids: string[] = [];
+    for (const item of v) {
+      if (typeof item !== "string") {
+        continue;
+      }
+      const id = item.trim();
+      if (!id || id.length > MAX_CANDIDATE_TEMPLATE_ID_LENGTH) {
+        continue;
+      }
+      ids.push(id);
+      if (ids.length >= MAX_INSTANT_QUOTE_TEMPLATE_IDS_PER_TYPE) {
+        break;
+      }
+    }
+    if (ids.length > 0) {
+      out[key] = ids;
+    }
+  }
+  return out;
+}
+
 export function requestTypeLabelByValue(
   options: PublicRequestTypeOption[],
   value: string,

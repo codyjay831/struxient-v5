@@ -78,7 +78,7 @@ export default async function JobsPage() {
             title="No jobs yet"
             description="Jobs are created by activating an approved quote from its execution preview. Approve a quote and review its draft execution to enable activation."
           >
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               Open quotes
             </Link>
           </EmptyState>
@@ -130,7 +130,7 @@ export default async function JobsPage() {
                       <p className="mt-1 text-xs text-foreground-muted">
                         From quote:{" "}
                         <Link
-                          href={`/quotes/${safeQuote.id}`}
+                          href={`/sales?tab=proposals/${safeQuote.id}`}
                           className="underline decoration-border underline-offset-4 hover:decoration-foreground"
                         >
                           {safeQuote.title}

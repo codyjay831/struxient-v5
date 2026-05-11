@@ -6,7 +6,10 @@ import {
   DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
   type PublicRequestTypeOption,
 } from "@/lib/public-request-settings-defaults";
-import { parseStoredRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
+import {
+  parseInstantQuoteConfigJson,
+  parseStoredRequestTypeOptionsJson,
+} from "@/lib/public-request-settings-validation";
 
 export type EffectivePublicRequestSettings = {
   enabled: boolean;
@@ -16,6 +19,10 @@ export type EffectivePublicRequestSettings = {
   emergencyWarningText: string | null;
   submitButtonText: string;
   requestTypeOptions: PublicRequestTypeOption[];
+  instantQuoteConfig: Record<string, string[]>;
+  instantQuoteEnabled: boolean;
+  showInstantQuoteDetails: boolean;
+  offerings: string[];
 };
 
 type PublicRequestSettingsRow = Pick<
@@ -26,6 +33,10 @@ type PublicRequestSettingsRow = Pick<
   | "emergencyWarningText"
   | "submitButtonText"
   | "requestTypeOptionsJson"
+  | "instantQuoteConfigJson"
+  | "instantQuoteEnabled"
+  | "showInstantQuoteDetails"
+  | "offerings"
 >;
 
 export function effectivePublicRequestSettingsFromRow(
@@ -39,6 +50,10 @@ export function effectivePublicRequestSettingsFromRow(
       emergencyWarningText: null,
       submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
       requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+      instantQuoteConfig: {},
+      instantQuoteEnabled: true,
+      showInstantQuoteDetails: true,
+      offerings: [],
     };
   }
 
@@ -65,6 +80,10 @@ export function effectivePublicRequestSettingsFromRow(
     emergencyWarningText,
     submitButtonText,
     requestTypeOptions: parseStoredRequestTypeOptionsJson(row.requestTypeOptionsJson),
+    instantQuoteConfig: parseInstantQuoteConfigJson(row.instantQuoteConfigJson),
+    instantQuoteEnabled: row.instantQuoteEnabled,
+    showInstantQuoteDetails: row.showInstantQuoteDetails,
+    offerings: row.offerings,
   };
 }
 
@@ -75,6 +94,10 @@ export type PublicIntakeFormViewModel = {
   emergencyWarningText: string | null;
   submitButtonText: string;
   requestTypeOptions: PublicRequestTypeOption[];
+  instantQuoteConfig: Record<string, string[]>;
+  instantQuoteEnabled: boolean;
+  showInstantQuoteDetails: boolean;
+  offerings: string[];
 };
 
 export function toPublicIntakeFormViewModel(
@@ -86,5 +109,9 @@ export function toPublicIntakeFormViewModel(
     emergencyWarningText: effective.emergencyWarningText,
     submitButtonText: effective.submitButtonText,
     requestTypeOptions: effective.requestTypeOptions,
+    instantQuoteConfig: effective.instantQuoteConfig,
+    instantQuoteEnabled: effective.instantQuoteEnabled,
+    showInstantQuoteDetails: effective.showInstantQuoteDetails,
+    offerings: effective.offerings,
   };
 }

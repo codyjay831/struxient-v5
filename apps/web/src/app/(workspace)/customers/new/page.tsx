@@ -22,7 +22,7 @@ export default function NewCustomerPage() {
       />
       <PageHeader
         title="New customer"
-        description="Create a durable relationship record in your development organization. Required: display name. Other fields are optional and stored only on this customer row."
+        description="Add who they are, how to reach them, and where the work happens. Only the customer name is required; everything else is optional."
         actions={
           <Link href="/customers" className={listLinkClass}>
             ← Customers list
@@ -33,9 +33,13 @@ export default function NewCustomerPage() {
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Customer record"
-          description="Contact methods and notes stay on this anchor until dedicated systems (tags, related parties, activity) ship later."
+          description="Save contact details and an optional service address. You can add or edit addresses later from the customer profile."
         />
-        <CustomerRecordForm mode="create" cancelHref="/customers" />
+        <CustomerRecordForm
+          mode="create"
+          cancelHref="/customers"
+          googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
+        />
       </WorkspacePanel>
     </div>
   );

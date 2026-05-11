@@ -6,8 +6,8 @@ export interface StorageProvider {
    */
   createObjectKey(params: {
     organizationId: string;
-    jobId: string;
-    taskId: string;
+    jobId?: string;
+    taskId?: string;
     attachmentId: string;
     fileName: string;
   }): string;

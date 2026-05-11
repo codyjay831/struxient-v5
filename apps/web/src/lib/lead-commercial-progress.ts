@@ -451,20 +451,20 @@ export function resolveLeadCommercialProgressActionHref(
 ): string {
   switch (action.kind) {
     case "EDIT_CONTACT_INFO":
-      return `/leads/${ctx.leadId}/edit`;
+      return `/sales/${ctx.leadId}/edit`;
     case "ATTACH_OR_CREATE_CUSTOMER":
-      return `/leads/${ctx.leadId}#customer-link`;
+      return `/sales/${ctx.leadId}#customer-link`;
     case "QUALIFY_LEAD":
-      return `/leads/${ctx.leadId}`;
+      return `/sales/${ctx.leadId}`;
     case "START_QUOTE":
       return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
     case "OPEN_DRAFT_QUOTE":
     case "OPEN_QUOTE":
-      return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/quotes";
+      return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/sales?tab=proposals";
     case "OPEN_EXECUTION_REVIEW":
       return action.targetQuoteId
         ? `/quotes/${action.targetQuoteId}/execution-review`
-        : "/quotes";
+        : "/sales?tab=proposals";
     case "OPEN_JOB":
       return action.targetJobId ? `/jobs/${action.targetJobId}` : "/jobs";
   }

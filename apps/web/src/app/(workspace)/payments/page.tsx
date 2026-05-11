@@ -98,7 +98,7 @@ export default function PaymentsPage() {
             <PlaceholderButton title="No editor in this build">
               Record payment (not wired)
             </PlaceholderButton>
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               Quotes
             </Link>
           </EmptyState>
@@ -115,7 +115,7 @@ export default function PaymentsPage() {
             title="View commercial terms"
             description="Go to Quotes for the working commercial record and staff-only checkpoints—no automatic handoff to this shell yet."
           >
-            <Link href="/quotes" className={handoffPrimaryLinkClass}>
+            <Link href="/sales?tab=proposals" className={handoffPrimaryLinkClass}>
               Open Quotes
             </Link>
           </EmptyState>
@@ -182,7 +182,7 @@ export default function PaymentsPage() {
           title="Payments (reserved) sit beside Sales and Work"
           description="Quotes hold the working commercial record today. Job and payment shells are placeholders. Workstation does not orchestrate money or execution yet—links are normal navigation only."
         >
-          <Link href="/quotes" className={handoffMutedLinkClass}>
+          <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
             Quotes
           </Link>
           <Link href="/customers" className={handoffMutedLinkClass}>

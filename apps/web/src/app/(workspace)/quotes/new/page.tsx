@@ -109,7 +109,7 @@ export default async function NewQuotePage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Quotes", href: "/sales?tab=proposals" },
           { label: "New" },
         ]}
       />
@@ -117,7 +117,7 @@ export default async function NewQuotePage({
         title="New quote"
         description="Create a draft working quote in your development organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, live proposal preview from the saved record, and staff-only recorded send checkpoints when you want proof—not delivery or approval."
         actions={
-          <Link href="/quotes" className={listLinkClass}>
+          <Link href="/sales?tab=proposals" className={listLinkClass}>
             ← Quotes list
           </Link>
         }
@@ -129,7 +129,7 @@ export default async function NewQuotePage({
           description="Organization scope is applied on the server from your session context—never from hidden fields alone. Lead and customer ids from the URL are validated here; create re-validates before insert."
         />
         <QuoteDraftForm
-          cancelHref="/quotes"
+          cancelHref="/sales?tab=proposals"
           defaultTitle={defaultTitle}
           validatedLeadId={validatedLeadId}
           validatedCustomerId={validatedCustomerId}

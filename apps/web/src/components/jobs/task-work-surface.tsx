@@ -20,6 +20,7 @@ import {
 import { createJobIssueAction } from "@/app/(workspace)/jobs/job-issue-actions";
 import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-display";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
+import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
 import {
   AlertCircle,
   Camera,
@@ -41,11 +42,17 @@ export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
   onClose?: () => void;
 };
 
+const addressPrimaryBtnClass =
+  "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
+
 export function TaskWorkSurface({
   jobId,
   jobStageId,
   stageTitle,
   jobContextLabel,
+  jobsiteAddressLine,
+  customerId,
+  leadEditHref,
   jobHref,
   task: initialTask,
   clearWorkstationSelectionOnComplete,
@@ -58,8 +65,13 @@ export function TaskWorkSurface({
 
   const [task, setTask] = useState(initialTask);
   const [isPending, startTransition] = useTransition();
+  const [isUploading, setIsUploading] = useState(false);
+  const [showNoteForm, setShowForm] = useState(false);
+  const [note, setNote] = useState(initialTask.completionNote || "");
 
+  /* Sync local editor state when the server task snapshot changes (e.g. after router.refresh()). */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync; avoids stale edits after refresh
     setTask(initialTask);
     setNote(initialTask.completionNote || "");
   }, [
@@ -71,10 +83,10 @@ export function TaskWorkSurface({
     initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|"),
     initialTask.paymentBlockers.map((p) => `${p.status}:${p.title}`).join("|"),
   ]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [showNoteForm, setShowForm] = useState(false);
-  const [note, setNote] = useState(task.completionNote || "");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [addressDialogOpen, setAddressDialogOpen] = useState(false);
+  const hasJobsite = Boolean(jobsiteAddressLine?.trim());
+  const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportTitle, setReportTitle] = useState("");
@@ -235,6 +247,7 @@ export function TaskWorkSurface({
   };
 
   return (
+    <>
     <div className="space-y-6">
       {showCloseControl && onClose && (
         <div className="flex justify-end">
@@ -252,6 +265,39 @@ export function TaskWorkSurface({
       <div className="rounded-xl border border-border bg-foreground/[0.01] p-5">
         <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Job</p>
         <p className="mt-1 text-sm font-semibold text-foreground">{jobContextLabel}</p>
+        {hasJobsite ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+              Service address
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground-muted">{jobsiteAddressLine}</p>
+          </div>
+        ) : (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+              Service address needed
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+              Add the project address before scheduling or field visits.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {customerId ? (
+                <button
+                  type="button"
+                  onClick={() => setAddressDialogOpen(true)}
+                  className={addressPrimaryBtnClass}
+                >
+                  Add service address
+                </button>
+              ) : null}
+              {!customerId && leadEditHref ? (
+                <Link href={leadEditHref} className={addressPrimaryBtnClass}>
+                  Add on request
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        )}
         <p className="mt-2 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Stage</p>
         <p className="mt-0.5 text-xs text-foreground-muted">{stageTitle}</p>
         <Link
@@ -496,5 +542,18 @@ export function TaskWorkSurface({
         </p>
       )}
     </div>
+    {customerId ? (
+      <AddOrEditServiceLocationDialog
+        open={addressDialogOpen}
+        onOpenChange={setAddressDialogOpen}
+        googleMapsApiKey={mapsApiKey}
+        customerId={customerId}
+        mode="create"
+        onSaved={() => {
+          router.refresh();
+        }}
+      />
+    ) : null}
+    </>
   );
 }

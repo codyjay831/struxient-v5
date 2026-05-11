@@ -2,9 +2,15 @@
 
 // TODO: Add server-side rate limiting (per IP / per slug) when traffic warrants it.
 
-import { LeadSource, LeadStatus, type Prisma } from "@prisma/client";
+import {
+  LeadSource,
+  LeadStatus,
+  NeededByBucket,
+  Prisma,
+  QuoteStatus,
+} from "@prisma/client";
 import { db } from "@/lib/db";
-import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/leads/lead-field-limits";
+import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { effectivePublicRequestSettingsFromRow } from "@/lib/public-request-settings-effective";
 import { requestTypeLabelByValue } from "@/lib/public-request-settings-validation";
@@ -13,6 +19,14 @@ import {
   sanitizePublicIntakeServiceLocationFromClient,
   type PublicIntakeServiceLocationV1,
 } from "@/lib/public-intake-service-location";
+import { performApplyLineItemTemplateToQuoteTx } from "@/lib/quote-line-item-template-apply-tx";
+import { notifyLeadSubmitted } from "@/lib/notifications";
+import { headers } from "next/headers";
+
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const MAX_REQUESTS_PER_WINDOW = 5;
 
 export type PublicLeadIntakeState = {
   error?: string;
@@ -24,6 +38,14 @@ function trimOrEmpty(value: FormDataEntryValue | null): string {
     return "";
   }
   return value.trim();
+}
+
+function trimOrNull(value: FormDataEntryValue | null): string | null {
+  if (value == null || typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 function enforceMaxLength(
@@ -43,6 +65,29 @@ function isReasonableEmail(value: string): boolean {
     return false;
   }
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/** `crypto.randomUUID()` shape — used only for public intake dedupe. */
+const PUBLIC_INTAKE_CLIENT_KEY_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parsePublicIntakeClientKey(raw: string): string | null {
+  const t = raw.trim();
+  if (!PUBLIC_INTAKE_CLIENT_KEY_RE.test(t)) {
+    return null;
+  }
+  return t.toLowerCase();
+}
+
+function isPublicIntakeClientKeyConstraintViolation(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") {
+    return false;
+  }
+  const target = e.meta?.target;
+  if (Array.isArray(target)) {
+    return target.some((x) => String(x).includes("publicIntakeClientKey"));
+  }
+  return String(target ?? "").includes("publicIntakeClientKey");
 }
 
 function buildPublicIntakeNotes(parts: {
@@ -79,6 +124,28 @@ export async function submitPublicLeadIntakeAction(
 ): Promise<PublicLeadIntakeState> {
   void _prevState;
 
+  const attachmentIdsRaw = trimOrEmpty(formData.get("attachmentIds"));
+  const attachmentIds = attachmentIdsRaw ? attachmentIdsRaw.split(",") : [];
+
+  const requestedDateRaw = trimOrNull(formData.get("requestedVisitDate"));
+  const requestedWindow = trimOrNull(formData.get("requestedVisitWindow"));
+  const visitNotes = trimOrNull(formData.get("requestedVisitNotes"));
+  const lockInInstantQuote = formData.get("lockInInstantQuote") === "on";
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  if (!(await checkRateLimit(ip, { windowMs: RATE_LIMIT_WINDOW_MS, max: MAX_REQUESTS_PER_WINDOW, keyPrefix: "public-intake" }))) {
+    return { error: "Too many requests. Please try again in an hour." };
+  }
+
+  const customFields: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("customField_") && typeof value === "string") {
+      const fieldDefId = key.replace("customField_", "");
+      customFields[fieldDefId] = value;
+    }
+  }
+
   const normalizedSlug = companySlug.trim().toLowerCase();
   if (!isValidPublicCompanySlugSegment(normalizedSlug)) {
     return { error: "We could not send your request. Please check the link and try again." };
@@ -102,6 +169,7 @@ export async function submitPublicLeadIntakeAction(
           emergencyWarningText: true,
           submitButtonText: true,
           requestTypeOptionsJson: true,
+          instantQuoteConfigJson: true,
         },
       },
     },
@@ -123,6 +191,8 @@ export async function submitPublicLeadIntakeAction(
   const requestDetails = trimOrEmpty(formData.get("requestDetails"));
   const requestTypeValue = trimOrEmpty(formData.get("requestType"));
   const rawLocationJson = trimOrEmpty(formData.get("publicIntakeServiceLocation"));
+  const neededByBucketRaw = trimOrEmpty(formData.get("neededByBucket"));
+  const neededByDateRaw = trimOrEmpty(formData.get("neededByDate"));
 
   if (!contactName) {
     return { error: "Please enter your name." };
@@ -138,9 +208,6 @@ export async function submitPublicLeadIntakeAction(
   }
   if (!serviceAddress) {
     return { error: "Please enter the service address or project location." };
-  }
-  if (!preferredTiming) {
-    return { error: "Please tell us your preferred timing." };
   }
   if (!requestDetails) {
     return { error: "Please describe what you need help with." };
@@ -201,26 +268,164 @@ export async function submitPublicLeadIntakeAction(
       ? `${titleBase.slice(0, LEAD_FIELD_LIMITS.title - 1)}…`
       : titleBase;
 
-  try {
-    await db.lead.create({
-      data: {
+  const neededByBucket = (Object.values(NeededByBucket) as string[]).includes(neededByBucketRaw) ? (neededByBucketRaw as NeededByBucket) : null;
+  const neededByDate = (neededByBucket === "SPECIFIC_DATE" && neededByDateRaw) ? new Date(neededByDateRaw) : null;
+
+  const publicIntakeClientKey = parsePublicIntakeClientKey(trimOrEmpty(formData.get("publicIntakeClientKey")));
+
+  if (publicIntakeClientKey) {
+    const existingLead = await db.lead.findFirst({
+      where: {
         organizationId: record.id,
-        title,
-        contactName,
-        email,
-        phone,
-        source: LeadSource.PUBLIC_REQUEST_LINK,
-        sourceDetail: "Public Intake Form",
-        notes,
-        status: LeadStatus.OPEN,
-        publicIntakeServiceLocation:
-          publicIntakeServiceLocation as unknown as Prisma.InputJsonValue,
+        publicIntakeClientKey,
       },
+      select: { id: true },
     });
-  } catch {
+    if (existingLead) {
+      return { success: true };
+    }
+  }
+
+  const requestTypeKey = requestTypeValue.trim().toLowerCase();
+
+  // Fuzzy duplicate detection
+  const likelyMatches = await db.customer.findMany({
+    where: {
+      organizationId: record.id,
+      OR: [
+        { email: { equals: email, mode: 'insensitive' } },
+        { phone: { equals: phone } }
+      ]
+    },
+    select: { id: true, displayName: true }
+  });
+
+  const duplicateNote = likelyMatches.length > 0 
+    ? `\n\n[System] Likely existing customer matches: ${likelyMatches.map(m => m.displayName).join(", ")}`
+    : "";
+
+  let createdLeadId: string | null = null;
+
+  try {
+    await db.$transaction(async (tx) => {
+      const lead = await tx.lead.create({
+        data: {
+          organizationId: record.id,
+          title,
+          contactName,
+          email,
+          phone,
+          source: LeadSource.PUBLIC_REQUEST_LINK,
+          sourceDetail: "Public Intake Form",
+          notes: notes + duplicateNote,
+          status: LeadStatus.OPEN,
+          publicIntakeServiceLocation:
+            publicIntakeServiceLocation as unknown as Prisma.InputJsonValue,
+          requestType: requestTypeLabel,
+          scopeSummary: requestDetails,
+          neededByBucket,
+          neededByDate,
+          publicIntakeClientKey,
+        },
+      });
+      createdLeadId = lead.id;
+
+      if (attachmentIds.length > 0) {
+        await tx.attachment.updateMany({
+          where: {
+            id: { in: attachmentIds },
+            organizationId: record.id,
+            leadId: null, // Security: only update if not already associated
+          },
+          data: {
+            leadId: lead.id,
+            status: "READY", // Mark as ready when lead is submitted
+          },
+        });
+      }
+
+      if (requestedDateRaw || requestedWindow) {
+        let requestedDate: Date | null = null;
+        if (requestedDateRaw) {
+          const d = new Date(requestedDateRaw);
+          if (!isNaN(d.getTime())) {
+            requestedDate = d;
+          }
+        }
+
+        await tx.leadVisitRequest.create({
+          data: {
+            organizationId: record.id,
+            leadId: lead.id,
+            requestedDate,
+            requestedWindow,
+            notes: visitNotes,
+          },
+        });
+      }
+
+      if (lockInInstantQuote && effective.instantQuoteEnabled) {
+        const configuredTemplateIds = effective.instantQuoteConfig[requestTypeKey] ?? [];
+        const resolvedTemplateIds: string[] = [];
+        for (const tid of configuredTemplateIds) {
+          const hit = await tx.lineItemTemplate.findFirst({
+            where: { id: tid, organizationId: record.id, archivedAt: null },
+            select: { id: true },
+          });
+          if (hit) {
+            resolvedTemplateIds.push(hit.id);
+          }
+        }
+
+        if (resolvedTemplateIds.length > 0) {
+          const quote = await tx.quote.create({
+            data: {
+              organizationId: record.id,
+              leadId: lead.id,
+              status: QuoteStatus.DRAFT,
+              title: `Instant Quote — ${contactName}`,
+              subtotalCents: 0,
+              totalCents: 0,
+            },
+          });
+
+          for (const tid of resolvedTemplateIds) {
+            await performApplyLineItemTemplateToQuoteTx(tx, quote.id, tid, record.id);
+          }
+        }
+      }
+
+      for (const [fieldDefId, value] of Object.entries(customFields)) {
+        if (value.trim()) {
+          await tx.leadCustomFieldValue.create({
+            data: {
+              leadId: lead.id,
+              fieldDefId,
+              value: value.trim(),
+            },
+          });
+        }
+      }
+    });
+  } catch (e) {
+    if (isPublicIntakeClientKeyConstraintViolation(e)) {
+      return { success: true };
+    }
     return {
       error: "We could not send your request right now. Please try again in a few minutes.",
     };
+  }
+
+  // Non-blocking notification
+  if (createdLeadId) {
+    void notifyLeadSubmitted({
+      organizationId: record.id,
+      leadId: createdLeadId,
+      contactName,
+      email,
+      phone,
+      requestType: requestTypeLabel,
+    });
   }
 
   return { success: true };

@@ -37,4 +37,18 @@ export type QuoteWorkSurfaceData = {
   quoteHref: string;
   proposalPreviewHref: string;
   executionReviewHref: string;
+  /** Jobsite / project address: customer profile first, else linked lead intake. */
+  jobsiteAddressLine: string | null;
+  /** True when no resolved jobsite line exists for this quote. */
+  jobsiteMissing: boolean;
+  /** Customer exists — staff can add a saved service address on the customer profile. */
+  canAddServiceAddress: boolean;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  /** US-friendly display string when {@link customerPhone} is present; otherwise null. */
+  customerFormattedPhone: string | null;
+  /** Share token for public proposal link (Phase F). */
+  shareToken?: string | null;
+  /** Optional display label for last sent email (Phase F). */
+  lastSentEmailAtLabel?: string | null;
 };

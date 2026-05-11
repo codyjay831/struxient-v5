@@ -24,8 +24,7 @@ const workstationEntry: NavItem[] = [
 
 /** Commercial pipeline: intake and working quotes (record routes). */
 const salesNav: NavItem[] = [
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/sales", label: "Sales", icon: Users },
   { href: "/scope-library", label: "Scope Library", icon: Library },
 ];
 

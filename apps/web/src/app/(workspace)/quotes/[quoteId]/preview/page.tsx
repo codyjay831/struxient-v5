@@ -52,7 +52,7 @@ export default async function QuoteLiveProposalPreviewPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales" },
-            { label: "Quotes", href: "/quotes" },
+            { label: "Quotes", href: "/sales?tab=proposals" },
             { label: "Not found" },
           ]}
         />
@@ -61,7 +61,7 @@ export default async function QuoteLiveProposalPreviewPage({
           title="Live proposal preview"
           description="No quote exists for this id in the current development organization."
           actions={
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               ← Quotes list
             </Link>
           }
@@ -77,7 +77,7 @@ export default async function QuoteLiveProposalPreviewPage({
           title="Quote not found"
           description="This id is not a quote record in the development organization, or it belongs to another tenant."
         >
-          <Link href="/quotes" className={listLinkClass}>
+          <Link href="/sales?tab=proposals" className={listLinkClass}>
             Back to quotes
           </Link>
         </EmptyState>
@@ -111,8 +111,8 @@ export default async function QuoteLiveProposalPreviewPage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
-          { label: row.title, href: `/quotes/${preview.quoteId}` },
+          { label: "Quotes", href: "/sales?tab=proposals" },
+          { label: row.title, href: `/sales?tab=proposals/${preview.quoteId}` },
           { label: "Live proposal preview" },
         ]}
       />
@@ -123,10 +123,10 @@ export default async function QuoteLiveProposalPreviewPage({
         description="Staff-only view of optional proposal wording from the saved working quote—not delivery, not a portal, and not approval capture."
         actions={
           <>
-            <Link href={`/quotes/${preview.quoteId}`} className={listLinkClass}>
+            <Link href={`/sales?tab=proposals/${preview.quoteId}`} className={listLinkClass}>
               ← Back to quote
             </Link>
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               Quotes list
             </Link>
           </>
@@ -146,7 +146,7 @@ export default async function QuoteLiveProposalPreviewPage({
           <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
             Recorded send checkpoints may differ from what you see here.{" "}
             <Link
-              href={`/quotes/${preview.quoteId}/checkpoints/${latestSendCheckpoint.id}`}
+              href={`/sales?tab=proposals/${preview.quoteId}/checkpoints/${latestSendCheckpoint.id}`}
               className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
             >
               Open latest recorded send checkpoint

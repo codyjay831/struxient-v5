@@ -1,6 +1,5 @@
 import {
   JobStatus,
-  JobTaskStatus,
   LeadStatus,
   QuoteStatus,
   JobIssueSeverity,
@@ -8,6 +7,8 @@ import {
   JobPaymentRequirementStatus,
   DailyJobLogStatus,
   JobVisitStatus,
+  QuoteCheckpointKind,
+  QuoteCheckpointSource,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -160,6 +161,10 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     where: { organizationId, status: { in: [LeadStatus.OPEN, LeadStatus.QUALIFYING] } },
     include: {
       customer: true,
+      visitRequests: {
+        where: { status: "PENDING" },
+        orderBy: { createdAt: "desc" },
+      },
       quotes: {
         where: { status: { not: QuoteStatus.ARCHIVED } },
         include: {
@@ -174,7 +179,7 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
     const isUnlinked = lead.customerId === null;
     const hasActiveQuote = lead.quotes.length > 0;
 
-    if (hasActiveQuote && !isUnlinked) continue;
+    if (hasActiveQuote) continue;
 
     const progress = getLeadCommercialProgress({
       lead: {
@@ -204,20 +209,30 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
 
     const { group, priority, lens } = lanesForLeadWorkflow(workflow, isUnlinked);
 
+    // Prioritize leads with pending visit requests
+    const pendingVisit = lead.visitRequests[0];
+    const effectivePriority = pendingVisit ? "critical" : priority;
+    const effectiveGroup = pendingVisit ? "investigate" : group;
+    const effectiveLens = pendingVisit ? "attention" : lens;
+    const effectiveReason = pendingVisit 
+      ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
+      : workflow.reason;
+    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Leads.");
+
     items.push({
       id: `lead-${lead.id}`,
       kind: "lead",
       title: lead.title,
       subtitle: lead.contactName || lead.email || lead.phone || undefined,
       status: lead.status,
-      priority,
-      group,
-      lens,
+      priority: effectivePriority,
+      group: effectiveGroup,
+      lens: effectiveLens,
       filterCategory: "leads",
-      reason: workflow.reason,
-      nextStep: workflow.nextAction?.label ?? "Review in Leads.",
+      reason: effectiveReason,
+      nextStep: effectiveNextStep,
       recordId: lead.id,
-      href: `/leads/${lead.id}`,
+      href: `/sales/${lead.id}`,
       updatedAt: lead.updatedAt,
       workflow,
     });
@@ -230,6 +245,11 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       customer: true,
       lead: true,
       job: true,
+      checkpoints: {
+        where: { kind: QuoteCheckpointKind.APPROVAL },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       lineItems: {
         include: {
           draftExecutionTasks: true,
@@ -239,6 +259,9 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
   });
 
   for (const quote of quotes) {
+    const latestApproval = quote.checkpoints[0];
+    const isCustomerAccepted = latestApproval?.source === QuoteCheckpointSource.CUSTOMER_PORTAL;
+
     const activationReadiness = evaluateQuoteJobActivationReadiness({
       status: quote.status,
       lines: quote.lineItems.map((l) => ({
@@ -305,12 +328,12 @@ export async function queryWorkstationWorkItems(organizationId: string): Promise
       group,
       lens,
       filterCategory: "quotes",
-      reason: workflow.reason,
+      reason: isCustomerAccepted ? "Accepted by customer via portal." : workflow.reason,
       nextStep: workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
       parentRecordId: quote.customerId || quote.leadId || undefined,
       parentLabel,
-      href: quote.leadId ? `/leads/${quote.leadId}` : `/quotes/${quote.id}`,
+      href: quote.leadId ? `/sales/${quote.leadId}` : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
       workflow,
     });

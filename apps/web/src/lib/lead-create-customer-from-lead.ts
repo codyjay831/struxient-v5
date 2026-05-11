@@ -1,3 +1,4 @@
+import type { LeadSource } from "@prisma/client";
 import { CUSTOMER_FIELD_LIMITS } from "@/app/(workspace)/customers/customer-field-limits";
 
 export type LeadRowForCustomerPrep = {
@@ -6,6 +7,8 @@ export type LeadRowForCustomerPrep = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  /** When omitted (e.g. older UI callers), public-request note shaping is skipped. */
+  source?: LeadSource;
 };
 
 export type PreparedCustomerFromLead =
@@ -43,14 +46,57 @@ function isReasonableCustomerEmail(value: string): boolean {
 
 const TRUNC_MARKER = "\n\n[truncated]";
 
+function extractPublicIntakeSection(normalizedNotes: string, header: string): string | null {
+  const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `^${escaped}:\\s*\\n([\\s\\S]*?)(?=\\n\\n[^\\n]+:\\s*\\n|$)`,
+    "im",
+  );
+  const m = normalizedNotes.match(re);
+  const raw = m?.[1]?.trim();
+  return raw && raw.length > 0 ? raw : null;
+}
+
 function buildCustomerNotesFromLead(lead: LeadRowForCustomerPrep): string {
-  const provenance = `Created from lead ${lead.title}.`;
-  const leadNotes = trimOrEmpty(lead.notes);
-  let body = provenance;
-  if (leadNotes.length > 0) {
-    body = `${provenance}\n\n${leadNotes}`;
-  }
   const max = CUSTOMER_FIELD_LIMITS.notes;
+  const leadNotesRaw = trimOrEmpty(lead.notes);
+
+  if (lead.source === "PUBLIC_REQUEST_LINK" && leadNotesRaw.includes("[Public Intake Form]")) {
+    const n = leadNotesRaw.replace(/\r\n/g, "\n");
+    const preferredTiming = extractPublicIntakeSection(n, "Preferred timing");
+    const requestType = extractPublicIntakeSection(n, "Request type");
+    const requestDetails = extractPublicIntakeSection(n, "What you need help with");
+
+    const parts = [
+      `Created from public request (lead: "${lead.title}").`,
+      "The service address from the request is saved with this customer.",
+    ];
+    if (preferredTiming) {
+      parts.push(`Preferred timing: ${preferredTiming}`);
+    }
+    if (requestType) {
+      parts.push(`Request type: ${requestType}`);
+    }
+    if (requestDetails) {
+      parts.push(`What they need:\n${requestDetails}`);
+    }
+
+    const body = parts.join("\n\n");
+    if (body.length <= max) {
+      return body;
+    }
+    const keep = max - TRUNC_MARKER.length;
+    if (keep < 1) {
+      return TRUNC_MARKER.slice(0, max);
+    }
+    return body.slice(0, keep) + TRUNC_MARKER;
+  }
+
+  const provenance = `Created from lead: "${lead.title}".`;
+  let body = provenance;
+  if (leadNotesRaw.length > 0) {
+    body = `${provenance}\n\n${leadNotesRaw}`;
+  }
   if (body.length <= max) {
     return body;
   }

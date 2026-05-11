@@ -34,7 +34,7 @@ export function QuoteWorkspaceShell({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Quotes", href: "/sales?tab=proposals" },
           { label: quote.primaryTitle },
         ]}
       />
@@ -72,7 +72,7 @@ export function QuoteWorkspaceShell({
               ← Lead
             </Link>
           ) : null}
-          <Link href="/quotes" className={listLinkClass}>
+          <Link href="/sales?tab=proposals" className={listLinkClass}>
             ← Quotes
           </Link>
         </div>

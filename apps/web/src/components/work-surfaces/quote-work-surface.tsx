@@ -66,6 +66,7 @@ import {
   Layers,
   Library,
   ListOrdered,
+  MapPin,
   MessageSquare,
   Send,
   ThumbsUp,
@@ -82,6 +83,7 @@ import {
   sendQuoteWorkspaceAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
+import { activateQuoteJobWorkspaceAction } from "@/app/(workspace)/quotes/quote-job-activation-actions";
 import {
   resolveQuoteReadinessActionHref,
   type QuoteReadiness,
@@ -89,6 +91,7 @@ import {
   type QuoteReadinessActionKind,
 } from "@/lib/quote-readiness";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
+import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
 import type {
   QuoteWorkspaceCheckpointPayload,
   QuoteWorkspaceTabData,
@@ -109,7 +112,6 @@ import {
 import { QuoteLineItemsWorkspaceEditor } from "@/components/quotes/quote-line-items-workspace-editor";
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
-import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
 
 /* ─── Public types ─────────────────────────────────────────────────────── */
 
@@ -147,6 +149,23 @@ export type QuoteWorkSurfaceProps = {
    * always safe.
    */
   onWorkSurfaceMutated?: () => void;
+  /**
+   * When true, the surface is rendered inside the Lead workspace Quote tab.
+   * Lets the surface defer service-address ownership to the surrounding
+   * Lead Customer Info area: the missing-address CTA routes back to the
+   * Lead block instead of opening a quote-owned dialog, and the present-
+   * address callout is suppressed (the Lead shell already shows it).
+   *
+   * Optional + defaults to `false` so Workstation / standalone Quote page
+   * usage is unchanged.
+   */
+  embeddedInLead?: boolean;
+  /**
+   * Required when `embeddedInLead` is true — handler invoked by the
+   * embedded missing-address CTA so the Lead workspace can switch to the
+   * Customer Info tab and scroll the Service address block into view.
+   */
+  onRequestServiceAddress?: () => void;
 };
 
 /* ─── Constants ────────────────────────────────────────────────────────── */
@@ -684,6 +703,108 @@ function NextStepCard({
   );
 }
 
+function QuoteJobsiteCallout({
+  quote,
+  onMutated,
+  embeddedInLead = false,
+  onRequestServiceAddress,
+}: {
+  quote: QuoteWorkSurfaceData;
+  onMutated?: () => void;
+  embeddedInLead?: boolean;
+  onRequestServiceAddress?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
+
+  /* When the Quote is embedded inside the Lead workspace AND the Lead
+   * shell already shows the address prominently, suppress the present-
+   * address card here. The Lead Customer Info block owns it. */
+  if (embeddedInLead && hasLine) {
+    return null;
+  }
+
+  /* Embedded missing-address: route the user back to the Lead Customer Info
+   * service-address block instead of opening a quote-owned dialog. The
+   * primary CTA copy makes ownership obvious. */
+  if (embeddedInLead && !hasLine && onRequestServiceAddress) {
+    return (
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="flex gap-3">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className={sectionLabelClass}>Service address needed</p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+              Add the project address before scheduling or creating a job.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onRequestServiceAddress}
+                className={primaryBtnClass}
+              >
+                Add service address in Customer Info
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="flex gap-3">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className={sectionLabelClass}>
+              {hasLine ? "Service address" : "Service address needed"}
+            </p>
+            {hasLine ? (
+              <p className="mt-1 text-sm leading-relaxed text-foreground">{quote.jobsiteAddressLine}</p>
+            ) : (
+              <>
+                <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+                  Add the project address before scheduling or creating a job.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {quote.canAddServiceAddress && quote.customerId ? (
+                    <button type="button" onClick={() => setOpen(true)} className={primaryBtnClass}>
+                      Add service address
+                    </button>
+                  ) : null}
+                  {quote.leadHref && !quote.canAddServiceAddress ? (
+                    <Link href={`${quote.leadHref}/edit`} className={primaryBtnClass}>
+                      Add on request
+                    </Link>
+                  ) : null}
+                  {quote.leadHref && quote.canAddServiceAddress ? (
+                    <Link href={`${quote.leadHref}/edit`} className={secondaryBtnClass}>
+                      Edit request record
+                    </Link>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      {quote.customerId && quote.canAddServiceAddress ? (
+        <AddOrEditServiceLocationDialog
+          open={open}
+          onOpenChange={setOpen}
+          googleMapsApiKey={apiKey}
+          customerId={quote.customerId}
+          mode="create"
+          onSaved={onMutated}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function FactsGrid({
   quote,
   readiness,
@@ -758,6 +879,8 @@ function OverviewTab({
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
   onMutated,
+  embeddedInLead,
+  onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
@@ -767,6 +890,8 @@ function OverviewTab({
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
+  embeddedInLead?: boolean;
+  onRequestServiceAddress?: () => void;
 }) {
   const isFull = mode === "full";
   return (
@@ -786,6 +911,13 @@ function OverviewTab({
         readiness={readiness}
         mode={mode}
         onSwitchToTab={onSwitchToTab}
+      />
+
+      <QuoteJobsiteCallout
+        quote={quote}
+        onMutated={onMutated}
+        embeddedInLead={embeddedInLead}
+        onRequestServiceAddress={onRequestServiceAddress}
       />
 
       {/* Active job link — visible on Overview when activated. */}
@@ -1107,14 +1239,29 @@ function ScopeTab({
 /* ─── Tab: Customer & Lead ─────────────────────────────────────────────── */
 
 function ContextTab({
+  quote,
   workspaceTabs,
+  onMutated,
+  embeddedInLead,
+  onRequestServiceAddress,
 }: {
+  quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
+  onMutated?: () => void;
+  embeddedInLead?: boolean;
+  onRequestServiceAddress?: () => void;
 }) {
   const { customerName, customerHref, leadIntake } = workspaceTabs;
 
   return (
     <div className="space-y-4">
+      <QuoteJobsiteCallout
+        quote={quote}
+        onMutated={onMutated}
+        embeddedInLead={embeddedInLead}
+        onRequestServiceAddress={onRequestServiceAddress}
+      />
+
       {/* Customer */}
       <div className="rounded-xl border border-border bg-surface p-4">
         <p className={`${sectionLabelClass} mb-2`}>Customer</p>
@@ -1125,6 +1272,36 @@ function ContextTab({
               <p className="mt-1 truncate text-sm font-medium text-foreground">
                 {customerName}
               </p>
+              {(quote.customerEmail || quote.customerFormattedPhone) && (
+                <dl className="mt-2 space-y-1 text-xs text-foreground-muted">
+                  {quote.customerEmail ? (
+                    <div>
+                      <dt className={sectionLabelClass}>Email</dt>
+                      <dd className="mt-0.5">
+                        <a
+                          href={`mailto:${encodeURIComponent(quote.customerEmail)}`}
+                          className="break-all underline-offset-4 hover:underline"
+                        >
+                          {quote.customerEmail}
+                        </a>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {quote.customerFormattedPhone ? (
+                    <div>
+                      <dt className={sectionLabelClass}>Phone</dt>
+                      <dd className="mt-0.5">
+                        <a
+                          href={`tel:${(quote.customerPhone ?? "").replace(/\s/g, "")}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {quote.customerFormattedPhone}
+                        </a>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
             </div>
             <Link href={customerHref} className={listLinkClass}>
               Customer record
@@ -1234,7 +1411,7 @@ function ContextTab({
               Linking is optional. Use it when this quote comes from a tracked
               lead.
             </p>
-            <Link href="/leads" className={`mt-3 ${listLinkClass}`}>
+            <Link href="/sales" className={`mt-3 ${listLinkClass}`}>
               Leads
             </Link>
           </div>
@@ -1263,10 +1440,17 @@ function CheckpointList({
           key={cp.id}
           className="flex flex-wrap items-baseline justify-between gap-2"
         >
-          <span>
-            #{cp.sequence} ·{" "}
-            <time dateTime={cp.createdAtIso}>{cp.createdAtLabel}</time>
-          </span>
+          <div className="flex items-center gap-2">
+            <span>
+              #{cp.sequence} ·{" "}
+              <time dateTime={cp.createdAtIso}>{cp.createdAtLabel}</time>
+            </span>
+            {cp.source === "CUSTOMER_PORTAL" && (
+              <span className="rounded bg-accent/10 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-accent">
+                Customer portal
+              </span>
+            )}
+          </div>
           <Link href={cp.href} className={listLinkClass}>
             Open record
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
@@ -1274,6 +1458,93 @@ function CheckpointList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Workspace-safe activate button shown only when the quote is approved AND
+ * the surface is embedded inside a Lead workspace. Calls the same activation
+ * transaction as the full-page form, but stays in the Lead workspace and
+ * shows an in-place success card with an Open job link.
+ *
+ * The full-page execution-review activation form continues to redirect — this
+ * button is additive, not a replacement.
+ */
+function EmbeddedActivateJobButton({
+  quoteId,
+  onMutated,
+}: {
+  quoteId: string;
+  onMutated?: () => void;
+}) {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activatedJobId, setActivatedJobId] = useState<string | null>(null);
+
+  const handleActivate = useCallback(async () => {
+    setError(null);
+    setIsPending(true);
+    try {
+      const res = await activateQuoteJobWorkspaceAction(quoteId);
+      if (!res.success) {
+        setError(res.error);
+        return;
+      }
+      setActivatedJobId(res.jobId);
+      onMutated?.();
+    } finally {
+      setIsPending(false);
+    }
+  }, [quoteId, onMutated]);
+
+  if (activatedJobId) {
+    return (
+      <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
+        <p className="text-xs font-medium text-foreground">Job activated</p>
+        <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+          Tasks are ready to schedule.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link
+            href={`/jobs/${activatedJobId}`}
+            className={primaryBtnClass}
+          >
+            <Briefcase className="size-3.5" strokeWidth={1.5} />
+            Open job
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
+      <p className="text-xs font-medium text-foreground">Activate job</p>
+      <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+        Activate to start work on this approved quote.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleActivate()}
+          disabled={isPending}
+          aria-busy={isPending}
+          className={primaryBtnClass}
+        >
+          <Briefcase className="size-3.5" strokeWidth={1.5} />
+          {isPending ? "Activating…" : "Activate job"}
+        </button>
+      </div>
+      {error ? (
+        <p
+          className="mt-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1285,6 +1556,7 @@ function SendAcceptTab({
   activePreview,
   onPreviewChange,
   onMutated,
+  embeddedInLead,
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
@@ -1293,6 +1565,7 @@ function SendAcceptTab({
   activePreview: "none" | "proposal" | "execution";
   onPreviewChange: (preview: "none" | "proposal" | "execution") => void;
   onMutated?: () => void;
+  embeddedInLead?: boolean;
 }) {
   const { isArchived, sendCheckpoints, approvalCheckpoints } = workspaceTabs;
 
@@ -1367,19 +1640,51 @@ function SendAcceptTab({
             <p className="text-xs font-medium text-foreground">Send this quote</p>
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
               When you are ready to treat this proposal as sent to the customer,
-              use Send quote. Commercial fields stay editable only while Draft —
+              use Send to customer. Commercial fields stay editable only while Draft —
               after send, scope and pricing lock.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <SendQuoteInlineButton
                 quoteId={quote.id}
                 variant="primary"
-                label="Send quote"
+                label="Send to customer"
                 onMutated={onMutated}
               />
             </div>
           </div>
         ) : null}
+
+        {quote.shareToken && (
+          <div className="mb-4 rounded-lg border border-border bg-background px-3 py-3 shadow-sm">
+            <p className={sectionLabelClass}>Public proposal link</p>
+            <p className="mt-1 text-xs text-foreground-muted leading-relaxed">
+              Share this secure link with the customer to view and accept the proposal.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-[10px] font-mono text-foreground truncate">
+                {typeof window !== "undefined"
+                  ? `${window.location.origin}/q/${quote.shareToken}`
+                  : `/q/${quote.shareToken}`}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    navigator.clipboard.writeText(`${window.location.origin}/q/${quote.shareToken}`);
+                  }
+                }}
+                className={secondaryBtnClass}
+              >
+                Copy
+              </button>
+            </div>
+            {quote.lastSentEmailAtLabel && (
+              <p className="mt-2 text-[10px] text-foreground-subtle">
+                Last sent: {quote.lastSentEmailAtLabel}
+              </p>
+            )}
+          </div>
+        )}
 
         {!isArchived && canApprove ? (
           <div className="mb-4 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
@@ -1430,6 +1735,18 @@ function SendAcceptTab({
           </div>
         ) : null}
 
+        {/* Embedded-only inline Activate job — keeps the user in the Lead
+            workspace; the full quote page continues to use the redirecting
+            QuoteActivateJobForm via the execution-review route. Only shown
+            when the readiness story says activation is the next step. */}
+        {embeddedInLead &&
+        !isArchived &&
+        readiness.state === "APPROVED_READY_TO_ACTIVATE" ? (
+          <div className="mb-4">
+            <EmbeddedActivateJobButton quoteId={quote.id} onMutated={onMutated} />
+          </div>
+        ) : null}
+
         {isArchived ? (
           <p className="text-xs leading-relaxed text-foreground-muted">
             This quote is archived and read-only. Existing checkpoints below stay
@@ -1453,7 +1770,7 @@ function SendAcceptTab({
         <p className={`${sectionLabelClass} mb-3`}>Send records</p>
         <CheckpointList
           checkpoints={sendCheckpoints}
-          emptyText="No send records yet — use Send quote while the quote is still a draft."
+          emptyText="No send records yet — use Mark as sent while the quote is still a draft."
         />
       </div>
 
@@ -1661,12 +1978,28 @@ export function QuoteWorkSurface({
   suppressIdentityRow = false,
   initialTab = "overview",
   onWorkSurfaceMutated,
+  embeddedInLead = false,
+  onRequestServiceAddress,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
   const isFull = mode === "full";
   const isStandard = mode === "standard";
   const isCompact = mode === "compact";
-  const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
+    if (
+      initialTab === "overview" &&
+      embeddedInLead &&
+      workspaceTabs.lineItems.length === 0
+    ) {
+      return "scope";
+    }
+    return initialTab;
+  });
+
+  const visibleTabs = TABS.filter((t) => {
+    if (embeddedInLead && t.id === "context") return false;
+    return true;
+  });
   const [activePreview, setActivePreview] = useState<
     "none" | "proposal" | "execution"
   >("none");
@@ -1676,7 +2009,7 @@ export function QuoteWorkSurface({
       setActiveTab(tab);
       setActivePreview(preview);
     },
-    [],
+    [setActiveTab, setActivePreview],
   );
 
   /* Set by `ADD_LINE_ITEM` action to ask the Scope tab editor to mount with
@@ -1724,7 +2057,7 @@ export function QuoteWorkSurface({
       ) : null}
 
       <div className={tabStripClass}>
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -1749,6 +2082,8 @@ export function QuoteWorkSurface({
           onRequestAddLineItem={handleRequestAddLineItem}
           onRequestScopeLibraryPicker={handleRequestScopeLibraryPicker}
           onMutated={handleSurfaceMutated}
+          embeddedInLead={embeddedInLead}
+          onRequestServiceAddress={onRequestServiceAddress}
         />
       )}
       {activeTab === "scope" && (
@@ -1764,7 +2099,15 @@ export function QuoteWorkSurface({
           onMutated={handleSurfaceMutated}
         />
       )}
-      {activeTab === "context" && <ContextTab workspaceTabs={workspaceTabs} />}
+      {activeTab === "context" && (
+        <ContextTab
+          quote={quote}
+          workspaceTabs={workspaceTabs}
+          onMutated={handleSurfaceMutated}
+          embeddedInLead={embeddedInLead}
+          onRequestServiceAddress={onRequestServiceAddress}
+        />
+      )}
       {activeTab === "sendaccept" && (
         <SendAcceptTab
           quote={quote}
@@ -1774,6 +2117,7 @@ export function QuoteWorkSurface({
           activePreview={activePreview}
           onPreviewChange={setActivePreview}
           onMutated={handleSurfaceMutated}
+          embeddedInLead={embeddedInLead}
         />
       )}
       {activeTab === "record" && (

@@ -4,7 +4,11 @@ export type LineItemTemplatePickerRow = {
   description: string;
   defaultQuantityDisplay: string;
   defaultUnitAmountCents: number;
+  /** Matches `computeLineTotalCents` on the server (canonical template apply). */
+  defaultLineTotalCents: number;
   hasCustomerProposalDefaults: boolean;
+  priceBufferPercentage: number;
+  tags: string[];
 };
 
 /** Staff-only Scope Library row for editing presets (org-scoped, non-archived). */
@@ -21,6 +25,8 @@ export type LineItemTemplateLibraryRow = {
   defaultCustomerExcludedNotes: string | null;
   defaultCustomerPresentationGroup: string | null;
   hasCustomerProposalDefaults: boolean;
+  priceBufferPercentage: number;
+  tags: string[];
   /** Optional default execution — summary only on list cards. */
   executionSummary: {
     taskCount: number;

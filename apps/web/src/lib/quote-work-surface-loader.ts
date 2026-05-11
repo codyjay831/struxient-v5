@@ -21,6 +21,7 @@ import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
+import { computeLineTotalCents } from "@/lib/quote-money";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type {
@@ -28,6 +29,8 @@ import type {
   QuoteWorkspaceLeadIntake,
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
+import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
+import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -68,10 +71,24 @@ export async function loadQuoteWorkSurface(
       subtotalCents: true,
       totalCents: true,
       internalNotes: true,
+      lastSentEmailAt: true,
+      shareToken: { select: { token: true } },
       createdAt: true,
       updatedAt: true,
       customerId: true,
-      customer: { select: { id: true, displayName: true, organizationId: true } },
+      customer: {
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          phone: true,
+          organizationId: true,
+          serviceLocations: {
+            orderBy: { isPrimary: "desc" },
+            select: { formattedAddress: true, addressLine1: true, isPrimary: true },
+          },
+        },
+      },
       leadId: true,
       lead: {
         select: {
@@ -83,6 +100,7 @@ export async function loadQuoteWorkSurface(
           contactName: true,
           email: true,
           phone: true,
+          publicIntakeServiceLocation: true,
         },
       },
       job: { select: { id: true, status: true, organizationId: true } },
@@ -110,22 +128,44 @@ export async function loadQuoteWorkSurface(
 
   if (!row) return null;
 
-  const customer =
-    row.customer && row.customer.organizationId === orgId
-      ? { id: row.customer.id, displayName: row.customer.displayName }
-      : null;
-  const lead =
-    row.lead && row.lead.organizationId === orgId
+  const rawCustomer =
+    row.customer && row.customer.organizationId === orgId ? row.customer : null;
+  const customer = rawCustomer
+    ? {
+        id: rawCustomer.id,
+        displayName: rawCustomer.displayName,
+        email: rawCustomer.email,
+        phone: rawCustomer.phone,
+      }
+    : null;
+  const rawLead =
+    row.lead && row.lead.organizationId === orgId ? row.lead : null;
+  const lead = rawLead
+    ? {
+        id: rawLead.id,
+        title: rawLead.title,
+        notes: rawLead.notes,
+        source: rawLead.source,
+        contactName: rawLead.contactName,
+        email: rawLead.email,
+        phone: rawLead.phone,
+      }
+    : null;
+
+  const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    customerLocations: rawCustomer?.serviceLocations ?? [],
+    leadRow: rawLead
       ? {
-          id: row.lead.id,
-          title: row.lead.title,
-          notes: row.lead.notes,
-          source: row.lead.source,
-          contactName: row.lead.contactName,
-          email: row.lead.email,
-          phone: row.lead.phone,
+          publicIntakeServiceLocation: rawLead.publicIntakeServiceLocation,
+          notes: rawLead.notes,
         }
-      : null;
+      : null,
+  });
+  const jobsiteMissing = jobsiteAddressLine == null || jobsiteAddressLine.trim() === "";
+  const canAddServiceAddress = Boolean(customer?.id);
+  const customerFormattedPhone = customer?.phone
+    ? formatPhoneForDisplay(customer.phone) || null
+    : null;
   const job =
     row.job && row.job.organizationId === orgId
       ? { id: row.job.id, status: row.job.status }
@@ -158,6 +198,7 @@ export async function loadQuoteWorkSurface(
         select: {
           id: true,
           sequence: true,
+          source: true,
           createdAt: true,
           quoteUpdatedAtAtCapture: true,
         },
@@ -172,6 +213,7 @@ export async function loadQuoteWorkSurface(
         select: {
           id: true,
           sequence: true,
+          source: true,
           createdAt: true,
           quoteUpdatedAtAtCapture: true,
         },
@@ -239,7 +281,7 @@ export async function loadQuoteWorkSurface(
     customerHref: customer ? `/customers/${customer.id}` : null,
     leadId: lead?.id ?? null,
     leadTitle: lead?.title ?? null,
-    leadHref: lead ? `/leads/${lead.id}` : null,
+    leadHref: lead ? `/sales/${lead.id}` : null,
     totalCents: row.totalCents,
     subtotalCents: row.subtotalCents,
     lineItemCount: row.lineItems.length,
@@ -250,6 +292,16 @@ export async function loadQuoteWorkSurface(
     quoteHref: `/quotes/${row.id}`,
     proposalPreviewHref: `/quotes/${row.id}/preview`,
     executionReviewHref: `/quotes/${row.id}/execution-review`,
+    jobsiteAddressLine,
+    jobsiteMissing,
+    canAddServiceAddress,
+    customerEmail: customer?.email ?? null,
+    customerPhone: customer?.phone ?? null,
+    customerFormattedPhone,
+    shareToken: row.shareToken?.token ?? null,
+    lastSentEmailAtLabel: row.lastSentEmailAt
+      ? row.lastSentEmailAt.toLocaleDateString("en-US", dateOpts)
+      : null,
   };
 
   /* ── Workspace tab data ───────────────────────────────────────────────── */
@@ -330,11 +382,14 @@ export async function loadQuoteWorkSurface(
             defaultCustomerPresentationGroup: true,
           },
         })
-      ).map((t) => ({
+      ).map((t) => {
+        const lineTotal = computeLineTotalCents(t.defaultQuantity, t.defaultUnitAmountCents);
+        return {
         id: t.id,
         description: t.description,
         defaultQuantityDisplay: t.defaultQuantity.toString(),
         defaultUnitAmountCents: t.defaultUnitAmountCents,
+        defaultLineTotalCents: lineTotal.ok ? lineTotal.lineTotalCents : 0,
         hasCustomerProposalDefaults: Boolean(
           t.defaultCustomerScopeTitle ||
             t.defaultCustomerScopeDescription ||
@@ -342,7 +397,8 @@ export async function loadQuoteWorkSurface(
             t.defaultCustomerExcludedNotes ||
             t.defaultCustomerPresentationGroup,
         ),
-      }))
+      };
+      })
     : [];
 
   /* Reusable task picker — only when execution editing is allowed. */
@@ -365,12 +421,14 @@ export async function loadQuoteWorkSurface(
   function toCheckpointPayload(c: {
     id: string;
     sequence: number;
+    source: "STAFF" | "CUSTOMER_PORTAL";
     createdAt: Date;
     quoteUpdatedAtAtCapture: Date | null;
   }): QuoteWorkspaceCheckpointPayload {
     return {
       id: c.id,
       sequence: c.sequence,
+      source: c.source,
       href: `/quotes/${row!.id}/checkpoints/${c.id}`,
       createdAtIso: c.createdAt.toISOString(),
       createdAtLabel: c.createdAt.toLocaleString(),
@@ -389,7 +447,7 @@ export async function loadQuoteWorkSurface(
     ? {
         id: lead.id,
         title: lead.title,
-        href: `/leads/${lead.id}`,
+        href: `/sales/${lead.id}`,
         notes: lead.notes,
         source: lead.source,
         contactName: lead.contactName,

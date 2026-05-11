@@ -3,29 +3,36 @@
 import {
   Prisma,
   QuoteCheckpointKind,
+  QuoteCheckpointSource,
   QuoteLineExecutionMergeMode,
   QuoteLineExecutionReviewStatus,
   QuoteStatus,
 } from "@prisma/client";
+import { randomBytes } from "crypto";
 import {
   getLeadCommercialProgress,
   type LeadProgressQuoteInput,
 } from "@/lib/lead-commercial-progress";
+import { prepareCustomerFromLead } from "@/lib/lead-create-customer-from-lead";
+import {
+  attachIntakeServiceLocationToCustomer,
+  intakeSnapshotForCustomerFromLead,
+  formatPrimaryServiceLocationLineForQuoteNotes,
+} from "@/lib/customer-service-location-from-lead";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import {
-  computeLineTotalCents,
-  parsePositiveQuantityString,
-  parseUsdStringToCents,
-} from "@/lib/quote-money";
+import { parsePositiveQuantityString, parseUsdStringToCents } from "@/lib/quote-money";
 import {
   parseQuoteLineFormDataInput,
   type ParsedQuoteLineInput as ParsedQuoteLineInputLib,
 } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { formatPrimaryServiceLocationLineForQuoteNotes } from "@/lib/customer-service-location-from-lead";
-import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
+import type { QuoteRollupTx } from "@/lib/quote-line-item-template-apply-tx";
+import {
+  performApplyLineItemTemplateToQuoteTx,
+  recalculateQuoteRollupsInTx,
+} from "@/lib/quote-line-item-template-apply-tx";
 
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import {
@@ -160,6 +167,8 @@ type LineItemTemplateParsedUpsert = {
   defaultQuantity: Prisma.Decimal;
   defaultUnitAmountCents: number;
   defaultInternalNotes: string | null;
+  tags: string[];
+  priceBufferPercentage: number;
 } & TemplateDefaultProposalFields;
 
 /**
@@ -210,12 +219,23 @@ function parseLineItemTemplateUpsertForm(
     return { error: templateProposalParsed.error };
   }
 
+  const tagsRaw = trimRequired(formData.get("tags"));
+  const tags = tagsRaw ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+  const bufferRaw = trimRequired(formData.get("priceBufferPercentage"));
+  const priceBufferPercentage = parseInt(bufferRaw, 10);
+  if (isNaN(priceBufferPercentage) || priceBufferPercentage < 0 || priceBufferPercentage > 100) {
+    return { error: "Price buffer must be a percentage between 0 and 100." };
+  }
+
   return {
     data: {
       description,
       defaultQuantity: qtyParsed.decimal,
       defaultUnitAmountCents: unitParsed.cents,
       defaultInternalNotes,
+      tags,
+      priceBufferPercentage,
       ...templateProposalParsed.data,
     },
   };
@@ -414,6 +434,10 @@ export async function performCreateQuoteDraftFromLead(
             customerId: true,
             email: true,
             phone: true,
+            contactName: true,
+            notes: true,
+            source: true,
+            publicIntakeServiceLocation: true,
             quotes: {
               where: { status: { not: QuoteStatus.ARCHIVED } },
               orderBy: { updatedAt: "desc" },
@@ -427,6 +451,7 @@ export async function performCreateQuoteDraftFromLead(
                 job: { select: { id: true, status: true, organizationId: true } },
               },
             },
+            suggestedTemplateIds: true,
           },
         });
 
@@ -473,9 +498,54 @@ export async function performCreateQuoteDraftFromLead(
           };
         }
 
+        let resolvedCustomerId = lead.customerId;
+
+        // Atomic Promotion: Create customer if missing
+        if (!resolvedCustomerId) {
+          const prep = prepareCustomerFromLead({
+            title: lead.title,
+            contactName: lead.contactName,
+            email: lead.email,
+            phone: lead.phone,
+            notes: lead.notes,
+            source: lead.source,
+          });
+
+          if (!prep.ok) {
+            return { ok: false as const, error: prep.error };
+          }
+
+          const customer = await tx.customer.create({
+            data: {
+              organizationId: ctx.organizationId,
+              ...prep.data,
+            },
+          });
+          resolvedCustomerId = customer.id;
+
+          // Carry forward service location
+          await attachIntakeServiceLocationToCustomer(tx, {
+            organizationId: ctx.organizationId,
+            customerId: customer.id,
+            leadId: lead.id,
+            leadSource: lead.source,
+            snapshot: intakeSnapshotForCustomerFromLead(lead),
+          });
+
+          // Mark lead as CONVERTED
+          await tx.lead.update({
+            where: { id: lead.id },
+            data: {
+              customerId: customer.id,
+              status: "CONVERTED",
+              convertedAt: new Date(),
+            },
+          });
+        }
+
         const resolved = await resolveCreateQuoteDraftFromFormFields(tx, { id: ctx.organizationId }, {
           formLeadId: lead.id,
-          formCustomerId: null,
+          formCustomerId: resolvedCustomerId,
           title: "",
           internalNotes: null,
         });
@@ -501,6 +571,12 @@ export async function performCreateQuoteDraftFromLead(
             totalCents: 0,
           },
         });
+
+        if (lead.suggestedTemplateIds.length > 0) {
+          for (const tid of lead.suggestedTemplateIds) {
+            await performApplyLineItemTemplateToQuoteTx(tx, quote.id, tid, ctx.organizationId);
+          }
+        }
 
         if (resolved.data.customerId) {
           const primaryLoc = await tx.customerServiceLocation.findFirst({
@@ -592,8 +668,6 @@ export async function createQuoteDraftAction(
   redirect(`/quotes/${quote.id}`);
 }
 
-type QuoteRollupTx = Pick<typeof db, "quoteLineItem" | "quote">;
-
 async function normalizeQuoteLineExecutionOrdersTx(tx: QuoteRollupTx, quoteId: string) {
   const lines = await tx.quoteLineItem.findMany({
     where: { quoteId },
@@ -606,29 +680,6 @@ async function normalizeQuoteLineExecutionOrdersTx(tx: QuoteRollupTx, quoteId: s
       data: { executionOrder: i },
     });
   }
-}
-
-async function recalculateQuoteRollupsInTx(
-  tx: QuoteRollupTx,
-  params: { quoteId: string; organizationId: string },
-) {
-  const { quoteId, organizationId } = params;
-  const lines = await tx.quoteLineItem.findMany({
-    where: { quoteId },
-    select: { lineTotalCents: true },
-  });
-  const subtotal = lines.reduce((sum, row) => sum + row.lineTotalCents, 0);
-  await tx.quote.updateMany({
-    where: {
-      id: quoteId,
-      organizationId,
-      status: QuoteStatus.DRAFT,
-    },
-    data: {
-      subtotalCents: subtotal,
-      totalCents: subtotal,
-    },
-  });
 }
 
 /**
@@ -1263,93 +1314,7 @@ export async function performApplyLineItemTemplateToQuote(
   const ctx = await getRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
-    const template = await tx.lineItemTemplate.findFirst({
-      where: {
-        id: tid,
-        organizationId: ctx.organizationId,
-        archivedAt: null,
-      },
-    });
-    if (!template) {
-      return { ok: false as const, message: null as string | null };
-    }
-
-    const quote = await tx.quote.findFirst({
-      where: {
-        id: qid,
-        organizationId: ctx.organizationId,
-        status: QuoteStatus.DRAFT,
-      },
-      select: { id: true },
-    });
-    if (!quote) {
-      return { ok: false as const, message: null as string | null };
-    }
-
-    const lineTotal = computeLineTotalCents(
-      template.defaultQuantity,
-      template.defaultUnitAmountCents,
-    );
-    if (!lineTotal.ok) {
-      return { ok: false as const, message: lineTotal.error };
-    }
-
-    const agg = await tx.quoteLineItem.aggregate({
-      where: { quoteId: qid },
-      _max: { sortOrder: true },
-    });
-    const nextOrder = (agg._max.sortOrder ?? -1) + 1;
-
-    const createdLine = await tx.quoteLineItem.create({
-      data: {
-        quoteId: qid,
-        sortOrder: nextOrder,
-        description: template.description,
-        customerScopeTitle: template.defaultCustomerScopeTitle,
-        customerScopeDescription: template.defaultCustomerScopeDescription,
-        customerIncludedNotes: template.defaultCustomerIncludedNotes,
-        customerExcludedNotes: template.defaultCustomerExcludedNotes,
-        customerPresentationGroup: template.defaultCustomerPresentationGroup,
-        quantity: template.defaultQuantity,
-        unitAmountCents: template.defaultUnitAmountCents,
-        lineTotalCents: lineTotal.lineTotalCents,
-        internalNotes: template.defaultInternalNotes,
-        sourceLineItemTemplateId: template.id,
-        executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
-        executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
-        executionOrder: nextOrder,
-      },
-    });
-
-    const templateTasks = await tx.lineItemTemplateTask.findMany({
-      where: { lineItemTemplateId: template.id },
-    });
-    const sortedTemplateTasks = [...templateTasks].sort((a, b) => {
-      const ia = EXECUTION_STAGE_KEYS_ORDERED.indexOf(a.stageKey);
-      const ib = EXECUTION_STAGE_KEYS_ORDERED.indexOf(b.stageKey);
-      if (ia !== ib) {
-        return ia - ib;
-      }
-      return a.sortOrder - b.sortOrder;
-    });
-    for (const tt of sortedTemplateTasks) {
-      await tx.quoteLineExecutionTask.create({
-        data: {
-          quoteLineItemId: createdLine.id,
-          sourceLineItemTemplateTaskId: tt.id,
-          sourceTaskTemplateId: tt.sourceTaskTemplateId,
-          sourceType: tt.sourceType,
-          title: tt.title,
-          stageKey: tt.stageKey,
-          category: tt.category,
-          instructions: tt.instructions,
-          sortOrder: tt.sortOrder,
-        },
-      });
-    }
-
-    await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: ctx.organizationId });
-    return { ok: true as const, message: null as string | null };
+    return await performApplyLineItemTemplateToQuoteTx(tx, qid, tid, ctx.organizationId);
   });
 
   if (!outcome.ok) {
@@ -1445,6 +1410,20 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
 
       const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
 
+      // Ensure share token exists
+      const existingToken = await tx.quoteShareToken.findUnique({
+        where: { quoteId: id },
+      });
+      if (!existingToken) {
+        await tx.quoteShareToken.create({
+          data: {
+            organizationId: ctx.organizationId,
+            quoteId: id,
+            token: randomBytes(32).toString("hex"),
+          },
+        });
+      }
+
       const aggregate = await tx.quoteCheckpoint.aggregate({
         where: {
           organizationId: ctx.organizationId,
@@ -1460,6 +1439,7 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
           organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.SEND,
+          source: QuoteCheckpointSource.STAFF,
           sequence: nextSequence,
           schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
           snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
@@ -1476,7 +1456,10 @@ export async function performQuoteSendCheckpoint(quoteId: string): Promise<Quote
           organizationId: ctx.organizationId,
           status: QuoteStatus.DRAFT,
         },
-        data: { status: QuoteStatus.SENT },
+        data: {
+          status: QuoteStatus.SENT,
+          lastSentEmailAt: new Date(),
+        },
       });
       if (statusUpdate.count !== 1) {
         throw new Error("QUOTE_SEND_STATUS_RACE");
@@ -1593,6 +1576,7 @@ export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFo
           organizationId: ctx.organizationId,
           quoteId: id,
           kind: QuoteCheckpointKind.APPROVAL,
+          source: QuoteCheckpointSource.STAFF,
           sequence: nextSequence,
           schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
           snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,

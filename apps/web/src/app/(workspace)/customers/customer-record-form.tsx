@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { ServiceAddressCaptureField } from "@/components/forms/service-address-capture-field";
 import { CUSTOMER_FIELD_LIMITS } from "./customer-field-limits";
 import { createCustomerAction, type CustomerFormState } from "./customer-form-actions";
 
@@ -18,6 +19,7 @@ export type CustomerRecordFormProps =
   | {
       mode: "create";
       cancelHref: string;
+      googleMapsApiKey: string;
     }
   | {
       mode: "edit";
@@ -54,6 +56,11 @@ export function CustomerRecordForm(props: CustomerRecordFormProps) {
           notes: null as string | null,
         };
 
+  const displayNameLabel =
+    props.mode === "edit" && props.initial.companyName?.trim()
+      ? "Primary contact"
+      : "Customer name";
+
   return (
     <form action={formAction} className="space-y-5">
       {state.error ? (
@@ -68,7 +75,7 @@ export function CustomerRecordForm(props: CustomerRecordFormProps) {
 
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Display name</span>
+          <span className={fieldLabelClass}>{displayNameLabel}</span>
           <input
             name="displayName"
             type="text"
@@ -83,7 +90,7 @@ export function CustomerRecordForm(props: CustomerRecordFormProps) {
 
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Company</span>
+          <span className={fieldLabelClass}>Company (optional)</span>
           <input
             name="companyName"
             type="text"
@@ -124,9 +131,18 @@ export function CustomerRecordForm(props: CustomerRecordFormProps) {
         </div>
       </div>
 
+      {props.mode === "create" ? (
+        <ServiceAddressCaptureField
+          googleMapsApiKey={props.googleMapsApiKey}
+          fieldLabelClass={fieldLabelClass}
+          controlClass={controlClass}
+          required={false}
+        />
+      ) : null}
+
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Internal notes</span>
+          <span className={fieldLabelClass}>Notes</span>
           <textarea
             name="notes"
             rows={4}

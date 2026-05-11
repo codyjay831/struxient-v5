@@ -155,7 +155,7 @@ export default async function QuoteExecutionReviewPreviewPage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Proposals", href: "/sales?tab=proposals" },
           { label: row.title, href: `/quotes/${qid}` },
           { label: "Execution preview" },
         ]}

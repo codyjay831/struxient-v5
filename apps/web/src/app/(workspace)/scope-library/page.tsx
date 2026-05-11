@@ -17,7 +17,19 @@ export default async function ScopeLibraryPage() {
   const rows = await db.lineItemTemplate.findMany({
     where: { organizationId: ctx.organizationId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      description: true,
+      defaultQuantity: true,
+      defaultUnitAmountCents: true,
+      defaultInternalNotes: true,
+      defaultCustomerScopeTitle: true,
+      defaultCustomerScopeDescription: true,
+      defaultCustomerIncludedNotes: true,
+      defaultCustomerExcludedNotes: true,
+      defaultCustomerPresentationGroup: true,
+      priceBufferPercentage: true,
+      tags: true,
       defaultExecutionTasks: {
         select: { stageKey: true, category: true },
       },
@@ -45,6 +57,8 @@ export default async function ScopeLibraryPage() {
           t.defaultCustomerExcludedNotes ||
           t.defaultCustomerPresentationGroup,
       ),
+      priceBufferPercentage: t.priceBufferPercentage,
+      tags: t.tags,
       executionSummary: { taskCount: exec.taskCount, summaryLine: exec.summaryLine },
     };
   });

@@ -142,7 +142,7 @@ function OverviewTab({
               <div>
                 <p className={`${sectionLabelClass} mb-0.5`}>Lead</p>
                 <Link
-                  href={`/leads/${quote.lead.id}`}
+                  href={`/sales/${quote.lead.id}`}
                   className="text-sm font-medium text-foreground hover:underline underline-offset-2 inline-flex items-center gap-1"
                 >
                   {quote.lead.title}
@@ -369,7 +369,7 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
                 <p className={sectionLabelClass}>Linked lead</p>
                 <p className="mt-1 text-sm font-medium text-foreground">{quote.lead!.title}</p>
               </div>
-              <Link href={`/leads/${quote.lead!.id}`} className={listLinkClass}>
+              <Link href={`/sales/${quote.lead!.id}`} className={listLinkClass}>
                 Lead record
                 <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
               </Link>
@@ -426,7 +426,7 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
             <p className="mt-1 text-xs text-foreground-subtle">
               Linking is optional. Use it when this quote comes from a tracked lead.
             </p>
-            <Link href="/leads" className={`mt-4 ${listLinkClass}`}>
+            <Link href="/sales" className={`mt-4 ${listLinkClass}`}>
               Leads
             </Link>
           </div>

@@ -18,6 +18,14 @@ enum LeadStatus {
   ARCHIVED
 }
 
+enum NeededByBucket {
+  ASAP
+  THIS_WEEK
+  THIS_MONTH
+  FLEXIBLE
+  SPECIFIC_DATE
+}
+
 enum LeadSource {
   PHONE
   EMAIL
@@ -43,6 +51,11 @@ enum QuoteStatus {
 enum QuoteCheckpointKind {
   SEND
   APPROVAL
+}
+
+enum QuoteCheckpointSource {
+  STAFF
+  CUSTOMER_PORTAL
 }
 
 /// V1 canonical execution phases — fixed keys for predictable merge later; no freeform stage names on templates yet.
@@ -120,6 +133,18 @@ enum JobVisitStatus {
   CANCELED
 }
 
+enum LeadVisitRequestStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+}
+
+enum LeadCustomFieldType {
+  TEXT
+  NUMBER
+  SELECT
+}
+
 enum AttachmentStatus {
   PENDING
   READY
@@ -149,6 +174,9 @@ model Organization {
   jobVisits             JobVisit[]
   publicRequestSettings PublicRequestSettings?
   customerServiceLocations CustomerServiceLocation[]
+  quoteShareTokens      QuoteShareToken[]
+  leadVisitRequests     LeadVisitRequest[]
+  leadCustomFieldDefs   LeadCustomFieldDef[]
 }
 
 /// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
@@ -163,6 +191,11 @@ model PublicRequestSettings {
   submitButtonText         String       @default("Send request")
   /// JSON array of `{ "value": "slug-key", "label": "Customer label" }` — validated server-side.
   requestTypeOptionsJson   Json         @default("[]")
+  /// JSON object mapping requestType value to array of LineItemTemplate ids: `{ "roof-repair": ["id1", "id2"] }`
+  instantQuoteConfigJson   Json         @default("{}")
+  instantQuoteEnabled      Boolean      @default(true)
+  showInstantQuoteDetails  Boolean      @default(true)
+  offerings                String[]     @default([])
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 }
@@ -182,6 +215,7 @@ model Customer {
   quotes         Quote[]
   jobs           Job[]
   serviceLocations CustomerServiceLocation[]
+  attachments    Attachment[]
 
   @@index([organizationId])
 }
@@ -273,9 +307,16 @@ model Lead {
   contactName    String?
   email          String?
   phone          String?
+  requestType    String?
+  neededByBucket NeededByBucket?
+  neededByDate   DateTime?
+  scopeSummary   String?
+  suggestedTemplateIds String[] @default([])
   notes          String?
   /// Optional snapshot from the public intake form (e.g. Google Places). Not authoritative for protected server decisions.
   publicIntakeServiceLocation Json?
+  /// Browser-generated key for public intake dedupe (double-submit / retry). Null for non-public leads.
+  publicIntakeClientKey String?
   convertedAt    DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -283,11 +324,14 @@ model Lead {
   quotes         Quote[]
   jobs           Job[]
   createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromLead")
+  visitRequests  LeadVisitRequest[]
+  customFieldValues LeadCustomFieldValue[]
 
   @@index([organizationId])
   @@index([customerId])
   @@index([status])
   @@index([source])
+  @@unique([organizationId, publicIntakeClientKey])
 }
 
 model Quote {
@@ -304,17 +348,52 @@ model Quote {
   internalNotes          String?
   subtotalCents      Int            @default(0)
   totalCents         Int            @default(0)
+  lastSentEmailAt    DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   attachments        Attachment[]
   lineItems          QuoteLineItem[]
   checkpoints        QuoteCheckpoint[]
+  shareToken         QuoteShareToken?
   job                Job?
 
   @@index([organizationId])
   @@index([customerId])
   @@index([leadId])
   @@index([status])
+}
+
+model QuoteShareToken {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteId        String    @unique
+  quote          Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  token          String    @unique
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastViewedAt   DateTime?
+  acceptedAt     DateTime?
+  acceptedByName String?
+  acceptedFromIp String?
+
+  @@index([organizationId])
+  @@index([token])
+}
+
+model QuoteView {
+  id              String       @id @default(cuid())
+  organizationId  String
+  quoteId         String
+  token           String
+  viewedAt        DateTime     @default(now())
+  ip              String?
+  userAgent       String?
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([token])
 }
 
 /// Immutable staff-only proof of what the customer-facing proposal contained at a commitment moment (send, acceptance).
@@ -327,6 +406,7 @@ model QuoteCheckpoint {
   quoteId                   String
   quote                     Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   kind                      QuoteCheckpointKind
+  source                    QuoteCheckpointSource @default(STAFF)
   sequence                  Int
   schemaVersion             Int
   snapshotJson              Json
@@ -355,6 +435,8 @@ model LineItemTemplate {
   defaultCustomerIncludedNotes     String?
   defaultCustomerExcludedNotes     String?
   defaultCustomerPresentationGroup String?
+  tags                             String[]        @default([])
+  priceBufferPercentage            Int             @default(0)
   archivedAt                       DateTime?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -692,6 +774,8 @@ model Attachment {
   job             Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
   jobTaskId       String?
   jobTask         JobTask?     @relation(fields: [jobTaskId], references: [id], onDelete: SetNull)
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   
   uploadedByUserId String?
   uploadedByUser   User?       @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
@@ -704,6 +788,7 @@ model Attachment {
   @@index([quoteId])
   @@index([jobId])
   @@index([jobTaskId])
+  @@index([customerId])
 }
 
 model JobActivity {
@@ -776,4 +861,63 @@ model JobPaymentRequirement {
   @@index([jobId])
   @@index([organizationId, status])
   @@index([requiredBeforeStageId])
+}
+
+model LeadVisitRequest {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId          String
+  lead            Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  requestedDate   DateTime?
+  requestedWindow String?               // e.g. "Morning", "Afternoon", "Anytime"
+  confirmedDate   DateTime?
+  status          LeadVisitRequestStatus @default(PENDING)
+  
+  notes           String?
+  
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([organizationId])
+  @@index([leadId])
+  @@index([status])
+}
+
+model LeadCustomFieldDef {
+  id              String              @id @default(cuid())
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  key             String              // e.g. "roof-type"
+  label           String              // e.g. "Roof Type"
+  type            LeadCustomFieldType
+  optionsJson     Json?               // For SELECT type: ["Asphalt", "Metal", "Tile"]
+  isRequired      Boolean             @default(false)
+  showOnPublicIntake Boolean          @default(true)
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  values          LeadCustomFieldValue[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model LeadCustomFieldValue {
+  id              String              @id @default(cuid())
+  leadId          String
+  lead            Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fieldDefId      String
+  fieldDef        LeadCustomFieldDef  @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+  
+  value           String              // Stored as string, parsed based on type
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([leadId, fieldDefId])
+  @@index([leadId])
+  @@index([fieldDefId])
 }

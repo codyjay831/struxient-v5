@@ -84,10 +84,10 @@ export default async function CustomersPage({
         title="Relationship context"
         description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes are live under Sales; job, schedule, and payment routes are reserved shells—not auto-wired from this page."
       >
-        <Link href="/leads" className={handoffMutedLinkClass}>
+        <Link href="/sales" className={handoffMutedLinkClass}>
           Sales: Leads
         </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
+        <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
           Sales: Quotes
         </Link>
         <Link href="/payments" className={handoffMutedLinkClass}>

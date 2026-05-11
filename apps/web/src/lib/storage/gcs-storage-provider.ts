@@ -21,13 +21,16 @@ export class GcsStorageProvider implements StorageProvider {
 
   createObjectKey(params: {
     organizationId: string;
-    jobId: string;
-    taskId: string;
+    jobId?: string;
+    taskId?: string;
     attachmentId: string;
     fileName: string;
   }): string {
     const safeName = params.fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
-    return `orgs/${params.organizationId}/jobs/${params.jobId}/tasks/${params.taskId}/attachments/${params.attachmentId}/${safeName}`;
+    if (params.jobId && params.taskId) {
+      return `orgs/${params.organizationId}/jobs/${params.jobId}/tasks/${params.taskId}/attachments/${params.attachmentId}/${safeName}`;
+    }
+    return `orgs/${params.organizationId}/leads/attachments/${params.attachmentId}/${safeName}`;
   }
 
   async createSignedUploadUrl(params: {

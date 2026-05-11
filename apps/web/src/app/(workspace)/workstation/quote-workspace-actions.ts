@@ -32,7 +32,7 @@ function revalidateQuoteCommercialSurfaces(quoteId: string) {
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
   revalidatePath("/workstation/jobs");
-  revalidatePath("/leads");
+  revalidatePath("/sales");
 }
 
 /**

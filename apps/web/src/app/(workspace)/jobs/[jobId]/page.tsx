@@ -18,6 +18,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { Briefcase, Layers, ListOrdered } from "lucide-react";
+import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
+import { JobJobsitePanel } from "@/components/jobs/job-jobsite-panel";
 import { JobIssueManager } from "@/components/jobs/job-issue-manager";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
@@ -67,8 +69,26 @@ export default async function JobDetailPage({
         },
       },
       quote: { select: { id: true, title: true, organizationId: true } },
-      customer: { select: { id: true, displayName: true, organizationId: true } },
-      lead: { select: { id: true, title: true, organizationId: true } },
+      customer: {
+        select: {
+          id: true,
+          displayName: true,
+          organizationId: true,
+          serviceLocations: {
+            orderBy: { isPrimary: "desc" },
+            select: { formattedAddress: true, addressLine1: true, isPrimary: true },
+          },
+        },
+      },
+      lead: {
+        select: {
+          id: true,
+          title: true,
+          organizationId: true,
+          notes: true,
+          publicIntakeServiceLocation: true,
+        },
+      },
       issues: {
         orderBy: [{ createdAt: "desc" }],
         select: {
@@ -184,6 +204,17 @@ export default async function JobDetailPage({
     job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
   const safeLead = job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
 
+  const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    customerLocations: safeCustomer?.serviceLocations ?? [],
+    leadRow: safeLead
+      ? {
+          publicIntakeServiceLocation: safeLead.publicIntakeServiceLocation,
+          notes: safeLead.notes,
+        }
+      : null,
+  });
+  const jobCustomerId = safeCustomer?.id ?? null;
+  const jobLeadEditHref = safeLead ? `/sales/${safeLead.id}/edit` : null;
 
   const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
@@ -260,6 +291,12 @@ export default async function JobDetailPage({
         }
       />
 
+      <JobJobsitePanel
+        jobsiteAddressLine={jobsiteAddressLine}
+        customerId={jobCustomerId}
+        leadEditHref={jobLeadEditHref}
+      />
+
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
           Job record
@@ -288,7 +325,7 @@ export default async function JobDetailPage({
             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Lead</dt>
             <dd className="mt-0.5 text-foreground">
               {safeLead ? (
-                <Link href={`/leads/${safeLead.id}`} className="underline-offset-4 hover:underline">
+                <Link href={`/sales/${safeLead.id}`} className="underline-offset-4 hover:underline">
                   {safeLead.title}
                 </Link>
               ) : (
@@ -391,6 +428,9 @@ export default async function JobDetailPage({
                             jobContextLabel={
                               secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
                             }
+                            jobsiteAddressLine={jobsiteAddressLine}
+                            customerId={jobCustomerId}
+                            leadEditHref={jobLeadEditHref}
                             task={{ ...task, paymentBlockers: taskPaymentBlockers }}
                           />
                         </li>
@@ -448,6 +488,9 @@ export default async function JobDetailPage({
                                   jobContextLabel={
                                     secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
                                   }
+                                  jobsiteAddressLine={jobsiteAddressLine}
+                                  customerId={jobCustomerId}
+                                  leadEditHref={jobLeadEditHref}
                                   task={{ ...task, paymentBlockers: taskPaymentBlockers }}
                                 />
                               </li>

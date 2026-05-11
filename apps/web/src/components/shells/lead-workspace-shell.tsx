@@ -2,12 +2,12 @@ import Link from "next/link";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  LeadWorkspacePageClient,
+  SalesWorkspacePageClient,
   type SerializedLeadFull,
   type SerializedLinkedQuoteFull,
   type SerializedProgressActionFull,
-} from "@/components/leads/lead-workspace-page-client";
-import type { LeadFormState } from "@/app/(workspace)/leads/lead-form-actions";
+} from "@/components/sales/sales-workspace-page-client";
+import type { LeadFormState } from "@/app/(workspace)/sales/sales-form-actions";
 import type { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import type { LeadCommercialProgress, LeadCommercialProgressAction } from "@/lib/lead-commercial-progress";
 import { resolveLeadCommercialProgressActionHref } from "@/lib/lead-commercial-progress";
@@ -23,6 +23,7 @@ import {
   type QuoteLinkedSummary,
 } from "@/lib/quote-display";
 import type { LeadWorkSurfaceActiveQuotePayload } from "@/components/work-surfaces/lead-work-surface";
+import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -64,6 +65,8 @@ export type LeadWorkspaceShellProps = {
   returnHref?: string;
   /** Pre-loaded QuoteWorkSurface payload for the active linked quote. */
   activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
+  /** Pre-loaded service-address context for the Customer Info block. */
+  serviceAddressContext?: LeadServiceAddressContext;
 };
 
 export function LeadWorkspaceShell({
@@ -76,6 +79,7 @@ export function LeadWorkspaceShell({
   commercialProgress,
   returnHref,
   activeQuoteWorkSurface,
+  serviceAddressContext,
 }: LeadWorkspaceShellProps) {
   /* ── Date formatting (server-side for SSR consistency) ─────────────────── */
   const locale = "en-US";
@@ -88,6 +92,9 @@ export function LeadWorkspaceShell({
   const updatedAtLabel = lead.updatedAt.toLocaleDateString(locale, dateOpts);
   const convertedAtLabel = lead.convertedAt
     ? lead.convertedAt.toLocaleDateString(locale, dateOpts)
+    : null;
+  const neededByDateLabel = lead.neededByDate
+    ? lead.neededByDate.toLocaleDateString(locale, dateOpts)
     : null;
 
   /* ── Serialize progress actions ────────────────────────────────────────── */
@@ -114,7 +121,11 @@ export function LeadWorkspaceShell({
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
-    publicIntakeFormattedAddress: lead.publicIntakeFormattedAddress,
+    requestType: lead.requestType,
+    neededByBucket: lead.neededByBucket,
+    neededByDateLabel,
+    scopeSummary: lead.scopeSummary,
+    jobsiteAddressLine: lead.jobsiteAddressLine,
     intakeServiceLocationLinkedToCustomer: lead.intakeServiceLocationLinkedToCustomer,
     sourceLabel: formatLeadSource(lead.source),
     sourceDetail: lead.sourceDetail,
@@ -129,8 +140,8 @@ export function LeadWorkspaceShell({
     convertedAtLabel,
     showConvertedWithoutCustomerHelper:
       lead.status === "CONVERTED" && lead.customerId == null,
-    leadHref: `/leads/${lead.id}`,
-    editHref: `/leads/${lead.id}/edit`,
+    leadHref: `/sales/${lead.id}`,
+    editHref: `/sales/${lead.id}/edit`,
     newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(lead.id)}`,
     progressLabel: commercialProgress.label,
     progressDescription: commercialProgress.description,
@@ -154,6 +165,19 @@ export function LeadWorkspaceShell({
     activeJobId: commercialProgress.activeJob?.id ?? null,
     activeJobStatus: commercialProgress.activeJob?.status ?? null,
     showsRevisionDrift: commercialProgress.showsRevisionDrift,
+    source: lead.source,
+    visitRequests: lead.visitRequests.map((vr) => ({
+      id: vr.id,
+      requestedDate: vr.requestedDate,
+      requestedDateLabel: vr.requestedDate
+        ? vr.requestedDate.toLocaleDateString(locale, dateOpts)
+        : null,
+      requestedWindow: vr.requestedWindow,
+      confirmedDate: vr.confirmedDate,
+      status: vr.status,
+      notes: vr.notes,
+      createdAt: vr.createdAt,
+    })),
   };
 
   /* ── Serialize linked quotes ───────────────────────────────────────────── */
@@ -181,7 +205,7 @@ export function LeadWorkspaceShell({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Leads", href: "/leads" },
+          { label: "Sales", href: "/sales" },
           { label: lead.title },
         ]}
       />
@@ -212,17 +236,17 @@ export function LeadWorkspaceShell({
               ← Workstation
             </Link>
           )}
-          <Link href="/leads" className={listLinkClass}>
+          <Link href="/sales" className={listLinkClass}>
             ← Leads
           </Link>
-          <Link href={`/leads/${lead.id}/edit`} className={listLinkClass}>
+          <Link href={`/sales/${lead.id}/edit`} className={listLinkClass}>
             Edit
           </Link>
         </div>
       </div>
 
       {/* ── Client workspace (next step + tabs) ──────────────────────────── */}
-      <LeadWorkspacePageClient
+      <SalesWorkspacePageClient
         lead={serializedLead}
         linkedQuotes={serializedQuotes}
         updateStatusAction={updateStatusAction}
@@ -230,6 +254,7 @@ export function LeadWorkspaceShell({
         linkLeadAction={linkLeadAction}
         matchHints={matchHints}
         activeQuoteWorkSurface={activeQuoteWorkSurface}
+        serviceAddressContext={serviceAddressContext}
       />
     </div>
   );

@@ -52,20 +52,42 @@ export function sanitizePublicIntakeServiceLocationFromClient(
     return null;
   }
   const o = input as Record<string, unknown>;
-  if (o.schemaVersion !== PUBLIC_INTAKE_SERVICE_LOCATION_SCHEMA_VERSION) {
+
+  const formattedAddressPre = trimToMax(o.formattedAddress, MAX.formattedAddress);
+  const addressLine1Pre = trimToMax(o.addressLine1, MAX.addressLine);
+  const googlePlaceIdPre = trimToMax(o.googlePlaceId, MAX.googlePlaceId);
+
+  const rawSv = o.schemaVersion;
+  const schemaOk =
+    rawSv === PUBLIC_INTAKE_SERVICE_LOCATION_SCHEMA_VERSION ||
+    rawSv === 1 ||
+    rawSv === "1";
+
+  /** Recover legacy snapshots that omit `schemaVersion` but carry usable address fields. */
+  if (!schemaOk && formattedAddressPre.length === 0 && addressLine1Pre.length === 0) {
+    return null;
+  }
+  if (!schemaOk && rawSv != null) {
     return null;
   }
 
-  const formattedAddress = trimToMax(o.formattedAddress, MAX.formattedAddress);
-  const addressLine1 = trimToMax(o.addressLine1, MAX.addressLine);
+  const formattedAddress = formattedAddressPre;
+  const addressLine1 = addressLine1Pre;
   const addressLine2 = trimToMax(o.addressLine2, MAX.addressLine);
   const city = trimToMax(o.city, MAX.city);
   const state = trimToMax(o.state, MAX.state);
   const postalCode = trimToMax(o.postalCode, MAX.postalCode);
   const country = trimToMax(o.country, MAX.country);
-  const googlePlaceId = trimToMax(o.googlePlaceId, MAX.googlePlaceId);
+  const googlePlaceId = googlePlaceIdPre;
 
-  const source = o.source === "google_places" || o.source === "manual" ? o.source : null;
+  let source: "google_places" | "manual" | null =
+    o.source === "google_places" || o.source === "manual" ? o.source : null;
+  if (source == null && !schemaOk && (rawSv === undefined || rawSv === null)) {
+    source = googlePlaceId.length > 0 ? "google_places" : "manual";
+  }
+  if (source == null && schemaOk) {
+    source = googlePlaceId.length > 0 ? "google_places" : "manual";
+  }
   if (source == null) {
     return null;
   }

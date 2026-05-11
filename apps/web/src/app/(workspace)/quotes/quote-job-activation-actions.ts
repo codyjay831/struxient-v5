@@ -29,27 +29,32 @@ export type QuoteJobActivationFormState = {
 };
 
 /**
- * Activates an APPROVED quote into a runtime [Job] with [JobStage] / [JobTask] copies of the
- * quote's draft execution. One job per quote (enforced by [Job.quoteId @unique]).
- *
- * Transactional: validates inside the transaction so racing actions cannot create a second job.
- * Lineage is preserved on every row (sourceQuoteLineItemId, sourceQuoteLineExecutionTaskId,
- * sourceTaskTemplateId) so later quote/template edits do not mutate this runtime copy.
+ * Result type for the shared activation core. Both the redirecting form action
+ * and the workspace-safe action call the same helper to avoid drift in
+ * readiness rules, lineage, and idempotency.
  */
-export async function activateQuoteJobAction(
-  quoteId: string,
-  _prev: QuoteJobActivationFormState,
-  formData: FormData,
-): Promise<QuoteJobActivationFormState> {
-  void formData;
-  const id = quoteId.trim();
-  if (!id) {
-    return { error: "Missing quote record id." };
-  }
+type PerformActivateQuoteJobResult =
+  | { ok: true; jobId: string; leadId: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Shared activation transaction body — same readiness rules, same lineage,
+ * same idempotency guard (`Job.quoteId @unique`) regardless of caller.
+ *
+ * Returns a result object rather than throwing across the action boundary.
+ * Does not redirect, does not revalidate — those are caller concerns so the
+ * redirecting and workspace-safe variants can choose what to invalidate.
+ */
+async function performActivateQuoteJob(
+  rawQuoteId: string,
+): Promise<PerformActivateQuoteJobResult> {
+  const id = rawQuoteId.trim();
+  if (!id) return { ok: false, error: "Missing quote record id." };
 
   const ctx = await getRequestContextOrThrow();
 
   let createdJobId: string | null = null;
+  let leadIdForRevalidation: string | null = null;
 
   try {
     createdJobId = await db.$transaction(async (tx) => {
@@ -157,6 +162,7 @@ export async function activateQuoteJobAction(
         quote.customer && quote.customer.organizationId === ctx.organizationId ? quote.customerId : null;
       const safeLeadId =
         quote.lead && quote.lead.organizationId === ctx.organizationId ? quote.leadId : null;
+      leadIdForRevalidation = safeLeadId;
 
       const job = await tx.job.create({
         data: {
@@ -298,10 +304,11 @@ export async function activateQuoteJobAction(
     });
   } catch (e) {
     if (e instanceof ActivationError) {
-      return { error: e.message };
+      return { ok: false, error: e.message };
     }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return {
+        ok: false,
         error:
           "A job for this quote was created at the same moment. Refresh the page to open it.",
       };
@@ -310,15 +317,74 @@ export async function activateQuoteJobAction(
   }
 
   if (!createdJobId) {
-    return { error: "Activation did not return a job id. Refresh and try again." };
+    return {
+      ok: false,
+      error: "Activation did not return a job id. Refresh and try again.",
+    };
   }
 
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
+  return { ok: true, jobId: createdJobId, leadId: leadIdForRevalidation };
+}
+
+function revalidateActivationSurfaces(quoteId: string, jobId: string, leadId: string | null) {
+  revalidatePath(`/quotes/${quoteId}`);
+  revalidatePath(`/quotes/${quoteId}/execution-review`);
   revalidatePath("/quotes");
   revalidatePath("/jobs");
-  revalidatePath(jobDetailPath(createdJobId));
-  redirect(jobDetailPath(createdJobId));
+  revalidatePath(jobDetailPath(jobId));
+  if (leadId) {
+    revalidatePath(`/sales/${leadId}`);
+  }
+  revalidatePath("/sales");
+  revalidatePath("/workstation");
+}
+
+/**
+ * Activates an APPROVED quote into a runtime [Job] with [JobStage] / [JobTask] copies of the
+ * quote's draft execution. One job per quote (enforced by [Job.quoteId @unique]).
+ *
+ * Transactional: validates inside the transaction so racing actions cannot create a second job.
+ * Lineage is preserved on every row (sourceQuoteLineItemId, sourceQuoteLineExecutionTaskId,
+ * sourceTaskTemplateId) so later quote/template edits do not mutate this runtime copy.
+ *
+ * Redirects to the new job page on success — preserves the existing full-page activation UX.
+ */
+export async function activateQuoteJobAction(
+  quoteId: string,
+  _prev: QuoteJobActivationFormState,
+  formData: FormData,
+): Promise<QuoteJobActivationFormState> {
+  void formData;
+  const result = await performActivateQuoteJob(quoteId);
+  if (!result.ok) {
+    return { error: result.error };
+  }
+  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.leadId);
+  redirect(jobDetailPath(result.jobId));
+}
+
+/**
+ * Workspace-safe variant of {@link activateQuoteJobAction} — same readiness
+ * rules, same transaction, same lineage, same `Job.quoteId @unique` idempotency
+ * — but returns a result object instead of redirecting so the embedded Lead
+ * Quote tab can show inline success ("Job activated. Open job") without
+ * navigating the user out of the Lead workspace.
+ *
+ * `quoteId` must be supplied from a server-trusted surface (`.bind(null, ...)`).
+ */
+export type ActivateQuoteJobWorkspaceResult =
+  | { success: true; jobId: string }
+  | { success: false; error: string };
+
+export async function activateQuoteJobWorkspaceAction(
+  quoteId: string,
+): Promise<ActivateQuoteJobWorkspaceResult> {
+  const result = await performActivateQuoteJob(quoteId);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateActivationSurfaces(quoteId.trim(), result.jobId, result.leadId);
+  return { success: true, jobId: result.jobId };
 }
 
 class ActivationError extends Error {

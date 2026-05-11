@@ -1,5 +1,16 @@
-import type { LeadSource, LeadStatus } from "@prisma/client";
+import type { LeadSource, LeadStatus, NeededByBucket, LeadVisitRequestStatus } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+
+/** Serializable lead visit request (Phase C site visits). */
+export type LeadVisitRequestPayload = {
+  id: string;
+  requestedDate: Date | null;
+  requestedWindow: string | null;
+  confirmedDate: Date | null;
+  status: LeadVisitRequestStatus;
+  notes: string | null;
+  createdAt: Date;
+};
 
 /** Serializable lead row for the detail shell (server-fetched, org-scoped). */
 export type LeadDetailPayload = {
@@ -12,8 +23,12 @@ export type LeadDetailPayload = {
   email: string | null;
   phone: string | null;
   notes: string | null;
-  /** From `Lead.publicIntakeServiceLocation` when present (public intake Places snapshot). */
-  publicIntakeFormattedAddress: string | null;
+  requestType: string | null;
+  neededByBucket: NeededByBucket | null;
+  neededByDate: Date | null;
+  scopeSummary: string | null;
+  /** Where work happens: structured lead intake and legacy public-request notes when needed. */
+  jobsiteAddressLine: string | null;
   /** True when a linked customer already reflects this lead's intake service location. */
   intakeServiceLocationLinkedToCustomer: boolean;
   customerId: string | null;
@@ -21,6 +36,8 @@ export type LeadDetailPayload = {
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; displayName: string } | null;
+  /** Site visit requests (Phase C). */
+  visitRequests: LeadVisitRequestPayload[];
 };
 
 const STATUS_LABELS: Record<LeadStatus, string> = {

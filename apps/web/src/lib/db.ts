@@ -115,6 +115,7 @@ export async function ensureDevUserAndMembership() {
 }
 
 export type PublicRequestIntakeBundle = {
+  organizationId: string;
   organizationDisplayName: string;
   companySlug: string;
   intake: EffectivePublicRequestSettings;
@@ -134,6 +135,7 @@ export async function getPublicRequestIntakeBundleBySlug(
   const org = await db.organization.findFirst({
     where: { slug: normalized },
     select: {
+      id: true,
       name: true,
       slug: true,
       publicRequestSettings: {
@@ -144,6 +146,10 @@ export async function getPublicRequestIntakeBundleBySlug(
           emergencyWarningText: true,
           submitButtonText: true,
           requestTypeOptionsJson: true,
+          instantQuoteConfigJson: true,
+          instantQuoteEnabled: true,
+          showInstantQuoteDetails: true,
+          offerings: true,
         },
       },
     },
@@ -152,7 +158,9 @@ export async function getPublicRequestIntakeBundleBySlug(
     return null;
   }
   const intake = effectivePublicRequestSettingsFromRow(org.publicRequestSettings);
+
   return {
+    organizationId: org.id,
     organizationDisplayName: org.name,
     companySlug: org.slug,
     intake,

@@ -107,6 +107,29 @@ function ScopeLibraryCreatePresetForm() {
           />
         </label>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className={fieldLabelClass}>Price buffer (%)</span>
+          <input
+            name="priceBufferPercentage"
+            type="number"
+            min="0"
+            max="100"
+            defaultValue="0"
+            className={controlClass}
+            placeholder="e.g. 10 for 10%"
+          />
+        </label>
+        <label className="block">
+          <span className={fieldLabelClass}>Tags (comma separated)</span>
+          <input
+            name="tags"
+            type="text"
+            className={controlClass}
+            placeholder="e.g. Premium, Service, Material"
+          />
+        </label>
+      </div>
       <div>
         <label className="block">
           <span className={fieldLabelClass}>Template internal notes (optional)</span>
@@ -179,6 +202,28 @@ function ScopeLibraryTemplateEditForm({
             defaultValue={template.defaultUnitAmountDollars}
             className={controlClass}
             autoComplete="off"
+          />
+        </label>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className={fieldLabelClass}>Price buffer (%)</span>
+          <input
+            name="priceBufferPercentage"
+            type="number"
+            min="0"
+            max="100"
+            defaultValue={template.priceBufferPercentage}
+            className={controlClass}
+          />
+        </label>
+        <label className="block">
+          <span className={fieldLabelClass}>Tags (comma separated)</span>
+          <input
+            name="tags"
+            type="text"
+            defaultValue={template.tags.join(", ")}
+            className={controlClass}
           />
         </label>
       </div>
@@ -274,9 +319,26 @@ export function ScopeLibraryLinePresetsPanel({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{t.description}</p>
+                  {t.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {t.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center rounded bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <p className="mt-1 text-xs text-foreground-muted">
                     Defaults: {t.defaultQuantityDisplay} × {formatMoneyCents(t.defaultUnitAmountCents)}{" "}
                     unit
+                    {t.priceBufferPercentage > 0 && (
+                      <span className="ml-1 text-foreground-subtle">
+                        (+{t.priceBufferPercentage}% buffer)
+                      </span>
+                    )}
                     {t.hasCustomerProposalDefaults ? (
                       <span className="mt-1 block text-foreground-subtle">
                         Includes default proposal wording (copied into new lines only).

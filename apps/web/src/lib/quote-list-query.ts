@@ -155,5 +155,5 @@ export function serializeQuotesListHref(overrides: {
     params.set("sort", sort);
   }
   const qs = params.toString();
-  return qs ? `/quotes?${qs}` : "/quotes";
+  return qs ? `/sales?tab=proposals&${qs}` : "/sales?tab=proposals";
 }

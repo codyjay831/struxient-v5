@@ -12,6 +12,7 @@ import {
   type LeadWorkSurfaceData,
   type LeadWorkSurfaceProgressAction,
   type LeadWorkSurfaceQuote,
+  type LeadWorkSurfaceVisitRequest,
 } from "@/components/work-surfaces/lead-work-surface";
 import {
   type LeadCommercialProgress,
@@ -19,7 +20,8 @@ import {
   resolveLeadCommercialProgressActionHref,
 } from "@/lib/lead-commercial-progress";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
-import type { LeadStatus } from "@prisma/client";
+import type { LeadStatus, LeadSource } from "@prisma/client";
+import type { LeadServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
 
 export type WorkstationLeadPanelQuote = {
   id: string;
@@ -43,6 +45,7 @@ export type WorkstationLeadPanelProps = {
   statusLabel: string;
   statusTone: StatusBadgeTone;
   sourceLabel: string;
+  source: LeadSource;
   createdAtLabel: string;
   customerId: string | null;
   customerDisplayName?: string | null;
@@ -54,6 +57,12 @@ export type WorkstationLeadPanelProps = {
   progress: LeadCommercialProgress;
   /** Pre-loaded active-quote QuoteWorkSurface payload (Phase 2 embed). */
   activeQuoteWorkSurface?: LeadWorkSurfaceActiveQuotePayload | null;
+  /** Same resolution as Leads list / full lead page (intake + legacy notes). */
+  jobsiteAddressLine?: string | null;
+  /** Pre-loaded service-address context for the Customer Info block. */
+  serviceAddressContext?: LeadServiceAddressContext;
+  /** Site visit requests (Phase C). */
+  visitRequests?: LeadWorkSurfaceVisitRequest[];
 };
 
 function serializeProgressAction(
@@ -83,6 +92,7 @@ export function WorkstationLeadPanel({
   statusLabel,
   statusTone,
   sourceLabel,
+  source,
   createdAtLabel,
   customerId,
   customerDisplayName,
@@ -91,6 +101,8 @@ export function WorkstationLeadPanel({
   linkedQuotes,
   progress,
   activeQuoteWorkSurface,
+  jobsiteAddressLine,
+  serviceAddressContext,
 }: WorkstationLeadPanelProps) {
   const data: LeadWorkSurfaceData = {
     id: leadId,
@@ -99,7 +111,9 @@ export function WorkstationLeadPanel({
     email: email ?? null,
     phone: phone ?? null,
     notes,
+    jobsiteAddressLine: jobsiteAddressLine ?? null,
     sourceLabel,
+    source,
     statusLabel,
     statusTone,
     statusValue,
@@ -107,8 +121,8 @@ export function WorkstationLeadPanel({
     customerDisplayName: customerDisplayName ?? null,
     customerHref: customerHref ?? null,
     createdAtLabel,
-    leadHref: `/leads/${leadId}`,
-    editHref: `/leads/${leadId}/edit`,
+    leadHref: `/sales/${leadId}`,
+    editHref: `/sales/${leadId}/edit`,
     newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(leadId)}`,
     progressLabel: progress.label,
     progressDescription: progress.description,
@@ -123,6 +137,7 @@ export function WorkstationLeadPanel({
     activeQuoteId: progress.activeQuote?.id ?? null,
     activeJobId: progress.activeJob?.id ?? null,
     activeJobStatus: progress.activeJob?.status ?? null,
+    visitRequests: visitRequests,
   };
 
   const surfaceQuotes: LeadWorkSurfaceQuote[] = linkedQuotes.map((q) => ({
@@ -142,6 +157,7 @@ export function WorkstationLeadPanel({
       linkedQuotes={surfaceQuotes}
       customersForLink={customersForLink}
       activeQuoteWorkSurface={activeQuoteWorkSurface}
+      serviceAddressContext={serviceAddressContext}
     />
   );
 }

@@ -79,8 +79,8 @@ export default async function QuoteCheckpointViewPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales" },
-            { label: "Quotes", href: "/quotes" },
-            { label: "Quote", href: `/quotes/${quoteId}` },
+            { label: "Quotes", href: "/sales?tab=proposals" },
+            { label: "Quote", href: `/sales?tab=proposals/${quoteId}` },
             { label: "Not found" },
           ]}
         />
@@ -89,7 +89,7 @@ export default async function QuoteCheckpointViewPage({
           title="Checkpoint"
           description="No checkpoint exists for this id in your organization, or it belongs to another quote."
           actions={
-            <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+            <Link href={`/sales?tab=proposals/${quoteId}`} className={listLinkClass}>
               ← Back to quote
             </Link>
           }
@@ -99,7 +99,7 @@ export default async function QuoteCheckpointViewPage({
           title="Checkpoint not found"
           description="Check the link or open the quote and pick a record from the commercial send & acceptance list."
         >
-          <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+          <Link href={`/sales?tab=proposals/${quoteId}`} className={listLinkClass}>
             Back to quote
           </Link>
         </EmptyState>
@@ -117,8 +117,8 @@ export default async function QuoteCheckpointViewPage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
-          { label: "Quote", href: `/quotes/${quoteId}` },
+          { label: "Quotes", href: "/sales?tab=proposals" },
+          { label: "Quote", href: `/sales?tab=proposals/${quoteId}` },
           { label: `${labels.breadcrumbTail}${checkpoint.sequence}` },
         ]}
       />
@@ -129,10 +129,10 @@ export default async function QuoteCheckpointViewPage({
         description={labels.description}
         actions={
           <>
-            <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+            <Link href={`/sales?tab=proposals/${quoteId}`} className={listLinkClass}>
               ← Back to quote
             </Link>
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               Quotes list
             </Link>
           </>

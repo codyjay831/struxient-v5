@@ -3,6 +3,9 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
+import { upsertCustomerServiceLocationFromIntakeSnapshot } from "@/lib/customer-service-location-from-lead";
+import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import { CUSTOMER_FIELD_LIMITS } from "./customer-field-limits";
 
 export type CustomerFormState = {
@@ -90,15 +93,37 @@ export async function createCustomerAction(
     }
   }
 
-  const customer = await db.customer.create({
-    data: {
-      organizationId: ctx.organizationId,
-      displayName,
-      companyName,
-      email,
-      phone,
-      notes,
-    },
+  const { snapshot, serviceAddressText } = resolveServiceLocationSnapshotFromFormData(formData);
+  if (serviceAddressText.length > LEAD_FIELD_LIMITS.publicIntakeServiceAddress) {
+    return {
+      error: `Service address is too long (max ${LEAD_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
+    };
+  }
+
+  const customer = await db.$transaction(async (tx) => {
+    const row = await tx.customer.create({
+      data: {
+        organizationId: ctx.organizationId,
+        displayName,
+        companyName,
+        email,
+        phone,
+        notes,
+      },
+    });
+    if (
+      snapshot &&
+      (snapshot.formattedAddress.trim().length > 0 || snapshot.addressLine1.trim().length > 0)
+    ) {
+      await upsertCustomerServiceLocationFromIntakeSnapshot(tx, {
+        organizationId: ctx.organizationId,
+        customerId: row.id,
+        snapshot,
+        label: null,
+        createdFromLeadId: null,
+      });
+    }
+    return row;
   });
 
   redirect(`/customers/${customer.id}`);

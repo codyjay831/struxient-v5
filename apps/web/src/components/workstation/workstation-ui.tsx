@@ -250,7 +250,7 @@ export function WorkstationClearedState({
         ) : (
           <>
             <Link 
-              href="/leads" 
+              href="/sales" 
               className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
             >
               Browse Leads

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
 import {
   HandoffPanel,
   handoffMutedLinkClass,
@@ -9,7 +8,6 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -26,55 +24,14 @@ import {
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
-import {
-  Building2,
-  CalendarDays,
-  CreditCard,
-  MapPin,
-  FileText,
-  FolderKanban,
-  MessageSquare,
-  Phone,
-  Tag,
-  UserRound,
-  Users,
-} from "lucide-react";
+import { formatPhoneForDisplay } from "@/lib/format-phone-display";
+import { CustomerServiceLocationsPanel } from "@/components/customers/customer-service-locations-panel";
+import { Phone, UserRound, Mail, ExternalLink, History, Briefcase, FileText, ChevronRight, ArrowUpRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
-
-function ConnectedRecordSlot({
-  title,
-  description,
-  icon: Icon,
-  href,
-  linkLabel,
-}: {
-  title: string;
-  description: string;
-  icon: LucideIcon;
-  href: string;
-  linkLabel: string;
-}) {
-  return (
-    <div className="flex flex-col rounded-xl border border-dashed border-border bg-surface/50 p-4 sm:p-5">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon
-          className="size-5 shrink-0 text-foreground-subtle opacity-80"
-          strokeWidth={1.25}
-          aria-hidden
-        />
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
-      </div>
-      <p className="mb-4 flex-1 text-xs leading-relaxed text-foreground-muted">{description}</p>
-      <Link href={href} className={`${listLinkClass} self-start`}>
-        {linkLabel}
-      </Link>
-    </div>
-  );
-}
 
 export default async function CustomerDetailPage({
   params,
@@ -106,6 +63,11 @@ export default async function CustomerDetailPage({
           organizationId: ctx.organizationId,
         },
         orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        include: {
+          createdFromLead: {
+            select: { id: true, title: true, source: true },
+          },
+        },
       })
     : [];
 
@@ -172,6 +134,7 @@ export default async function CustomerDetailPage({
       email: true,
       phone: true,
       createdAt: true,
+      updatedAt: true,
       convertedAt: true,
     },
   });
@@ -191,13 +154,46 @@ export default async function CustomerDetailPage({
     },
   });
 
+  const linkedJobs = await db.job.findMany({
+    where: {
+      organizationId: ctx.organizationId,
+      customerId: customer.id,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      updatedAt: true,
+    },
+  });
+
+  const openQuotes = linkedQuotes.filter((q) => q.status === "SENT" || q.status === "APPROVED");
+  const openJobs = linkedJobs.filter((j) => j.status === "ACTIVE");
+
+  const lastContact = [
+    customer.updatedAt,
+    ...linkedLeads.map((l) => l.updatedAt),
+    ...linkedQuotes.map((q) => q.updatedAt),
+    ...linkedJobs.map((j) => j.updatedAt),
+  ].reduce((max, curr) => (curr > max ? curr : max), customer.createdAt);
+
+  const lastContactLabel = new Date(lastContact).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
   const linkedLeadCount = linkedLeads.length;
-  const newestLinkedLeadCreatedAt = linkedLeads[0]?.createdAt ?? null;
-  const linkedWithConvertedStatus = linkedLeads.filter((l) => l.status === "CONVERTED").length;
-  const linkedWithConversionTimestamp = linkedLeads.filter((l) => l.convertedAt != null).length;
-  const newestLinkedLeadLabel = newestLinkedLeadCreatedAt
-    ? new Date(newestLinkedLeadCreatedAt).toLocaleString()
-    : "—";
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+
+  /* Steer users back to the Lead workspace for active sales work. The Lead
+     workspace is the primary place to build/send quotes, capture address, and
+     activate jobs — the customer profile is the saved history view. If there
+     is an in-progress lead, primary CTA is "Open lead", not "Create quote". */
+  const activeLead = linkedLeads.find(
+    (l) => l.status === "OPEN" || l.status === "QUALIFYING",
+  ) ?? null;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -208,462 +204,400 @@ export default async function CustomerDetailPage({
           { label: customer.displayName },
         ]}
       />
-      <PageHeader
-        title={customer.displayName}
-        description="Durable relationship record—not Sales-only. A customer can exist without any leads; leads you link or create from intake appear in Linked leads below. Linked quotes are read-only from the database for this organization; jobs, schedule, and payments stay out of scope here. Identity and contact fields are edited on the separate edit route; this view stays read-first."
-        actions={
-          <>
-            {returnHref ? (
-              <Link href={returnHref} className={listLinkClass}>
-                ← Workstation
-              </Link>
-            ) : null}
-            <Link href="/customers" className={listLinkClass}>
-              ← Customers list
-            </Link>
-            <Link href={`/customers/${customer.id}/edit`} className={listLinkClass}>
-              Edit customer
-            </Link>
+
+      {/* ── Header ────────────────────────────────────────────────────────── */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+              {customer.displayName}
+            </h1>
+            {customer.companyName && (
+              <span className="rounded-md bg-foreground/[0.03] px-2 py-0.5 text-xs font-medium text-foreground-muted border border-border">
+                {customer.companyName}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground-muted">
+            {customer.phone && (
+              <a
+                href={`tel:${customer.phone.replace(/\s/g, "")}`}
+                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+              >
+                <Phone className="size-3.5" />
+                {formatPhoneForDisplay(customer.phone)}
+              </a>
+            )}
+            {customer.email && (
+              <a
+                href={`mailto:${encodeURIComponent(customer.email)}`}
+                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+              >
+                <Mail className="size-3.5" />
+                {customer.email}
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {activeLead && (
             <Link
-              href={`/quotes/new?customerId=${encodeURIComponent(customer.id)}`}
-              className={listLinkClass}
+              href={`/sales/${activeLead.id}`}
+              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
             >
-              Create quote
+              Open active lead
+              <ArrowUpRight className="ml-1.5 size-3.5" />
             </Link>
-          </>
-        }
-      />
-
-      <WorkspacePanel padding="compact" className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Record
-        </p>
-        <p className="mt-1 break-all font-mono text-xs text-foreground-muted">{customer.id}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Relationship record" tone="neutral" />
-          <span className="text-xs text-foreground-muted">
-            Scoped to organization ({ctx.organizationName})
-          </span>
+          )}
+          <Link href={`/customers/${customer.id}/edit`} className={listLinkClass}>
+            Edit profile
+          </Link>
+          <Link
+            href={`/quotes/new?customerId=${encodeURIComponent(customer.id)}`}
+            className={listLinkClass}
+          >
+            Create quote
+          </Link>
         </div>
-        <dl className="mt-4 grid gap-2 text-xs text-foreground-muted sm:grid-cols-2">
-          <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Created</dt>
-            <dd className="mt-0.5 text-foreground">{createdLabel}</dd>
-          </div>
-          <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Updated</dt>
-            <dd className="mt-0.5 text-foreground">{updatedLabel}</dd>
-          </div>
-        </dl>
-      </WorkspacePanel>
+      </div>
 
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Relationship summary (Sales)"
-          description="Derived from leads linked to this customer in this organization—counts are honest database reads, not fabricated activity. Quotes and jobs get their own sections when modeled."
+      {/* ── At a glance ───────────────────────────────────────────────────── */}
+      <div className="mb-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <SignalCard
+          label="Open jobs"
+          value={String(openJobs.length)}
+          hint={openJobs.length > 0 ? openJobs[0].title : undefined}
         />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SignalCard
-            label="Linked leads"
-            value={String(linkedLeadCount)}
-            hint="Intake rows with this customerId in your org."
-          />
-          <SignalCard
-            label="Newest linked intake"
-            value={newestLinkedLeadLabel}
-            hint="By lead created date (newest first in the list below)."
-          />
-          <SignalCard
-            label='Status "Converted" (manual)'
-            value={String(linkedWithConvertedStatus)}
-            hint="Count where lead.status is CONVERTED—set on the lead, not inferred here."
-          />
-          <SignalCard
-            label="Conversion timestamp recorded"
-            value={String(linkedWithConversionTimestamp)}
-            hint="Leads with convertedAt from explicit link or create-from-lead."
-          />
-        </div>
-      </WorkspacePanel>
+        <SignalCard
+          label="Open quotes"
+          value={String(openQuotes.length)}
+          hint={openQuotes.length > 0 ? openQuotes[0].title : undefined}
+        />
+        <SignalCard
+          label="Last contact"
+          value={lastContactLabel}
+        />
+        <SignalCard
+          label="Balance"
+          value="—"
+          hint="Payments coming soon"
+        />
+        <SignalCard
+          label="Next visit"
+          value="—"
+          hint="Schedule coming soon"
+        />
+      </div>
 
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Customer identity"
-          description="Legal name, display name, and billing entity anchor here. Fields below are read from the database for this organization only."
-        />
-        <div className="rounded-lg border border-border bg-surface px-4 py-5">
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                Display name
-              </dt>
-              <dd className="mt-1 text-sm font-medium text-foreground">{customer.displayName}</dd>
+      {/* ── Main content sections ─────────────────────────────────────────── */}
+      <div className="space-y-12">
+        {/* Active Work Section */}
+        {(openJobs.length > 0 || openQuotes.length > 0) && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 px-1">
+              <Briefcase className="size-4 text-foreground-subtle" />
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                Active work
+              </h2>
             </div>
-            <div>
-              <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                Company
-              </dt>
-              <dd className="mt-1 text-sm text-foreground">{customer.companyName || "—"}</dd>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {openJobs.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="bg-foreground/[0.02] px-4 py-2 border-b border-border">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Open Jobs ({openJobs.length})
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-border">
+                    {openJobs.map((j) => (
+                      <li key={j.id}>
+                        <Link
+                          href={`/jobs/${j.id}`}
+                          className="flex items-center justify-between px-4 py-3 hover:bg-foreground/[0.01] transition-colors"
+                        >
+                          <span className="text-sm font-medium text-foreground truncate">
+                            {j.title}
+                          </span>
+                          <ChevronRight className="size-4 text-foreground-subtle" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {openQuotes.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="bg-foreground/[0.02] px-4 py-2 border-b border-border">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Open Quotes ({openQuotes.length})
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-border">
+                    {openQuotes.map((q) => (
+                      <li key={q.id}>
+                        <Link
+                          href={`/quotes/${q.id}`}
+                          className="flex items-center justify-between px-4 py-3 hover:bg-foreground/[0.01] transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {q.title}
+                            </p>
+                            <p className="text-[10px] text-foreground-subtle uppercase font-bold tracking-tight">
+                              {formatQuoteStatus(q.status)}
+                            </p>
+                          </div>
+                          <ChevronRight className="size-4 text-foreground-subtle" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          </dl>
-        </div>
-      </WorkspacePanel>
+          </section>
+        )}
 
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Contact methods"
-          description="Office phone, mobile, email, and preferred channel—structured fields expand with persistence."
-        />
-        {customer.email || customer.phone ? (
-          <div className="rounded-lg border border-border bg-surface px-4 py-5">
-            <dl className="grid gap-4 sm:grid-cols-2">
+        {/* Service Locations Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <UserRound className="size-4 text-foreground-subtle" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+              Service locations
+            </h2>
+          </div>
+          <CustomerServiceLocationsPanel
+            customerId={customer.id}
+            googleMapsApiKey={googleMapsApiKey}
+            locations={serviceLocations.map((loc) => ({
+              id: loc.id,
+              formattedAddress: loc.formattedAddress,
+              addressLine1: loc.addressLine1,
+              addressLine2: loc.addressLine2,
+              city: loc.city,
+              state: loc.state,
+              postalCode: loc.postalCode,
+              country: loc.country,
+              googlePlaceId: loc.googlePlaceId,
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+              source: loc.source,
+              isPrimary: loc.isPrimary,
+              createdFromLead: loc.createdFromLead,
+            }))}
+          />
+        </section>
+
+        {/* Contact & Profile Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <Phone className="size-4 text-foreground-subtle" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+              Contact & Profile
+            </h2>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-3">
               <div>
-                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-1">
                   Email
                 </dt>
-                <dd className="mt-1 text-sm text-foreground">{customer.email || "—"}</dd>
+                <dd className="text-sm font-medium text-foreground">
+                  {customer.email ? (
+                    <a href={`mailto:${customer.email}`} className="hover:text-accent transition-colors">
+                      {customer.email}
+                    </a>
+                  ) : "—"}
+                </dd>
               </div>
               <div>
-                <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-1">
                   Phone
                 </dt>
-                <dd className="mt-1 text-sm text-foreground">{customer.phone || "—"}</dd>
+                <dd className="text-sm font-medium text-foreground">
+                  {customer.phone ? (
+                    <a href={`tel:${customer.phone}`} className="hover:text-accent transition-colors">
+                      {formatPhoneForDisplay(customer.phone)}
+                    </a>
+                  ) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-1">
+                  Company
+                </dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {customer.companyName || "—"}
+                </dd>
               </div>
             </dl>
           </div>
-        ) : (
-          <EmptyState
-            icon={Phone}
-            title="No contact methods on file"
-            description="None are stored for this customer yet. Add email or phone on Edit customer."
-          >
-            <Link href={`/customers/${customer.id}/edit`} className={listLinkClass}>
-              Edit customer
-            </Link>
-          </EmptyState>
-        )}
-      </WorkspacePanel>
+        </section>
 
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Service locations"
-          description="Job sites and service addresses for this customer. Intake from linked leads can add the first location automatically."
-        />
-        {serviceLocations.length === 0 ? (
-          <p className="text-sm text-foreground-muted">
-            No service locations on file yet. They appear when you create or link a lead that
-            includes a service address.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-            {serviceLocations.map((loc) => (
-              <li key={loc.id} className="px-4 py-4">
-                <div className="flex items-start gap-2">
-                  <MapPin
-                    className="mt-0.5 size-4 shrink-0 text-foreground-subtle"
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {loc.isPrimary ? (
-                        <StatusBadge label="Primary" tone="draft" />
-                      ) : null}
-                      {loc.label ? (
-                        <span className="text-xs font-medium text-foreground-muted">{loc.label}</span>
-                      ) : null}
-                      <span className="text-xs text-foreground-subtle capitalize">
-                        {String(loc.source).replace(/_/g, " ")}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground">
-                      {loc.formattedAddress.trim() || loc.addressLine1}
-                    </p>
-                    {(loc.addressLine2 || loc.city || loc.state || loc.postalCode || loc.country) && (
-                      <p className="mt-1 text-xs text-foreground-muted">
-                        {[loc.addressLine2, [loc.city, loc.state].filter(Boolean).join(", "), loc.postalCode, loc.country]
-                          .filter((x) => x && String(x).trim().length > 0)
-                          .join(" · ")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </WorkspacePanel>
-
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Internal notes"
-          description="Free-form notes stored on the customer record—edit on the customer edit route."
-        />
-        {customer.notes ? (
-          <p className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
-            {customer.notes}
-          </p>
-        ) : (
-          <p className="text-sm text-foreground-muted">No notes on this record.</p>
-        )}
-      </WorkspacePanel>
-
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Linked leads"
-          description="Read-only: intake records in this organization that were explicitly linked or created-from-lead for this customer. Linking and unlinking happen on each lead’s detail page—not here."
-        />
-        {linkedLeads.length === 0 ? (
-          <p className="text-sm text-foreground-muted">No leads are linked to this customer yet.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-            {linkedLeads.map((row) => {
-              const created = new Date(row.createdAt).toLocaleString();
-              const converted = row.convertedAt
-                ? new Date(row.convertedAt).toLocaleString()
-                : null;
-              const contactBits = [row.contactName, row.email, row.phone].filter(Boolean);
-              const contactLine =
-                contactBits.length > 0 ? contactBits.join(" · ") : "No contact on lead";
-              return (
-                <li key={row.id} className="px-4 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/leads/${row.id}`}
-                        className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                      >
-                        {row.title}
-                      </Link>
-                      <p className="mt-1 text-xs text-foreground-muted">
-                        <span className="break-words">{contactLine}</span>
-                      </p>
-                      <dl className="mt-2 grid gap-1 text-xs text-foreground-muted sm:grid-cols-2">
-                        <div>
-                          <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                            Created
-                          </dt>
-                          <dd className="mt-0.5 text-foreground">{created}</dd>
-                        </div>
-                        {converted ? (
-                          <div>
-                            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
-                              Converted (recorded)
-                            </dt>
-                            <dd className="mt-0.5 text-foreground">{converted}</dd>
+        {/* History Section (Collapsed) */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <History className="size-4 text-foreground-subtle" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+              History
+            </h2>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  className="size-3.5 shrink-0 text-foreground-subtle transition-transform group-open:rotate-90"
+                  aria-hidden
+                />
+                <span className="text-xs font-medium text-foreground-muted group-open:text-foreground transition-colors">
+                  View archived leads, closed quotes, and completed jobs
+                </span>
+              </summary>
+              <div className="mt-6 space-y-8 border-t border-border pt-6">
+                {/* Leads History */}
+                <div>
+                  <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
+                    Leads
+                  </h3>
+                  {linkedLeads.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle px-1">No leads on file.</p>
+                  ) : (
+                    <ul className="divide-y divide-border rounded-lg border border-border">
+                      {linkedLeads.map((l) => (
+                        <li key={l.id} className="flex items-center justify-between px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/sales/${l.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
+                              {l.title}
+                            </Link>
+                            <p className="text-[10px] text-foreground-subtle mt-0.5">
+                              Created {new Date(l.createdAt).toLocaleDateString()} · {formatLeadSource(l.source)}
+                            </p>
                           </div>
-                        ) : null}
-                      </dl>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-                      <StatusBadge
-                        label={formatLeadStatus(row.status)}
-                        tone={leadStatusBadgeTone(row.status)}
-                      />
-                      <span className="text-xs text-foreground-muted">
-                        {formatLeadSource(row.source)}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </WorkspacePanel>
+                          <StatusBadge label={formatLeadStatus(l.status)} tone={leadStatusBadgeTone(l.status)} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Linked quotes"
-          description="Read-only: quotes in this organization that reference this customer. Create and edit quote actions are not implemented yet."
-        />
-        {linkedQuotes.length === 0 ? (
-          <p className="text-sm text-foreground-muted">
-            No quotes reference this customer yet. Quote authoring will land in a later phase—this
-            section only reflects persisted rows.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-            {linkedQuotes.map((q) => {
-              const updated = new Date(q.updatedAt).toLocaleString();
-              return (
-                <li key={q.id} className="px-4 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/quotes/${q.id}`}
-                        className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                      >
-                        {q.title}
-                      </Link>
-                      <p className="mt-1 text-xs text-foreground-muted">
-                        Updated {updated} · Total {formatMoneyCents(q.totalCents)}
-                      </p>
-                    </div>
-                    <StatusBadge
-                      label={formatQuoteStatus(q.status)}
-                      tone={quoteStatusBadgeTone(q.status)}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </WorkspacePanel>
+                {/* Quotes History */}
+                <div>
+                  <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
+                    Quotes
+                  </h3>
+                  {linkedQuotes.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle px-1">No quotes on file.</p>
+                  ) : (
+                    <ul className="divide-y divide-border rounded-lg border border-border">
+                      {linkedQuotes.map((q) => (
+                        <li key={q.id} className="flex items-center justify-between px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/quotes/${q.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
+                              {q.title}
+                            </Link>
+                            <p className="text-[10px] text-foreground-subtle mt-0.5">
+                              {formatMoneyCents(q.totalCents)} · Updated {new Date(q.updatedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <StatusBadge label={formatQuoteStatus(q.status)} tone={quoteStatusBadgeTone(q.status)} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-      <WorkspacePanel className="mb-6 border-border-strong shadow-md ring-1 ring-ring/30">
-        <SectionHeading
-          title="Connected records"
-          description="The customer record is where Sales history and Work history meet. Linked leads and quotes above are live for this organization; jobs, schedule, and payments remain placeholders until those models exist."
-        />
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SignalCard
-            label="Linked leads"
-            value={String(linkedLeads.length)}
-            hint="Intake tied to this party in this organization."
-          />
-          <SignalCard
-            label="Quotes (any state)"
-            value={String(linkedQuotes.length)}
-            hint="Commercial quotes with this customerId in your org."
-          />
-          <SignalCard
-            label="Jobs"
-            value="—"
-            hint="Reserved execution records—none linked yet."
-          />
-          <SignalCard
-            label="Schedule context"
-            value="—"
-            hint="Reserved timing shell—no holds stored."
-          />
+                {/* Jobs History */}
+                <div>
+                  <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
+                    Jobs
+                  </h3>
+                  {linkedJobs.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle px-1">No jobs on file.</p>
+                  ) : (
+                    <ul className="divide-y divide-border rounded-lg border border-border">
+                      {linkedJobs.map((j) => (
+                        <li key={j.id} className="flex items-center justify-between px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/jobs/${j.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
+                              {j.title}
+                            </Link>
+                            <p className="text-[10px] text-foreground-subtle mt-0.5">
+                              Updated {new Date(j.updatedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                            {j.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        {/* Notes Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <FileText className="size-4 text-foreground-subtle" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+              Notes
+            </h2>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            {customer.notes ? (
+              <p className="text-sm leading-relaxed text-foreground-muted whitespace-pre-wrap">
+                {customer.notes}
+              </p>
+            ) : (
+              <p className="text-sm text-foreground-subtle italic">No internal notes for this customer.</p>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* ── Footer / Technical ────────────────────────────────────────────── */}
+      <footer className="mt-16 pt-8 border-t border-border flex flex-col items-center gap-6">
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden opacity-40 hover:opacity-100 transition-opacity">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle underline-offset-4 group-open:underline">
+              Record details
+            </span>
+          </summary>
+          <div className="mt-4 rounded-lg border border-border bg-surface p-4 min-w-[300px]">
+            <dl className="space-y-3 text-[10px] font-mono text-foreground-subtle">
+              <div className="flex justify-between gap-4">
+                <dt className="uppercase tracking-wider">Customer ID</dt>
+                <dd className="text-foreground select-all">{customer.id}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="uppercase tracking-wider">Organization</dt>
+                <dd className="text-foreground">{ctx.organizationName}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="uppercase tracking-wider">Created</dt>
+                <dd className="text-foreground">{createdLabel}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="uppercase tracking-wider">Updated</dt>
+                <dd className="text-foreground">{updatedLabel}</dd>
+              </div>
+            </dl>
+          </div>
+        </details>
+
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link href="/customers" className="text-xs text-foreground-subtle hover:text-foreground transition-colors">
+            ← Back to customers
+          </Link>
+          <Link href="/workstation" className="text-xs text-foreground-subtle hover:text-foreground transition-colors">
+            Workstation
+          </Link>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ConnectedRecordSlot
-            title="Leads"
-            description="Browse all leads in Sales. Records linked to this customer are listed in Linked leads above."
-            icon={Users}
-            href="/leads"
-            linkLabel="Open Leads"
-          />
-          <ConnectedRecordSlot
-            title="Quotes"
-            description="Working quotes for this customer in your org—use the quote workspace for line items and recorded send checkpoints."
-            icon={FileText}
-            href="/quotes"
-            linkLabel="Open Quotes"
-          />
-          <ConnectedRecordSlot
-            title="Jobs"
-            description="Reserved job directory—not linked to quotes or checkpoints yet; routes exist for planning layout only."
-            icon={FolderKanban}
-            href="/jobs"
-            linkLabel="Open Jobs (reserved)"
-          />
-          <ConnectedRecordSlot
-            title="Schedule context"
-            description="Reserved schedule planning shell—no appointments or engine tied to this customer yet."
-            icon={CalendarDays}
-            href="/schedule"
-            linkLabel="Open Schedule (reserved)"
-          />
-          <ConnectedRecordSlot
-            title="Payments"
-            description="Reserved payments shell under navigation—no ledger, history, or automatic quote linkage yet."
-            icon={CreditCard}
-            href="/payments"
-            linkLabel="Open Payments (reserved)"
-          />
-        </div>
-      </WorkspacePanel>
-
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Relationship signals & tags"
-          description="Company tags you choose (VIP, GC, referral) sit beside system-derived signals when the product already knows them—repeat customer, import source, in-flight quotes, linked work (future), service area, needs follow-up."
-        />
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SignalCard
-            label="Repeat / history"
-            value="—"
-            hint="Derived when job or quote history exists."
-          />
-          <SignalCard
-            label="Active quote signal"
-            value="—"
-            hint="Unsold or in-flight commercial work."
-          />
-          <SignalCard
-            label="Linked work (reserved)"
-            value="—"
-            hint="Future execution tie-ins—not evaluated."
-          />
-          <SignalCard
-            label="Import / referral"
-            value="—"
-            hint="Provenance and source tags later."
-          />
-        </div>
-        <EmptyState
-          icon={Tag}
-          title="No tags applied"
-          description="Manual chips and automated signals render after rules and storage exist—no fabricated tags."
-        >
-          <PlaceholderButton title="No tagging in this build">Add tag (soon)</PlaceholderButton>
-        </EmptyState>
-      </WorkspacePanel>
-
-      <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Related parties"
-          description="Future links to contacts, property owners, GCs or builders, subs and partners, vendors, and referral sources—still under this relationship, without new routes in this build."
-        />
-        <EmptyState
-          icon={Building2}
-          title="No related parties"
-          description="Those relationship types ship later; this shell does not mock people or companies."
-        />
-      </WorkspacePanel>
-
-      <WorkspacePanel padding="compact" className="mb-6">
-        <SectionHeading
-          title="Activity timeline"
-          description="Internal calls, visits, billing notes, and job events in one timeline—audit behavior is future work."
-        />
-        <EmptyState
-          icon={MessageSquare}
-          title="No activity yet"
-          description="No fabricated events; logging attaches when persistence exists beyond this customer row."
-        />
-      </WorkspacePanel>
-
-      <HandoffPanel
-        title="Sales + Work from one record"
-        description="Leads and Quotes live under Sales. Jobs and Schedule under Work are reserved shells. Workstation is a static attention layout—this page is the relationship anchor, not an inbox or orchestrator."
-      >
-        <Link href="/customers" className={handoffMutedLinkClass}>
-          Customers list
-        </Link>
-        <Link href="/leads" className={handoffMutedLinkClass}>
-          Leads
-        </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
-          Quotes
-        </Link>
-        <Link href="/jobs" className={handoffMutedLinkClass}>
-          Jobs
-        </Link>
-        <Link href="/schedule" className={handoffMutedLinkClass}>
-          Schedule
-        </Link>
-        <Link href="/payments" className={handoffMutedLinkClass}>
-          Payments
-        </Link>
-        <Link href="/workstation" className={handoffPrimaryLinkClass}>
-          Workstation
-        </Link>
-      </HandoffPanel>
+      </footer>
     </div>
   );
 }

@@ -49,7 +49,7 @@ export default async function QuoteDetailPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales" },
-            { label: "Quotes", href: "/quotes" },
+            { label: "Quotes", href: "/sales?tab=proposals" },
             { label: "Not found" },
           ]}
         />
@@ -58,7 +58,7 @@ export default async function QuoteDetailPage({
           title="Quote"
           description="No quote exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
-            <Link href="/quotes" className={listLinkClass}>
+            <Link href="/sales?tab=proposals" className={listLinkClass}>
               ← Quotes list
             </Link>
           }
@@ -76,7 +76,7 @@ export default async function QuoteDetailPage({
           title="Quote not found"
           description="This id is not a quote record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
         >
-          <Link href="/quotes" className={listLinkClass}>
+          <Link href="/sales?tab=proposals" className={listLinkClass}>
             Back to quotes
           </Link>
         </EmptyState>
