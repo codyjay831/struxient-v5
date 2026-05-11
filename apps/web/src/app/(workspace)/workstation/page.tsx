@@ -69,8 +69,8 @@ export default async function WorkstationTodayLensPage({
   });
 
   const showQuickActions = settings?.showQuickActions ?? true;
-  const quickActions = settings?.quickActionsJson 
-    ? (JSON.parse(settings.quickActionsJson as string) as string[]) 
+  const quickActions = Array.isArray(settings?.quickActionsJson)
+    ? (settings.quickActionsJson as string[])
     : ["new-intake", "new-quote", "browse-jobs"];
   const urgentThresholdHours = settings?.urgentThresholdHours ?? 24;
 

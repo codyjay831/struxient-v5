@@ -19,12 +19,12 @@ export async function updateWorkstationSettingsAction(payload: WorkstationSettin
       create: {
         organizationId: ctx.organizationId,
         showQuickActions: payload.showQuickActions,
-        quickActionsJson: JSON.stringify(payload.quickActions),
+        quickActionsJson: payload.quickActions,
         urgentThresholdHours: payload.urgentThresholdHours,
       },
       update: {
         showQuickActions: payload.showQuickActions,
-        quickActionsJson: JSON.stringify(payload.quickActions),
+        quickActionsJson: payload.quickActions,
         urgentThresholdHours: payload.urgentThresholdHours,
       },
     });

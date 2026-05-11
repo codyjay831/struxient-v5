@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,749 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                       String                    @id @default(cuid())
+  name                     String
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  /// Lowercase public handle for `/request/[slug]` — optional until configured.
+  slug                     String?                   @unique
+  attachments              Attachment[]
+  customers                Customer[]
+  customerServiceLocations CustomerServiceLocation[]
+  dailyJobLogs             DailyJobLog[]
+  jobs                     Job[]
+  jobActivities            JobActivity[]
+  jobIssues                JobIssue[]
+  jobPaymentRequirements   JobPaymentRequirement[]
+  jobVisits                JobVisit[]
+  lineItemTemplates        LineItemTemplate[]
+  memberships              Membership[]
+  publicRequestSettings    PublicRequestSettings?
+  quotes                   Quote[]
+  quoteCheckpoints         QuoteCheckpoint[]
+  quoteShareTokens         QuoteShareToken[]
+  salesCustomFieldDefs     SalesCustomFieldDef[]
+  salesIntakes             SalesIntake[]
+  salesVisitRequests       SalesVisitRequest[]
+  taskTemplates            TaskTemplate[]
+  workstationSettings      WorkstationSettings?
+}
+
+model WorkstationSettings {
+  id                   String       @id @default(cuid())
+  organizationId       String       @unique
+  showQuickActions     Boolean      @default(true)
+  /// JSON array of visible action keys: ["new-intake", "new-quote", "browse-jobs"]
+  quickActionsJson     Json         @default("[\"new-intake\", \"new-quote\", \"browse-jobs\"]")
+  urgentThresholdHours Int          @default(24)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
+model PublicRequestSettings {
+  id                      String       @id @default(cuid())
+  organizationId          String       @unique
+  enabled                 Boolean      @default(true)
+  formTitle               String       @default("Request service")
+  introMessage            String?
+  emergencyWarningText    String?
+  submitButtonText        String       @default("Send request")
+  /// JSON array of `{ "value": "slug-key", "label": "Customer label" }` — validated server-side.
+  requestTypeOptionsJson  Json         @default("[]")
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  /// JSON object mapping requestType value to array of LineItemTemplate ids: `{ "roof-repair": ["id1", "id2"] }`
+  instantQuoteConfigJson  Json         @default("{}")
+  instantQuoteEnabled     Boolean      @default(true)
+  offerings               String[]     @default([])
+  showInstantQuoteDetails Boolean      @default(true)
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id               String                    @id @default(cuid())
+  organizationId   String
+  displayName      String
+  companyName      String?
+  email            String?
+  phone            String?
+  notes            String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  attachments      Attachment[]
+  organization     Organization              @relation(fields: [organizationId], references: [id])
+  serviceLocations CustomerServiceLocation[]
+  jobs             Job[]
+  quotes           Quote[]
+  salesIntakes     SalesIntake[]
+
+  @@index([organizationId])
+}
+
+model CustomerServiceLocation {
+  id                       String                        @id @default(cuid())
+  organizationId           String
+  customerId               String
+  formattedAddress         String
+  addressLine1             String                        @default("")
+  addressLine2             String                        @default("")
+  city                     String                        @default("")
+  state                    String                        @default("")
+  postalCode               String                        @default("")
+  country                  String                        @default("")
+  googlePlaceId            String                        @default("")
+  latitude                 Float?
+  longitude                Float?
+  source                   CustomerServiceLocationSource
+  label                    String?
+  isPrimary                Boolean                       @default(false)
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  createdFromSalesIntakeId String?
+  createdFromSalesIntake   SalesIntake?                  @relation("ServiceLocationCreatedFromSalesIntake", fields: [createdFromSalesIntakeId], references: [id])
+  customer                 Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([customerId, isPrimary])
+}
+
+model User {
+  id                   String        @id @default(cuid())
+  email                String?       @unique
+  name                 String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  emailVerified        DateTime?
+  image                String?
+  accounts             Account[]
+  uploadedAttachments  Attachment[]  @relation("UploadedAttachments")
+  reviewedDailyJobLogs DailyJobLog[] @relation("ReviewedBy")
+  jobActivities        JobActivity[]
+  jobIssues            JobIssue[]
+  completedTasks       JobTask[]     @relation("CompletedTasks")
+  assignedVisits       JobVisit[]    @relation("AssignedVisits")
+  memberships          Membership[]
+  sessions             Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           StaffRole    @default(FIELD)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model SalesIntake {
+  id                          String                    @id @default(cuid())
+  organizationId              String
+  customerId                  String?
+  status                      SalesIntakeStatus         @default(OPEN)
+  source                      SalesIntakeSource         @default(MANUAL)
+  sourceDetail                String?
+  title                       String
+  contactName                 String?
+  email                       String?
+  phone                       String?
+  requestType                 String?
+  neededByBucket              NeededByBucket?
+  neededByDate                DateTime?
+  scopeSummary                String?
+  suggestedTemplateIds        String[]                  @default([])
+  notes                       String?
+  /// Optional snapshot from the public intake form (e.g. Google Places). Not authoritative for protected server decisions.
+  publicIntakeServiceLocation Json?
+  /// Browser-generated key for public intake dedupe (double-submit / retry). Null for non-public leads.
+  publicIntakeClientKey       String?
+  convertedAt                 DateTime?
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  attachments                 Attachment[]
+  createdServiceLocations     CustomerServiceLocation[] @relation("ServiceLocationCreatedFromSalesIntake")
+  jobs                        Job[]
+  quotes                      Quote[]
+  customFieldValues           SalesCustomFieldValue[]
+  customer                    Customer?                 @relation(fields: [customerId], references: [id])
+  organization                Organization              @relation(fields: [organizationId], references: [id])
+  visitRequests               SalesVisitRequest[]
+
+  @@unique([organizationId, publicIntakeClientKey])
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([status])
+  @@index([source])
+}
+
+model Quote {
+  id                    String            @id @default(cuid())
+  organizationId        String
+  customerId            String?
+  status                QuoteStatus       @default(DRAFT)
+  title                 String
+  internalNotes         String?
+  subtotalCents         Int               @default(0)
+  totalCents            Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  customerDocumentTitle String?
+  lastSentEmailAt       DateTime?
+  salesIntakeId         String?
+  attachments           Attachment[]
+  job                   Job?
+  customer              Customer?         @relation(fields: [customerId], references: [id])
+  organization          Organization      @relation(fields: [organizationId], references: [id])
+  salesIntake           SalesIntake?      @relation(fields: [salesIntakeId], references: [id])
+  checkpoints           QuoteCheckpoint[]
+  lineItems             QuoteLineItem[]
+  shareToken            QuoteShareToken?
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([salesIntakeId])
+  @@index([status])
+}
+
+model QuoteShareToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  quoteId        String       @unique
+  token          String       @unique
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastViewedAt   DateTime?
+  acceptedAt     DateTime?
+  acceptedByName String?
+  acceptedFromIp String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote          Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([token])
+}
+
+model QuoteView {
+  id             String   @id @default(cuid())
+  organizationId String
+  quoteId        String
+  token          String
+  viewedAt       DateTime @default(now())
+  ip             String?
+  userAgent      String?
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([token])
+}
+
+/// Immutable staff-only proof of what the customer-facing proposal contained at a commitment moment (send, acceptance).
+/// Quote status advances with Send (→ SENT) and staff-recorded approval (→ APPROVED) in v1; checkpoints store commercial projection only.
+/// Future runtime jobs materialize from approved commercial baseline plus internal execution planning — not from checkpoint rows alone.
+model QuoteCheckpoint {
+  id                      String                @id @default(cuid())
+  organizationId          String
+  quoteId                 String
+  kind                    QuoteCheckpointKind
+  sequence                Int
+  schemaVersion           Int
+  snapshotJson            Json
+  staffOnlyJson           Json?
+  /// Quote row `updatedAt` at capture time — staff context for drift vs proof.
+  quoteUpdatedAtAtCapture DateTime?
+  createdAt               DateTime              @default(now())
+  source                  QuoteCheckpointSource @default(STAFF)
+  organization            Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                   Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, kind, sequence])
+  @@index([organizationId])
+  @@index([quoteId, kind])
+}
+
+/// Reusable commercial line presets for an organization. Applying copies values onto [QuoteLineItem];
+/// quotes never read live template fields for pricing after insert.
+model LineItemTemplate {
+  id                               String                 @id @default(cuid())
+  organizationId                   String
+  description                      String
+  defaultQuantity                  Decimal                @db.Decimal(18, 6)
+  defaultUnitAmountCents           Int
+  defaultInternalNotes             String?
+  archivedAt                       DateTime?
+  createdAt                        DateTime               @default(now())
+  updatedAt                        DateTime               @updatedAt
+  defaultCustomerExcludedNotes     String?
+  defaultCustomerIncludedNotes     String?
+  defaultCustomerPresentationGroup String?
+  defaultCustomerScopeDescription  String?
+  defaultCustomerScopeTitle        String?
+  priceBufferPercentage            Int                    @default(0)
+  tags                             String[]               @default([])
+  organization                     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  defaultExecutionTasks            LineItemTemplateTask[]
+  quoteLineItems                   QuoteLineItem[]
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt])
+}
+
+/// Org-scoped reusable task presets (library). Quote/job rows copy fields from templates when applied — not live-linked.
+model TaskTemplate {
+  id                      String                   @id @default(cuid())
+  organizationId          String
+  title                   String
+  stageKey                ExecutionStageKey
+  category                TaskTemplateCategory
+  instructions            String?
+  archivedAt              DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  requirementsJson        Json                     @default("{}")
+  jobTaskCopies           JobTask[]
+  lineItemTemplateTasks   LineItemTemplateTask[]
+  quoteLineExecutionTasks QuoteLineExecutionTask[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt])
+}
+
+/// Optional default execution on a saved line item — snapshot fields; not live-linked to [TaskTemplate] or quotes.
+model LineItemTemplateTask {
+  id                   String                     @id @default(cuid())
+  lineItemTemplateId   String
+  sourceType           LineItemTemplateTaskSource
+  sourceTaskTemplateId String?
+  title                String
+  stageKey             ExecutionStageKey
+  category             TaskTemplateCategory
+  instructions         String?
+  sortOrder            Int                        @default(0)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  requirementsJson     Json                       @default("{}")
+  lineItemTemplate     LineItemTemplate           @relation(fields: [lineItemTemplateId], references: [id], onDelete: Cascade)
+  sourceTaskTemplate   TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
+  quoteLineCopies      QuoteLineExecutionTask[]
+
+  @@index([lineItemTemplateId, stageKey, sortOrder])
+  @@index([lineItemTemplateId, sortOrder])
+}
+
+/// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
+/// No denormalized organizationId here—avoids redundant writes and drift.
+model QuoteLineItem {
+  id                        String                         @id @default(cuid())
+  quoteId                   String
+  sortOrder                 Int                            @default(0)
+  description               String
+  quantity                  Decimal                        @db.Decimal(18, 6)
+  unitAmountCents           Int
+  lineTotalCents            Int
+  internalNotes             String?
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
+  sourceLineItemTemplateId  String?
+  customerExcludedNotes     String?
+  customerIncludedNotes     String?
+  customerPresentationGroup String?
+  customerScopeDescription  String?
+  customerScopeTitle        String?
+  /// Internal planning: whether this line still needs execution review vs explicitly commercial-only.
+  executionReviewStatus     QuoteLineExecutionReviewStatus @default(UNREVIEWED)
+  /// How this scope should group when a job exists — planning metadata only in this build.
+  executionMergeMode        QuoteLineExecutionMergeMode    @default(MERGE_INTO_JOB_STAGES)
+  /// Work order among lines on this quote for future job sequencing (normalized with peers).
+  executionOrder            Int                            @default(0)
+  jobStageCopies            JobStage[]
+  jobTaskCopies             JobTask[]
+  draftExecutionTasks       QuoteLineExecutionTask[]
+  quote                     Quote                          @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplate    LineItemTemplate?              @relation(fields: [sourceLineItemTemplateId], references: [id])
+
+  @@index([quoteId])
+  @@index([quoteId, executionOrder])
+  @@index([sourceLineItemTemplateId])
+}
+
+/// Draft internal execution tasks for a quote line — independent from [LineItemTemplateTask] and [TaskTemplate] after copy.
+model QuoteLineExecutionTask {
+  id                           String                     @id @default(cuid())
+  quoteLineItemId              String
+  sourceLineItemTemplateTaskId String?
+  sourceTaskTemplateId         String?
+  sourceType                   LineItemTemplateTaskSource
+  title                        String
+  stageKey                     ExecutionStageKey
+  category                     TaskTemplateCategory
+  instructions                 String?
+  sortOrder                    Int                        @default(0)
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
+  requirementsJson             Json                       @default("{}")
+  jobTaskCopies                JobTask[]
+  quoteLineItem                QuoteLineItem              @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplateTask   LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id])
+  sourceTaskTemplate           TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
+
+  @@index([quoteLineItemId, stageKey, sortOrder])
+  @@index([quoteLineItemId, sortOrder])
+}
+
+/// Runtime job materialized from an APPROVED [Quote] at activation time.
+/// Job rows are independent copies — later quote/template edits do not mutate stages or tasks here.
+/// One job per quote in V1 (enforced by [@@unique] on [quoteId]).
+model Job {
+  id                  String                  @id @default(cuid())
+  organizationId      String
+  quoteId             String                  @unique
+  customerId          String?
+  title               String
+  status              JobStatus               @default(ACTIVE)
+  activatedAt         DateTime                @default(now())
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  salesIntakeId       String?
+  attachments         Attachment[]
+  dailyJobLogs        DailyJobLog[]
+  customer            Customer?               @relation(fields: [customerId], references: [id])
+  organization        Organization            @relation(fields: [organizationId], references: [id])
+  quote               Quote                   @relation(fields: [quoteId], references: [id])
+  salesIntake         SalesIntake?            @relation(fields: [salesIntakeId], references: [id])
+  activities          JobActivity[]
+  issues              JobIssue[]
+  paymentRequirements JobPaymentRequirement[]
+  stages              JobStage[]
+  tasks               JobTask[]
+  visits              JobVisit[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([customerId])
+  @@index([salesIntakeId])
+}
+
+/// Stage on a job — either a SHARED canonical phase merging tasks from many quote lines,
+/// or a SEPARATE_LINE_ITEM block scoped to one source quote line. V1 has no nested groups.
+model JobStage {
+  id                    String                  @id @default(cuid())
+  jobId                 String
+  blockType             JobStageBlockType
+  stageKey              ExecutionStageKey
+  title                 String
+  /// Position within the job — shared stages first by canonical stage order, then separate blocks; ties broken by block order then stage order.
+  sortOrder             Int                     @default(0)
+  /// SHARED: null. SEPARATE_LINE_ITEM: source quote line id at activation; SetNull if the line is later removed.
+  sourceQuoteLineItemId String?
+  /// Stable label for separate-line-item blocks (line description at activation); null for shared stages.
+  blockTitle            String?
+  /// Position of the parent block among separate blocks (work order at activation); 0 for shared.
+  blockSortOrder        Int                     @default(0)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  issues                JobIssue[]
+  paymentRequirements   JobPaymentRequirement[]
+  job                   Job                     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceQuoteLineItem   QuoteLineItem?          @relation(fields: [sourceQuoteLineItemId], references: [id])
+  tasks                 JobTask[]
+
+  @@index([jobId])
+  @@index([jobId, sortOrder])
+  @@index([sourceQuoteLineItemId])
+}
+
+/// Runtime task on a job — copied from a quote line execution task at activation; later quote edits do not mutate this row.
+/// Lineage fields use SetNull so source deletes do not orphan the runtime row.
+model JobTask {
+  id                             String                     @id @default(cuid())
+  jobId                          String
+  jobStageId                     String
+  sourceQuoteLineItemId          String?
+  sourceQuoteLineExecutionTaskId String?
+  sourceTaskTemplateId           String?
+  sourceType                     LineItemTemplateTaskSource
+  title                          String
+  category                       TaskTemplateCategory
+  stageKey                       ExecutionStageKey
+  instructions                   String?
+  status                         JobTaskStatus              @default(TODO)
+  sortOrder                      Int                        @default(0)
+  createdAt                      DateTime                   @default(now())
+  updatedAt                      DateTime                   @updatedAt
+  sourceJobIssueId               String?                    @unique
+  completedAt                    DateTime?
+  completedByUserId              String?
+  completionNote                 String?
+  completionRequirementsJson     Json                       @default("{}")
+  attachments                    Attachment[]
+  issues                         JobIssue[]
+  completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
+  job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
+  sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id])
+  sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id])
+  sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id])
+  sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
+
+  @@index([jobId])
+  @@index([jobStageId, sortOrder])
+}
+
+model JobIssue {
+  id              String           @id @default(cuid())
+  organizationId  String
+  jobId           String
+  jobStageId      String?
+  jobTaskId       String?
+  createdByUserId String?
+  type            JobIssueType
+  severity        JobIssueSeverity @default(BLOCKS_WORK)
+  status          JobIssueStatus   @default(OPEN)
+  title           String
+  description     String?
+  resolutionNote  String?
+  resolvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  createdByUser   User?            @relation(fields: [createdByUserId], references: [id])
+  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobStage        JobStage?        @relation(fields: [jobStageId], references: [id])
+  jobTask         JobTask?         @relation(fields: [jobTaskId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  followUpTask    JobTask?         @relation("IssueFollowUpTask")
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+  @@index([jobTaskId])
+  @@index([jobStageId])
+}
+
+model JobVisit {
+  id               String         @id @default(cuid())
+  organizationId   String
+  jobId            String
+  scheduledStartAt DateTime
+  scheduledEndAt   DateTime?
+  status           JobVisitStatus @default(SCHEDULED)
+  assignedUserId   String?
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  assignedUser     User?          @relation("AssignedVisits", fields: [assignedUserId], references: [id])
+  job              Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([scheduledStartAt])
+}
+
+model Attachment {
+  id               String           @id @default(cuid())
+  organizationId   String
+  fileName         String
+  fileKey          String
+  contentType      String
+  fileSize         Int
+  quoteId          String?
+  jobId            String?
+  jobTaskId        String?
+  uploadedByUserId String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  status           AttachmentStatus @default(READY)
+  customerId       String?
+  salesIntakeId    String?
+  customer         Customer?        @relation(fields: [customerId], references: [id])
+  job              Job?             @relation(fields: [jobId], references: [id])
+  jobTask          JobTask?         @relation(fields: [jobTaskId], references: [id])
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote            Quote?           @relation(fields: [quoteId], references: [id])
+  salesIntake      SalesIntake?     @relation(fields: [salesIntakeId], references: [id])
+  uploadedByUser   User?            @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([salesIntakeId])
+  @@index([quoteId])
+  @@index([jobId])
+  @@index([jobTaskId])
+  @@index([customerId])
+}
+
+model JobActivity {
+  id             String          @id @default(cuid())
+  organizationId String
+  jobId          String
+  actorUserId    String?
+  type           JobActivityType
+  title          String
+  details        String?
+  entityType     String?
+  entityId       String?
+  metadataJson   Json?
+  createdAt      DateTime        @default(now())
+  actorUser      User?           @relation(fields: [actorUserId], references: [id])
+  job            Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, createdAt])
+  @@index([jobId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model DailyJobLog {
+  id               String            @id @default(cuid())
+  organizationId   String
+  jobId            String
+  /// Normalized to midnight for v1. Org-timezone-aware date handling can be improved later.
+  logDate          DateTime
+  summary          String
+  internalNotes    String?
+  status           DailyJobLogStatus @default(DRAFT)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reviewedByUser   User?             @relation("ReviewedBy", fields: [reviewedByUserId], references: [id])
+
+  @@unique([jobId, logDate])
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, logDate])
+  @@index([jobId, logDate])
+  @@index([status])
+}
+
+model JobPaymentRequirement {
+  id                    String                      @id @default(cuid())
+  organizationId        String
+  jobId                 String
+  title                 String
+  amountCents           Int?
+  status                JobPaymentRequirementStatus @default(PENDING)
+  requiredBeforeStageId String?
+  paidAt                DateTime?
+  waivedAt              DateTime?
+  canceledAt            DateTime?
+  notes                 String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  job                   Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requiredBeforeStage   JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id])
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([organizationId, status])
+  @@index([requiredBeforeStageId])
+}
+
+model SalesVisitRequest {
+  id              String                  @id @default(cuid())
+  organizationId  String
+  salesIntakeId   String
+  requestedDate   DateTime?
+  requestedWindow String?
+  confirmedDate   DateTime?
+  status          SalesVisitRequestStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salesIntake     SalesIntake             @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([salesIntakeId])
+  @@index([status])
+}
+
+model SalesCustomFieldDef {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  key                String
+  label              String
+  type               SalesCustomFieldType
+  optionsJson        Json?
+  isRequired         Boolean                 @default(false)
+  showOnPublicIntake Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  values             SalesCustomFieldValue[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model SalesCustomFieldValue {
+  id            String              @id @default(cuid())
+  salesIntakeId String
+  fieldDefId    String
+  value         String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  fieldDef      SalesCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+  salesIntake   SalesIntake         @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
+
+  @@unique([salesIntakeId, fieldDefId])
+  @@index([salesIntakeId])
+  @@index([fieldDefId])
 }
 
 enum SalesIntakeStatus {
@@ -40,9 +780,9 @@ enum SalesIntakeSource {
 
 enum QuoteStatus {
   DRAFT
+  ARCHIVED
   SENT
   APPROVED
-  ARCHIVED
 }
 
 /// Hidden proof records at commitment moments — not a user-managed version system.
@@ -151,121 +891,10 @@ enum AttachmentStatus {
   FAILED
 }
 
-model Organization {
-  id                    String                 @id @default(cuid())
-  name                  String
-  /// Lowercase public handle for `/request/[slug]` — optional until configured.
-  slug                  String?                @unique
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  memberships           Membership[]
-  jobIssues             JobIssue[]
-  customers             Customer[]
-  salesIntakes          SalesIntake[]
-  quotes                Quote[]
-  lineItemTemplates     LineItemTemplate[]
-  taskTemplates         TaskTemplate[]
-  quoteCheckpoints      QuoteCheckpoint[]
-  jobs                  Job[]
-  jobPaymentRequirements JobPaymentRequirement[]
-  jobActivities         JobActivity[]
-  dailyJobLogs          DailyJobLog[]
-  attachments           Attachment[]
-  jobVisits             JobVisit[]
-  publicRequestSettings PublicRequestSettings?
-  customerServiceLocations CustomerServiceLocation[]
-  quoteShareTokens      QuoteShareToken[]
-  salesVisitRequests    SalesVisitRequest[]
-  salesCustomFieldDefs  SalesCustomFieldDef[]
-  workstationSettings   WorkstationSettings?
-}
-
-model WorkstationSettings {
-  id                   String       @id @default(cuid())
-  organizationId       String       @unique
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  showQuickActions     Boolean      @default(true)
-  /// JSON array of visible action keys: ["new-intake", "new-quote", "browse-jobs"]
-  quickActionsJson     Json         @default("[\"new-intake\", \"new-quote\", \"browse-jobs\"]")
-  urgentThresholdHours Int          @default(24)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-}
-
-/// V1 contractor-configurable copy for the Public Intake Form — not a form-builder schema.
-model PublicRequestSettings {
-  id                       String       @id @default(cuid())
-  organizationId           String       @unique
-  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  enabled                  Boolean      @default(true)
-  formTitle                String       @default("Request service")
-  introMessage             String?
-  emergencyWarningText     String?
-  submitButtonText         String       @default("Send request")
-  /// JSON array of `{ "value": "slug-key", "label": "Customer label" }` — validated server-side.
-  requestTypeOptionsJson   Json         @default("[]")
-  /// JSON object mapping requestType value to array of LineItemTemplate ids: `{ "roof-repair": ["id1", "id2"] }`
-  instantQuoteConfigJson   Json         @default("{}")
-  instantQuoteEnabled      Boolean      @default(true)
-  showInstantQuoteDetails  Boolean      @default(true)
-  offerings                String[]     @default([])
-  createdAt                DateTime     @default(now())
-  updatedAt                DateTime     @updatedAt
-}
-
-model Customer {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  displayName    String
-  companyName    String?
-  email          String?
-  phone          String?
-  notes          String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  salesIntakes   SalesIntake[]
-  quotes         Quote[]
-  jobs           Job[]
-  serviceLocations CustomerServiceLocation[]
-  attachments    Attachment[]
-
-  @@index([organizationId])
-}
-
 /// Service / job site addresses for a customer (multiple over time). Intake may seed the first row.
 enum CustomerServiceLocationSource {
   google_places
   manual
-}
-
-model CustomerServiceLocation {
-  id               String                        @id @default(cuid())
-  organizationId   String
-  organization     Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customerId       String
-  customer         Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  createdFromSalesIntakeId String?
-  createdFromSalesIntake   SalesIntake?                         @relation("ServiceLocationCreatedFromSalesIntake", fields: [createdFromSalesIntakeId], references: [id], onDelete: SetNull)
-  formattedAddress String
-  addressLine1     String                        @default("")
-  addressLine2     String                        @default("")
-  city             String                        @default("")
-  state            String                        @default("")
-  postalCode       String                        @default("")
-  country          String                        @default("")
-  googlePlaceId    String                        @default("")
-  latitude         Float?
-  longitude        Float?
-  source           CustomerServiceLocationSource
-  label            String?
-  isPrimary        Boolean                       @default(false)
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-
-  @@index([organizationId])
-  @@index([customerId])
-  @@index([customerId, isPrimary])
 }
 
 enum StaffRole {
@@ -275,461 +904,6 @@ enum StaffRole {
   FIELD
   VIEWER
   SUBCONTRACTOR
-}
-
-model User {
-  id            String       @id @default(cuid())
-  email         String?      @unique
-  emailVerified DateTime?
-  image         String?
-  name          String?
-  accounts      Account[]
-  sessions      Session[]
-  memberships   Membership[]
-  jobIssues     JobIssue[]
-  jobActivities JobActivity[]
-  reviewedDailyJobLogs DailyJobLog[] @relation("ReviewedBy")
-  completedTasks JobTask[] @relation("CompletedTasks")
-  uploadedAttachments Attachment[] @relation("UploadedAttachments")
-  assignedVisits JobVisit[] @relation("AssignedVisits")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
-model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-model Membership {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           StaffRole    @default(FIELD)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  @@unique([userId, organizationId])
-  @@index([organizationId])
-  @@index([userId])
-}
-
-model SalesIntake {
-  id             String         @id @default(cuid())
-  organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id])
-  customerId     String?
-  customer       Customer?      @relation(fields: [customerId], references: [id])
-  status         SalesIntakeStatus @default(OPEN)
-  source         SalesIntakeSource @default(MANUAL)
-  sourceDetail   String?
-  title          String
-  contactName    String?
-  email          String?
-  phone          String?
-  requestType    String?
-  neededByBucket NeededByBucket?
-  neededByDate   DateTime?
-  scopeSummary   String?
-  suggestedTemplateIds String[] @default([])
-  notes          String?
-  /// Optional snapshot from the public intake form (e.g. Google Places). Not authoritative for protected server decisions.
-  publicIntakeServiceLocation Json?
-  /// Browser-generated key for public intake dedupe (double-submit / retry). Null for non-public leads.
-  publicIntakeClientKey String?
-  convertedAt    DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  attachments    Attachment[]
-  quotes         Quote[]
-  jobs           Job[]
-  createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromSalesIntake")
-  visitRequests  SalesVisitRequest[]
-  customFieldValues SalesCustomFieldValue[]
-
-  @@index([organizationId])
-  @@index([customerId])
-  @@index([status])
-  @@index([source])
-  @@unique([organizationId, publicIntakeClientKey])
-}
-
-model Quote {
-  id               String         @id @default(cuid())
-  organizationId   String
-  organization     Organization   @relation(fields: [organizationId], references: [id])
-  customerId       String?
-  customer         Customer?      @relation(fields: [customerId], references: [id])
-  salesIntakeId    String?
-  salesIntake      SalesIntake?          @relation(fields: [salesIntakeId], references: [id])
-  status                 QuoteStatus    @default(DRAFT)
-  title                  String
-  customerDocumentTitle  String?
-  internalNotes          String?
-  subtotalCents      Int            @default(0)
-  totalCents         Int            @default(0)
-  lastSentEmailAt    DateTime?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  attachments        Attachment[]
-  lineItems          QuoteLineItem[]
-  checkpoints        QuoteCheckpoint[]
-  shareToken         QuoteShareToken?
-  job                Job?
-
-  @@index([organizationId])
-  @@index([customerId])
-  @@index([salesIntakeId])
-  @@index([status])
-}
-
-model QuoteShareToken {
-  id             String    @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteId        String    @unique
-  quote          Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  token          String    @unique
-  createdAt      DateTime  @default(now())
-  expiresAt      DateTime?
-  revokedAt      DateTime?
-  lastViewedAt   DateTime?
-  acceptedAt     DateTime?
-  acceptedByName String?
-  acceptedFromIp String?
-
-  @@index([organizationId])
-  @@index([token])
-}
-
-model QuoteView {
-  id              String       @id @default(cuid())
-  organizationId  String
-  quoteId         String
-  token           String
-  viewedAt        DateTime     @default(now())
-  ip              String?
-  userAgent       String?
-
-  @@index([organizationId])
-  @@index([quoteId])
-  @@index([token])
-}
-
-/// Immutable staff-only proof of what the customer-facing proposal contained at a commitment moment (send, acceptance).
-/// Quote status advances with Send (→ SENT) and staff-recorded approval (→ APPROVED) in v1; checkpoints store commercial projection only.
-/// Future runtime jobs materialize from approved commercial baseline plus internal execution planning — not from checkpoint rows alone.
-model QuoteCheckpoint {
-  id                        String              @id @default(cuid())
-  organizationId          String
-  organization            Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteId                   String
-  quote                     Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  kind                      QuoteCheckpointKind
-  source                    QuoteCheckpointSource @default(STAFF)
-  sequence                  Int
-  schemaVersion             Int
-  snapshotJson              Json
-  staffOnlyJson             Json?
-  /// Quote row `updatedAt` at capture time — staff context for drift vs proof.
-  quoteUpdatedAtAtCapture   DateTime?
-  createdAt                 DateTime            @default(now())
-
-  @@unique([quoteId, kind, sequence])
-  @@index([organizationId])
-  @@index([quoteId, kind])
-}
-
-/// Reusable commercial line presets for an organization. Applying copies values onto [QuoteLineItem];
-/// quotes never read live template fields for pricing after insert.
-model LineItemTemplate {
-  id                       String          @id @default(cuid())
-  organizationId         String
-  organization           Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  description            String
-  defaultQuantity        Decimal         @db.Decimal(18, 6)
-  defaultUnitAmountCents Int
-  defaultInternalNotes             String?
-  defaultCustomerScopeTitle        String?
-  defaultCustomerScopeDescription  String?
-  defaultCustomerIncludedNotes     String?
-  defaultCustomerExcludedNotes     String?
-  defaultCustomerPresentationGroup String?
-  tags                             String[]        @default([])
-  priceBufferPercentage            Int             @default(0)
-  archivedAt                       DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  quoteLineItems         QuoteLineItem[]
-  defaultExecutionTasks  LineItemTemplateTask[]
-
-  @@index([organizationId])
-  @@index([organizationId, archivedAt])
-}
-
-/// Org-scoped reusable task presets (library). Quote/job rows copy fields from templates when applied — not live-linked.
-model TaskTemplate {
-  id               String               @id @default(cuid())
-  organizationId   String
-  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  title              String
-  stageKey           ExecutionStageKey
-  category           TaskTemplateCategory
-  instructions       String?
-  requirementsJson   Json                 @default("{}")
-  archivedAt         DateTime?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  lineItemTemplateTasks LineItemTemplateTask[]
-  quoteLineExecutionTasks QuoteLineExecutionTask[]
-  jobTaskCopies      JobTask[]
-
-  @@index([organizationId])
-  @@index([organizationId, archivedAt])
-}
-
-/// Optional default execution on a saved line item — snapshot fields; not live-linked to [TaskTemplate] or quotes.
-model LineItemTemplateTask {
-  id                   String                     @id @default(cuid())
-  lineItemTemplateId   String
-  lineItemTemplate     LineItemTemplate           @relation(fields: [lineItemTemplateId], references: [id], onDelete: Cascade)
-  sourceType           LineItemTemplateTaskSource
-  sourceTaskTemplateId String?
-  sourceTaskTemplate   TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
-  title                String
-  stageKey             ExecutionStageKey
-  category             TaskTemplateCategory
-  instructions         String?
-  requirementsJson     Json                       @default("{}")
-  sortOrder            Int                        @default(0)
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
-  quoteLineCopies      QuoteLineExecutionTask[]
-
-  @@index([lineItemTemplateId, stageKey, sortOrder])
-  @@index([lineItemTemplateId, sortOrder])
-}
-
-/// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
-/// No denormalized organizationId here—avoids redundant writes and drift.
-model QuoteLineItem {
-  id                       String             @id @default(cuid())
-  quoteId                  String
-  quote                    Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  sortOrder                Int                @default(0)
-  description                 String
-  customerScopeTitle          String?
-  customerScopeDescription    String?
-  customerIncludedNotes       String?
-  customerExcludedNotes       String?
-  customerPresentationGroup   String?
-  quantity                    Decimal            @db.Decimal(18, 6)
-  unitAmountCents             Int
-  lineTotalCents              Int
-  internalNotes               String?
-  sourceLineItemTemplateId String?
-  sourceLineItemTemplate   LineItemTemplate?  @relation(fields: [sourceLineItemTemplateId], references: [id], onDelete: SetNull)
-  /// Internal planning: whether this line still needs execution review vs explicitly commercial-only.
-  executionReviewStatus QuoteLineExecutionReviewStatus @default(UNREVIEWED)
-  /// How this scope should group when a job exists — planning metadata only in this build.
-  executionMergeMode    QuoteLineExecutionMergeMode   @default(MERGE_INTO_JOB_STAGES)
-  /// Work order among lines on this quote for future job sequencing (normalized with peers).
-  executionOrder        Int                           @default(0)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
-  draftExecutionTasks      QuoteLineExecutionTask[]
-  jobStageCopies           JobStage[]
-  jobTaskCopies            JobTask[]
-
-  @@index([quoteId])
-  @@index([quoteId, executionOrder])
-  @@index([sourceLineItemTemplateId])
-}
-
-/// Draft internal execution tasks for a quote line — independent from [LineItemTemplateTask] and [TaskTemplate] after copy.
-model QuoteLineExecutionTask {
-  id                           String                     @id @default(cuid())
-  quoteLineItemId              String
-  quoteLineItem                QuoteLineItem              @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
-  sourceLineItemTemplateTaskId String?
-  sourceLineItemTemplateTask   LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id], onDelete: SetNull)
-  sourceTaskTemplateId         String?
-  sourceTaskTemplate           TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
-  sourceType                   LineItemTemplateTaskSource
-  title                        String
-  stageKey                     ExecutionStageKey
-  category                     TaskTemplateCategory
-  instructions                 String?
-  requirementsJson             Json                       @default("{}")
-  sortOrder                    Int                        @default(0)
-  createdAt                    DateTime                   @default(now())
-  updatedAt                    DateTime                   @updatedAt
-  jobTaskCopies                JobTask[]
-
-  @@index([quoteLineItemId, stageKey, sortOrder])
-  @@index([quoteLineItemId, sortOrder])
-}
-
-/// Runtime job materialized from an APPROVED [Quote] at activation time.
-/// Job rows are independent copies — later quote/template edits do not mutate stages or tasks here.
-/// One job per quote in V1 (enforced by [@@unique] on [quoteId]).
-model Job {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  quoteId        String       @unique
-  quote          Quote        @relation(fields: [quoteId], references: [id])
-  customerId     String?
-  customer       Customer?    @relation(fields: [customerId], references: [id])
-  salesIntakeId  String?
-  salesIntake    SalesIntake?        @relation(fields: [salesIntakeId], references: [id])
-  title          String
-  status         JobStatus    @default(ACTIVE)
-  activatedAt    DateTime     @default(now())
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  attachments    Attachment[]
-  visits         JobVisit[]
-  stages         JobStage[]
-  tasks          JobTask[]
-  issues         JobIssue[]
-  paymentRequirements JobPaymentRequirement[]
-  activities     JobActivity[]
-  dailyJobLogs   DailyJobLog[]
-
-  @@index([organizationId])
-  @@index([organizationId, status])
-  @@index([customerId])
-  @@index([salesIntakeId])
-}
-
-/// Stage on a job — either a SHARED canonical phase merging tasks from many quote lines,
-/// or a SEPARATE_LINE_ITEM block scoped to one source quote line. V1 has no nested groups.
-model JobStage {
-  id                    String            @id @default(cuid())
-  jobId                 String
-  job                   Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  blockType             JobStageBlockType
-  stageKey              ExecutionStageKey
-  title                 String
-  /// Position within the job — shared stages first by canonical stage order, then separate blocks; ties broken by block order then stage order.
-  sortOrder             Int               @default(0)
-  /// SHARED: null. SEPARATE_LINE_ITEM: source quote line id at activation; SetNull if the line is later removed.
-  sourceQuoteLineItemId String?
-  sourceQuoteLineItem   QuoteLineItem?    @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
-  /// Stable label for separate-line-item blocks (line description at activation); null for shared stages.
-  blockTitle            String?
-  /// Position of the parent block among separate blocks (work order at activation); 0 for shared.
-  blockSortOrder        Int               @default(0)
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  tasks                 JobTask[]
-  issues                JobIssue[]
-  paymentRequirements   JobPaymentRequirement[]
-
-  @@index([jobId])
-  @@index([jobId, sortOrder])
-  @@index([sourceQuoteLineItemId])
-}
-
-/// Runtime task on a job — copied from a quote line execution task at activation; later quote edits do not mutate this row.
-/// Lineage fields use SetNull so source deletes do not orphan the runtime row.
-model JobTask {
-  id                             String                     @id @default(cuid())
-  jobId                          String
-  job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  jobStageId                     String
-  jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
-  sourceQuoteLineItemId          String?
-  sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
-  sourceQuoteLineExecutionTaskId String?
-  sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id], onDelete: SetNull)
-  sourceTaskTemplateId           String?
-  sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
-  sourceType                     LineItemTemplateTaskSource
-  title                          String
-  category                       TaskTemplateCategory
-  stageKey                       ExecutionStageKey
-  instructions                   String?
-  status                         JobTaskStatus              @default(TODO)
-  sortOrder                      Int                        @default(0)
-  completedAt                    DateTime?
-  completedByUserId              String?
-  completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
-  completionNote                 String?
-  completionRequirementsJson     Json                       @default("{}")
-  createdAt                      DateTime                   @default(now())
-  updatedAt                      DateTime                   @updatedAt
-  attachments                    Attachment[]
-  issues                         JobIssue[]
-  sourceJobIssueId               String?                    @unique
-  sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id], onDelete: SetNull)
-
-  @@index([jobId])
-  @@index([jobStageId, sortOrder])
-}
-
-model JobIssue {
-  id              String           @id @default(cuid())
-  organizationId  String
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobId           String
-  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  jobStageId      String?
-  jobStage        JobStage?        @relation(fields: [jobStageId], references: [id], onDelete: SetNull)
-  jobTaskId       String?
-  jobTask         JobTask?         @relation(fields: [jobTaskId], references: [id], onDelete: SetNull)
-  createdByUserId String?
-  createdByUser   User?            @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  type            JobIssueType
-  severity        JobIssueSeverity @default(BLOCKS_WORK)
-  status          JobIssueStatus   @default(OPEN)
-  title           String
-  description     String?
-  resolutionNote  String?
-  resolvedAt      DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  followUpTask    JobTask?         @relation("IssueFollowUpTask")
-
-  @@index([organizationId])
-  @@index([jobId])
-  @@index([organizationId, status])
-  @@index([organizationId, severity])
-  @@index([jobTaskId])
-  @@index([jobStageId])
 }
 
 enum JobIssueType {
@@ -778,198 +952,4 @@ enum JobActivityType {
   VISIT_RESCHEDULED
   VISIT_CANCELED
   VISIT_COMPLETED
-}
-
-model JobVisit {
-  id              String         @id @default(cuid())
-  organizationId  String
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobId           String
-  job             Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  
-  scheduledStartAt DateTime
-  scheduledEndAt   DateTime?
-  status           JobVisitStatus @default(SCHEDULED)
-  
-  assignedUserId   String?
-  assignedUser     User?          @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  
-  notes            String?
-  
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@index([organizationId])
-  @@index([jobId])
-  @@index([assignedUserId])
-  @@index([status])
-  @@index([scheduledStartAt])
-}
-
-model Attachment {
-  id              String       @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  fileName        String
-  fileKey         String       // Storage provider key/path
-  contentType     String
-  fileSize        Int
-  status          AttachmentStatus @default(READY)
-  
-  // Explicit nullable foreign keys
-  salesIntakeId   String?
-  salesIntake     SalesIntake?        @relation(fields: [salesIntakeId], references: [id], onDelete: SetNull)
-  quoteId         String?
-  quote           Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
-  jobId           String?
-  job             Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  jobTaskId       String?
-  jobTask         JobTask?     @relation(fields: [jobTaskId], references: [id], onDelete: SetNull)
-  customerId      String?
-  customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  
-  uploadedByUserId String?
-  uploadedByUser   User?       @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  @@index([organizationId])
-  @@index([salesIntakeId])
-  @@index([quoteId])
-  @@index([jobId])
-  @@index([jobTaskId])
-  @@index([customerId])
-}
-
-model JobActivity {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobId          String
-  job            Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  actorUserId    String?
-  actorUser      User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  type           JobActivityType
-  title          String
-  details        String?
-  entityType     String?
-  entityId       String?
-  metadataJson   Json?
-  createdAt      DateTime        @default(now())
-
-  @@index([organizationId])
-  @@index([jobId])
-  @@index([organizationId, createdAt])
-  @@index([jobId, createdAt])
-  @@index([entityType, entityId])
-}
-
-model DailyJobLog {
-  id               String            @id @default(cuid())
-  organizationId   String
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobId            String
-  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  /// Normalized to midnight for v1. Org-timezone-aware date handling can be improved later.
-  logDate          DateTime
-  summary          String            @db.Text
-  internalNotes    String?
-  status           DailyJobLogStatus @default(DRAFT)
-  reviewedByUserId String?
-  reviewedByUser   User?             @relation("ReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  reviewedAt       DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-
-  @@unique([jobId, logDate])
-  @@index([organizationId])
-  @@index([jobId])
-  @@index([organizationId, logDate])
-  @@index([jobId, logDate])
-  @@index([status])
-}
-
-model JobPaymentRequirement {
-  id                    String                      @id @default(cuid())
-  organizationId        String
-  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobId                 String
-  job                   Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  title                 String
-  amountCents           Int?
-  status                JobPaymentRequirementStatus @default(PENDING)
-  requiredBeforeStageId String?
-  requiredBeforeStage   JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id], onDelete: SetNull)
-  paidAt                DateTime?
-  waivedAt              DateTime?
-  canceledAt            DateTime?
-  notes                 String?
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
-
-  @@index([organizationId])
-  @@index([jobId])
-  @@index([organizationId, status])
-  @@index([requiredBeforeStageId])
-}
-
-model SalesVisitRequest {
-  id              String                 @id @default(cuid())
-  organizationId  String
-  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  salesIntakeId   String
-  salesIntake     SalesIntake            @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
-  
-  requestedDate   DateTime?
-  requestedWindow String?               // e.g. "Morning", "Afternoon", "Anytime"
-  confirmedDate   DateTime?
-  status          SalesVisitRequestStatus @default(PENDING)
-  
-  notes           String?
-  
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-
-  @@index([organizationId])
-  @@index([salesIntakeId])
-  @@index([status])
-}
-
-model SalesCustomFieldDef {
-  id              String              @id @default(cuid())
-  organizationId  String
-  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  key             String              // e.g. "roof-type"
-  label           String              // e.g. "Roof Type"
-  type            SalesCustomFieldType
-  optionsJson     Json?               // For SELECT type: ["Asphalt", "Metal", "Tile"]
-  isRequired      Boolean             @default(false)
-  showOnPublicIntake Boolean          @default(true)
-  
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  values          SalesCustomFieldValue[]
-
-  @@unique([organizationId, key])
-  @@index([organizationId])
-}
-
-model SalesCustomFieldValue {
-  id              String              @id @default(cuid())
-  salesIntakeId   String
-  salesIntake     SalesIntake         @relation(fields: [salesIntakeId], references: [id], onDelete: Cascade)
-  fieldDefId      String
-  fieldDef        SalesCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
-  
-  value           String              // Stored as string, parsed based on type
-  
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-
-  @@unique([salesIntakeId, fieldDefId])
-  @@index([salesIntakeId])
-  @@index([fieldDefId])
 }

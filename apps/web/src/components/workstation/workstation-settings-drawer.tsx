@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, useEffect } from "react";
 import { X, Settings2, Check, Loader2 } from "lucide-react";
 import { updateWorkstationSettingsAction } from "@/app/(workspace)/workstation/workstation-settings-actions";
 
@@ -27,6 +27,13 @@ export function WorkstationSettingsDrawer({
   const [quickActions, setQuickActions] = useState<string[]>(initial.quickActions);
   const [urgentThresholdHours, setUrgentThresholdHours] = useState(initial.urgentThresholdHours);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Sync state with props when they change (e.g. after revalidatePath)
+  useEffect(() => {
+    setShowQuickActions(initial.showQuickActions);
+    setQuickActions(initial.quickActions);
+    setUrgentThresholdHours(initial.urgentThresholdHours);
+  }, [initial.showQuickActions, initial.quickActions, initial.urgentThresholdHours]);
 
   function open() {
     dialogRef.current?.showModal();
