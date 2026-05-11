@@ -1514,17 +1514,16 @@ export function SalesIntakeWorkSurface({
   }, [parentProvidedActiveQuote, runActiveQuoteLoad, router]);
 
   /* Effective payload: explicit non-null parent payload wins; otherwise a
-   * post–Start quote client fetch; otherwise lazy-loaded popup payload. When
-   * the parent passes explicit `null` (no quote yet), post-create payload can
-   * still render until SSR catches up. */
+   * lazy-loaded quote payload when one is already in state; otherwise the
+   * post–Start quote client fetch so promotion can render before the first
+   * lazy fetch completes. When the parent passes explicit `null` (no quote
+   * yet), that post-create payload still bridges until the lazy loader runs. */
   const effectiveActiveQuotePayload =
     activeQuoteWorkSurface != null
       ? activeQuoteWorkSurface
-      : postCreateActiveQuote != null
-        ? postCreateActiveQuote
-        : !parentProvidedActiveQuote && activeQuoteState.kind === "loaded"
-          ? activeQuoteState.payload
-          : null;
+      : !parentProvidedActiveQuote && activeQuoteState.kind === "loaded"
+        ? activeQuoteState.payload ?? postCreateActiveQuote
+        : postCreateActiveQuote ?? null;
 
   const isLoadingActiveQuote =
     !parentProvidedActiveQuote && activeQuoteState.kind === "loading";
