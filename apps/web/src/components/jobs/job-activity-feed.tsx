@@ -2,6 +2,7 @@
 
 import { JobActivityType } from "@prisma/client";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { EmptyState } from "@/components/ui/empty-state";
 import { History, User as UserIcon, Settings, Calendar } from "lucide-react";
 
 type Activity = {
@@ -25,10 +26,11 @@ export function JobActivityFeed({ activities }: { activities: Activity[] }) {
       />
 
       {activities.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <History className="mx-auto size-8 text-foreground-subtle/50" />
-          <p className="mt-2 text-sm font-medium text-foreground-subtle">No activity recorded yet</p>
-        </div>
+        <EmptyState
+          icon={History}
+          title="No activity recorded yet"
+          description="Key events and changes will appear here as they happen."
+        />
       ) : (
         <div className="space-y-4">
           <div className="relative">

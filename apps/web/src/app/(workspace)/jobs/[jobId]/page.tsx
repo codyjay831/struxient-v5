@@ -308,7 +308,7 @@ export default async function JobDetailPage({
             Activated <time dateTime={job.activatedAt.toISOString()}>{activatedLabel}</time>
           </span>
         </div>
-        <dl className="mt-4 grid gap-3 text-xs text-foreground-muted sm:grid-cols-2">
+        <dl className="mt-4 grid gap-3 text-xs text-foreground-muted sm:grid-cols-3">
           <div>
             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Customer</dt>
             <dd className="mt-0.5 text-foreground">
@@ -322,11 +322,23 @@ export default async function JobDetailPage({
             </dd>
           </div>
           <div>
-            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Sales intake</dt>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Intake</dt>
             <dd className="mt-0.5 text-foreground">
               {safeSalesIntake ? (
                 <Link href={`/sales/${safeSalesIntake.id}`} className="underline-offset-4 hover:underline">
                   {safeSalesIntake.title}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Source quote</dt>
+            <dd className="mt-0.5 text-foreground">
+              {safeQuote ? (
+                <Link href={`/quotes/${safeQuote.id}`} className="underline-offset-4 hover:underline">
+                  {safeQuote.title}
                 </Link>
               ) : (
                 "—"

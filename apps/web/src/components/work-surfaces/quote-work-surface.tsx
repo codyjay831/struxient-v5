@@ -173,7 +173,7 @@ export type QuoteWorkSurfaceProps = {
 const TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
-  { id: "context", label: "Customer & Sales Intake" },
+  { id: "context", label: "Customer & Intake" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },
 ];
@@ -735,7 +735,7 @@ function QuoteJobsiteCallout({
         <div className="flex gap-3">
           <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className={sectionLabelClass}>Service address needed</p>
+            <p className={sectionLabelClass}>Jobsite address needed</p>
             <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
               Add the project address before scheduling or creating a job.
             </p>
@@ -745,7 +745,7 @@ function QuoteJobsiteCallout({
                 onClick={onRequestServiceAddress}
                 className={primaryBtnClass}
               >
-                Add service address in Customer Info
+                Add jobsite address in Customer Info
               </button>
             </div>
           </div>
@@ -761,7 +761,7 @@ function QuoteJobsiteCallout({
           <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className={sectionLabelClass}>
-              {hasLine ? "Service address" : "Service address needed"}
+              {hasLine ? "Jobsite address" : "Jobsite address needed"}
             </p>
             {hasLine ? (
               <p className="mt-1 text-sm leading-relaxed text-foreground">{quote.jobsiteAddressLine}</p>
@@ -773,7 +773,7 @@ function QuoteJobsiteCallout({
                 <div className="mt-3 flex flex-wrap gap-2">
                   {quote.canAddServiceAddress && quote.customerId ? (
                     <button type="button" onClick={() => setOpen(true)} className={primaryBtnClass}>
-                      Add service address
+                      Add jobsite address
                     </button>
                   ) : null}
                   {quote.salesIntakeHref && !quote.canAddServiceAddress ? (
@@ -847,9 +847,14 @@ function FactsGrid({
       <button
         type="button"
         onClick={() => onSwitchToTab("context")}
-        className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background"
+        className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background group"
       >
-        <p className={`${sectionLabelClass} mb-0.5`}>Intake</p>
+        <div className="flex items-center justify-between gap-2 mb-0.5">
+          <p className={sectionLabelClass}>Intake</p>
+          {quote.salesIntakeId && (
+            <ArrowUpRight className="size-3 text-foreground-subtle opacity-0 group-hover:opacity-100 transition-opacity" />
+          )}
+        </div>
         <p className="truncate text-sm font-medium text-foreground">{salesIntakeLabel}</p>
       </button>
       <div className="rounded-lg border border-border bg-surface p-3">
@@ -1332,12 +1337,12 @@ function ContextTab({
 
       {/* Sales Intake */}
       <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-2`}>Sales Intake</p>
+        <p className={`${sectionLabelClass} mb-2`}>Intake</p>
         {salesIntake ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
               <div className="min-w-0">
-                <p className={sectionLabelClass}>Linked sales intake</p>
+                <p className={sectionLabelClass}>Linked request</p>
                 <p className="mt-1 truncate text-sm font-medium text-foreground">
                   {salesIntake.title}
                 </p>
@@ -1350,7 +1355,7 @@ function ContextTab({
 
             {/* Intake context */}
             <div className="rounded-lg border border-border bg-foreground/[0.01] px-4 py-4">
-              <p className={`${sectionLabelClass} mb-3`}>Sales intake context</p>
+              <p className={`${sectionLabelClass} mb-3`}>Intake context</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-3">
                   {salesIntake.source ? (
@@ -1413,7 +1418,7 @@ function ContextTab({
               sales intake.
             </p>
             <Link href="/sales" className={`mt-3 ${listLinkClass}`}>
-              Sales Intakes
+              Intakes
             </Link>
           </div>
         )}
@@ -1481,6 +1486,7 @@ function EmbeddedActivateJobButton({
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activatedJobId, setActivatedJobId] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleActivate = useCallback(async () => {
     setError(null);
@@ -1492,6 +1498,7 @@ function EmbeddedActivateJobButton({
         return;
       }
       setActivatedJobId(res.jobId);
+      setShowConfirm(false);
       onMutated?.();
     } finally {
       setIsPending(false);
@@ -1518,6 +1525,44 @@ function EmbeddedActivateJobButton({
     );
   }
 
+  if (showConfirm) {
+    return (
+      <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-4">
+        <p className="text-xs font-bold text-foreground">Activate this job?</p>
+        <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+          This will create a runtime job and copy all execution tasks. This action cannot be undone.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleActivate()}
+            disabled={isPending}
+            className={primaryBtnClass}
+          >
+            {isPending ? "Activating…" : "Yes, activate job"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowConfirm(false)}
+            disabled={isPending}
+            className={secondaryBtnClass}
+          >
+            Cancel
+          </button>
+        </div>
+        {error ? (
+          <p
+            className="mt-3 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
+            role="alert"
+            aria-live="polite"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
       <p className="text-xs font-medium text-foreground">Activate job</p>
@@ -1527,24 +1572,13 @@ function EmbeddedActivateJobButton({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => void handleActivate()}
-          disabled={isPending}
-          aria-busy={isPending}
+          onClick={() => setShowConfirm(true)}
           className={primaryBtnClass}
         >
           <Briefcase className="size-3.5" strokeWidth={1.5} />
-          {isPending ? "Activating…" : "Activate job"}
+          Activate job
         </button>
       </div>
-      {error ? (
-        <p
-          className="mt-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

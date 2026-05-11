@@ -535,9 +535,14 @@ function OverviewTab({
         <button
           type="button"
           onClick={() => onSwitchToSection("quote")}
-          className="rounded-lg border border-border bg-surface p-3 text-left hover:bg-background transition-colors"
+          className="rounded-lg border border-border bg-surface p-3 text-left hover:bg-background transition-colors group"
         >
-          <p className={`${sectionLabelClass} mb-0.5`}>Quote</p>
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <p className={sectionLabelClass}>Quote</p>
+            {linkedQuotes.length > 0 && (
+              <ArrowUpRight className="size-3 text-foreground-subtle opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+          </div>
           <p className="text-sm font-medium text-foreground">{quoteLabel}</p>
         </button>
         <div className="rounded-lg border border-border bg-surface p-3">
@@ -1607,9 +1612,9 @@ export function SalesIntakeWorkSurface({
               <div className="flex size-12 items-center justify-center rounded-full bg-success/10 text-success mb-4">
                 <Check className="size-6" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Sales Intake Promoted!</h3>
+              <h3 className="text-lg font-semibold text-foreground">Intake Promoted!</h3>
               <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
-                This sales intake has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
+                This request has been promoted to a Quote. It will now be found in the <strong>Quotes</strong> tab of the Sales Hub.
               </p>
               <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
                 You can continue working on the quote right here.
@@ -1758,9 +1763,9 @@ export function SalesIntakeWorkSurface({
             <div className="flex size-12 items-center justify-center rounded-full bg-success/10 text-success mb-4">
               <Check className="size-6" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground">Sales Intake Promoted!</h3>
+            <h3 className="text-lg font-semibold text-foreground">Intake Promoted!</h3>
             <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
-              This sales intake has been promoted to a Quote. It will now be found in the <strong>Proposals</strong> tab of the Sales Hub.
+              This request has been promoted to a Quote. It will now be found in the <strong>Quotes</strong> tab of the Sales Hub.
             </p>
             <p className="mt-2 text-sm text-foreground-muted leading-relaxed">
               You can continue working on the quote right here.

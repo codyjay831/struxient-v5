@@ -37,7 +37,7 @@ export function JobJobsitePanel({
           <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className={sectionLabelClass}>
-              {hasLine ? "Service address" : "Service address needed"}
+              {hasLine ? "Jobsite address" : "Jobsite address needed"}
             </p>
             {hasLine ? (
               <p className="mt-1 text-sm leading-relaxed text-foreground">{jobsiteAddressLine}</p>
@@ -49,7 +49,7 @@ export function JobJobsitePanel({
                 <div className="mt-3 flex flex-wrap gap-2">
                   {customerId ? (
                     <button type="button" onClick={() => setOpen(true)} className={primaryBtnClass}>
-                      Add service address
+                      Add jobsite address
                     </button>
                   ) : null}
                   {!customerId && salesIntakeEditHref ? (

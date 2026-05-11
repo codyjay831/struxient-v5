@@ -24,7 +24,7 @@ const workstationEntry: NavItem[] = [
 
 /** Commercial pipeline: intake and working quotes (record routes). */
 const salesNav: NavItem[] = [
-  { href: "/sales", label: "Sales", icon: Users },
+  { href: "/sales", label: "Sales Hub", icon: Users },
   { href: "/scope-library", label: "Scope Library", icon: Library },
 ];
 
@@ -106,7 +106,7 @@ export function SidebarNav() {
   return (
     <nav className="flex flex-1 flex-col" aria-label="Main">
       <NavSection title="" items={workstationEntry} pathname={pathname} />
-      <NavSection title="Sales" items={salesNav} pathname={pathname} />
+      <NavSection title="Sales Hub" items={salesNav} pathname={pathname} />
       <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
       <NavSection title="Reserved" items={reservedPlanningNav} pathname={pathname} />

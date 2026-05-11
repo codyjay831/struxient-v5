@@ -236,7 +236,7 @@ export default async function SalesHubPage({
 
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Proposals" }]} />
+        <WorkspaceBreadcrumb items={[{ label: "Sales Hub" }, { label: "Proposals" }]} />
         <PageHeader
           title="Sales Hub"
           description="Manage your intake queue and active proposals in one place."
@@ -267,7 +267,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Intake (Sales Intakes)
+              Intakes
             </Link>
             <Link
               href="/sales?tab=proposals"
@@ -277,7 +277,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Proposals (Quotes)
+              Quotes
             </Link>
           </nav>
         </div>
@@ -489,8 +489,8 @@ export default async function SalesHubPage({
       <WorkspacePanel padding="compact">
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">More intake sources (soon)</p>
         <p className="mt-2 text-sm text-foreground-muted">
-          Your Public Request Link sends sales intakes here automatically. Email, phone, text, and file imports will land in
-          this queue as integrations roll out. You can always add sales intakes by hand from the New sales intake action.
+          Your Public Request Link sends intakes here automatically. Email, phone, text, and file imports will land in
+          this queue as integrations roll out. You can always add intakes by hand from the New intake action.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <PlaceholderButton title="CSV import is not connected in this build.">CSV import (soon)</PlaceholderButton>
@@ -502,7 +502,7 @@ export default async function SalesHubPage({
   return (
     <SalesIntakeSourcesProvider sourcesPanel={sourcesPanel}>
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Intake" }]} />
+        <WorkspaceBreadcrumb items={[{ label: "Sales Hub" }, { label: "Intake" }]} />
         <PageHeader
           title="Sales Hub"
           description="Manage your intake queue and active proposals in one place."
@@ -517,7 +517,7 @@ export default async function SalesHubPage({
                 Proposals
               </Link>
               <Link href="/sales/new" className={primaryLinkClass}>
-                New sales intake
+                New intake
               </Link>
               <SalesIntakeSourcesToolbarButton />
               <SalesIntakeScaffoldingDialog />
@@ -535,7 +535,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Intake (Sales Intakes)
+              Intakes
             </Link>
             <Link
               href="/sales?tab=proposals"
@@ -545,7 +545,7 @@ export default async function SalesHubPage({
                   : "text-foreground-muted hover:text-foreground"
               }`}
             >
-              Proposals (Quotes)
+              Quotes
             </Link>
           </nav>
         </div>

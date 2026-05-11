@@ -249,8 +249,12 @@ export function TaskWorkSurface({
   return (
     <>
     <div className="space-y-6">
-      {showCloseControl && onClose && (
-        <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-lg font-bold tracking-tight text-foreground">{task.title}</h3>
+          <StatusBadge label={taskStateLabel(derivedState, task)} tone={taskStateTone(derivedState)} />
+        </div>
+        {showCloseControl && onClose && (
           <button
             type="button"
             onClick={onClose}
@@ -259,60 +263,73 @@ export function TaskWorkSurface({
           >
             <X className="size-5" />
           </button>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border bg-foreground/[0.01] p-5">
-        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Job</p>
-        <p className="mt-1 text-sm font-semibold text-foreground">{jobContextLabel}</p>
-        {hasJobsite ? (
-          <div className="mt-3 border-t border-border pt-3">
-            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-              Service address
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-foreground-muted">{jobsiteAddressLine}</p>
-          </div>
-        ) : (
-          <div className="mt-3 border-t border-border pt-3">
-            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-              Service address needed
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
-              Add the project address before scheduling or field visits.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {customerId ? (
-                <button
-                  type="button"
-                  onClick={() => setAddressDialogOpen(true)}
-                  className={addressPrimaryBtnClass}
-                >
-                  Add service address
-                </button>
-              ) : null}
-              {!customerId && salesIntakeEditHref ? (
-                <Link href={salesIntakeEditHref} className={addressPrimaryBtnClass}>
-                  Add on request
-                </Link>
-              ) : null}
-            </div>
-          </div>
         )}
-        <p className="mt-2 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Stage</p>
-        <p className="mt-0.5 text-xs text-foreground-muted">{stageTitle}</p>
-        <Link
-          href={jobHref}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted hover:text-foreground"
-        >
-          Open full job record
-          <ChevronRight className="size-3.5" />
-        </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-lg font-bold tracking-tight text-foreground">{task.title}</h3>
-        <StatusBadge label={taskStateLabel(derivedState, task)} tone={taskStateTone(derivedState)} />
-      </div>
+      <details className="group rounded-xl border border-border bg-foreground/[0.01]">
+        <summary className="flex cursor-pointer list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            className="size-3.5 shrink-0 text-foreground-subtle transition-transform group-open:rotate-90"
+            aria-hidden
+          />
+          <span className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+            Job Context
+          </span>
+          <span className="ml-auto truncate text-[0.65rem] text-foreground-subtle group-open:hidden">
+            {jobContextLabel} · {stageTitle}
+          </span>
+        </summary>
+        <div className="space-y-4 border-t border-border p-4 pt-3">
+          <div>
+            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Job</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{jobContextLabel}</p>
+          </div>
+          {hasJobsite ? (
+            <div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                Jobsite address
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-foreground-muted">{jobsiteAddressLine}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                Jobsite address needed
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+                Add the project address before scheduling or field visits.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {customerId ? (
+                  <button
+                    type="button"
+                    onClick={() => setAddressDialogOpen(true)}
+                    className={addressPrimaryBtnClass}
+                  >
+                    Add jobsite address
+                  </button>
+                ) : null}
+                {!customerId && salesIntakeEditHref ? (
+                  <Link href={salesIntakeEditHref} className={addressPrimaryBtnClass}>
+                    Add on request
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">Stage</p>
+            <p className="mt-0.5 text-xs text-foreground-muted">{stageTitle}</p>
+          </div>
+          <Link
+            href={jobHref}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted hover:text-foreground"
+          >
+            Open full job record
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+      </details>
 
       {task.instructions && (
         <div>
