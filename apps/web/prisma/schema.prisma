@@ -18,25 +18,25 @@ model Organization {
   customers                Customer[]
   customerServiceLocations CustomerServiceLocation[]
   dailyJobLogs             DailyJobLog[]
+  intakeFormDefinitions    IntakeFormDefinition[]
   jobs                     Job[]
   jobActivities            JobActivity[]
   jobIssues                JobIssue[]
   jobPaymentRequirements   JobPaymentRequirement[]
   jobVisits                JobVisit[]
+  leads                    Lead[]
+  leadCustomFieldDefs      LeadCustomFieldDef[]
+  leadVisitRequests        LeadVisitRequest[]
   lineItemTemplates        LineItemTemplate[]
   memberships              Membership[]
   publicRequestSettings    PublicRequestSettings?
   quotes                   Quote[]
-  quoteCheckpoints         QuoteCheckpoint[]
   quoteChangeRequests      QuoteChangeRequest[]
+  quoteCheckpoints         QuoteCheckpoint[]
   quoteShareTokens         QuoteShareToken[]
-  leadCustomFieldDefs      LeadCustomFieldDef[]
-  leads                    Lead[]
-  leadVisitRequests        LeadVisitRequest[]
   stages                   Stage[]
   taskTemplates            TaskTemplate[]
   workstationSettings      WorkstationSettings?
-  intakeFormDefinitions    IntakeFormDefinition[]
 }
 
 model Stage {
@@ -47,12 +47,13 @@ model Stage {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   archivedAt              DateTime?
-  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   jobStages               JobStage[]
   jobTasks                JobTask[]
   lineItemTemplateTasks   LineItemTemplateTask[]
   quoteLineExecutionTasks QuoteLineExecutionTask[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taskTemplates           TaskTemplate[]
+  paymentScheduleItems    PaymentScheduleItem[]
 
   @@index([organizationId])
   @@index([organizationId, sortOrder])
@@ -105,35 +106,35 @@ model Customer {
   organization     Organization              @relation(fields: [organizationId], references: [id])
   serviceLocations CustomerServiceLocation[]
   jobs             Job[]
-  quotes           Quote[]
   leads            Lead[]
+  quotes           Quote[]
 
   @@index([organizationId])
 }
 
 model CustomerServiceLocation {
-  id                       String                        @id @default(cuid())
-  organizationId           String
-  customerId               String
-  formattedAddress         String
-  addressLine1             String                        @default("")
-  addressLine2             String                        @default("")
-  city                     String                        @default("")
-  state                    String                        @default("")
-  postalCode               String                        @default("")
-  country                  String                        @default("")
-  googlePlaceId            String                        @default("")
-  latitude                 Float?
-  longitude                Float?
-  source                   CustomerServiceLocationSource
-  label                    String?
-  isPrimary                Boolean                       @default(false)
-  createdAt                DateTime                      @default(now())
-  updatedAt                DateTime                      @updatedAt
-  createdFromLeadId        String?
-  createdFromLead          Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id])
-  customer                 Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String                        @id @default(cuid())
+  organizationId    String
+  customerId        String
+  formattedAddress  String
+  addressLine1      String                        @default("")
+  addressLine2      String                        @default("")
+  city              String                        @default("")
+  state             String                        @default("")
+  postalCode        String                        @default("")
+  country           String                        @default("")
+  googlePlaceId     String                        @default("")
+  latitude          Float?
+  longitude         Float?
+  source            CustomerServiceLocationSource
+  label             String?
+  isPrimary         Boolean                       @default(false)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  createdFromLeadId String?
+  createdFromLead   Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id])
+  customer          Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization      Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
@@ -156,10 +157,10 @@ model User {
   jobIssues              JobIssue[]
   completedTasks         JobTask[]            @relation("CompletedTasks")
   assignedVisits         JobVisit[]           @relation("AssignedVisits")
-  memberships            Membership[]
-  sessions               Session[]
-  resolvedChangeRequests QuoteChangeRequest[]
   leadEvents             LeadEvent[]
+  memberships            Membership[]
+  resolvedChangeRequests QuoteChangeRequest[]
+  sessions               Session[]
 }
 
 model Account {
@@ -212,61 +213,62 @@ model Membership {
 }
 
 model Lead {
-  id                          String                    @id @default(cuid())
-  organizationId              String
-  customerId                  String?
-  status                      LeadStatus                @default(NEW)
-  channel                     LeadChannel               @default(MANUAL)
-  contact                     Json                      // { name, email, phone }
-  request                     Json                      // { type, neededByBucket, neededByDate, scope, attachments }
-  address                     Json?                     // structured service address
-  signals                     Json?                     // { duplicateCandidateIds, suggestedTemplateIds, urgencyHint, ... }
-  formDefinitionId            String?
-  formSnapshot                Json?                     // schema at time of submission (immutable)
-  raw                         Json?                     // original payload for forensics
-  assignedToId                String?
-  publicClientKey             String?
-  convertedAt                 DateTime?
-  createdAt                   DateTime                  @default(now())
-  updatedAt                   DateTime                  @updatedAt
-  attachments                 Attachment[]
-  createdServiceLocations     CustomerServiceLocation[] @relation("ServiceLocationCreatedFromLead")
-  jobs                        Job[]
-  quotes                      Quote[]
-  customFieldValues           LeadCustomFieldValue[]
-  customer                    Customer?                 @relation(fields: [customerId], references: [id])
-  organization                Organization              @relation(fields: [organizationId], references: [id])
-  visitRequests               LeadVisitRequest[]
-  events                      LeadEvent[]
+  id                      String                    @id @default(cuid())
+  organizationId          String
+  customerId              String?
+  status                  LeadStatus                @default(NEW)
+  channel                 LeadChannel               @default(MANUAL)
+  contact                 Json
+  request                 Json
+  address                 Json?
+  signals                 Json?
+  formDefinitionId        String?
+  formSnapshot            Json?
+  raw                     Json?
+  assignedToId            String?
+  publicClientKey         String?
+  convertedAt             DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  attachments             Attachment[]
+  createdServiceLocations CustomerServiceLocation[] @relation("ServiceLocationCreatedFromLead")
+  jobs                    Job[]
+  customer                Customer?                 @relation(fields: [customerId], references: [id])
+  organization            Organization              @relation(fields: [organizationId], references: [id])
+  customFieldValues       LeadCustomFieldValue[]
+  events                  LeadEvent[]
+  visitRequests           LeadVisitRequest[]
+  quotes                  Quote[]
 
   @@unique([organizationId, publicClientKey])
   @@index([organizationId, status])
 }
 
 model Quote {
-  id                    String                 @id @default(cuid())
+  id                    String               @id @default(cuid())
   organizationId        String
   customerId            String?
-  status                QuoteStatus            @default(DRAFT)
+  status                QuoteStatus          @default(DRAFT)
   title                 String
   internalNotes         String?
-  subtotalCents         Int                    @default(0)
-  totalCents            Int                    @default(0)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  subtotalCents         Int                  @default(0)
+  totalCents            Int                  @default(0)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
   customerDocumentTitle String?
   lastSentEmailAt       DateTime?
   leadId                String?
-  presentation          Json?                  // { title, introText, expiryDays, brandingOverrides }
+  presentation          Json?
   attachments           Attachment[]
   job                   Job?
-  customer              Customer?              @relation(fields: [customerId], references: [id])
-  organization          Organization           @relation(fields: [organizationId], references: [id])
-  lead                  Lead?                  @relation(fields: [leadId], references: [id])
+  customer              Customer?            @relation(fields: [customerId], references: [id])
+  lead                  Lead?                @relation(fields: [leadId], references: [id])
+  organization          Organization         @relation(fields: [organizationId], references: [id])
+  changeRequests        QuoteChangeRequest[]
   checkpoints           QuoteCheckpoint[]
   lineItems             QuoteLineItem[]
+  paymentSchedule       PaymentScheduleItem[]
   shareToken            QuoteShareToken?
-  changeRequests        QuoteChangeRequest[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -309,14 +311,14 @@ model QuoteView {
 }
 
 model QuoteChangeRequest {
-  id               String    @id @default(cuid())
+  id               String       @id @default(cuid())
   organizationId   String
   quoteId          String
   token            String
   message          String
   submittedFromIp  String?
   userAgent        String?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime     @default(now())
   resolvedAt       DateTime?
   resolvedByUserId String?
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -383,24 +385,24 @@ model TaskTemplate {
   id                      String                   @id @default(cuid())
   organizationId          String
   title                   String
-  stageId                 String?
   category                TaskTemplateCategory
   instructions            String?
   archivedAt              DateTime?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   requirementsJson        Json                     @default("{}")
-  providesSignals         String[]                 @default([])
-  requiresSignals         String[]                 @default([])
-  hardSignal              Boolean                  @default(false)
   /// Reserved for future assignment logic.
   assigneeRole            StaffRole?
-  /// Reserved for future estimation logic.
-  estimatedMinutes        Int?
-  /// Reserved for future parts/materials logic.
-  partsRequiredJson       Json?
   /// Reserved for future job costing.
   costBudgetCents         Int?
+  /// Reserved for future estimation logic.
+  estimatedMinutes        Int?
+  hardSignal              Boolean                  @default(false)
+  /// Reserved for future parts/materials logic.
+  partsRequiredJson       Json?
+  providesSignals         String[]                 @default([])
+  requiresSignals         String[]                 @default([])
+  stageId                 String?
   jobTaskCopies           JobTask[]
   lineItemTemplateTasks   LineItemTemplateTask[]
   quoteLineExecutionTasks QuoteLineExecutionTask[]
@@ -418,24 +420,24 @@ model LineItemTemplateTask {
   sourceType           LineItemTemplateTaskSource
   sourceTaskTemplateId String?
   title                String
-  stageId              String?
   category             TaskTemplateCategory
   instructions         String?
   sortOrder            Int                        @default(0)
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
   requirementsJson     Json                       @default("{}")
-  providesSignals      String[]                   @default([])
-  requiresSignals      String[]                   @default([])
-  hardSignal           Boolean                    @default(false)
   /// Reserved for future assignment logic.
   assigneeRole         StaffRole?
-  /// Reserved for future estimation logic.
-  estimatedMinutes     Int?
-  /// Reserved for future parts/materials logic.
-  partsRequiredJson    Json?
   /// Reserved for future job costing.
   costBudgetCents      Int?
+  /// Reserved for future estimation logic.
+  estimatedMinutes     Int?
+  hardSignal           Boolean                    @default(false)
+  /// Reserved for future parts/materials logic.
+  partsRequiredJson    Json?
+  providesSignals      String[]                   @default([])
+  requiresSignals      String[]                   @default([])
+  stageId              String?
   lineItemTemplate     LineItemTemplate           @relation(fields: [lineItemTemplateId], references: [id], onDelete: Cascade)
   sourceTaskTemplate   TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                Stage?                     @relation(fields: [stageId], references: [id])
@@ -481,24 +483,24 @@ model QuoteLineExecutionTask {
   sourceTaskTemplateId         String?
   sourceType                   LineItemTemplateTaskSource
   title                        String
-  stageId                      String?
   category                     TaskTemplateCategory
   instructions                 String?
   sortOrder                    Int                        @default(0)
   createdAt                    DateTime                   @default(now())
   updatedAt                    DateTime                   @updatedAt
   requirementsJson             Json                       @default("{}")
-  providesSignals              String[]                   @default([])
-  requiresSignals              String[]                   @default([])
-  hardSignal                   Boolean                    @default(false)
   /// Reserved for future assignment logic.
   assigneeRole                 StaffRole?
-  /// Reserved for future estimation logic.
-  estimatedMinutes             Int?
-  /// Reserved for future parts/materials logic.
-  partsRequiredJson            Json?
   /// Reserved for future job costing.
   costBudgetCents              Int?
+  /// Reserved for future estimation logic.
+  estimatedMinutes             Int?
+  hardSignal                   Boolean                    @default(false)
+  /// Reserved for future parts/materials logic.
+  partsRequiredJson            Json?
+  providesSignals              String[]                   @default([])
+  requiresSignals              String[]                   @default([])
+  stageId                      String?
   jobTaskCopies                JobTask[]
   quoteLineItem                QuoteLineItem              @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
   sourceLineItemTemplateTask   LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id])
@@ -506,6 +508,25 @@ model QuoteLineExecutionTask {
   stage                        Stage?                     @relation(fields: [stageId], references: [id])
 
   @@index([quoteLineItemId, sortOrder])
+}
+
+model PaymentScheduleItem {
+  id            String                    @id @default(cuid())
+  quoteId       String
+  title         String // e.g. "Deposit", "Progress Payment", "Final Balance"
+  amountCents   Int?
+  percentage    Decimal?                  @db.Decimal(5, 2) // Optional: for % based schedules
+  sortOrder     Int                       @default(0)
+  // Anchor logic for execution gating
+  anchorType    PaymentScheduleAnchorType @default(UPON_APPROVAL)
+  anchorStageId String? // Link to a Stage in the library
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  quote         Quote                     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  anchorStage   Stage?                    @relation(fields: [anchorStageId], references: [id])
+
+  @@index([quoteId])
+  @@index([quoteId, sortOrder])
 }
 
 /// Runtime job materialized from an APPROVED [Quote] at activation time.
@@ -525,9 +546,9 @@ model Job {
   attachments         Attachment[]
   dailyJobLogs        DailyJobLog[]
   customer            Customer?               @relation(fields: [customerId], references: [id])
+  lead                Lead?                   @relation(fields: [leadId], references: [id])
   organization        Organization            @relation(fields: [organizationId], references: [id])
   quote               Quote                   @relation(fields: [quoteId], references: [id])
-  lead                Lead?                   @relation(fields: [leadId], references: [id])
   activities          JobActivity[]
   issues              JobIssue[]
   paymentRequirements JobPaymentRequirement[]
@@ -544,15 +565,15 @@ model Job {
 
 /// Per-job fact bus for Signal-based readiness.
 model JobSignal {
-  id             String   @id @default(cuid())
-  jobId          String
-  name           String
-  publishedAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  jobId            String
+  name             String
+  publishedAt      DateTime @default(now())
   /// Optional ID of the task that published this signal.
-  sourceJobTaskId String?
+  sourceJobTaskId  String?
   /// Optional ID of the stage that published this signal.
   sourceJobStageId String?
-  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job              Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, name])
   @@index([jobId])
@@ -562,7 +583,6 @@ model JobSignal {
 model JobStage {
   id                    String                  @id @default(cuid())
   jobId                 String
-  stageId               String?
   title                 String
   /// Position within the job.
   sortOrder             Int                     @default(0)
@@ -572,6 +592,7 @@ model JobStage {
   updatedAt             DateTime                @updatedAt
   providesSignals       String[]                @default([])
   requiresSignals       String[]                @default([])
+  stageId               String?
   issues                JobIssue[]
   paymentRequirements   JobPaymentRequirement[]
   job                   Job                     @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -596,7 +617,6 @@ model JobTask {
   sourceType                     LineItemTemplateTaskSource
   title                          String
   category                       TaskTemplateCategory
-  stageId                        String?
   instructions                   String?
   status                         JobTaskStatus              @default(TODO)
   sortOrder                      Int                        @default(0)
@@ -607,18 +627,19 @@ model JobTask {
   completedByUserId              String?
   completionNote                 String?
   completionRequirementsJson     Json                       @default("{}")
-  providesSignals                String[]                   @default([])
-  requiresSignals                String[]                   @default([])
-  hardSignal                     Boolean                    @default(false)
+  actualMinutes                  Int?
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
-  /// Reserved for future estimation logic.
-  estimatedMinutes               Int?
-  actualMinutes                  Int?
-  /// Reserved for future parts/materials logic.
-  partsRequiredJson              Json?
   /// Reserved for future job costing.
   costBudgetCents                Int?
+  /// Reserved for future estimation logic.
+  estimatedMinutes               Int?
+  hardSignal                     Boolean                    @default(false)
+  /// Reserved for future parts/materials logic.
+  partsRequiredJson              Json?
+  providesSignals                String[]                   @default([])
+  requiresSignals                String[]                   @default([])
+  stageId                        String?
   attachments                    Attachment[]
   issues                         JobIssue[]
   completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
@@ -702,14 +723,14 @@ model Attachment {
   updatedAt        DateTime         @updatedAt
   status           AttachmentStatus @default(READY)
   customerId       String?
-  leadId           String?
   description      String?
+  leadId           String?
   customer         Customer?        @relation(fields: [customerId], references: [id])
   job              Job?             @relation(fields: [jobId], references: [id])
   jobTask          JobTask?         @relation(fields: [jobTaskId], references: [id])
+  lead             Lead?            @relation(fields: [leadId], references: [id])
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote            Quote?           @relation(fields: [quoteId], references: [id])
-  lead             Lead?            @relation(fields: [leadId], references: [id])
   uploadedByUser   User?            @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
 
   @@index([organizationId])
@@ -793,7 +814,7 @@ model JobPaymentRequirement {
 }
 
 model LeadVisitRequest {
-  id              String                  @id @default(cuid())
+  id              String                 @id @default(cuid())
   organizationId  String
   leadId          String
   requestedDate   DateTime?
@@ -801,10 +822,10 @@ model LeadVisitRequest {
   confirmedDate   DateTime?
   status          LeadVisitRequestStatus @default(PENDING)
   notes           String?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lead            Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  lead            Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([leadId])
@@ -812,17 +833,17 @@ model LeadVisitRequest {
 }
 
 model LeadCustomFieldDef {
-  id                 String                  @id @default(cuid())
+  id                 String                 @id @default(cuid())
   organizationId     String
   key                String
   label              String
   type               LeadCustomFieldType
   optionsJson        Json?
-  isRequired         Boolean                 @default(false)
-  showOnPublicIntake Boolean                 @default(true)
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  isRequired         Boolean                @default(false)
+  showOnPublicIntake Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   values             LeadCustomFieldValue[]
 
   @@unique([organizationId, key])
@@ -830,14 +851,14 @@ model LeadCustomFieldDef {
 }
 
 model LeadCustomFieldValue {
-  id         String              @id @default(cuid())
+  id         String             @id @default(cuid())
   leadId     String
   fieldDefId String
   value      String
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
   fieldDef   LeadCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
-  lead       Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead       Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@unique([leadId, fieldDefId])
   @@index([leadId])
@@ -847,12 +868,12 @@ model LeadCustomFieldValue {
 model IntakeFormDefinition {
   id             String       @id @default(cuid())
   organizationId String
-  slug           String           // /request/{companySlug}/{slug}
+  slug           String
   channel        LeadChannel
   name           String
   isPublic       Boolean      @default(true)
   isDefault      Boolean      @default(false)
-  schema         Json             // { sections: [{ key, title, fields: [...] }] }
+  schema         Json
   triageRules    Json?
   archivedAt     DateTime?
   createdAt      DateTime     @default(now())
@@ -861,6 +882,19 @@ model IntakeFormDefinition {
 
   @@unique([organizationId, slug])
   @@index([organizationId])
+}
+
+model LeadEvent {
+  id          String   @id @default(cuid())
+  leadId      String
+  type        String
+  payload     Json
+  createdAt   DateTime @default(now())
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
 }
 
 enum LeadStatus {
@@ -905,6 +939,13 @@ enum QuoteStatus {
 enum QuoteCheckpointKind {
   SEND
   APPROVAL
+}
+
+enum PaymentScheduleAnchorType {
+  UPON_APPROVAL // Deposit
+  BEFORE_STAGE // Milestone
+  AFTER_STAGE // Milestone
+  FINAL_BALANCE // Balance
 }
 
 enum QuoteCheckpointSource {
@@ -1029,7 +1070,6 @@ enum JobPaymentRequirementStatus {
 }
 
 enum JobActivityType {
-  JOB_ACTIVATED
   ISSUE_CREATED
   ISSUE_RESOLVED
   ISSUE_FOLLOW_UP_TASK_CREATED
@@ -1039,23 +1079,11 @@ enum JobActivityType {
   PAYMENT_REQUIREMENT_CANCELED
   TASK_COMPLETED
   ATTACHMENT_UPLOADED
-  EVENT_CREATED
-  EVENT_RESOLVED
   VISIT_SCHEDULED
   VISIT_RESCHEDULED
   VISIT_CANCELED
   VISIT_COMPLETED
-}
-
-model LeadEvent {
-  id             String       @id @default(cuid())
-  leadId         String
-  type           String       // e.g., "CREATED", "STATUS_CHANGED", "NOTE_ADDED"
-  payload        Json         // structured data for the event
-  createdAt      DateTime     @default(now())
-  actorUserId    String?
-  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  actor          User?        @relation(fields: [actorUserId], references: [id])
-
-  @@index([leadId])
+  JOB_ACTIVATED
+  EVENT_CREATED
+  EVENT_RESOLVED
 }

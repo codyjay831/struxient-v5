@@ -61,6 +61,7 @@ import {
   Briefcase,
   CheckCircle2,
   ChevronRight,
+  DollarSign,
   Eye,
   FileText,
   Layers,
@@ -112,6 +113,7 @@ import {
   QuoteLiveProposalPreviewLineBlock,
 } from "@/components/quotes/quote-line-item-display";
 import { QuoteLineItemsWorkspaceEditor } from "@/components/quotes/quote-line-items-workspace-editor";
+import { QuotePaymentScheduleEditor } from "@/components/quotes/quote-payment-schedule-editor";
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 
@@ -122,6 +124,7 @@ export type QuoteWorkSurfaceMode = "compact" | "standard" | "full";
 export type QuoteWorkSurfaceTab =
   | "overview"
   | "scope"
+  | "payments"
   | "context"
   | "sendaccept"
   | "record";
@@ -175,6 +178,7 @@ export type QuoteWorkSurfaceProps = {
 const TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
+  { id: "payments", label: "Payments" },
   { id: "context", label: "Customer & Intake" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },
@@ -1456,6 +1460,37 @@ function ScopeTab({
   );
 }
 
+/* ─── Tab: Payments ──────────────────────────────────────────────────────── */
+
+function PaymentsTab({
+  quote,
+  workspaceTabs,
+  mode,
+  onMutated,
+}: {
+  quote: QuoteWorkSurfaceData;
+  workspaceTabs: QuoteWorkspaceTabData;
+  mode: QuoteWorkSurfaceMode;
+  onMutated: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionHeading
+        title="Payment Schedule"
+        description="Define milestones and deposits. Tying milestones to stages creates execution gates."
+      />
+
+      <QuotePaymentScheduleEditor
+        quoteId={quote.id}
+        quoteTotalCents={quote.totalCents}
+        items={workspaceTabs.paymentSchedule}
+        stages={workspaceTabs.stages}
+        mode={mode === "compact" ? "compact" : "standard"}
+      />
+    </div>
+  );
+}
+
 /* ─── Tab: Customer & Lead ─────────────────────────────────────────────── */
 
 function ContextTab({
@@ -2369,6 +2404,14 @@ export function QuoteWorkSurface({
           onAddFormFocusConsumed={handleAddFormFocusConsumed}
           shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
           onScopeLibraryPickerOpenConsumed={handleScopeLibraryPickerOpenConsumed}
+          onMutated={handleSurfaceMutated}
+        />
+      )}
+      {activeTab === "payments" && (
+        <PaymentsTab
+          quote={quote}
+          workspaceTabs={workspaceTabs}
+          mode={mode}
           onMutated={handleSurfaceMutated}
         />
       )}

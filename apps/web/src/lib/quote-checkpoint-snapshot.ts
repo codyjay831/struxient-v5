@@ -3,6 +3,7 @@ import type {
   QuoteCustomerPreviewDocument,
   QuoteCustomerPreviewInput,
   QuoteCustomerPreviewLine,
+  QuoteCustomerPreviewPaymentMilestone,
 } from "@/lib/quote-customer-projection";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 
@@ -48,6 +49,19 @@ export const quoteSelectForCustomerProposalCheckpoint = {
       quantity: true,
       unitAmountCents: true,
       lineTotalCents: true,
+    },
+  },
+  paymentSchedule: {
+    orderBy: { sortOrder: "asc" as const },
+    select: {
+      id: true,
+      title: true,
+      amountCents: true,
+      percentage: true,
+      anchorType: true,
+      anchorStageId: true,
+      anchorStage: { select: { name: true } },
+      sortOrder: true,
     },
   },
 };
@@ -98,6 +112,16 @@ export function quoteRowToCustomerPreviewInput(
       unitAmountCents: line.unitAmountCents,
       lineTotalCents: line.lineTotalCents,
     })),
+    paymentSchedule: row.paymentSchedule.map((item) => ({
+      id: item.id,
+      title: item.title,
+      amountCents: item.amountCents,
+      percentage: item.percentage?.toString() ?? null,
+      anchorType: item.anchorType,
+      anchorStageId: item.anchorStageId,
+      anchorStageName: item.anchorStage?.name ?? null,
+      sortOrder: item.sortOrder,
+    })),
     subtotalCents: row.subtotalCents,
     totalCents: row.totalCents,
     createdAt: row.createdAt,
@@ -114,6 +138,7 @@ type WirePreviewDocument = {
   customer: { displayName: string } | null;
   lead: { title: string } | null;
   lineItems: WirePreviewLine[];
+  paymentSchedule: QuoteCustomerPreviewPaymentMilestone[];
   subtotalCents: number;
   totalCents: number;
   createdAt: string;
@@ -139,6 +164,7 @@ export function serializeCustomerPreviewDocumentForCheckpoint(
       customer: document.customer,
       lead: document.lead,
       lineItems: document.lineItems.map((l) => ({ ...l })),
+      paymentSchedule: document.paymentSchedule.map((m) => ({ ...m })),
       subtotalCents: document.subtotalCents,
       totalCents: document.totalCents,
       createdAt: document.createdAt.toISOString(),
@@ -159,6 +185,7 @@ function revivePreviewDocument(wire: WirePreviewDocument): QuoteCustomerPreviewD
     customer: wire.customer,
     lead: wire.lead,
     lineItems: wire.lineItems,
+    paymentSchedule: wire.paymentSchedule,
     subtotalCents: wire.subtotalCents,
     totalCents: wire.totalCents,
     createdAt: new Date(wire.createdAt),
@@ -224,6 +251,25 @@ export function parseQuoteSendCheckpointSnapshot(
       return { ok: false, error: "Checkpoint line item fields are invalid." };
     }
   }
+  if (!Array.isArray(d.paymentSchedule)) {
+    return { ok: false, error: "Checkpoint document has invalid payment schedule." };
+  }
+  for (const milestone of d.paymentSchedule) {
+    if (!isRecord(milestone)) {
+      return { ok: false, error: "Checkpoint milestone is malformed." };
+    }
+    const m = milestone as Record<string, unknown>;
+    if (
+      typeof m.id !== "string" ||
+      typeof m.title !== "string" ||
+      typeof m.amountCents !== "number" ||
+      typeof m.anchorType !== "string" ||
+      (m.anchorStageName !== null && typeof m.anchorStageName !== "string") ||
+      typeof m.sortOrder !== "number"
+    ) {
+      return { ok: false, error: "Checkpoint milestone fields are invalid." };
+    }
+  }
   const customer = d.customer;
   if (customer != null && (!isRecord(customer) || typeof customer.displayName !== "string")) {
     return { ok: false, error: "Checkpoint customer context is invalid." };
@@ -243,6 +289,7 @@ export function parseQuoteSendCheckpointSnapshot(
         : { displayName: (customer as { displayName: string }).displayName },
     lead: lead == null ? null : { title: (lead as { title: string }).title },
     lineItems: d.lineItems as WirePreviewLine[],
+    paymentSchedule: d.paymentSchedule as QuoteCustomerPreviewPaymentMilestone[],
     subtotalCents: d.subtotalCents,
     totalCents: d.totalCents,
     createdAt: d.createdAt,

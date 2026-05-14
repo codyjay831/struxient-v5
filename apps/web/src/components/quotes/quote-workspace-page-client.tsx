@@ -28,6 +28,7 @@ import {
   QuoteDraftArchivePanel,
 } from "@/components/quotes/quote-archive-controls";
 import { QuoteSendCheckpointsStaffPanel } from "@/components/quotes/quote-send-checkpoints-staff-panel";
+import { QuotePaymentScheduleEditor } from "@/components/quotes/quote-payment-schedule-editor";
 import {
   QuoteLineDraftExecutionSummary,
   QuoteLineItemScanBlock,
@@ -66,11 +67,12 @@ const listLinkClass =
 
 /* ─── Tab type ───────────────────────────────────────────────────────────── */
 
-type QuoteWorkspaceTab = "overview" | "scope" | "context" | "sendaccept" | "record";
+type QuoteWorkspaceTab = "overview" | "scope" | "payments" | "context" | "sendaccept" | "record";
 
 const WS_TABS: { id: QuoteWorkspaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
+  { id: "payments", label: "Payments" },
   { id: "context", label: "Customer & Lead" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },

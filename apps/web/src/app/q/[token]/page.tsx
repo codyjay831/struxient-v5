@@ -25,6 +25,10 @@ export default async function PublicQuotePage({
           organization: { select: { name: true } },
           customer: { select: { displayName: true, organizationId: true } },
           lead: { select: { contact: true, request: true, organizationId: true } },
+          paymentSchedule: {
+            orderBy: { sortOrder: "asc" },
+            include: { anchorStage: { select: { name: true } } },
+          },
           lineItems: {
             orderBy: { sortOrder: "asc" },
           },

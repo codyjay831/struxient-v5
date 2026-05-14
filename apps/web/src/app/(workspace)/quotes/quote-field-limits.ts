@@ -18,3 +18,7 @@ export const QUOTE_PROPOSAL_FIELD_LIMITS = {
   customerExcludedNotes: 5000,
   customerPresentationGroup: 200,
 } as const;
+
+export const QUOTE_PAYMENT_SCHEDULE_FIELD_LIMITS = {
+  title: 200,
+} as const;

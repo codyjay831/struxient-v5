@@ -106,6 +106,13 @@ export function LeadInboxClient({
     }) => {
       if (selectedLeadId) {
         setSessionGraduatedIds((prev) => new Set(prev).add(selectedLeadId));
+        // Update the status in the lightweight leads list as well
+        setOpenLeads((prev) =>
+          prev.map((l) => (l.id === selectedLeadId ? { ...l, status: "CONVERTED" } : l)),
+        );
+        setRecentLeads((prev) =>
+          prev.map((l) => (l.id === selectedLeadId ? { ...l, status: "CONVERTED" } : l)),
+        );
       }
       setWorkspaceOpenLeads((prev) => {
         const base = prev.find((l) => l.id === selectedLeadId);
@@ -128,6 +135,20 @@ export function LeadInboxClient({
   const handlePromote = async () => {
     if (!selectedLeadId) return;
     setIsPromoting(true);
+    // #region agent log
+    fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '564110' },
+      body: JSON.stringify({
+        sessionId: '564110',
+        location: 'lead-inbox-client.tsx:132',
+        message: 'Promote clicked',
+        data: { id: selectedLeadId },
+        timestamp: Date.now(),
+        hypothesisId: 'promote-action',
+      }),
+    }).catch(() => {});
+    // #endregion
     try {
       await workSurfaceRef.current?.startQuote();
     } finally {
@@ -316,6 +337,17 @@ export function LeadInboxClient({
                       <Phone className="size-3" />
                       {selectedLead.contact.phone || "No phone"}
                     </span>
+                    {selectedWorkspaceLead && (
+                      <span
+                        className={`text-[0.6rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          selectedWorkspaceLead.statusTone === "approved"
+                            ? "bg-success/10 text-success"
+                            : "bg-foreground/5 text-foreground-subtle"
+                        }`}
+                      >
+                        {selectedWorkspaceLead.statusLabel}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -343,18 +375,20 @@ export function LeadInboxClient({
                   )}
                 </button>
                 <div className="w-px h-6 bg-border mx-1" />
-                <button
-                  onClick={handlePromote}
-                  disabled={isPromoting}
-                  className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {isPromoting ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="mr-2 size-4" />
-                  )}
-                  Promote to Quote
-                </button>
+                {selectedWorkspaceLead?.progressState !== "QUOTE_IN_PROGRESS" && (
+                  <button
+                    onClick={handlePromote}
+                    disabled={isPromoting}
+                    className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isPromoting ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-2 size-4" />
+                    )}
+                    Promote to Quote
+                  </button>
+                )}
               </div>
             </div>
 

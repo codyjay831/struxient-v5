@@ -84,3 +84,28 @@ export function computeLineTotalCents(
   }
   return { ok: true, lineTotalCents: n };
 }
+
+/**
+ * Parses a percentage string (0 to 100) into a Prisma.Decimal.
+ */
+export function parsePercentageString(
+  raw: string,
+): { ok: true; decimal: Prisma.Decimal } | { ok: false; error: string } {
+  const trimmed = raw.trim().replace(/%$/, "").trim();
+  if (!trimmed) {
+    return { ok: false, error: "Percentage is required." };
+  }
+  let d: Prisma.Decimal;
+  try {
+    d = new Prisma.Decimal(trimmed);
+  } catch {
+    return { ok: false, error: "Percentage is not a valid number." };
+  }
+  if (!d.isFinite()) {
+    return { ok: false, error: "Percentage must be a finite number." };
+  }
+  if (d.lt(0) || d.gt(100)) {
+    return { ok: false, error: "Percentage must be between 0 and 100." };
+  }
+  return { ok: true, decimal: d };
+}

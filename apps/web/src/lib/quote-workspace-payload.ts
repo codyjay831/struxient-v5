@@ -2,7 +2,7 @@
  * Serializable workspace-tab payload consumed by `QuoteWorkSurface`.
  */
 
-import type { QuoteLineItemPayload } from "@/lib/quote-display";
+import type { QuoteLineItemPayload, PaymentScheduleItemPayload } from "@/lib/quote-display";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
@@ -54,6 +54,9 @@ export type QuoteWorkspaceTabData = {
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
+
+  /* Payments tab */
+  paymentSchedule: PaymentScheduleItemPayload[];
 
   /* Customer & Lead tab */
   customerName: string | null;

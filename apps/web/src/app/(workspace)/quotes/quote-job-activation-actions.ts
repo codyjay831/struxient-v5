@@ -52,6 +52,17 @@ async function performActivateQuoteJob(
           customer: { select: { organizationId: true } },
           lead: { select: { organizationId: true } },
           job: { select: { id: true } },
+          totalCents: true,
+          paymentSchedule: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              title: true,
+              amountCents: true,
+              anchorType: true,
+              anchorStageId: true,
+            },
+          },
           lineItems: {
             orderBy: [{ sortOrder: "asc" }],
             select: {
@@ -234,6 +245,31 @@ async function performActivateQuoteJob(
             });
           }
         }
+      }
+
+      // 5. Materialize JobPaymentRequirements from PaymentSchedule
+      const scheduledCentsForActivation = quote.paymentSchedule.reduce((sum, item) => {
+        if (item.anchorType === "FINAL_BALANCE") return sum;
+        return sum + (item.amountCents ?? 0);
+      }, 0);
+      const activationRemainderCents = Math.max(0, quote.totalCents - scheduledCentsForActivation);
+
+      for (const item of quote.paymentSchedule) {
+        const jobStageId = item.anchorStageId ? stageIdToJobStageId[item.anchorStageId] : null;
+
+        await tx.jobPaymentRequirement.create({
+          data: {
+            organizationId: ctx.organizationId,
+            jobId: job.id,
+            title: item.title,
+            amountCents:
+              item.anchorType === "FINAL_BALANCE"
+                ? activationRemainderCents
+                : item.amountCents,
+            requiredBeforeStageId: item.anchorType === "BEFORE_STAGE" ? jobStageId : null,
+            status: "PENDING",
+          },
+        });
       }
 
       await recordJobActivity(

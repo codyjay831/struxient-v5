@@ -17,6 +17,12 @@ import {
   performQuoteSendCheckpoint,
   performUpdateQuoteLineItem,
 } from "@/app/(workspace)/quotes/quote-form-actions";
+import {
+  addPaymentScheduleItemAction,
+  updatePaymentScheduleItemAction,
+  deletePaymentScheduleItemAction,
+  reorderPaymentScheduleItemsAction,
+} from "@/app/(workspace)/quotes/quote-payment-schedule-actions";
 import { parseQuoteLineFormDataInput } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -304,4 +310,72 @@ export async function extendQuoteShareTokenAction(
     console.error("[extendQuoteShareTokenAction] Error:", error);
     return { success: false, error: "Failed to extend token." };
   }
+}
+
+/**
+ * Adds a payment schedule item. Org-scoped; no redirect.
+ * Bind `quoteId` before passing to `useActionState`.
+ */
+export async function addPaymentScheduleItemWorkspaceAction(
+  quoteId: string,
+  _prevState: QuoteWorkspaceActionState,
+  formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const result = await addPaymentScheduleItemAction(quoteId, {}, formData);
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(quoteId);
+  return { success: true };
+}
+
+/**
+ * Updates a payment schedule item. Org-scoped; no redirect.
+ * Bind `quoteId, itemId` before passing to `useActionState`.
+ */
+export async function updatePaymentScheduleItemWorkspaceAction(
+  quoteId: string,
+  itemId: string,
+  _prevState: QuoteWorkspaceActionState,
+  formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const result = await updatePaymentScheduleItemAction(quoteId, itemId, {}, formData);
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(quoteId);
+  return { success: true };
+}
+
+/**
+ * Deletes a payment schedule item. Org-scoped; no redirect.
+ * Bind `quoteId, itemId` before passing to `useActionState`.
+ */
+export async function deletePaymentScheduleItemWorkspaceAction(
+  quoteId: string,
+  itemId: string,
+  _prevState: QuoteWorkspaceActionState,
+  _formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const result = await deletePaymentScheduleItemAction(quoteId, itemId, {}, _formData);
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(quoteId);
+  return { success: true };
+}
+
+/**
+ * Reorders payment schedule items. Org-scoped; no redirect.
+ */
+export async function reorderPaymentScheduleItemsWorkspaceAction(
+  quoteId: string,
+  itemIds: string[],
+): Promise<QuoteWorkspaceActionState> {
+  const result = await reorderPaymentScheduleItemsAction(quoteId, itemIds);
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(quoteId);
+  return { success: true };
 }

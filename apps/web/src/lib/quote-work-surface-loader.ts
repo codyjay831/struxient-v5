@@ -10,6 +10,7 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
   type QuoteLineItemPayload,
+  type PaymentScheduleItemPayload,
 } from "@/lib/quote-display";
 import {
   quoteStatusAllowsCommercialEdits,
@@ -89,6 +90,18 @@ export async function loadQuoteWorkSurface(
         },
       },
       job: { select: { id: true, status: true, organizationId: true } },
+      paymentSchedule: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          percentage: true,
+          anchorType: true,
+          anchorStageId: true,
+          sortOrder: true,
+        },
+      },
       lineItems: {
         orderBy: { sortOrder: "asc" },
         include: {
@@ -467,6 +480,10 @@ export async function loadQuoteWorkSurface(
     draftTasksByLineId,
     reusableTaskOptions,
     stages,
+    paymentSchedule: row.paymentSchedule.map(item => ({
+      ...item,
+      percentage: item.percentage?.toString() ?? null,
+    })),
     customerName: customer?.displayName ?? null,
     customerHref: customer ? `/customers/${customer.id}` : null,
     lead: leadPayload,

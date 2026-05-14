@@ -2,7 +2,10 @@
 
 import { useActionState, useState } from "react";
 import type { QuoteCustomerPreviewDocument } from "@/lib/quote-customer-projection";
-import { formatMoneyCents } from "@/lib/quote-display";
+import { 
+  formatMoneyCents, 
+  formatPaymentAnchorLabel 
+} from "@/lib/quote-display";
 import { 
   acceptQuoteFromTokenAction, 
   requestQuoteChangesAction,
@@ -161,6 +164,36 @@ export function QuotePublicPreview({
             </span>
           </div>
         </div>
+
+        {/* Payment Schedule */}
+        {document.paymentSchedule.length > 0 && (
+          <div className="rounded-2xl border border-border bg-surface overflow-hidden shadow-sm">
+            <div className="bg-foreground/[0.02] px-6 py-4 border-b border-border">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                Payment schedule
+              </h2>
+            </div>
+            <ul className="divide-y divide-border">
+              {document.paymentSchedule.map((milestone) => (
+                <li key={milestone.id} className="px-6 py-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">
+                        {milestone.title}
+                      </h3>
+                      <p className="text-xs text-foreground-muted">
+                        {formatPaymentAnchorLabel(milestone.anchorType, milestone.anchorStageName)}
+                      </p>
+                    </div>
+                    <div className="text-sm font-bold text-foreground tabular-nums">
+                      {formatMoneyCents(milestone.amountCents)}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Accept / Decline */}
         {!isApproved ? (

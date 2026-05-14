@@ -49,6 +49,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             address: true,
             signals: true,
             channel: true,
+            convertedAt: true,
             quotes: {
               where: { status: { not: QuoteStatus.ARCHIVED } },
               orderBy: { updatedAt: "desc" },
@@ -105,6 +106,15 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         }
 
         if (progress.activeQuote) {
+          // Ensure lead is graduated even if we reuse an existing quote
+          await tx.lead.update({
+            where: { id: lead.id },
+            data: {
+              status: "CONVERTED",
+              convertedAt: lead.convertedAt ?? new Date(),
+            },
+          });
+
           return {
             ok: true,
             quoteId: progress.activeQuote.id,

@@ -19,6 +19,15 @@ export type QuoteCustomerPreviewLine = {
   lineTotalCents: number;
 };
 
+export type QuoteCustomerPreviewPaymentMilestone = {
+  id: string;
+  title: string;
+  amountCents: number;
+  anchorType: string;
+  anchorStageName: string | null;
+  sortOrder: number;
+};
+
 /**
  * Input to {@link buildCustomerQuotePreviewDocument}: only fields safe to map into live proposal preview / checkpoint payloads.
  * Load with a Prisma `select` that omits `internalNotes` on the quote and on line items so staff-only text never enters this pipeline.
@@ -30,6 +39,7 @@ export type QuoteCustomerPreviewInput = {
   customer: { displayName: string } | null;
   lead: { title: string } | null;
   lineItems: QuoteCustomerPreviewLineInput[];
+  paymentSchedule: QuoteCustomerPreviewPaymentMilestoneInput[];
   subtotalCents: number;
   totalCents: number;
   createdAt: Date;
@@ -51,6 +61,17 @@ export type QuoteCustomerPreviewLineInput = {
   lineTotalCents: number;
 };
 
+export type QuoteCustomerPreviewPaymentMilestoneInput = {
+  id: string;
+  title: string;
+  amountCents: number | null;
+  percentage: string | null;
+  anchorType: string;
+  anchorStageId: string | null;
+  anchorStageName: string | null;
+  sortOrder: number;
+};
+
 /**
  * Serializable document for internal “customer view” preview only.
  * Excludes internal ids on parties (names/titles only for a proposal-style header today).
@@ -63,12 +84,11 @@ export type QuoteCustomerPreviewDocument = {
   customer: { displayName: string } | null;
   lead: { title: string } | null;
   lineItems: QuoteCustomerPreviewLine[];
+  paymentSchedule: QuoteCustomerPreviewPaymentMilestone[];
   subtotalCents: number;
   totalCents: number;
   createdAt: Date;
   updatedAt: Date;
-  /** Forward-compat placeholder for payment milestones (empty for now). */
-  paymentMilestones?: never[];
 };
 
 /** Staff-only signals for the internal preview route (omit on any future customer channel). */
@@ -160,6 +180,22 @@ export function buildCustomerQuotePreviewDocument(
     return a.id.localeCompare(b.id);
   });
 
+  const scheduledCents = quote.paymentSchedule.reduce((sum, item) => {
+    if (item.anchorType === "FINAL_BALANCE") return sum;
+    return sum + (item.amountCents ?? 0);
+  }, 0);
+
+  const remainderCents = Math.max(0, quote.totalCents - scheduledCents);
+
+  const paymentSchedule: QuoteCustomerPreviewPaymentMilestone[] = quote.paymentSchedule.map((item) => ({
+    id: item.id,
+    title: item.title,
+    amountCents: item.anchorType === "FINAL_BALANCE" ? remainderCents : (item.amountCents ?? 0),
+    anchorType: item.anchorType,
+    anchorStageName: item.anchorStageName,
+    sortOrder: item.sortOrder,
+  }));
+
   return {
     document: {
       organizationDisplayName: context.organizationDisplayName,
@@ -168,6 +204,7 @@ export function buildCustomerQuotePreviewDocument(
       customer: quote.customer,
       lead: quote.lead,
       lineItems: mapped,
+      paymentSchedule,
       subtotalCents: quote.subtotalCents,
       totalCents: quote.totalCents,
       createdAt: quote.createdAt,

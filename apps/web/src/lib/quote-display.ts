@@ -1,4 +1,5 @@
 import type {
+  PaymentScheduleAnchorType,
   QuoteStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
@@ -13,6 +14,16 @@ export type QuoteListRowPayload = {
   updatedAt: Date;
   customer: { id: string; displayName: string } | null;
   lead: { id: string; title: string } | null;
+};
+
+export type PaymentScheduleItemPayload = {
+  id: string;
+  title: string;
+  amountCents: number | null;
+  percentage: string | null; // Decimal comes as string in JSON
+  anchorType: PaymentScheduleAnchorType;
+  anchorStageId: string | null;
+  sortOrder: number;
 };
 
 /** Minimal quote row for lead/customer detail sidebars (org-scoped). */
@@ -76,6 +87,7 @@ export type QuoteDetailPayload = {
     phone: string | null;
   } | null;
   lineItems: QuoteLineItemPayload[];
+  paymentSchedule: PaymentScheduleItemPayload[];
 };
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
@@ -114,5 +126,23 @@ export function quoteStatusBadgeTone(status: QuoteStatus): StatusBadgeTone {
       return "sent";
     default:
       return "draft";
+  }
+}
+
+export function formatPaymentAnchorLabel(
+  type: PaymentScheduleAnchorType | string,
+  stageName: string | null,
+): string {
+  switch (type) {
+    case "UPON_APPROVAL":
+      return "Due upon approval (Deposit)";
+    case "BEFORE_STAGE":
+      return stageName ? `Due before ${stageName}` : "Due before stage";
+    case "AFTER_STAGE":
+      return stageName ? `Due after ${stageName}` : "Due after stage";
+    case "FINAL_BALANCE":
+      return "Final balance upon completion";
+    default:
+      return "Unknown anchor";
   }
 }
