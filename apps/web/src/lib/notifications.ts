@@ -22,8 +22,8 @@ export type QuoteAcceptanceNotificationPayload = {
 export type QuoteSentNotificationPayload = {
   organizationId: string;
   quoteId: string;
-  customerEmail: string;
-  customerName: string;
+  recipients: { email: string; name?: string }[];
+  customMessage?: string;
   organizationDisplayName: string;
   shareUrl: string;
   expiresAt?: Date | null;
@@ -171,22 +171,31 @@ export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
       ? `This link expires on ${payload.expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
       : "This link does not expire.";
 
-    // 1. Send proposal link to customer
-    await resend.emails.send({
-      from: "Struxient <notifications@struxient.com>",
-      to: payload.customerEmail,
-      subject: `Your proposal from ${payload.organizationDisplayName}`,
-      html: `
-        <h1>Your proposal is ready</h1>
-        <p>Hi ${payload.customerName},</p>
-        <p>Your proposal from <strong>${payload.organizationDisplayName}</strong> is ready to review.</p>
-        <p><a href="${payload.shareUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 16px 0;">View Proposal</a></p>
-        <p style="font-size: 14px; color: #666;">Or copy this link: ${payload.shareUrl}</p>
-        <p style="font-size: 14px; color: #666;">${expiryText}</p>
-        <p>You can review the details, download a PDF, and accept the proposal directly from the link above.</p>
-        <p>Best regards,<br/>${payload.organizationDisplayName}</p>
-      `,
-    });
+    const customMessageHtml = payload.customMessage
+      ? `<div style="margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #2563eb; color: #374151; font-style: italic;">
+          ${payload.customMessage.replace(/\n/g, "<br/>")}
+        </div>`
+      : "";
+
+    // 1. Send proposal link to each recipient
+    for (const recipient of payload.recipients) {
+      await resend.emails.send({
+        from: "Struxient <notifications@struxient.com>",
+        to: recipient.email,
+        subject: `Your proposal from ${payload.organizationDisplayName}`,
+        html: `
+          <h1>Your proposal is ready</h1>
+          <p>Hi ${recipient.name || "there"},</p>
+          <p>Your proposal from <strong>${payload.organizationDisplayName}</strong> is ready to review.</p>
+          ${customMessageHtml}
+          <p><a href="${payload.shareUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 16px 0;">View Proposal</a></p>
+          <p style="font-size: 14px; color: #666;">Or copy this link: ${payload.shareUrl}</p>
+          <p style="font-size: 14px; color: #666;">${expiryText}</p>
+          <p>You can review the details, download a PDF, and accept the proposal directly from the link above.</p>
+          <p>Best regards,<br/>${payload.organizationDisplayName}</p>
+        `,
+      });
+    }
 
     // 2. CC staff (Owners and Admins) for visibility
     const staffMembers = await db.membership.findMany({
@@ -198,16 +207,17 @@ export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
     });
 
     const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
+    const recipientListText = payload.recipients.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
 
     if (staffEmails.length > 0) {
       await resend.emails.send({
         from: "Struxient <notifications@struxient.com>",
         to: staffEmails,
-        subject: `Quote sent to ${payload.customerName}`,
+        subject: `Quote sent to ${payload.recipients.length} recipient(s)`,
         html: `
           <h1>Quote Sent</h1>
-          <p>The quote for <strong>${payload.customerName}</strong> has been sent.</p>
-          <p><strong>Customer Email:</strong> ${payload.customerEmail}</p>
+          <p>The quote has been sent to: <strong>${recipientListText}</strong></p>
+          ${payload.customMessage ? `<p><strong>Custom message included:</strong></p><blockquote style="border-left: 4px solid #e5e7eb; padding-left: 16px; color: #666;">${payload.customMessage}</blockquote>` : ""}
           <p><strong>Proposal Link:</strong> ${payload.shareUrl}</p>
           <p style="font-size: 14px; color: #666;">${expiryText}</p>
           <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/quotes/${payload.quoteId}">View Quote in Dashboard</a></p>

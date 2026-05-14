@@ -205,7 +205,7 @@ export async function loadQuoteWorkSurface(
     })),
   });
 
-  const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof, stages] =
+  const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof, stages, organization] =
     await Promise.all([
       db.quoteCheckpoint.findMany({
         where: {
@@ -250,6 +250,10 @@ export async function loadQuoteWorkSurface(
         where: { organizationId: orgId, archivedAt: null },
         orderBy: { sortOrder: "asc" },
         select: { id: true, name: true },
+      }),
+      db.organization.findUnique({
+        where: { id: orgId },
+        select: { name: true },
       }),
     ]);
 
@@ -321,6 +325,7 @@ export async function loadQuoteWorkSurface(
     lastSentEmailAtLabel: row.lastSentEmailAt
       ? row.lastSentEmailAt.toLocaleDateString("en-US", dateOpts)
       : null,
+    organizationDisplayName: organization?.name ?? "Struxient",
   };
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};

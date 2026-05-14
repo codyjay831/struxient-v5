@@ -174,7 +174,7 @@ export async function sendQuoteWorkspaceAction(
 ): Promise<QuoteWorkspaceActionState> {
   const expiresInDaysStr = formData.get("expiresInDays") as string | null;
   let expiresInDays: number | null = null;
-  
+
   if (expiresInDaysStr && expiresInDaysStr !== "never") {
     const parsed = parseInt(expiresInDaysStr, 10);
     if (!isNaN(parsed) && parsed > 0) {
@@ -182,7 +182,36 @@ export async function sendQuoteWorkspaceAction(
     }
   }
 
-  const result = await performQuoteSendCheckpoint(quoteId, { expiresInDays });
+  const recipientsJson = formData.get("recipients") as string | null;
+  let recipients: { email: string; name?: string }[] | undefined = undefined;
+  if (recipientsJson) {
+    try {
+      recipients = JSON.parse(recipientsJson);
+    } catch {
+      return { success: false, error: "Invalid recipients format." };
+    }
+  }
+
+  if (recipients && recipients.length === 0) {
+    return { success: false, error: "At least one recipient is required." };
+  }
+
+  // Server-side email validation
+  if (recipients) {
+    for (const r of recipients) {
+      if (!r.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) {
+        return { success: false, error: `Invalid email address: ${r.email}` };
+      }
+    }
+  }
+
+  const customMessage = trimOrNull(formData.get("customMessage")) ?? undefined;
+
+  const result = await performQuoteSendCheckpoint(quoteId, {
+    expiresInDays,
+    recipients,
+    customMessage,
+  });
   if (result.error) {
     return { success: false, error: result.error };
   }
@@ -411,8 +440,7 @@ export async function extendQuoteShareTokenAction(
         void notifyQuoteSent({
           organizationId: ctx.organizationId,
           quoteId,
-          customerEmail,
-          customerName,
+          recipients: [{ email: customerEmail, name: customerName }],
           organizationDisplayName: ctx.organizationName,
           shareUrl,
           expiresAt,

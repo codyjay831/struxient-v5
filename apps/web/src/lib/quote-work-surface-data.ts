@@ -55,4 +55,5 @@ export type QuoteWorkSurfaceData = {
   shareTokenExpiresAt?: Date | null;
   /** Token revocation date */
   shareTokenRevokedAt?: Date | null;
+  organizationDisplayName: string;
 };

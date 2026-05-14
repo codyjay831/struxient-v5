@@ -1211,9 +1211,13 @@ export type PerformQuoteCheckpointResult = { error?: string };
  */
 export async function performQuoteSendCheckpoint(
   quoteId: string,
-  options: { expiresInDays?: number | null } = {},
+  options: {
+    expiresInDays?: number | null;
+    recipients?: { email: string; name?: string }[];
+    customMessage?: string;
+  } = {},
 ): Promise<PerformQuoteCheckpointResult> {
-  const result = await sendQuote(quoteId, { expiresInDays: options.expiresInDays });
+  const result = await sendQuote(quoteId, options);
   if (!result.ok) {
     return { error: result.error ?? "Failed to send quote." };
   }

@@ -22,6 +22,8 @@ import { getRequestContextOrThrow } from "../auth-context";
 
 export interface QuoteSendOptions {
   expiresInDays?: number | null;
+  recipients?: { email: string; name?: string }[];
+  customMessage?: string;
 }
 
 export interface QuoteSendResult {
@@ -37,6 +39,7 @@ export async function captureQuoteSendCheckpoint(
   quoteId: string,
   organizationId: string,
   organizationName: string,
+  options: QuoteSendOptions = {},
 ): Promise<{ snapshotWire: QuoteCheckpointSnapshotWire; staffOnly: QuoteCheckpointStaffOnlyWire; quoteUpdatedAt: Date }> {
   const quote = await tx.quote.findFirst({
     where: {
@@ -79,6 +82,8 @@ export async function captureQuoteSendCheckpoint(
       snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
       staffOnlyJson: {
         anyLineUsesInternalDescriptionForTitle: staffOnly.anyLineUsesInternalDescriptionForTitle,
+        recipients: options.recipients,
+        customMessage: options.customMessage,
       } as Prisma.InputJsonValue,
       quoteUpdatedAtAtCapture: quote.updatedAt,
     },
@@ -151,6 +156,7 @@ export async function enqueueQuoteSentNotification(
   shareExpiresAt: Date | null,
   organizationId: string,
   organizationName: string,
+  options: QuoteSendOptions = {},
 ): Promise<void> {
   const quote = await db.quote.findUnique({
     where: { id: quoteId },
@@ -161,18 +167,26 @@ export async function enqueueQuoteSentNotification(
   });
 
   const contact = readContact(quote?.lead?.contact);
-  const customerEmail = quote?.customer?.email || contact?.email;
-  const customerName = quote?.customer?.displayName || contact?.name || "Customer";
 
-  if (customerEmail) {
+  // Use provided recipients, or fall back to primary customer/lead email
+  let recipients = options.recipients;
+  if (!recipients || recipients.length === 0) {
+    const customerEmail = quote?.customer?.email || contact?.email;
+    const customerName = quote?.customer?.displayName || contact?.name || "Customer";
+    if (customerEmail) {
+      recipients = [{ email: customerEmail, name: customerName }];
+    }
+  }
+
+  if (recipients && recipients.length > 0) {
     const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL}/q/${shareToken}`;
     // In a real app, this would be a real queue. For now, we just call it.
     // In Phase 2 we introduced local-queue, but notifications.ts handles its own async-ness usually.
     void notifyQuoteSent({
       organizationId,
       quoteId,
-      customerEmail,
-      customerName,
+      recipients,
+      customMessage: options.customMessage,
       organizationDisplayName: organizationName,
       shareUrl,
       expiresAt: shareExpiresAt,
@@ -192,11 +206,18 @@ export async function sendQuote(
 
   try {
     const { shareToken, shareExpiresAt } = await db.$transaction(async (tx) => {
-      await captureQuoteSendCheckpoint(tx, id, ctx.organizationId, ctx.organizationName);
+      await captureQuoteSendCheckpoint(tx, id, ctx.organizationId, ctx.organizationName, options);
       return await transitionQuoteToSent(tx, id, ctx.organizationId, options);
     });
 
-    await enqueueQuoteSentNotification(id, shareToken, shareExpiresAt, ctx.organizationId, ctx.organizationName);
+    await enqueueQuoteSentNotification(
+      id,
+      shareToken,
+      shareExpiresAt,
+      ctx.organizationId,
+      ctx.organizationName,
+      options,
+    );
 
     return { ok: true };
   } catch (e) {

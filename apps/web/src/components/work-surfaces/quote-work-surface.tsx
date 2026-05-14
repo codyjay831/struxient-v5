@@ -80,7 +80,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import {
   approveQuoteWorkspaceAction,
-  sendQuoteWorkspaceAction,
   revokeQuoteShareTokenAction,
   extendQuoteShareTokenAction,
   type QuoteWorkspaceActionState,
@@ -102,6 +101,7 @@ import {
   QuoteAuthoringSurface,
   ArchivedQuoteReadOnlyNotice,
 } from "@/components/quotes/quote-authoring-surface";
+import { QuoteSendPanel } from "@/components/quotes/quote-send-panel";
 import {
   QuoteArchivedRestorePanel,
   QuoteDraftArchivePanel,
@@ -509,52 +509,6 @@ function QuoteExecutionPreviewEmbedded({
 
 /* ─── Inline send / approve buttons (workspace-safe, every mode) ───────── */
 
-function SendQuoteInlineButton({
-  quoteId,
-  variant,
-  label,
-  onMutated,
-}: {
-  quoteId: string;
-  variant: "primary" | "secondary";
-  label: string;
-  onMutated?: () => void;
-}) {
-  const [state, formAction, isPending] = useActionState(
-    sendQuoteWorkspaceAction.bind(null, quoteId),
-    workspaceActionInitial,
-  );
-  const handledKeyRef = useRef<unknown>(null);
-
-  useEffect(() => {
-    if (state.success && handledKeyRef.current !== state) {
-      handledKeyRef.current = state;
-      onMutated?.();
-    }
-  }, [state, onMutated]);
-
-  const cls = variant === "primary" ? primaryBtnClass : secondaryBtnClass;
-
-  return (
-    <form action={formAction} className="contents">
-      <input type="hidden" name="expiresInDays" value="30" />
-      <button type="submit" disabled={isPending} aria-busy={isPending} className={cls}>
-        <Send className="size-3.5 opacity-80" strokeWidth={2} />
-        {isPending ? "Sending…" : label}
-      </button>
-      {state.error ? (
-        <p
-          className="basis-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
-          role="alert"
-          aria-live="polite"
-        >
-          {state.error}
-        </p>
-      ) : null}
-    </form>
-  );
-}
-
 function ApproveQuoteInlineButton({
   quoteId,
   variant,
@@ -747,7 +701,7 @@ function renderAction({
   action: QuoteReadinessAction | null;
   variant: "primary" | "secondary";
   quote: QuoteWorkSurfaceData;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
@@ -756,12 +710,14 @@ function renderAction({
 
   if (action.kind === "SEND_QUOTE") {
     return (
-      <SendQuoteInlineButton
-        quoteId={quote.id}
-        variant={variant}
-        label={action.label}
-        onMutated={onMutated}
-      />
+      <button
+        type="button"
+        onClick={() => onSwitchToTab("sendaccept", "send")}
+        className={variant === "primary" ? primaryBtnClass : secondaryBtnClass}
+      >
+        <Send className="size-3.5 opacity-80" strokeWidth={2} />
+        {action.label}
+      </button>
     );
   }
   if (action.kind === "MARK_APPROVED") {
@@ -855,7 +811,7 @@ function NextStepCard({
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
@@ -1013,7 +969,7 @@ function FactsGrid({
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
 }) {
   const { signals } = readiness;
   const leadLabel = quote.leadTitle ?? "—";
@@ -1087,7 +1043,7 @@ function OverviewTab({
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
@@ -1202,6 +1158,7 @@ function OverviewTab({
 function ScopeTab({
   quote,
   workspaceTabs,
+  onSwitchToTab,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
   shouldOpenScopeLibraryPicker,
@@ -1210,7 +1167,7 @@ function ScopeTab({
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
   shouldOpenScopeLibraryPicker: boolean;
@@ -1731,8 +1688,8 @@ function SendAcceptTab({
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
-  activePreview: "none" | "proposal" | "execution";
-  onPreviewChange: (preview: "none" | "proposal" | "execution") => void;
+  activePreview: "none" | "proposal" | "execution" | "send";
+  onPreviewChange: (preview: "none" | "proposal" | "execution" | "send") => void;
   onMutated?: () => void;
   embeddedInLead?: boolean;
 }) {
@@ -1744,6 +1701,26 @@ function SendAcceptTab({
   const latestSend = sendCheckpoints[sendCheckpoints.length - 1] ?? null;
   const latestApproval =
     approvalCheckpoints[approvalCheckpoints.length - 1] ?? null;
+
+  if (activePreview === "send") {
+    return (
+      <QuoteSendPanel
+        quoteId={quote.id}
+        initialRecipients={
+          quote.customerEmail
+            ? [{ email: quote.customerEmail, name: quote.customerDisplayName ?? undefined }]
+            : []
+        }
+        organizationDisplayName={quote.organizationDisplayName}
+        shareUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/q/${quote.shareToken}`}
+        onSuccess={() => {
+          onPreviewChange("none");
+          onMutated?.();
+        }}
+        onCancel={() => onPreviewChange("none")}
+      />
+    );
+  }
 
   if (activePreview === "proposal") {
     return (
@@ -1813,12 +1790,14 @@ function SendAcceptTab({
               after send, scope and pricing lock.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <SendQuoteInlineButton
-                quoteId={quote.id}
-                variant="primary"
-                label="Send to customer"
-                onMutated={onMutated}
-              />
+              <button
+                type="button"
+                onClick={() => onPreviewChange("send")}
+                className={primaryBtnClass}
+              >
+                <Send className="size-3.5 opacity-80" strokeWidth={2} />
+                Send to customer
+              </button>
             </div>
           </div>
         ) : null}
@@ -2186,11 +2165,11 @@ export function QuoteWorkSurface({
     return true;
   });
   const [activePreview, setActivePreview] = useState<
-    "none" | "proposal" | "execution"
+    "none" | "proposal" | "execution" | "send"
   >("none");
 
   const handleSwitchToTab = useCallback(
-    (tab: QuoteWorkSurfaceTab, preview: "none" | "proposal" | "execution" = "none") => {
+    (tab: QuoteWorkSurfaceTab, preview: "none" | "proposal" | "execution" | "send" = "none") => {
       setActiveTab(tab);
       setActivePreview(preview);
     },
