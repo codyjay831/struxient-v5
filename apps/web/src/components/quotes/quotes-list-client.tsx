@@ -255,7 +255,6 @@ function QuotePopupContent({
         ) : null}
         {state.kind === "loaded" ? (
           <QuoteWorkSurface
-            mode="standard"
             quote={state.payload.quote}
             readiness={state.payload.readiness}
             workspaceTabs={state.payload.workspaceTabs}

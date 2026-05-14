@@ -79,7 +79,6 @@ export function QuoteWorkspaceShell({
       </div>
 
       <QuoteWorkSurface
-        mode="full"
         quote={quote}
         readiness={readiness}
         workspaceTabs={workspaceTabs}

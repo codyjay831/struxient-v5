@@ -87,6 +87,12 @@ A **payment schedule** expresses **what is owed, when, and why** (milestones, de
 
 **Responsibility:** be legible **internally and in the portal**, and able to act as a **blocker** when payment gates execution.
 
+### Trust & Verification (Enrichment)
+
+**Trust & Verification** is the layer that validates the identity, legality, and reputation of parties (leads, customers, or marketplace responders). It uses **official records** (contractor licenses, secretary of state filings) and **digital footprints** (Google Maps, web search, reviews) to enrich records and reduce risk.
+
+**Responsibility:** reduce manual data entry through **auto-fill**, provide **real-time verification** of credentials, and enable **due diligence** for high-value partnerships or marketplace bid responses.
+
 ### Customer portal presentation
 
 Not a single “entity,” but a **presentation and permissions boundary**: customer-visible subsets of quotes, schedules, payments, selected job updates, uploads when enabled.

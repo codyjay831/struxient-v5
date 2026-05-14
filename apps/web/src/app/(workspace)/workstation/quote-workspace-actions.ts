@@ -16,6 +16,8 @@ import {
   performQuoteMarkApproved,
   performQuoteSendCheckpoint,
   performUpdateQuoteLineItem,
+  performUpdateDraftQuoteDetails,
+  performCopyLeadToQuoteNotes,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
   addPaymentScheduleItemAction,
@@ -24,6 +26,9 @@ import {
   reorderPaymentScheduleItemsAction,
 } from "@/app/(workspace)/quotes/quote-payment-schedule-actions";
 import { parseQuoteLineFormDataInput } from "@/lib/quote-line-form-input";
+import {
+  QUOTE_FIELD_LIMITS,
+} from "@/app/(workspace)/quotes/quote-field-limits";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { randomBytes } from "crypto";
@@ -44,6 +49,117 @@ function revalidateQuoteCommercialSurfaces(quoteId: string) {
   revalidatePath("/workstation/tasks");
   revalidatePath("/workstation/jobs");
   revalidatePath("/leads");
+}
+
+function trimRequired(value: FormDataEntryValue | null): string {
+  if (value == null || typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+function trimOrNull(value: FormDataEntryValue | null): string | null {
+  if (value == null || typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function enforceMaxLength(
+  label: string,
+  value: string,
+  max: number,
+): QuoteWorkspaceActionState | null {
+  if (value.length > max) {
+    return { error: `${label} is too long (max ${max} characters).` };
+  }
+  return null;
+}
+
+/**
+ * Updates draft quote details. Org-scoped; no redirect.
+ * Bind `quoteId` before passing to `useActionState`.
+ */
+export async function updateDraftQuoteDetailsWorkspaceAction(
+  quoteId: string,
+  _prevState: QuoteWorkspaceActionState,
+  formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { success: false, error: "Missing quote record id." };
+  }
+
+  const title = trimRequired(formData.get("title"));
+  if (!title) {
+    return { success: false, error: "Workspace title is required." };
+  }
+  const titleErr = enforceMaxLength("Workspace title", title, QUOTE_FIELD_LIMITS.title);
+  if (titleErr) {
+    return { success: false, error: titleErr.error };
+  }
+
+  const internalNotes = trimOrNull(formData.get("internalNotes"));
+  if (internalNotes) {
+    const notesErr = enforceMaxLength(
+      "Internal notes",
+      internalNotes,
+      QUOTE_FIELD_LIMITS.internalNotes,
+    );
+    if (notesErr) {
+      return { success: false, error: notesErr.error };
+    }
+  }
+
+  const customerDocumentTitle = trimOrNull(formData.get("customerDocumentTitle"));
+  if (customerDocumentTitle) {
+    const docTitleErr = enforceMaxLength(
+      "Customer proposal document title",
+      customerDocumentTitle,
+      QUOTE_FIELD_LIMITS.customerDocumentTitle,
+    );
+    if (docTitleErr) {
+      return { success: false, error: docTitleErr.error };
+    }
+  }
+
+  const result = await performUpdateDraftQuoteDetails(id, {
+    title,
+    internalNotes,
+    customerDocumentTitle,
+  });
+
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+
+  revalidateQuoteCommercialSurfaces(id);
+  return { success: true };
+}
+
+/**
+ * Copies lead notes to quote notes. Org-scoped; no redirect.
+ * Bind `quoteId` before passing to `useActionState`.
+ */
+export async function copyLeadToQuoteNotesWorkspaceAction(
+  quoteId: string,
+  _prevState: QuoteWorkspaceActionState,
+  _formData: FormData,
+): Promise<QuoteWorkspaceActionState> {
+  void _formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { success: false, error: "Missing quote record id." };
+  }
+
+  const result = await performCopyLeadToQuoteNotes(id);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+
+  revalidateQuoteCommercialSurfaces(id);
+  return { success: true };
 }
 
 /**

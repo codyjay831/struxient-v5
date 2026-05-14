@@ -441,6 +441,47 @@ async function normalizeQuoteLineSortOrdersTx(tx: QuoteRollupTx, quoteId: string
 }
 
 /**
+ * Org-scoped update of draft quote details. No redirect, no revalidate.
+ */
+export async function performUpdateDraftQuoteDetails(
+  quoteId: string,
+  input: {
+    title: string;
+    internalNotes: string | null;
+    customerDocumentTitle: string | null;
+  },
+): Promise<PerformQuoteLineItemResult> {
+  const id = quoteId.trim();
+  if (!id) {
+    return { ok: false, error: "Missing quote record id." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+  const result = await db.quote.updateMany({
+    where: {
+      id,
+      organizationId: ctx.organizationId,
+      status: QuoteStatus.DRAFT,
+    },
+    data: {
+      title: input.title,
+      internalNotes: input.internalNotes,
+      customerDocumentTitle: input.customerDocumentTitle,
+    },
+  });
+
+  if (result.count === 0) {
+    return {
+      ok: false,
+      error:
+        "This quote could not be updated. It may not be a draft, may be archived, missing, or outside your organization.",
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
  * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
  */
 export async function updateDraftQuoteDetailsAction(
@@ -484,25 +525,14 @@ export async function updateDraftQuoteDetailsAction(
     return { error: customerDocTitle.error };
   }
 
-  const ctx = await getRequestContextOrThrow();
-  const result = await db.quote.updateMany({
-    where: {
-      id,
-      organizationId: ctx.organizationId,
-      status: QuoteStatus.DRAFT,
-    },
-    data: {
-      title,
-      internalNotes,
-      customerDocumentTitle: customerDocTitle.value,
-    },
+  const result = await performUpdateDraftQuoteDetails(id, {
+    title,
+    internalNotes,
+    customerDocumentTitle: customerDocTitle.value,
   });
 
-  if (result.count === 0) {
-    return {
-      error:
-        "This quote could not be updated. It may not be a draft, may be archived, missing, or outside your organization.",
-    };
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${id}`);
@@ -512,18 +542,14 @@ export async function updateDraftQuoteDetailsAction(
 }
 
 /**
- * Appends lead notes to internal quote notes.
- * `quoteId` must be supplied via `.bind(null, quote.id)`.
+ * Org-scoped copy of lead notes to quote notes. No redirect, no revalidate.
  */
-export async function copyLeadToQuoteNotesAction(
+export async function performCopyLeadToQuoteNotes(
   quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
+): Promise<PerformQuoteLineItemResult> {
   const id = quoteId.trim();
   if (!id) {
-    return { error: "Missing quote record id." };
+    return { ok: false, error: "Missing quote record id." };
   }
 
   const ctx = await getRequestContextOrThrow();
@@ -557,19 +583,44 @@ export async function copyLeadToQuoteNotesAction(
         data: { internalNotes: newNotes },
       });
     });
+    return { ok: true };
   } catch (e) {
     if (e instanceof Error) {
       if (e.message === "QUOTE_NOT_FOUND") {
-        return { error: "Quote not found or not a draft." };
+        return { ok: false, error: "Quote not found or not a draft." };
       }
       if (e.message === "NO_LEAD_NOTES") {
-        return { error: "No intake notes found on the linked lead." };
+        return { ok: false, error: "No intake notes found on the linked lead." };
       }
       if (e.message === "NOTES_TOO_LONG") {
-        return { error: `Resulting notes would exceed the ${QUOTE_FIELD_LIMITS.internalNotes} character limit.` };
+        return {
+          ok: false,
+          error: `Resulting notes would exceed the ${QUOTE_FIELD_LIMITS.internalNotes} character limit.`,
+        };
       }
     }
     throw e;
+  }
+}
+
+/**
+ * Appends lead notes to internal quote notes.
+ * `quoteId` must be supplied via `.bind(null, quote.id)`.
+ */
+export async function copyLeadToQuoteNotesAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const result = await performCopyLeadToQuoteNotes(id);
+  if (!result.ok) {
+    return { error: result.error };
   }
 
   revalidatePath(`/quotes/${id}`);

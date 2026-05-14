@@ -26,6 +26,17 @@ Leads enter from **many real-world channels**; the system must not assume a sing
 - **Conditional Visibility** allows forms to adapt to user input (e.g., showing emergency details only if "ASAP" is selected).
 - Intake should preserve **provenance** (channel) and a **formSnapshot** (immutable record of the form schema at the time of submission).
 
+### 1.5 Trust & Verification (Enrichment)
+
+### Intent
+Reduce friction and risk by automatically verifying the identity and credentials of parties as early as possible.
+
+### Canonical behaviors
+- **Auto-fill:** Entering a Contractor License Number and State should automatically populate company name, address, phone, and brand assets (logo).
+- **Verification Loop:** The system uses an "AI Search & Scrape" approach to verify license status against official state registries and cross-reference with Google Maps.
+- **Trust Badges:** Verified records display real-time status (e.g., "Active License," "Verified Address") to build confidence before a quote is even sent.
+- **Deep Search:** For high-value partnerships, the system can perform a deeper "Due Diligence" search into safety records (OSHA), reputation sentiment, and project history.
+
 ### Architectural note
 
 Treat intake as a **capability seam**: new sources should not require redesigning the core lead model each time. The **Lead** model uses a thin core with **JSONB** fields (`contact`, `request`, `address`, `signals`) for maximum flexibility.

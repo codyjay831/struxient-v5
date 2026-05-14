@@ -444,7 +444,6 @@ async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {
 
   return (
     <QuoteWorkSurface
-      mode="compact"
       quote={result.quote}
       readiness={result.readiness}
       workspaceTabs={result.workspaceTabs}

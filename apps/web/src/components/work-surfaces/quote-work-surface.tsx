@@ -99,9 +99,9 @@ import type {
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
 import {
+  QuoteAuthoringSurface,
   ArchivedQuoteReadOnlyNotice,
-  QuoteDraftWorkspaceControls,
-} from "@/components/quotes/quote-draft-workspace-controls";
+} from "@/components/quotes/quote-authoring-surface";
 import {
   QuoteArchivedRestorePanel,
   QuoteDraftArchivePanel,
@@ -111,14 +111,11 @@ import {
   QuoteLineItemScanBlock,
   QuoteLiveProposalPreviewLineBlock,
 } from "@/components/quotes/quote-line-item-display";
-import { QuoteLineItemsWorkspaceEditor } from "@/components/quotes/quote-line-items-workspace-editor";
 import { QuotePaymentScheduleEditor } from "@/components/quotes/quote-payment-schedule-editor";
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 
 /* ─── Public types ─────────────────────────────────────────────────────── */
-
-export type QuoteWorkSurfaceMode = "compact" | "standard" | "full";
 
 export type QuoteWorkSurfaceTab =
   | "overview"
@@ -129,12 +126,11 @@ export type QuoteWorkSurfaceTab =
   | "record";
 
 export type QuoteWorkSurfaceProps = {
-  mode: QuoteWorkSurfaceMode;
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
   /**
-   * Suppress the `mode="standard"` internal identity row when the container
+   * Suppress the internal identity row when the container
    * chrome already prints the quote's status/title/customer/lead (e.g. the
    * Quotes list popup chrome). Default `false` preserves the embedded Lead
    * Quote tab UX, where the surrounding Lead container shows lead identity
@@ -249,9 +245,7 @@ function formatMoneyCompact(cents: number): string {
  *  tab-bound actions never get a suffix because the user stays on the surface. */
 function externalActionLabel(
   action: QuoteReadinessAction,
-  mode: QuoteWorkSurfaceMode,
 ): string {
-  if (mode === "full") return action.label;
   switch (action.kind) {
     case "OPEN_JOB":
       return `${action.label} — opens job`;
@@ -745,7 +739,6 @@ function renderAction({
   action,
   variant,
   quote,
-  mode,
   onSwitchToTab,
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
@@ -754,7 +747,6 @@ function renderAction({
   action: QuoteReadinessAction | null;
   variant: "primary" | "secondary";
   quote: QuoteWorkSurfaceData;
-  mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
@@ -819,7 +811,7 @@ function renderAction({
   return (
     <Link href={href} className={cls}>
       <Icon className="size-3.5 opacity-80" strokeWidth={2} />
-      {externalActionLabel(action, mode)}
+      {externalActionLabel(action)}
       {variant === "primary" ? (
         <ArrowUpRight className="size-3.5 opacity-70" strokeWidth={1.5} />
       ) : null}
@@ -856,7 +848,6 @@ function StandardIdentityRow({ quote }: { quote: QuoteWorkSurfaceData }) {
 function NextStepCard({
   quote,
   readiness,
-  mode,
   onSwitchToTab,
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
@@ -864,7 +855,6 @@ function NextStepCard({
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
-  mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
@@ -895,7 +885,6 @@ function NextStepCard({
           action: primaryAction,
           variant: "primary",
           quote,
-          mode,
           onSwitchToTab,
           onRequestAddLineItem,
           onRequestScopeLibraryPicker,
@@ -905,7 +894,6 @@ function NextStepCard({
           action: secondaryAction,
           variant: "secondary",
           quote,
-          mode,
           onSwitchToTab,
           onRequestAddLineItem,
           onRequestScopeLibraryPicker,
@@ -1021,20 +1009,17 @@ function QuoteJobsiteCallout({
 function FactsGrid({
   quote,
   readiness,
-  mode,
   onSwitchToTab,
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
-  mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
 }) {
   const { signals } = readiness;
-  const leadLabel =
-    quote.leadTitle ?? (mode === "standard" ? "Inside this intake" : "—");
+  const leadLabel = quote.leadTitle ?? "—";
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
       <button
         type="button"
         onClick={() => onSwitchToTab("scope")}
@@ -1092,7 +1077,6 @@ function OverviewTab({
   quote,
   readiness,
   workspaceTabs,
-  mode,
   onSwitchToTab,
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
@@ -1103,7 +1087,6 @@ function OverviewTab({
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
-  mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
@@ -1111,13 +1094,11 @@ function OverviewTab({
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
-  const isFull = mode === "full";
   return (
     <div className="space-y-4">
       <NextStepCard
         quote={quote}
         readiness={readiness}
-        mode={mode}
         onSwitchToTab={onSwitchToTab}
         onRequestAddLineItem={onRequestAddLineItem}
         onRequestScopeLibraryPicker={onRequestScopeLibraryPicker}
@@ -1127,7 +1108,6 @@ function OverviewTab({
       <FactsGrid
         quote={quote}
         readiness={readiness}
-        mode={mode}
         onSwitchToTab={onSwitchToTab}
       />
 
@@ -1207,14 +1187,12 @@ function OverviewTab({
       </div>
 
       {/* Footer escape hatch — only when not on full page. */}
-      {!isFull ? (
-        <div className="pt-1">
-          <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
-            Open full quote page
-            <ArrowUpRight className="size-3" strokeWidth={1.5} />
-          </Link>
-        </div>
-      ) : null}
+      <div className="pt-1 @[1000px]:hidden">
+        <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
+          Open full quote page
+          <ArrowUpRight className="size-3" strokeWidth={1.5} />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -1224,7 +1202,6 @@ function OverviewTab({
 function ScopeTab({
   quote,
   workspaceTabs,
-  mode,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
   shouldOpenScopeLibraryPicker,
@@ -1233,7 +1210,6 @@ function ScopeTab({
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
-  mode: QuoteWorkSurfaceMode;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
@@ -1241,7 +1217,6 @@ function ScopeTab({
   onScopeLibraryPickerOpenConsumed: () => void;
   onMutated?: () => void;
 }) {
-  const isFull = mode === "full";
   const {
     isCommercialEditable,
     isExecutionEditable,
@@ -1259,38 +1234,35 @@ function ScopeTab({
   } = workspaceTabs;
   const lineCount = lineItems.length;
 
-  /* Full + DRAFT — embed the existing full-page editor. The legacy line-item
-   * add/edit/delete forms here redirect to `/quotes/[id]` which is where we
-   * already are, so no navigation occurs. The Scope Library picker now uses
-   * the workspace-safe action (no redirect) plus `router.refresh()` driven
-   * from QuoteDraftWorkspaceControls. Execution editing remains full-page
-   * only by design. */
-  if (isFull && isCommercialEditable) {
+  /* DRAFT — unified authoring surface. */
+  if (isCommercialEditable) {
     return (
-      <QuoteDraftWorkspaceControls
-        id="line-items"
+      <QuoteAuthoringSurface
         quoteId={quote.id}
+        quoteHref={quote.quoteHref}
         initialTitle={quote.title}
         initialInternalNotes={internalNotes}
         initialCustomerDocumentTitle={customerDocumentTitle}
         hasLeadNotes={hasLeadNotes}
+        lineItems={lineItems}
         subtotalCents={subtotalCents}
         totalCents={totalCents}
-        lineItems={lineItems}
         lineItemTemplates={lineItemTemplates}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
         stages={stages}
+        shouldFocusAddForm={shouldFocusAddForm}
+        onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
         onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
+        onMutated={onMutated ?? (() => {})}
       />
     );
   }
 
-  /* Full + non-DRAFT — read-only line list with execution-edit summaries
-   * (execution actions also redirect to self → safe). */
-  if (isFull) {
-    return (
+  /* non-DRAFT — read-only line list with execution-edit summaries. */
+  return (
+    <div className="space-y-4">
       <WorkspacePanel
         id="line-items"
         className="border-border-strong shadow-md ring-1 ring-ring/30"
@@ -1303,21 +1275,21 @@ function ScopeTab({
               : "Commercial scope and pricing are read-only after send. Internal draft execution can still be edited from each line."
           }
         />
-        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid gap-3 grid-cols-2 @lg:grid-cols-3">
           <SignalCard
             label="Subtotal"
             value={formatMoneyCents(subtotalCents)}
-            hint="Stored rollup (sum of line totals)."
+            hint={isArchived ? "Stored rollup." : "Sum of line totals."}
           />
           <SignalCard
             label="Total"
             value={formatMoneyCents(totalCents)}
-            hint="Same as subtotal for now—no tax line."
+            hint="Same as subtotal for now."
           />
           <SignalCard
             label="Lines"
             value={String(lineCount)}
-            hint="Persisted rows, ordered for display."
+            hint="Persisted rows."
           />
         </div>
         {lineCount === 0 ? (
@@ -1333,7 +1305,7 @@ function ScopeTab({
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
             {lineItems.map((line) => (
-              <li key={line.id} className="px-4 py-4">
+              <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <QuoteLineItemScanBlock line={line} />
@@ -1352,99 +1324,8 @@ function ScopeTab({
           </ul>
         )}
       </WorkspacePanel>
-    );
-  }
 
-  /* Standard / compact + DRAFT — workspace-safe inline editor. Add / Edit /
-   * Delete and Scope Library Apply-template submit through `*WorkspaceAction`
-   * server actions and call `onMutated()` so the surrounding popup/drawer/
-   * lead-tab can re-load its `QuoteWorkSurfaceData` payload. Per-line
-   * execution editing is also supported in-place. */
-  if (isCommercialEditable) {
-    return (
-      <QuoteLineItemsWorkspaceEditor
-        quoteId={quote.id}
-        quoteHref={quote.quoteHref}
-        lineItems={lineItems}
-        subtotalCents={subtotalCents}
-        totalCents={totalCents}
-        mode={mode === "compact" ? "compact" : "standard"}
-        lineItemTemplates={lineItemTemplates}
-        draftTasksByLineId={draftTasksByLineId}
-        reusableTaskOptions={reusableTaskOptions}
-        stages={stages}
-        shouldFocusAddForm={shouldFocusAddForm}
-        onAddOpenConsumed={onAddFormFocusConsumed}
-        shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
-        onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
-        onMutated={onMutated ?? (() => {})}
-      />
-    );
-  }
-
-  /* Standard / compact + non-DRAFT — read-only summary + escape hatch.
-   * Commercial fields are locked after send; restore-to-draft lives on the
-   * full quote page. */
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-border bg-surface p-3">
-          <p className={`${sectionLabelClass} mb-0.5`}>Subtotal</p>
-          <p className="text-sm font-medium text-foreground tabular-nums">
-            {formatMoneyCents(subtotalCents)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-3">
-          <p className={`${sectionLabelClass} mb-0.5`}>Total</p>
-          <p className="text-sm font-medium text-foreground tabular-nums">
-            {formatMoneyCents(totalCents)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-3">
-          <p className={`${sectionLabelClass} mb-0.5`}>Lines</p>
-          <p className="text-sm font-medium text-foreground">{lineCount}</p>
-        </div>
-      </div>
-
-      {lineCount === 0 ? (
-        <div className="rounded-xl border border-border bg-surface px-4 py-5">
-          <p className="text-sm font-medium text-foreground">No line items</p>
-          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            {isArchived
-              ? "No scope rows were captured before archive. Restore to draft on the full quote page to add line items."
-              : "Commercial scope is locked after send. Existing rows would appear here."}
-          </p>
-        </div>
-      ) : (
-        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
-          {lineItems.map((line) => (
-            <li key={line.id} className="px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                  {line.description}
-                </p>
-                <p className="shrink-0 text-sm font-medium tabular-nums text-foreground">
-                  {formatMoneyCents(line.lineTotalCents)}
-                </p>
-              </div>
-              <p className="mt-0.5 text-[0.7rem] text-foreground-subtle">
-                {line.quantityDisplay} ×{" "}
-                {formatMoneyCents(line.unitAmountCents)}
-              </p>
-              <QuoteLineDraftExecutionSummary
-                quoteId={quote.id}
-                line={line}
-                isExecutionEditable={isExecutionEditable}
-                draftTasks={draftTasksByLineId[line.id] ?? []}
-                reusableOptions={reusableTaskOptions}
-                stages={stages}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="pt-1">
+      <div className="pt-1 @[1000px]:hidden">
         <Link
           href={`${quote.quoteHref}#line-items`}
           className={mutedFooterLinkClass}
@@ -1464,11 +1345,9 @@ function ScopeTab({
 function PaymentsTab({
   quote,
   workspaceTabs,
-  mode,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
-  mode: QuoteWorkSurfaceMode;
 }) {
   return (
     <div className="space-y-6">
@@ -1482,7 +1361,6 @@ function PaymentsTab({
         quoteTotalCents={quote.totalCents}
         items={workspaceTabs.paymentSchedule}
         stages={workspaceTabs.stages}
-        mode={mode === "compact" ? "compact" : "standard"}
       />
     </div>
   );
@@ -1504,6 +1382,9 @@ function ContextTab({
   onRequestServiceAddress?: () => void;
 }) {
   const { customerName, customerHref, lead } = workspaceTabs;
+  const contactName = lead?.contactName;
+  const isResidentialDuplication =
+    customerName && contactName && customerName.trim().toLowerCase() === contactName.trim().toLowerCase();
 
   return (
     <div className="space-y-4">
@@ -1520,10 +1401,19 @@ function ContextTab({
         {customerName && customerHref ? (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
             <div className="min-w-0">
-              <p className={sectionLabelClass}>Linked customer</p>
-              <p className="mt-1 truncate text-sm font-medium text-foreground">
-                {customerName}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className={sectionLabelClass}>Linked customer</p>
+                {isResidentialDuplication && (
+                  <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-foreground-subtle">
+                    Residential Match
+                  </span>
+                )}
+              </div>
+              {!isResidentialDuplication && (
+                <p className="mt-1 truncate text-sm font-medium text-foreground">
+                  {customerName}
+                </p>
+              )}
               {(quote.customerEmail || quote.customerFormattedPhone) && (
                 <dl className="mt-2 space-y-1 text-xs text-foreground-muted">
                   {quote.customerEmail ? (
@@ -1833,7 +1723,6 @@ function SendAcceptTab({
   quote,
   readiness,
   workspaceTabs,
-  mode,
   activePreview,
   onPreviewChange,
   onMutated,
@@ -1842,7 +1731,6 @@ function SendAcceptTab({
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
   workspaceTabs: QuoteWorkspaceTabData;
-  mode: QuoteWorkSurfaceMode;
   activePreview: "none" | "proposal" | "execution";
   onPreviewChange: (preview: "none" | "proposal" | "execution") => void;
   onMutated?: () => void;
@@ -2144,7 +2032,7 @@ function SendAcceptTab({
           <Link href={`/jobs/${quote.activatedJobId}`} className={listLinkClass}>
             <Briefcase className="size-3.5 mr-1.5" strokeWidth={1.5} />
             Open job
-            {mode !== "full" ? " — opens job" : ""}
+            <span className="@[1000px]:hidden"> — opens job</span>
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>
@@ -2158,28 +2046,26 @@ function SendAcceptTab({
 function RecordTab({
   quote,
   workspaceTabs,
-  mode,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
-  mode: QuoteWorkSurfaceMode;
 }) {
-  const isFull = mode === "full";
   const { isCommercialEditable, isArchived, internalNotes } = workspaceTabs;
 
   return (
     <div className="space-y-4">
       {/* Archive / Restore */}
-      {isFull ? (
-        isArchived ? (
+      <div className="@lg:hidden">
+        {isArchived ? (
           <>
             <ArchivedQuoteReadOnlyNotice />
             <QuoteArchivedRestorePanel id="archive-restore" quoteId={quote.id} />
           </>
         ) : (
           <QuoteDraftArchivePanel id="archive-restore" quoteId={quote.id} />
-        )
-      ) : (
+        )}
+      </div>
+      <div className="hidden @lg:block">
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className={`${sectionLabelClass} mb-1`}>
             {isArchived ? "Restore to draft" : "Archive quote"}
@@ -2197,7 +2083,7 @@ function RecordTab({
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>
-      )}
+      </div>
 
       {/* Internal notes — read-only when commercial-locked (DRAFT shows them inline in Scope tab via the details form). */}
       {!isCommercialEditable ? (
@@ -2261,14 +2147,12 @@ function RecordTab({
       </div>
 
       {/* Footer escape hatch — only when not on full page. */}
-      {!isFull ? (
-        <div className="pt-1">
-          <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
-            Open full quote page
-            <ArrowUpRight className="size-3" strokeWidth={1.5} />
-          </Link>
-        </div>
-      ) : null}
+      <div className="pt-1 @[1000px]:hidden">
+        <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
+          Open full quote page
+          <ArrowUpRight className="size-3" strokeWidth={1.5} />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -2276,7 +2160,6 @@ function RecordTab({
 /* ─── Main export ──────────────────────────────────────────────────────── */
 
 export function QuoteWorkSurface({
-  mode,
   quote,
   readiness,
   workspaceTabs,
@@ -2287,9 +2170,6 @@ export function QuoteWorkSurface({
   onRequestServiceAddress,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
-  const isFull = mode === "full";
-  const isStandard = mode === "standard";
-  const isCompact = mode === "compact";
   const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
     if (
       initialTab === "overview" &&
@@ -2344,22 +2224,19 @@ export function QuoteWorkSurface({
     onWorkSurfaceMutated?.();
   }, [router, onWorkSurfaceMutated]);
 
-  /* Mode-specific tab strip styling — full page sits on bg-background, popup
-   * dialog sits on bg-surface, Workstation drawer sits on bg-surface too. */
-  const tabStripClass = isFull
-    ? "mb-4 inline-flex rounded-lg bg-surface border border-border p-1 gap-0.5"
-    : "mb-4 inline-flex rounded-lg bg-background p-1 gap-0.5";
-  const activeTabClass = isFull
-    ? "bg-background text-foreground shadow-sm"
-    : "bg-surface text-foreground shadow-sm";
+  /* Tab strip styling — adapts via container width. */
+  const tabStripClass = "mb-4 inline-flex rounded-lg bg-background p-1 gap-0.5 @[1000px]:bg-surface @[1000px]:border @[1000px]:border-border";
+  const activeTabClass = "bg-surface text-foreground shadow-sm @[1000px]:bg-background";
   const inactiveTabClass = "text-foreground-subtle hover:text-foreground";
-  const tabPaddingClass = isCompact ? "px-3 py-1.5" : "px-4 py-1.5";
+  const tabPaddingClass = "px-3 py-1.5 @lg:px-4";
 
   return (
-    <div className={isFull ? "mb-6 space-y-4" : "space-y-4"}>
-      {isStandard && !suppressIdentityRow ? (
-        <StandardIdentityRow quote={quote} />
-      ) : null}
+    <div className="@container space-y-4 @[1000px]:mb-6">
+      {!suppressIdentityRow && (
+        <div className="@[1000px]:hidden">
+          <StandardIdentityRow quote={quote} />
+        </div>
+      )}
 
       <div className={tabStripClass}>
         {visibleTabs.map((t) => (
@@ -2382,7 +2259,6 @@ export function QuoteWorkSurface({
           quote={quote}
           readiness={readiness}
           workspaceTabs={workspaceTabs}
-          mode={mode}
           onSwitchToTab={handleSwitchToTab}
           onRequestAddLineItem={handleRequestAddLineItem}
           onRequestScopeLibraryPicker={handleRequestScopeLibraryPicker}
@@ -2395,7 +2271,6 @@ export function QuoteWorkSurface({
         <ScopeTab
           quote={quote}
           workspaceTabs={workspaceTabs}
-          mode={mode}
           onSwitchToTab={handleSwitchToTab}
           shouldFocusAddForm={shouldFocusAddForm}
           onAddFormFocusConsumed={handleAddFormFocusConsumed}
@@ -2408,7 +2283,6 @@ export function QuoteWorkSurface({
         <PaymentsTab
           quote={quote}
           workspaceTabs={workspaceTabs}
-          mode={mode}
         />
       )}
       {activeTab === "context" && (
@@ -2425,7 +2299,6 @@ export function QuoteWorkSurface({
           quote={quote}
           readiness={readiness}
           workspaceTabs={workspaceTabs}
-          mode={mode}
           activePreview={activePreview}
           onPreviewChange={setActivePreview}
           onMutated={handleSurfaceMutated}
@@ -2433,7 +2306,7 @@ export function QuoteWorkSurface({
         />
       )}
       {activeTab === "record" && (
-        <RecordTab quote={quote} workspaceTabs={workspaceTabs} mode={mode} />
+        <RecordTab quote={quote} workspaceTabs={workspaceTabs} />
       )}
     </div>
   );

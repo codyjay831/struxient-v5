@@ -9,6 +9,7 @@ Project documentation lives here. Canon (authoritative setting and story facts) 
 | Path | Purpose |
 |------|---------|
 | [canon/](./canon/) | **Struxient v5** product and architecture canon: experience, **locked-decisions-v1**, contractor journey, conceptual model, domains, templates, lineage, Workstation, invariants, glossary |
+| [specs/](./specs/) | **Feature Specifications:** Detailed plans for upcoming features like [Contractor License Enrichment](./specs/contractor-license-enrichment.md) |
 | [build-concerns-risks-and-gaps.md](./build-concerns-risks-and-gaps.md) | Engineering tracker: risks, gaps, dependencies, UX follow-ups, suggested build order |
 | [workstation-ia-ui-note.md](./workstation-ia-ui-note.md) | **UI implementation:** current `/workstation` destination, lenses, and why Browse Jobs/Schedule point at those routes (temporary simplification; not canon) |
 
