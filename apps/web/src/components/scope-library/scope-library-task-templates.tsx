@@ -23,10 +23,8 @@ import {
 } from "@/lib/task-template-category";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { ListChecks, Zap, Sparkles } from "lucide-react";
-import { suggestSignalsForTask } from "@/lib/ai/signal-suggester";
-import type { TaskCompletionRequirements } from "@/lib/task-readiness";
-import { toast } from "sonner";
+import { ListChecks } from "lucide-react";
+import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -48,138 +46,6 @@ function FormError({ message }: { message: string }) {
     >
       {message}
     </p>
-  );
-}
-
-function SmartTaskDisclosure({ 
-  providesSignals: initialProvides, 
-  requiresSignals: initialRequires, 
-  hardSignal,
-  requirementsJson,
-  title,
-  category,
-}: { 
-  providesSignals?: string[], 
-  requiresSignals?: string[], 
-  hardSignal?: boolean,
-  requirementsJson?: unknown,
-  title?: string,
-  category?: string,
-}) {
-  const [provides, setProvides] = useState(initialProvides?.join(", ") || "");
-  const [requires, setRequires] = useState(initialRequires?.join(", ") || "");
-  
-  const handleSuggest = () => {
-    if (!title) {
-      toast.error("Enter a task title first to get suggestions.");
-      return;
-    }
-    const suggestions = suggestSignalsForTask(title, category || "GENERAL");
-    
-    if (suggestions.provides.length > 0 || suggestions.requires.length > 0) {
-      const newProvides = Array.from(new Set([...(provides ? provides.split(",").map(s => s.trim()) : []), ...suggestions.provides])).join(", ");
-      const newRequires = Array.from(new Set([...(requires ? requires.split(",").map(s => s.trim()) : []), ...suggestions.requires])).join(", ");
-      
-      setProvides(newProvides);
-      setRequires(newRequires);
-      toast.success("AI Secretary suggested signals.");
-    } else {
-      toast.info("No obvious signals found for this title.");
-    }
-  };
-
-  const reqs = (requirementsJson ?? {}) as TaskCompletionRequirements;
-  return (
-    <div className="mt-4 space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-primary">
-          <Zap className="h-3 w-3" />
-          Smart Task Configuration
-        </div>
-        <button
-          type="button"
-          onClick={handleSuggest}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
-        >
-          <Sparkles className="size-3" />
-          Suggest Signals
-        </button>
-      </div>
-      
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-3">
-          <label className="block">
-            <span className={fieldLabelClass}>Provides signals</span>
-            <input
-              name="providesSignals"
-              type="text"
-              className={controlClass}
-              value={provides}
-              onChange={(e) => setProvides(e.target.value)}
-              placeholder="e.g. roof-sealed, permit-ready"
-            />
-            <p className="mt-1 text-[10px] text-foreground-muted">Comma-separated facts this task broadcasts when done.</p>
-          </label>
-
-          <label className="block">
-            <span className={fieldLabelClass}>Requires signals</span>
-            <input
-              name="requiresSignals"
-              type="text"
-              className={controlClass}
-              value={requires}
-              onChange={(e) => setRequires(e.target.value)}
-              placeholder="e.g. materials-on-site"
-            />
-            <p className="mt-1 text-[10px] text-foreground-muted">Comma-separated facts this task waits for.</p>
-          </label>
-
-          <label className="flex items-center gap-2">
-            <input
-              name="hardSignal"
-              type="checkbox"
-              defaultChecked={hardSignal}
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-            />
-            <span className="text-xs font-medium text-foreground">Hard dependency</span>
-          </label>
-          <p className="text-[10px] text-foreground-muted ml-6">If checked, activation blocks if no provider exists in the job.</p>
-        </div>
-
-        <div className="space-y-3">
-          <span className={fieldLabelClass}>Completion Proof</span>
-          <div className="space-y-2">
-            <label className="flex items-center gap-2">
-              <input
-                name="noteRequired"
-                type="checkbox"
-                defaultChecked={reqs.noteRequired}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-              <span className="text-xs text-foreground">Note required</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                name="photoRequired"
-                type="checkbox"
-                defaultChecked={reqs.photoRequired}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-              <span className="text-xs text-foreground">Photo required</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                name="attachmentRequired"
-                type="checkbox"
-                defaultChecked={reqs.attachmentRequired}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-              <span className="text-xs text-foreground">File attachment required</span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -363,6 +229,7 @@ function ScopeLibraryTaskTemplateEditForm({
         requiresSignals={template.requiresSignals}
         hardSignal={template.hardSignal}
         requirementsJson={template.requirementsJson}
+        partsRequiredJson={template.partsRequiredJson}
         title={title}
         category={category}
       />

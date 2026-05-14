@@ -30,6 +30,7 @@ import {
   updateQuoteLineItemWorkspaceAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
+import { generateQuoteLineExecutionPlanAction } from "@/app/(workspace)/quotes/quote-line-execution-actions";
 import { QUOTE_LINE_FIELD_LIMITS } from "@/app/(workspace)/quotes/quote-field-limits";
 import {
   formatCentsAsDollarInput,
@@ -53,6 +54,8 @@ import {
 } from "@/components/quotes/quote-line-item-display";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import { Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 type EditorMode = "standard" | "compact";
 
@@ -406,7 +409,25 @@ export function QuoteLineItemsWorkspaceEditor({
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [autoFocusAdd, setAutoFocusAdd] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const isCompact = mode === "compact";
+
+  const handleGeneratePlan = async (lineId: string) => {
+    setIsGenerating(lineId);
+    try {
+      const result = await generateQuoteLineExecutionPlanAction(quoteId, lineId);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("AI execution plan generated.");
+        onMutated();
+      }
+    } catch (e) {
+      toast.error("Failed to generate AI plan.");
+    } finally {
+      setIsGenerating(null);
+    }
+  };
 
   useEffect(() => {
     if (!shouldFocusAddForm) return;
@@ -538,19 +559,36 @@ export function QuoteLineItemsWorkspaceEditor({
                     />
                   </div>
                   {isEditing ? null : (
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        className={secondaryButtonClass}
-                        onClick={() => setEditingLineId(line.id)}
-                      >
-                        Edit
-                      </button>
-                      <DeleteLineItemForm
-                        quoteId={quoteId}
-                        lineId={line.id}
-                        onSuccess={onMutated}
-                      />
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          onClick={() => setEditingLineId(line.id)}
+                        >
+                          Edit
+                        </button>
+                        <DeleteLineItemForm
+                          quoteId={quoteId}
+                          lineId={line.id}
+                          onSuccess={onMutated}
+                        />
+                      </div>
+                      {(draftTasksByLineId[line.id]?.length ?? 0) === 0 && (
+                        <button
+                          type="button"
+                          disabled={isGenerating === line.id}
+                          onClick={() => handleGeneratePlan(line.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                        >
+                          {isGenerating === line.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="size-3" />
+                          )}
+                          {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

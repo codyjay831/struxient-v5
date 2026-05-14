@@ -7,10 +7,18 @@ export type TaskDerivedState =
   | "NEEDS_PROOF"
   | "READY";
 
+export type ChecklistItem = {
+  id: string;
+  label: string;
+  completedAt?: string | null; // ISO string for JSON compatibility
+  completedByUserId?: string | null;
+};
+
 export type TaskCompletionRequirements = {
   noteRequired?: boolean;
   photoRequired?: boolean;
   attachmentRequired?: boolean;
+  checklist?: ChecklistItem[];
 };
 
 export type TaskReadinessInput = {
@@ -91,6 +99,13 @@ export function deriveTaskState(
 
   if ((requirements.photoRequired || requirements.attachmentRequired) && task.attachments.length === 0) {
     return "NEEDS_PROOF";
+  }
+
+  if (requirements.checklist && requirements.checklist.length > 0) {
+    const allChecked = requirements.checklist.every((item) => !!item.completedAt);
+    if (!allChecked) {
+      return "NEEDS_PROOF";
+    }
   }
 
   return "READY";

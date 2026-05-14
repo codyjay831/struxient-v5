@@ -36,6 +36,7 @@ export default async function ScopeLibraryTasksPage() {
     requiresSignals: t.requiresSignals,
     hardSignal: t.hardSignal,
     requirementsJson: t.requirementsJson,
+    partsRequiredJson: t.partsRequiredJson,
   }));
 
   return (

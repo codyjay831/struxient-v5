@@ -6,6 +6,7 @@ import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
+import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
 import { lineItemTemplateDefaultExecutionPath } from "@/lib/line-item-template-execution-path";
 
@@ -103,6 +104,7 @@ type ParsedTaskBody =
         requiresSignals: string[];
         hardSignal: boolean;
         requirementsJson: TaskCompletionRequirements | null;
+        partsRequiredJson: TaskResourceRequirement | null;
       };
     };
 
@@ -136,11 +138,30 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
   const requiresSignals = parseSignals(formData.get("requiresSignals"));
   const hardSignal = formData.get("hardSignal") === "on";
 
-  const requirementsJson = {
+  const requirementsJson: TaskCompletionRequirements = {
     noteRequired: formData.get("noteRequired") === "on",
     photoRequired: formData.get("photoRequired") === "on",
     attachmentRequired: formData.get("attachmentRequired") === "on",
   };
+
+  const checklistRaw = formData.get("checklistJson");
+  if (typeof checklistRaw === "string" && checklistRaw) {
+    try {
+      requirementsJson.checklist = JSON.parse(checklistRaw);
+    } catch (e) {
+      console.error("Failed to parse checklistJson", e);
+    }
+  }
+
+  const partsRaw = formData.get("partsRequiredJson");
+  let partsRequiredJson: TaskResourceRequirement | null = null;
+  if (typeof partsRaw === "string" && partsRaw) {
+    try {
+      partsRequiredJson = JSON.parse(partsRaw);
+    } catch (e) {
+      console.error("Failed to parse partsRequiredJson", e);
+    }
+  }
 
   return {
     data: {
@@ -152,6 +173,7 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
       requiresSignals,
       hardSignal,
       requirementsJson,
+      partsRequiredJson,
     },
   };
 }
@@ -205,6 +227,7 @@ export async function addLineItemTemplateTaskFromReusableAction(
         requiresSignals: reusable.requiresSignals,
         hardSignal: reusable.hardSignal,
         requirementsJson: reusable.requirementsJson || {},
+        partsRequiredJson: reusable.partsRequiredJson || {},
         sortOrder,
       },
     });
@@ -270,6 +293,7 @@ export async function addLineItemTemplateTaskCustomAction(
         requiresSignals: parsed.data.requiresSignals,
         hardSignal: parsed.data.hardSignal,
         requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         sortOrder,
       },
     });
@@ -338,6 +362,7 @@ export async function updateLineItemTemplateTaskAction(
           requiresSignals: parsed.data.requiresSignals,
           hardSignal: parsed.data.hardSignal,
           requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           sortOrder,
         },
       });
@@ -353,6 +378,7 @@ export async function updateLineItemTemplateTaskAction(
           requiresSignals: parsed.data.requiresSignals,
           hardSignal: parsed.data.hardSignal,
           requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         },
       });
     }

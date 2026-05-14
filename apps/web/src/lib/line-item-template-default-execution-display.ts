@@ -18,6 +18,7 @@ export type DefaultExecutionTaskRow = {
   requiresSignals: string[];
   hardSignal: boolean;
   requirementsJson: unknown;
+  partsRequiredJson: unknown;
 };
 
 export type DefaultExecutionStageGroup = {

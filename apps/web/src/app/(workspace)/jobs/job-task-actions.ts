@@ -1,6 +1,6 @@
 "use server";
 
-import { JobTaskStatus, JobActivityType, JobIssueStatus, JobIssueSeverity } from "@prisma/client";
+import { JobTaskStatus, JobActivityType, JobIssueStatus, JobIssueSeverity, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
@@ -269,5 +269,60 @@ export async function overrideJobTaskReadinessAction(
   } catch (e) {
     console.error("Failed to override task", e);
     return { error: "Failed to override task. Please try again." };
+  }
+}
+
+export async function toggleJobTaskChecklistItemAction(
+  taskId: string,
+  checklistItemId: string,
+  completed: boolean,
+): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  try {
+    const task = await db.jobTask.findFirst({
+      where: { id: taskId, job: { organizationId } },
+      select: { id: true, jobId: true, completionRequirementsJson: true },
+    });
+
+    if (!task) {
+      return { error: "Task not found in your organization." };
+    }
+
+    const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
+    if (!requirements.checklist) {
+      return { error: "Checklist not found for this task." };
+    }
+
+    const newChecklist = requirements.checklist.map((item) => {
+      if (item.id === checklistItemId) {
+        return {
+          ...item,
+          completedAt: completed ? new Date().toISOString() : null,
+          completedByUserId: completed ? session.userId : null,
+        };
+      }
+      return item;
+    });
+
+    await db.jobTask.update({
+      where: { id: taskId },
+      data: {
+        completionRequirementsJson: {
+          ...requirements,
+          checklist: newChecklist,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
+    revalidatePath(`/jobs/${task.jobId}`);
+
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to toggle checklist item", e);
+    return { error: "Failed to update checklist. Please try again." };
   }
 }

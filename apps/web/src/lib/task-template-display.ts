@@ -12,4 +12,5 @@ export type TaskTemplateLibraryRow = {
   requiresSignals: string[];
   hardSignal: boolean;
   requirementsJson: unknown;
+  partsRequiredJson: unknown;
 };

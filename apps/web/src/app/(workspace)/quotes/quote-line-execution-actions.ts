@@ -1,12 +1,14 @@
 "use server";
 
 import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
+import { AIService } from "@/lib/ai/ai-service";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
+import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
 
 export type QuoteLineExecutionFormState = {
@@ -99,6 +101,7 @@ type ParsedTaskBody =
         requiresSignals: string[];
         hardSignal: boolean;
         requirementsJson: TaskCompletionRequirements | null;
+        partsRequiredJson: TaskResourceRequirement | null;
       };
     };
 
@@ -132,11 +135,30 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
   const requiresSignals = parseSignals(formData.get("requiresSignals"));
   const hardSignal = formData.get("hardSignal") === "on";
 
-  const requirementsJson = {
+  const requirementsJson: TaskCompletionRequirements = {
     noteRequired: formData.get("noteRequired") === "on",
     photoRequired: formData.get("photoRequired") === "on",
     attachmentRequired: formData.get("attachmentRequired") === "on",
   };
+
+  const checklistRaw = formData.get("checklistJson");
+  if (typeof checklistRaw === "string" && checklistRaw) {
+    try {
+      requirementsJson.checklist = JSON.parse(checklistRaw);
+    } catch (e) {
+      console.error("Failed to parse checklistJson", e);
+    }
+  }
+
+  const partsRaw = formData.get("partsRequiredJson");
+  let partsRequiredJson: TaskResourceRequirement | null = null;
+  if (typeof partsRaw === "string" && partsRaw) {
+    try {
+      partsRequiredJson = JSON.parse(partsRaw);
+    } catch (e) {
+      console.error("Failed to parse partsRequiredJson", e);
+    }
+  }
 
   return {
     data: {
@@ -148,6 +170,7 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
       requiresSignals,
       hardSignal,
       requirementsJson,
+      partsRequiredJson,
     },
   };
 }
@@ -244,6 +267,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
         requiresSignals: reusable.requiresSignals,
         hardSignal: reusable.hardSignal,
         requirementsJson: reusable.requirementsJson || {},
+        partsRequiredJson: reusable.partsRequiredJson || {},
         sortOrder,
       },
     });
@@ -307,6 +331,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
         requiresSignals: parsed.data.requiresSignals,
         hardSignal: parsed.data.hardSignal,
         requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         sortOrder,
       },
     });
@@ -389,6 +414,7 @@ export async function updateQuoteLineExecutionTaskAction(
           requiresSignals: parsed.data.requiresSignals,
           hardSignal: parsed.data.hardSignal,
           requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           sortOrder,
         },
       });
@@ -404,9 +430,99 @@ export async function updateQuoteLineExecutionTaskAction(
           requiresSignals: parsed.data.requiresSignals,
           hardSignal: parsed.data.hardSignal,
           requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         },
       });
     }
+
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+  }
+
+  revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
+  return {};
+}
+
+export async function moveQuoteLineExecutionTaskAction(
+  quoteId: string,
+  lineItemId: string,
+  taskId: string,
+  direction: "up" | "down",
+  _prevState: QuoteLineExecutionFormState,
+  formData: FormData,
+): Promise<QuoteLineExecutionFormState> {
+  void formData;
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  const kid = taskId.trim();
+  if (!qid || !lid || !kid) {
+    return { error: "Missing quote, line item, or task." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const existing = await tx.quoteLineExecutionTask.findFirst({
+      where: { id: kid, quoteLineItemId: lid },
+      include: {
+        quoteLineItem: {
+          select: {
+            quoteId: true,
+            quote: { select: { organizationId: true, status: true } },
+          },
+        },
+      },
+    });
+    if (
+      !existing ||
+      existing.quoteLineItem.quoteId !== qid ||
+      existing.quoteLineItem.quote.organizationId !== ctx.organizationId ||
+      !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(existing.quoteLineItem.quote.status)
+    ) {
+      return { ok: false as const };
+    }
+
+    const quoteHasJob = await tx.job.findFirst({
+      where: { quoteId: qid, organizationId: ctx.organizationId },
+      select: { id: true },
+    });
+    if (quoteHasJob) {
+      return { ok: false as const };
+    }
+
+    const stageId = existing.stageId;
+    const peers = await tx.quoteLineExecutionTask.findMany({
+      where: { quoteLineItemId: lid, stageId },
+      orderBy: { sortOrder: "asc" },
+    });
+    const idx = peers.findIndex((p) => p.id === kid);
+    if (idx < 0) {
+      return { ok: false as const };
+    }
+    const swapWith = direction === "up" ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= peers.length) {
+      return { ok: true as const };
+    }
+
+    const a = peers[idx];
+    const b = peers[swapWith];
+    const temp = 1_000_000 + Math.floor(Math.random() * 100_000);
+    await tx.quoteLineExecutionTask.update({
+      where: { id: a.id },
+      data: { sortOrder: temp },
+    });
+    await tx.quoteLineExecutionTask.update({
+      where: { id: b.id },
+      data: { sortOrder: a.sortOrder },
+    });
+    await tx.quoteLineExecutionTask.update({
+      where: { id: a.id },
+      data: { sortOrder: b.sortOrder },
+    });
 
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
@@ -481,91 +597,73 @@ export async function deleteQuoteLineExecutionTaskAction(
   return {};
 }
 
-export async function moveQuoteLineExecutionTaskAction(
+export async function generateQuoteLineExecutionPlanAction(
   quoteId: string,
   lineItemId: string,
-  taskId: string,
-  direction: "up" | "down",
-  _prevState: QuoteLineExecutionFormState,
-  formData: FormData,
 ): Promise<QuoteLineExecutionFormState> {
-  void formData;
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
-  const kid = taskId.trim();
-  if (!qid || !lid || !kid) {
-    return { error: "Missing quote, line item, or task." };
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item." };
   }
 
   const ctx = await getRequestContextOrThrow();
 
-  const ok = await db.$transaction(async (tx) => {
-    const existing = await tx.quoteLineExecutionTask.findFirst({
-      where: { id: kid, quoteLineItemId: lid },
-      include: {
-        quoteLineItem: {
-          select: {
-            quoteId: true,
-            quote: { select: { organizationId: true, status: true } },
-          },
-        },
+  try {
+    const line = await db.quoteLineItem.findFirst({
+      where: {
+        id: lid,
+        quoteId: qid,
+        quote: { organizationId: ctx.organizationId },
       },
+      select: { description: true },
     });
-    if (
-      !existing ||
-      existing.quoteLineItem.quoteId !== qid ||
-      existing.quoteLineItem.quote.organizationId !== ctx.organizationId ||
-      !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(existing.quoteLineItem.quote.status)
-    ) {
-      return false;
+
+    if (!line) {
+      return { error: "Line item not found." };
     }
 
-    const quoteHasJob = await tx.job.findFirst({
-      where: { quoteId: qid, organizationId: ctx.organizationId },
-      select: { id: true },
-    });
-    if (quoteHasJob) {
-      return false;
-    }
+    const plan = await AIService.generateExecutionPlan(line.description);
 
-    const stageId = existing.stageId;
-    const peers = await tx.quoteLineExecutionTask.findMany({
-      where: { quoteLineItemId: lid, stageId },
-      orderBy: { sortOrder: "asc" },
-    });
-    const idx = peers.findIndex((p) => p.id === kid);
-    if (idx < 0) {
-      return false;
-    }
-    const swapWith = direction === "up" ? idx - 1 : idx + 1;
-    if (swapWith < 0 || swapWith >= peers.length) {
-      return true;
-    }
+    await db.$transaction(async (tx) => {
+      for (let i = 0; i < plan.tasks.length; i++) {
+        const gTask = plan.tasks[i];
+        const sortOrder = await nextSortOrderInStage(tx, lid, null);
 
-    const a = peers[idx];
-    const b = peers[swapWith];
-    const temp = 1_000_000 + Math.floor(Math.random() * 100_000);
-    await tx.quoteLineExecutionTask.update({
-      where: { id: a.id },
-      data: { sortOrder: temp },
-    });
-    await tx.quoteLineExecutionTask.update({
-      where: { id: b.id },
-      data: { sortOrder: a.sortOrder },
-    });
-    await tx.quoteLineExecutionTask.update({
-      where: { id: a.id },
-      data: { sortOrder: b.sortOrder },
+        await tx.quoteLineExecutionTask.create({
+          data: {
+            quoteLineItemId: lid,
+            sourceType: LineItemTemplateTaskSource.CUSTOM,
+            title: gTask.title,
+            category: gTask.category,
+            instructions: gTask.instructions,
+            providesSignals: gTask.providesSignals,
+            requiresSignals: gTask.requiresSignals,
+            hardSignal: false,
+            requirementsJson: {
+              checklist: gTask.checklist.map(label => ({
+                id: crypto.randomUUID(),
+                label,
+              })),
+            } as Prisma.InputJsonValue,
+            partsRequiredJson: {
+              resources: gTask.resources.map(r => ({
+                id: crypto.randomUUID(),
+                ...r,
+              })),
+            } as Prisma.InputJsonValue,
+            sortOrder,
+          },
+        });
+      }
+
+      await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     });
 
-    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
-    return true;
-  });
-
-  if (!ok) {
-    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+    revalidatePath(`/quotes/${qid}`);
+    return {};
+  } catch (e) {
+    console.error("Failed to generate execution plan", e);
+    return { error: "Failed to generate AI execution plan." };
   }
-
-  revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
-  return {};
 }

@@ -12,7 +12,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
-import { Briefcase, CheckCircle2, ClipboardList, Info, ShieldAlert, Zap } from "lucide-react";
+import { Briefcase, CheckCircle2, ClipboardList, Info, ShieldAlert, Zap, Package, Hammer, ListChecks } from "lucide-react";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -43,7 +43,7 @@ export function QuoteExecutionReviewPreviewView({
   reusableTaskOptions: ReusableTaskPickerOption[];
   stages: { id: string; name: string }[];
 }) {
-  const { summary, handshakes, orphans, lineReadiness } = model;
+  const { summary, handshakes, orphans, lineReadiness, equipmentRollup } = model;
 
   return (
     <div className="space-y-6">
@@ -146,6 +146,59 @@ export function QuoteExecutionReviewPreviewView({
             </WorkspacePanel>
           )}
 
+          {equipmentRollup.length > 0 && (
+            <WorkspacePanel>
+              <SectionHeading
+                title="Equipment & Tools Rollup"
+                description="Aggregated list of all equipment and tools required across all tasks in this quote."
+              />
+              <div className="mt-4 overflow-hidden rounded-lg border border-border bg-surface">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-foreground/[0.02] text-foreground-subtle uppercase tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Item</th>
+                      <th className="px-4 py-3 text-right">Qty</th>
+                      <th className="px-4 py-3">Tasks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {equipmentRollup.map((item, i) => (
+                      <tr key={i} className="hover:bg-foreground/[0.01]">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {item.isEquipment ? (
+                            <div className="flex items-center gap-1.5 text-accent">
+                              <Hammer className="size-3" />
+                              <span>Equipment</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-success">
+                              <Package className="size-3" />
+                              <span>Part/Material</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-foreground">{item.name}</td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {item.quantity} {item.unit}
+                        </td>
+                        <td className="px-4 py-3 text-foreground-muted">
+                          <div className="flex flex-wrap gap-1">
+                            {item.taskTitles.map((title, j) => (
+                              <span key={j} className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px]">
+                                {title}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </WorkspacePanel>
+          )}
+
           <WorkspacePanel>
             <SectionHeading
               title="Line breakdown"
@@ -159,9 +212,23 @@ export function QuoteExecutionReviewPreviewView({
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground">{row.description}</p>
-                        <p className="mt-1 text-xs text-foreground-muted">
-                          {row.taskCount} {row.taskCount === 1 ? "task" : "tasks"}
-                        </p>
+                        <div className="mt-1 flex items-center gap-3 text-xs text-foreground-muted">
+                          <span>
+                            {row.taskCount} {row.taskCount === 1 ? "task" : "tasks"}
+                          </span>
+                          {row.checklistCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <ListChecks className="size-3 text-foreground-subtle" />
+                              0/{row.checklistCount} {row.checklistCount === 1 ? "step" : "steps"}
+                            </span>
+                          )}
+                          {row.equipmentCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Hammer className="size-3 text-foreground-subtle" />
+                              {row.equipmentCount} {row.equipmentCount === 1 ? "item" : "items"}
+                            </span>
+                          )}
+                        </div>
                         
                         {(row.providesSignals.length > 0 || row.requiresSignals.length > 0) && (
                           <div className="mt-3 flex flex-wrap gap-3">

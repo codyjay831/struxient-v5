@@ -65,6 +65,7 @@ export default async function QuoteExecutionReviewPreviewPage({
                 requiresSignals: true,
                 hardSignal: true,
                 requirementsJson: true,
+                partsRequiredJson: true,
               },
             },
           },
@@ -104,6 +105,7 @@ export default async function QuoteExecutionReviewPreviewPage({
       requiresSignals: t.requiresSignals,
       hardSignal: t.hardSignal,
       requirementsJson: t.requirementsJson,
+      partsRequiredJson: t.partsRequiredJson,
     }));
   }
 
@@ -140,6 +142,8 @@ export default async function QuoteExecutionReviewPreviewPage({
         requiresSignals: t.requiresSignals,
         hardSignal: t.hardSignal,
         sortOrder: t.sortOrder,
+        requirementsJson: t.requirementsJson,
+        partsRequiredJson: t.partsRequiredJson,
       })),
     })),
   });

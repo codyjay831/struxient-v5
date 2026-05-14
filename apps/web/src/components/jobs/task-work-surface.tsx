@@ -14,6 +14,7 @@ import {
 import {
   completeJobTaskAction,
   overrideJobTaskReadinessAction,
+  toggleJobTaskChecklistItemAction,
 } from "@/app/(workspace)/jobs/job-task-actions";
 import {
   uploadTaskAttachmentAction,
@@ -272,6 +273,17 @@ export function TaskWorkSurface({
     }
   };
 
+  const handleToggleChecklist = (itemId: string, completed: boolean) => {
+    startTransition(async () => {
+      const result = await toggleJobTaskChecklistItemAction(task.id, itemId, completed);
+      if (result.error) {
+        setActionMessage({ tone: "error", text: result.error });
+      } else {
+        refreshAfterMutation();
+      }
+    });
+  };
+
   return (
     <>
     <div className="space-y-6">
@@ -363,6 +375,44 @@ export function TaskWorkSurface({
             Instructions
           </h4>
           <p className="mt-2 text-base leading-relaxed text-foreground-muted sm:text-sm">{task.instructions}</p>
+        </div>
+      )}
+
+      {requirements.checklist && requirements.checklist.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+            Checklist
+          </h4>
+          <div className="space-y-2">
+            {requirements.checklist.map((item) => (
+              <label
+                key={item.id}
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors sm:rounded-lg sm:p-3 ${
+                  item.completedAt
+                    ? "border-approved/20 bg-approved/5 text-approved-strong"
+                    : "border-border bg-surface hover:border-border-strong"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-5 w-5 rounded border-border text-approved focus:ring-approved sm:h-4 sm:w-4"
+                  checked={!!item.completedAt}
+                  disabled={isPending || isCompleted}
+                  onChange={(e) => handleToggleChecklist(item.id, e.target.checked)}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-base font-medium sm:text-sm ${item.completedAt ? "line-through opacity-60" : ""}`}>
+                    {item.label}
+                  </p>
+                  {item.completedAt && (
+                    <p className="mt-0.5 text-[10px] opacity-60">
+                      Done {new Date(item.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
       )}
 

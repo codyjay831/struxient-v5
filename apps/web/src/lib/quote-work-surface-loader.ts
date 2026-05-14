@@ -122,6 +122,7 @@ export async function loadQuoteWorkSurface(
               requiresSignals: true,
               hardSignal: true,
               requirementsJson: true,
+              partsRequiredJson: true,
             },
           },
         },
@@ -338,6 +339,7 @@ export async function loadQuoteWorkSurface(
       requiresSignals: t.requiresSignals,
       hardSignal: t.hardSignal,
       requirementsJson: t.requirementsJson,
+      partsRequiredJson: t.partsRequiredJson,
     }));
   }
 

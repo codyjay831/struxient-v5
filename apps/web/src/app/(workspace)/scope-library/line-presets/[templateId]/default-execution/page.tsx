@@ -79,6 +79,7 @@ export default async function LineItemTemplateDefaultExecutionPage({
       requiresSignals: t.requiresSignals,
       hardSignal: t.hardSignal,
       requirementsJson: t.requirementsJson,
+      partsRequiredJson: t.partsRequiredJson,
     };
     tasksByStage.get(t.stageId)?.push(row);
   }
