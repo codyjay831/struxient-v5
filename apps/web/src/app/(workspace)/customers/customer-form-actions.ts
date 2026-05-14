@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { SALES_INTAKE_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
-import { upsertCustomerServiceLocationFromIntakeSnapshot } from "@/lib/customer-service-location-from-sales-intake";
+import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/leads/lead-field-limits";
+import { upsertCustomerServiceLocationFromIntakeSnapshot } from "@/lib/customer-service-location-from-lead";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import { CUSTOMER_FIELD_LIMITS } from "./customer-field-limits";
 
@@ -94,9 +94,9 @@ export async function createCustomerAction(
   }
 
   const { snapshot, serviceAddressText } = resolveServiceLocationSnapshotFromFormData(formData);
-  if (serviceAddressText.length > SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress) {
+  if (serviceAddressText.length > LEAD_FIELD_LIMITS.publicIntakeServiceAddress) {
     return {
-      error: `Service address is too long (max ${SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
+      error: `Service address is too long (max ${LEAD_FIELD_LIMITS.publicIntakeServiceAddress} characters).`,
     };
   }
 
@@ -120,7 +120,7 @@ export async function createCustomerAction(
         customerId: row.id,
         snapshot,
         label: null,
-        createdFromSalesIntakeId: null,
+        createdFromLeadId: null,
       });
     }
     return row;

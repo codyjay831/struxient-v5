@@ -30,7 +30,7 @@ export class GcsStorageProvider implements StorageProvider {
     if (params.jobId && params.taskId) {
       return `orgs/${params.organizationId}/jobs/${params.jobId}/tasks/${params.taskId}/attachments/${params.attachmentId}/${safeName}`;
     }
-    return `orgs/${params.organizationId}/sales-intakes/attachments/${params.attachmentId}/${safeName}`;
+    return `orgs/${params.organizationId}/leads/attachments/${params.attachmentId}/${safeName}`;
   }
 
   async createSignedUploadUrl(params: {

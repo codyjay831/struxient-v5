@@ -1,23 +1,17 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
-  formatSalesIntakeSource,
-  formatSalesIntakeStatus,
-  salesIntakeStatusBadgeTone,
-} from "@/lib/sales-intake-display";
+  formatLeadChannel,
+  formatLeadStatus,
+  leadStatusBadgeTone,
+} from "@/lib/lead-display";
 import {
   formatMoneyCents,
   formatQuoteStatus,
@@ -26,7 +20,8 @@ import {
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import { CustomerServiceLocationsPanel } from "@/components/customers/customer-service-locations-panel";
-import { Phone, UserRound, Mail, ExternalLink, History, Briefcase, FileText, ChevronRight, ArrowUpRight } from "lucide-react";
+import { deriveLeadTitle } from "@/lib/lead/lead-projection";
+import { Phone, UserRound, Mail, History, Briefcase, FileText, ChevronRight, ArrowUpRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +59,8 @@ export default async function CustomerDetailPage({
         },
         orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
         include: {
-          createdFromSalesIntake: {
-            select: { id: true, title: true, source: true },
+          createdFromLead: {
+            select: { id: true, contact: true, request: true, channel: true },
           },
         },
       })
@@ -119,7 +114,7 @@ export default async function CustomerDetailPage({
   const createdLabel = new Date(customer.createdAt).toLocaleString();
   const updatedLabel = new Date(customer.updatedAt).toLocaleString();
 
-  const linkedSalesIntakes = await db.salesIntake.findMany({
+  const linkedLeads = await db.lead.findMany({
     where: {
       organizationId: ctx.organizationId,
       customerId: customer.id,
@@ -173,7 +168,7 @@ export default async function CustomerDetailPage({
 
   const lastContact = [
     customer.updatedAt,
-    ...linkedSalesIntakes.map((l) => l.updatedAt),
+    ...linkedLeads.map((l) => l.updatedAt),
     ...linkedQuotes.map((q) => q.updatedAt),
     ...linkedJobs.map((j) => j.updatedAt),
   ].reduce((max, curr) => (curr > max ? curr : max), customer.createdAt);
@@ -184,15 +179,14 @@ export default async function CustomerDetailPage({
     year: "numeric",
   });
 
-  const linkedSalesIntakeCount = linkedSalesIntakes.length;
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
-  /* Steer users back to the Sales Intake workspace for active sales work. The Sales Intake
+  /* Steer users back to the Lead workspace for active sales work. The Lead
      workspace is the primary place to build/send quotes, capture address, and
      activate jobs — the customer profile is the saved history view. If there
-     is an in-progress sales intake, primary CTA is "Open sales intake", not "Create quote". */
-  const activeSalesIntake = linkedSalesIntakes.find(
-    (l) => l.status === "OPEN" || l.status === "QUALIFYING",
+     is an in-progress lead, primary CTA is "Open lead", not "Create quote". */
+  const activeLead = linkedLeads.find(
+    (l) => l.status === "NEW" || l.status === "TRIAGING",
   ) ?? null;
 
   return (
@@ -241,12 +235,12 @@ export default async function CustomerDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {activeSalesIntake && (
+          {activeLead && (
             <Link
-              href={`/sales/${activeSalesIntake.id}`}
+              href={`/leads/${activeLead.id}`}
               className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
             >
-              Open active sales intake
+              Open active lead
               <ArrowUpRight className="ml-1.5 size-3.5" />
             </Link>
           )}
@@ -384,7 +378,17 @@ export default async function CustomerDetailPage({
               longitude: loc.longitude,
               source: loc.source,
               isPrimary: loc.isPrimary,
-              createdFromSalesIntake: loc.createdFromSalesIntake,
+              createdFromLead: loc.createdFromLead
+                ? {
+                    id: loc.createdFromLead.id,
+                    title: deriveLeadTitle(
+                      loc.createdFromLead.contact,
+                      loc.createdFromLead.request,
+                    ),
+                    channel: loc.createdFromLead.channel,
+                    source: loc.createdFromLead.channel,
+                  }
+                : null,
             }))}
           />
         </section>
@@ -451,30 +455,30 @@ export default async function CustomerDetailPage({
                   aria-hidden
                 />
                 <span className="text-xs font-medium text-foreground-muted group-open:text-foreground transition-colors">
-                  View archived sales intakes, closed quotes, and completed jobs
+                  View archived leads, closed quotes, and completed jobs
                 </span>
               </summary>
               <div className="mt-6 space-y-8 border-t border-border pt-6">
-                {/* Sales Intakes History */}
+                {/* Leads History */}
                 <div>
                   <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
-                    Sales Intakes
+                    Leads
                   </h3>
-                  {linkedSalesIntakes.length === 0 ? (
-                    <p className="text-xs text-foreground-subtle px-1">No sales intakes on file.</p>
+                  {linkedLeads.length === 0 ? (
+                    <p className="text-xs text-foreground-subtle px-1">No leads on file.</p>
                   ) : (
                     <ul className="divide-y divide-border rounded-lg border border-border">
-                      {linkedSalesIntakes.map((l) => (
+                      {linkedLeads.map((l) => (
                         <li key={l.id} className="flex items-center justify-between px-3 py-2.5">
                           <div className="min-w-0 flex-1">
-                            <Link href={`/sales/${l.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
+                            <Link href={`/leads/${l.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
                               {l.title}
                             </Link>
                             <p className="text-[10px] text-foreground-subtle mt-0.5">
-                              Created {new Date(l.createdAt).toLocaleDateString()} · {formatSalesIntakeSource(l.source)}
+                              Created {new Date(l.createdAt).toLocaleDateString()} · {formatLeadChannel(l.source)}
                             </p>
                           </div>
-                          <StatusBadge label={formatSalesIntakeStatus(l.status)} tone={salesIntakeStatusBadgeTone(l.status)} />
+                          <StatusBadge label={formatLeadStatus(l.status)} tone={leadStatusBadgeTone(l.status)} />
                         </li>
                       ))}
                     </ul>

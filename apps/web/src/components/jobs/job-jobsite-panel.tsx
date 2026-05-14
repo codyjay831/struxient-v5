@@ -19,11 +19,11 @@ const secondaryBtnClass =
 export function JobJobsitePanel({
   jobsiteAddressLine,
   customerId,
-  salesIntakeEditHref,
+  leadEditHref,
 }: {
   jobsiteAddressLine: string | null;
   customerId: string | null;
-  salesIntakeEditHref: string | null;
+  leadEditHref: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -52,13 +52,13 @@ export function JobJobsitePanel({
                       Add jobsite address
                     </button>
                   ) : null}
-                  {!customerId && salesIntakeEditHref ? (
-                    <Link href={salesIntakeEditHref} className={primaryBtnClass}>
+                  {!customerId && leadEditHref ? (
+                    <Link href={leadEditHref} className={primaryBtnClass}>
                       Add on request
                     </Link>
                   ) : null}
-                  {customerId && salesIntakeEditHref ? (
-                    <Link href={salesIntakeEditHref} className={secondaryBtnClass}>
+                  {customerId && leadEditHref ? (
+                    <Link href={leadEditHref} className={secondaryBtnClass}>
                       Edit request record
                     </Link>
                   ) : null}

@@ -1,24 +1,6 @@
 "use server";
 
-import {
-  Prisma,
-  QuoteCheckpointKind,
-  QuoteCheckpointSource,
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
-  QuoteStatus,
-} from "@prisma/client";
-import { randomBytes } from "crypto";
-import {
-  getSalesIntakeCommercialProgress,
-  type SalesIntakeProgressQuoteInput,
-} from "@/lib/sales-commercial-progress";
-import { prepareCustomerFromSalesIntake } from "@/lib/sales-intake-create-customer";
-import {
-  attachIntakeServiceLocationToCustomerFromSalesIntake,
-  intakeSnapshotForCustomerFromSalesIntake,
-  formatPrimaryServiceLocationLineForQuoteNotes,
-} from "@/lib/customer-service-location-from-sales-intake";
+import { Prisma, QuoteStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parsePositiveQuantityString, parseUsdStringToCents } from "@/lib/quote-money";
@@ -28,19 +10,13 @@ import {
 } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { promoteLeadToQuote } from "@/lib/lead/promote-to-quote";
 import type { QuoteRollupTx } from "@/lib/quote-line-item-template-apply-tx";
 import {
   performApplyLineItemTemplateToQuoteTx,
   recalculateQuoteRollupsInTx,
 } from "@/lib/quote-line-item-template-apply-tx";
 
-import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
-import {
-  QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
-  quoteRowToCustomerPreviewInput,
-  quoteSelectForCustomerProposalCheckpoint,
-  serializeCustomerPreviewDocumentForCheckpoint,
-} from "@/lib/quote-checkpoint-snapshot";
 import {
   QUOTE_FIELD_LIMITS,
   QUOTE_LINE_FIELD_LIMITS,
@@ -242,31 +218,31 @@ function parseLineItemTemplateUpsertForm(
 }
 
 function defaultTitleFromContext(params: {
-  salesIntake: { title: string } | null;
+  lead: { title: string } | null;
   customer: { displayName: string } | null;
 }): string {
-  const { salesIntake, customer } = params;
-  if (customer && salesIntake) {
+  const { lead, customer } = params;
+  if (customer && lead) {
     return `Quote — ${customer.displayName}`;
   }
   if (customer) {
     return `Quote — ${customer.displayName}`;
   }
-  if (salesIntake) {
-    return `Quote — ${salesIntake.title}`;
+  if (lead) {
+    return `Quote — ${lead.title}`;
   }
   return "";
 }
 
 /** Minimal DB surface for draft resolution + insert (plain client or interactive tx). */
-type QuoteDraftDb = Pick<typeof db, "salesIntake" | "customer" | "quote">;
+type QuoteDraftDb = Pick<typeof db, "lead" | "customer" | "quote">;
 
 type OrgScope = { id: string };
 
 type ResolvedDraftQuoteInsert = {
   organizationId: string;
   customerId: string | null;
-  salesIntakeId: string | null;
+  leadId: string | null;
   title: string;
   internalNotes: string | null;
 };
@@ -275,28 +251,28 @@ async function resolveCreateQuoteDraftFromFormFields(
   exec: QuoteDraftDb,
   org: OrgScope,
   input: {
-    formSalesIntakeId: string | null;
+    formLeadId: string | null;
     formCustomerId: string | null;
-    /** Trimmed workspace title — empty string lets the server derive from sales intake/customer. */
+    /** Trimmed workspace title — empty string lets the server derive from lead/customer. */
     title: string;
     internalNotes: string | null;
   },
 ): Promise<{ ok: false; error: string } | { ok: true; data: ResolvedDraftQuoteInsert }> {
-  const { formSalesIntakeId, formCustomerId, internalNotes } = input;
+  const { formLeadId, formCustomerId, internalNotes } = input;
   let title = input.title;
 
-  const salesIntake = formSalesIntakeId
-    ? await exec.salesIntake.findFirst({
-        where: { id: formSalesIntakeId, organizationId: org.id },
+  const lead = formLeadId
+    ? await exec.lead.findFirst({
+        where: { id: formLeadId, organizationId: org.id },
         select: { id: true, title: true, customerId: true },
       })
     : null;
 
-  if (formSalesIntakeId && !salesIntake) {
+  if (formLeadId && !lead) {
     return {
       ok: false,
       error:
-        "That sales intake was not found in your organization. Remove stale context or start from Quotes without a sales intake link.",
+        "That lead was not found in your organization. Remove stale context or start from Quotes without a lead link.",
     };
   }
 
@@ -315,33 +291,33 @@ async function resolveCreateQuoteDraftFromFormFields(
     };
   }
 
-  if (salesIntake && customer) {
-    if (salesIntake.customerId != null && salesIntake.customerId !== customer.id) {
+  if (lead && customer) {
+    if (lead.customerId != null && lead.customerId !== customer.id) {
       return {
         ok: false,
         error:
-          "This sales intake is linked to a different customer than the one submitted. Refresh the page and try again from the sales intake or customer record.",
+          "This lead is linked to a different customer than the one submitted. Refresh the page and try again from the lead or customer record.",
       };
     }
   }
 
-  let resolvedSalesIntakeId: string | null = salesIntake?.id ?? null;
+  let resolvedLeadId: string | null = lead?.id ?? null;
   let resolvedCustomerId: string | null = null;
 
-  if (salesIntake && customer) {
+  if (lead && customer) {
     resolvedCustomerId = customer.id;
-  } else if (salesIntake && !customer) {
-    resolvedSalesIntakeId = salesIntake.id;
-    if (salesIntake.customerId) {
+  } else if (lead && !customer) {
+    resolvedLeadId = lead.id;
+    if (lead.customerId) {
       const linkedCustomer = await exec.customer.findFirst({
-        where: { id: salesIntake.customerId, organizationId: org.id },
+        where: { id: lead.customerId, organizationId: org.id },
         select: { id: true },
       });
       resolvedCustomerId = linkedCustomer?.id ?? null;
     } else {
       resolvedCustomerId = null;
     }
-  } else if (!salesIntake && customer) {
+  } else if (!lead && customer) {
     resolvedCustomerId = customer.id;
   }
 
@@ -356,7 +332,7 @@ async function resolveCreateQuoteDraftFromFormFields(
 
   if (!title) {
     title = defaultTitleFromContext({
-      salesIntake,
+      lead,
       customer: customerForTitle,
     });
   }
@@ -364,7 +340,7 @@ async function resolveCreateQuoteDraftFromFormFields(
   if (!title) {
     return {
       ok: false,
-      error: "Title is required when no sales intake or customer context is attached.",
+      error: "Title is required when no lead or customer context is attached.",
     };
   }
 
@@ -373,7 +349,7 @@ async function resolveCreateQuoteDraftFromFormFields(
     data: {
       organizationId: org.id,
       customerId: resolvedCustomerId,
-      salesIntakeId: resolvedSalesIntakeId,
+      leadId: resolvedLeadId,
       title,
       internalNotes,
     },
@@ -381,248 +357,38 @@ async function resolveCreateQuoteDraftFromFormFields(
 
 }
 
-function validateResolvedDraftQuoteFields(data: ResolvedDraftQuoteInsert): string | null {
-  const titleErr = enforceMaxLength("Title", data.title, QUOTE_FIELD_LIMITS.title);
-  if (titleErr?.error) {
-    return titleErr.error;
-  }
-  if (data.internalNotes) {
-    const notesErr = enforceMaxLength(
-      "Internal notes",
-      data.internalNotes,
-      QUOTE_FIELD_LIMITS.internalNotes,
-    );
-    if (notesErr?.error) {
-      return notesErr.error;
-    }
-  }
-  return null;
-}
-
-export type PerformCreateQuoteDraftFromSalesIntakeResult =
+export type PerformCreateQuoteDraftFromLeadResult =
   | { ok: true; quoteId: string; reusedExisting: boolean }
   | { ok: false; error: string };
 
 /**
- * Org-scoped draft quote creation anchored to a sales intake — same resolution defaults
- * as `/quotes/new?salesIntakeId=…` and {@link createQuoteDraftAction}, without redirect.
- *
- * When {@link getSalesIntakeCommercialProgress} already has an active linked quote,
- * returns that id and does not insert (idempotent for double-clicks / races).
- *
- * Uses a serializable transaction so concurrent "Start quote" requests do not
- * reliably create two active drafts for the same sales intake window.
+ * Org-scoped draft quote creation anchored to a lead.
+ * Now a thin wrapper around the promoteLeadToQuote use case.
  */
-export async function performCreateQuoteDraftFromSalesIntake(
-  salesIntakeId: string,
-): Promise<PerformCreateQuoteDraftFromSalesIntakeResult> {
-  const ctx = await getRequestContextOrThrow();
-  const id = salesIntakeId.trim();
-  if (!id) {
-    return { ok: false, error: "Missing sales intake record id." };
+export async function performCreateQuoteDraftFromLead(
+  leadId: string,
+): Promise<PerformCreateQuoteDraftFromLeadResult> {
+  const result = await promoteLeadToQuote(leadId);
+  if (result.ok && result.quoteId) {
+    return {
+      ok: true,
+      quoteId: result.quoteId,
+      reusedExisting: result.reusedExisting === true,
+    };
   }
-
-  try {
-    return await db.$transaction(
-      async (tx) => {
-        const salesIntake = await tx.salesIntake.findFirst({
-          where: { id, organizationId: ctx.organizationId },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            customerId: true,
-            email: true,
-            phone: true,
-            contactName: true,
-            notes: true,
-            source: true,
-            publicIntakeServiceLocation: true,
-            quotes: {
-              where: { status: { not: QuoteStatus.ARCHIVED } },
-              orderBy: { updatedAt: "desc" },
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                totalCents: true,
-                updatedAt: true,
-                _count: { select: { lineItems: true } },
-                job: { select: { id: true, status: true, organizationId: true } },
-              },
-            },
-            suggestedTemplateIds: true,
-          },
-        });
-
-        if (!salesIntake) {
-          return { ok: false as const, error: "That sales intake was not found in your organization." };
-        }
-
-        const progressQuoteInputs: SalesIntakeProgressQuoteInput[] = salesIntake.quotes.map((q) => ({
-          id: q.id,
-          title: q.title,
-          status: q.status,
-          totalCents: q.totalCents,
-          lineItemCount: q._count.lineItems,
-          updatedAt: q.updatedAt,
-          job:
-            q.job && q.job.organizationId === ctx.organizationId
-              ? { id: q.job.id, status: q.job.status }
-              : null,
-        }));
-
-        const progress = getSalesIntakeCommercialProgress({
-          salesIntake: {
-            status: salesIntake.status,
-            customerId: salesIntake.customerId,
-            email: salesIntake.email,
-            phone: salesIntake.phone,
-          },
-          quotes: progressQuoteInputs,
-        });
-
-        if (progress.isTerminal) {
-          return {
-            ok: false as const,
-            error:
-              "This sales intake is archived or closed. Open the full sales intake record if you need to change its status before starting a quote.",
-          };
-        }
-
-        if (progress.activeQuote) {
-          return {
-            ok: true as const,
-            quoteId: progress.activeQuote.id,
-            reusedExisting: true,
-          };
-        }
-
-        let resolvedCustomerId = salesIntake.customerId;
-
-        // Atomic Promotion: Create customer if missing
-        if (!resolvedCustomerId) {
-          const prep = prepareCustomerFromSalesIntake({
-            title: salesIntake.title,
-            contactName: salesIntake.contactName,
-            email: salesIntake.email,
-            phone: salesIntake.phone,
-            notes: salesIntake.notes,
-            source: salesIntake.source,
-          });
-
-          if (!prep.ok) {
-            return { ok: false as const, error: prep.error };
-          }
-
-          const customer = await tx.customer.create({
-            data: {
-              organizationId: ctx.organizationId,
-              ...prep.data,
-            },
-          });
-          resolvedCustomerId = customer.id;
-
-          // Carry forward service location
-          await attachIntakeServiceLocationToCustomerFromSalesIntake(tx, {
-            organizationId: ctx.organizationId,
-            customerId: customer.id,
-            salesIntakeId: salesIntake.id,
-            salesIntakeSource: salesIntake.source,
-            snapshot: intakeSnapshotForCustomerFromSalesIntake(salesIntake),
-          });
-
-          // Mark sales intake as CONVERTED
-          await tx.salesIntake.update({
-            where: { id: salesIntake.id },
-            data: {
-              customerId: customer.id,
-              status: "CONVERTED",
-              convertedAt: new Date(),
-            },
-          });
-        }
-
-        const resolved = await resolveCreateQuoteDraftFromFormFields(tx, { id: ctx.organizationId }, {
-          formSalesIntakeId: salesIntake.id,
-          formCustomerId: resolvedCustomerId,
-          title: "",
-          internalNotes: null,
-        });
-
-        if (!resolved.ok) {
-          return { ok: false as const, error: resolved.error };
-        }
-
-        const valErr = validateResolvedDraftQuoteFields(resolved.data);
-        if (valErr) {
-          return { ok: false as const, error: valErr };
-        }
-
-        const quote = await tx.quote.create({
-          data: {
-            organizationId: resolved.data.organizationId,
-            customerId: resolved.data.customerId,
-            salesIntakeId: resolved.data.salesIntakeId,
-            status: QuoteStatus.DRAFT,
-            title: resolved.data.title,
-            internalNotes: resolved.data.internalNotes,
-            subtotalCents: 0,
-            totalCents: 0,
-          },
-        });
-
-        if (salesIntake.suggestedTemplateIds.length > 0) {
-          for (const tid of salesIntake.suggestedTemplateIds) {
-            await performApplyLineItemTemplateToQuoteTx(tx, quote.id, tid, ctx.organizationId);
-          }
-        }
-
-        if (resolved.data.customerId) {
-          const primaryLoc = await tx.customerServiceLocation.findFirst({
-            where: {
-              organizationId: ctx.organizationId,
-              customerId: resolved.data.customerId,
-              isPrimary: true,
-            },
-            select: { formattedAddress: true, addressLine1: true },
-          });
-          const line = formatPrimaryServiceLocationLineForQuoteNotes(primaryLoc);
-          if (line) {
-            const prefix = `Primary service location:\n${line}\n\n`;
-            const merged = prefix + (resolved.data.internalNotes ?? "");
-            if (merged.length <= QUOTE_FIELD_LIMITS.internalNotes) {
-              await tx.quote.update({
-                where: { id: quote.id },
-                data: { internalNotes: merged },
-              });
-            }
-          }
-        }
-
-        return { ok: true as const, quoteId: quote.id, reusedExisting: false };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        maxWait: 5000,
-        timeout: 15000,
-      },
-    );
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
-      return {
-        ok: false,
-        error:
-          "Another change happened at the same moment. Refresh the workspace and try again.",
-      };
-    }
-    throw e;
-  }
+  return {
+    ok: false,
+    error: result.error ?? "Could not start the quote.",
+  };
 }
+
+import { createQuoteDraft } from "@/lib/quote/create-draft";
+import { sendQuote } from "@/lib/quote/send";
+import { approveQuote } from "@/lib/quote/approve";
 
 /**
  * Creates a DRAFT quote for the active development organization.
- * `salesIntakeId` / `customerId` in the form are untrusted—revalidated against org scope here.
+ * `leadId` / `customerId` in the form are untrusted—revalidated against org scope here.
  */
 export async function createQuoteDraftAction(
   _prevState: QuoteFormState,
@@ -630,13 +396,13 @@ export async function createQuoteDraftAction(
 ): Promise<QuoteFormState> {
   const ctx = await getRequestContextOrThrow();
 
-  const formSalesIntakeId = trimOrNull(formData.get("salesIntakeId"));
+  const formLeadId = trimOrNull(formData.get("leadId"));
   const formCustomerId = trimOrNull(formData.get("customerId"));
   const title = trimRequired(formData.get("title"));
   const internalNotes = trimOrNull(formData.get("internalNotes"));
 
   const resolved = await resolveCreateQuoteDraftFromFormFields(db, { id: ctx.organizationId }, {
-    formSalesIntakeId,
+    formLeadId,
     formCustomerId,
     title,
     internalNotes,
@@ -646,38 +412,30 @@ export async function createQuoteDraftAction(
     return { error: resolved.error };
   }
 
-  const valErr = validateResolvedDraftQuoteFields(resolved.data);
-  if (valErr) {
-    return { error: valErr };
-  }
-
-  const quote = await db.quote.create({
-    data: {
-      organizationId: resolved.data.organizationId,
-      customerId: resolved.data.customerId,
-      salesIntakeId: resolved.data.salesIntakeId,
-      status: QuoteStatus.DRAFT,
-      title: resolved.data.title,
-      internalNotes: resolved.data.internalNotes,
-      subtotalCents: 0,
-      totalCents: 0,
-    },
+  const result = await createQuoteDraft({
+    title: resolved.data.title,
+    customerId: resolved.data.customerId,
+    internalNotes: resolved.data.internalNotes,
   });
 
+  if (!result.ok || !result.quoteId) {
+    return { error: result.error };
+  }
+
   revalidatePath("/quotes");
-  redirect(`/quotes/${quote.id}`);
+  redirect(`/quotes/${result.quoteId}`);
 }
 
-async function normalizeQuoteLineExecutionOrdersTx(tx: QuoteRollupTx, quoteId: string) {
+async function normalizeQuoteLineSortOrdersTx(tx: QuoteRollupTx, quoteId: string) {
   const lines = await tx.quoteLineItem.findMany({
     where: { quoteId },
-    orderBy: [{ executionOrder: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: { id: true },
   });
   for (let i = 0; i < lines.length; i++) {
     await tx.quoteLineItem.update({
       where: { id: lines[i].id },
-      data: { executionOrder: i },
+      data: { sortOrder: i },
     });
   }
 }
@@ -754,10 +512,10 @@ export async function updateDraftQuoteDetailsAction(
 }
 
 /**
- * Appends sales intake notes to internal quote notes.
+ * Appends lead notes to internal quote notes.
  * `quoteId` must be supplied via `.bind(null, quote.id)`.
  */
-export async function copySalesIntakeToQuoteNotesAction(
+export async function copyLeadToQuoteNotesAction(
   quoteId: string,
   _prevState: QuoteFormState,
   formData: FormData,
@@ -774,21 +532,21 @@ export async function copySalesIntakeToQuoteNotesAction(
     await db.$transaction(async (tx) => {
       const quote = await tx.quote.findFirst({
         where: { id, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
-        select: { internalNotes: true, salesIntake: { select: { notes: true } } },
+        select: { internalNotes: true, lead: { select: { notes: true } } },
       });
 
       if (!quote) {
         throw new Error("QUOTE_NOT_FOUND");
       }
 
-      if (!quote.salesIntake?.notes) {
-        throw new Error("NO_SALES_INTAKE_NOTES");
+      if (!quote.lead?.notes) {
+        throw new Error("NO_LEAD_NOTES");
       }
 
-      const salesIntakeNotes = quote.salesIntake.notes;
+      const leadNotes = quote.lead.notes;
       const existingNotes = quote.internalNotes ?? "";
-      const separator = existingNotes ? "\n\nCopied from sales intake:\n" : "Copied from sales intake:\n";
-      const newNotes = `${existingNotes}${separator}${salesIntakeNotes}`;
+      const separator = existingNotes ? "\n\nCopied from lead:\n" : "Copied from lead:\n";
+      const newNotes = `${existingNotes}${separator}${leadNotes}`;
 
       if (newNotes.length > QUOTE_FIELD_LIMITS.internalNotes) {
         throw new Error("NOTES_TOO_LONG");
@@ -804,8 +562,8 @@ export async function copySalesIntakeToQuoteNotesAction(
       if (e.message === "QUOTE_NOT_FOUND") {
         return { error: "Quote not found or not a draft." };
       }
-      if (e.message === "NO_SALES_INTAKE_NOTES") {
-        return { error: "No intake notes found on the linked sales intake." };
+      if (e.message === "NO_LEAD_NOTES") {
+        return { error: "No intake notes found on the linked lead." };
       }
       if (e.message === "NOTES_TOO_LONG") {
         return { error: `Resulting notes would exceed the ${QUOTE_FIELD_LIMITS.internalNotes} character limit.` };
@@ -827,7 +585,7 @@ type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
 /**
  * Org-scoped add of a quote line item. No redirect, no revalidate — composable
  * by both the redirecting full-page action and workspace-safe wrappers used
- * inside QuoteWorkSurface popup/drawer/sales-intake-tab containers.
+ * inside QuoteWorkSurface popup/drawer/lead-tab containers.
  */
 export async function performAddQuoteLineItem(
   quoteId: string,
@@ -874,9 +632,6 @@ export async function performAddQuoteLineItem(
         lineTotalCents: input.lineTotalCents,
         internalNotes: input.internalNotes,
         sourceLineItemTemplateId: null,
-        executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
-        executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
-        executionOrder: nextOrder,
       },
     });
 
@@ -1059,7 +814,7 @@ export async function performDeleteQuoteLineItem(
       where: { id: lid },
     });
 
-    await normalizeQuoteLineExecutionOrdersTx(tx, qid);
+    await normalizeQuoteLineSortOrdersTx(tx, qid);
     await recalculateQuoteRollupsInTx(tx, { quoteId: qid, organizationId: ctx.organizationId });
     return { ok: true as const };
   });
@@ -1295,7 +1050,7 @@ export async function archiveLineItemTemplateAction(
 /**
  * Org-scoped apply of a Scope Library template to a draft quote. No redirect,
  * no revalidate — composed by both the redirecting full-page action and the
- * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/sales-intake-tab.
+ * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/lead-tab.
  *
  * Copies the template's commercial fields onto a new quote line item, copies
  * any default execution tasks onto the new line, and recalculates quote
@@ -1362,330 +1117,6 @@ export async function applyLineItemTemplateToQuoteAction(
 }
 
 /**
- * Org-scoped send checkpoint + status → SENT. No redirect — for Workstation and
- * for composition into {@link recordQuoteSendCheckpointAction}.
- */
-export async function performQuoteSendCheckpoint(quoteId: string): Promise<QuoteFormState> {
-  const id = quoteId.trim();
-  if (!id) {
-    return { error: "Missing quote record id." };
-  }
-
-  const ctx = await getRequestContextOrThrow();
-
-  const draftExists = await db.quote.findFirst({
-    where: {
-      id,
-      organizationId: ctx.organizationId,
-      status: QuoteStatus.DRAFT,
-    },
-    select: { id: true },
-  });
-  if (!draftExists) {
-    return {
-      error:
-        "Send is only available while the quote is a draft. If it was already sent, approved, or archived, open the quote and review its status.",
-    };
-  }
-
-  try {
-    await db.$transaction(async (tx) => {
-      const quote = await tx.quote.findFirst({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          status: QuoteStatus.DRAFT,
-        },
-        select: quoteSelectForCustomerProposalCheckpoint,
-      });
-
-      if (!quote) {
-        throw new Error("QUOTE_SEND_CHECKPOINT_RACE");
-      }
-
-      const input = quoteRowToCustomerPreviewInput(quote, ctx.organizationId);
-      const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
-        organizationDisplayName: ctx.organizationName,
-      });
-
-      const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
-
-      // Ensure share token exists
-      const existingToken = await tx.quoteShareToken.findUnique({
-        where: { quoteId: id },
-      });
-      if (!existingToken) {
-        await tx.quoteShareToken.create({
-          data: {
-            organizationId: ctx.organizationId,
-            quoteId: id,
-            token: randomBytes(32).toString("hex"),
-          },
-        });
-      }
-
-      const aggregate = await tx.quoteCheckpoint.aggregate({
-        where: {
-          organizationId: ctx.organizationId,
-          quoteId: id,
-          kind: QuoteCheckpointKind.SEND,
-        },
-        _max: { sequence: true },
-      });
-      const nextSequence = (aggregate._max.sequence ?? 0) + 1;
-
-      await tx.quoteCheckpoint.create({
-        data: {
-          organizationId: ctx.organizationId,
-          quoteId: id,
-          kind: QuoteCheckpointKind.SEND,
-          source: QuoteCheckpointSource.STAFF,
-          sequence: nextSequence,
-          schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
-          snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
-          staffOnlyJson: {
-            anyLineUsesInternalDescriptionForTitle: staffOnly.anyLineUsesInternalDescriptionForTitle,
-          } as Prisma.InputJsonValue,
-          quoteUpdatedAtAtCapture: quote.updatedAt,
-        },
-      });
-
-      const statusUpdate = await tx.quote.updateMany({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          status: QuoteStatus.DRAFT,
-        },
-        data: {
-          status: QuoteStatus.SENT,
-          lastSentEmailAt: new Date(),
-        },
-      });
-      if (statusUpdate.count !== 1) {
-        throw new Error("QUOTE_SEND_STATUS_RACE");
-      }
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message === "QUOTE_SEND_CHECKPOINT_RACE") {
-      return {
-        error:
-          "This quote changed state while sending (for example it was archived). Refresh the page and try again if it should still be a draft.",
-      };
-    }
-    if (e instanceof Error && e.message === "QUOTE_SEND_STATUS_RACE") {
-      return {
-        error:
-          "This quote could not be marked sent—another change may have happened at the same time. Refresh and try again.",
-      };
-    }
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return {
-        error:
-          "Another send was recorded at the same moment. Refresh the page and try again if you still need to send.",
-      };
-    }
-    throw e;
-  }
-
-  return {};
-}
-
-/**
- * Sends a draft quote: records a hidden SEND checkpoint (commercial proposal projection only) and sets status to SENT.
- * Does not email customers, does not include internal execution planning in the checkpoint payload, and does not create jobs.
- * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
- */
-export async function recordQuoteSendCheckpointAction(
-  quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
-  const result = await performQuoteSendCheckpoint(quoteId);
-  if (result.error) {
-    return result;
-  }
-  const id = quoteId.trim();
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
-  redirect(`/quotes/${id}`);
-}
-
-/**
- * Org-scoped approval checkpoint + status → APPROVED. No redirect — for Workstation
- * and for composition into {@link markQuoteApprovedAction}.
- */
-export async function performQuoteMarkApproved(quoteId: string): Promise<QuoteFormState> {
-  const id = quoteId.trim();
-  if (!id) {
-    return { error: "Missing quote record id." };
-  }
-
-  const ctx = await getRequestContextOrThrow();
-
-  const sentExists = await db.quote.findFirst({
-    where: {
-      id,
-      organizationId: ctx.organizationId,
-      status: QuoteStatus.SENT,
-    },
-    select: { id: true },
-  });
-  if (!sentExists) {
-    return {
-      error:
-        "Approval can only be recorded for a sent quote. Send the quote first, or refresh if the status already changed.",
-    };
-  }
-
-  try {
-    await db.$transaction(async (tx) => {
-      const quote = await tx.quote.findFirst({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          status: QuoteStatus.SENT,
-        },
-        select: quoteSelectForCustomerProposalCheckpoint,
-      });
-
-      if (!quote) {
-        throw new Error("QUOTE_APPROVAL_RACE");
-      }
-
-      const input = quoteRowToCustomerPreviewInput(quote, ctx.organizationId);
-      const { document, staffOnly } = buildCustomerQuotePreviewDocument(input, {
-        organizationDisplayName: ctx.organizationName,
-      });
-
-      const snapshotWire = serializeCustomerPreviewDocumentForCheckpoint(document);
-
-      const aggregate = await tx.quoteCheckpoint.aggregate({
-        where: {
-          organizationId: ctx.organizationId,
-          quoteId: id,
-          kind: QuoteCheckpointKind.APPROVAL,
-        },
-        _max: { sequence: true },
-      });
-      const nextSequence = (aggregate._max.sequence ?? 0) + 1;
-
-      await tx.quoteCheckpoint.create({
-        data: {
-          organizationId: ctx.organizationId,
-          quoteId: id,
-          kind: QuoteCheckpointKind.APPROVAL,
-          source: QuoteCheckpointSource.STAFF,
-          sequence: nextSequence,
-          schemaVersion: QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
-          snapshotJson: snapshotWire as unknown as Prisma.InputJsonValue,
-          staffOnlyJson: {
-            anyLineUsesInternalDescriptionForTitle: staffOnly.anyLineUsesInternalDescriptionForTitle,
-          } as Prisma.InputJsonValue,
-          quoteUpdatedAtAtCapture: quote.updatedAt,
-        },
-      });
-
-      const statusUpdate = await tx.quote.updateMany({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          status: QuoteStatus.SENT,
-        },
-        data: { status: QuoteStatus.APPROVED },
-      });
-      if (statusUpdate.count !== 1) {
-        throw new Error("QUOTE_APPROVAL_STATUS_RACE");
-      }
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message === "QUOTE_APPROVAL_RACE") {
-      return {
-        error:
-          "This quote changed state while recording approval. Refresh the page and try again if it should still be sent.",
-      };
-    }
-    if (e instanceof Error && e.message === "QUOTE_APPROVAL_STATUS_RACE") {
-      return {
-        error:
-          "This quote could not be marked approved—another change may have happened at the same time. Refresh and try again.",
-      };
-    }
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return {
-        error:
-          "Another approval row was written at the same moment. Refresh the page and try again if you still need to record acceptance.",
-      };
-    }
-    throw e;
-  }
-
-  return {};
-}
-
-/**
- * Staff-recorded customer acceptance of the commercial proposal (no e-sign provider in this build).
- * Creates an APPROVAL checkpoint with the same commercial projection shape as SEND, then sets status to APPROVED.
- * SENT-only. Does not create jobs or freeze internal execution planning.
- */
-export async function markQuoteApprovedAction(
-  quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
-  const result = await performQuoteMarkApproved(quoteId);
-  if (result.error) {
-    return result;
-  }
-  const id = quoteId.trim();
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
-  redirect(`/quotes/${id}`);
-}
-
-/**
- * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
- * Transitions draft, sent, or approved quotes → ARCHIVED; does not modify lines, totals, or links.
- */
-export async function archiveQuoteAction(
-  quoteId: string,
-  _prevState: QuoteFormState,
-  formData: FormData,
-): Promise<QuoteFormState> {
-  void formData;
-  const id = quoteId.trim();
-  if (!id) {
-    return { error: "Missing quote record id." };
-  }
-
-  const ctx = await getRequestContextOrThrow();
-  const result = await db.quote.updateMany({
-    where: {
-      id,
-      organizationId: ctx.organizationId,
-      status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] },
-    },
-    data: { status: QuoteStatus.ARCHIVED },
-  });
-
-  if (result.count === 0) {
-    return {
-      error:
-        "This quote could not be archived. It may already be archived, missing, or outside your organization.",
-    };
-  }
-
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
-  redirect(`/quotes/${id}`);
-}
-
-/**
- * `quoteId` must be supplied via `.bind(null, quote.id)` from the quote detail route.
  * Transitions ARCHIVED → DRAFT only; does not modify lines, totals, or links.
  */
 export async function restoreQuoteToDraftAction(
@@ -1713,6 +1144,123 @@ export async function restoreQuoteToDraftAction(
     return {
       error:
         "This quote could not be restored. It may already be a draft, missing, or outside your organization.",
+    };
+  }
+
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
+  redirect(`/quotes/${id}`);
+}
+
+export type PerformQuoteCheckpointResult = { error?: string };
+
+/**
+ * Org-scoped send checkpoint + SENT transition. Used by workstation actions.
+ */
+export async function performQuoteSendCheckpoint(
+  quoteId: string,
+  options: { expiresInDays?: number | null } = {},
+): Promise<PerformQuoteCheckpointResult> {
+  const result = await sendQuote(quoteId, { expiresInDays: options.expiresInDays });
+  if (!result.ok) {
+    return { error: result.error ?? "Failed to send quote." };
+  }
+  return {};
+}
+
+/**
+ * Org-scoped approval checkpoint + APPROVED transition. Used by workstation actions.
+ */
+export async function performQuoteMarkApproved(
+  quoteId: string,
+): Promise<PerformQuoteCheckpointResult> {
+  const result = await approveQuote(quoteId);
+  if (!result.ok) {
+    return { error: result.error ?? "Failed to approve quote." };
+  }
+  return {};
+}
+
+/**
+ * Records SEND checkpoint and sets quote → SENT. Redirects on success.
+ */
+export async function recordQuoteSendCheckpointAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const expiresInDaysStr = formData.get("expiresInDays") as string | null;
+  let expiresInDays: number | null = null;
+
+  if (expiresInDaysStr && expiresInDaysStr !== "never") {
+    const parsed = parseInt(expiresInDaysStr, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      expiresInDays = parsed;
+    }
+  }
+
+  const result = await performQuoteSendCheckpoint(quoteId, { expiresInDays });
+  if (result.error) {
+    return { error: result.error };
+  }
+
+  const id = quoteId.trim();
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * Records APPROVAL checkpoint and sets quote → APPROVED. Redirects on success.
+ */
+export async function markQuoteApprovedAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  _formData: FormData,
+): Promise<QuoteFormState> {
+  void _formData;
+  const result = await performQuoteMarkApproved(quoteId);
+  if (result.error) {
+    return { error: result.error };
+  }
+
+  const id = quoteId.trim();
+  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/quotes/${id}/execution-review`);
+  revalidatePath("/quotes");
+  redirect(`/quotes/${id}`);
+}
+
+/**
+ * Transitions a quote to ARCHIVED.
+ */
+export async function archiveQuoteAction(
+  quoteId: string,
+  _prevState: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  void formData;
+  const id = quoteId.trim();
+  if (!id) {
+    return { error: "Missing quote record id." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+  const result = await db.quote.updateMany({
+    where: {
+      id,
+      organizationId: ctx.organizationId,
+      status: { not: QuoteStatus.ARCHIVED },
+    },
+    data: { status: QuoteStatus.ARCHIVED },
+  });
+
+  if (result.count === 0) {
+    return {
+      error:
+        "This quote could not be archived. It may already be archived, missing, or outside your organization.",
     };
   }
 

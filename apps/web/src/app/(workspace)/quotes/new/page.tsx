@@ -13,7 +13,7 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 type SearchRecord = {
-  salesIntakeId?: string | string[];
+  leadId?: string | string[];
   customerId?: string | string[];
 };
 
@@ -34,24 +34,24 @@ export default async function NewQuotePage({
 }) {
   const sp = await searchParams;
   const ctx = await getRequestContextOrThrow();
-  const rawSalesIntake = firstString(sp.salesIntakeId);
+  const rawLead = firstString(sp.leadId);
   const rawCustomer = firstString(sp.customerId);
 
   let paramWarning: string | null = null;
-  let validatedSalesIntakeId: string | null = null;
+  let validatedLeadId: string | null = null;
   let validatedCustomerId: string | null = null;
   const contextLines: { label: string; value: string }[] = [];
   let defaultTitle = "";
 
-  const salesIntake = rawSalesIntake
-    ? await db.salesIntake.findFirst({
-        where: { id: rawSalesIntake, organizationId: ctx.organizationId },
+  const lead = rawLead
+    ? await db.lead.findFirst({
+        where: { id: rawLead, organizationId: ctx.organizationId },
         select: { id: true, title: true, customerId: true },
       })
     : null;
-  if (rawSalesIntake && !salesIntake) {
+  if (rawLead && !lead) {
     paramWarning =
-      "The sales intake id in the link was not found in your organization—it was ignored. You can still create a title-only draft or return to Sales Intakes.";
+      "The lead id in the link was not found in your organization—it was ignored. You can still create a title-only draft or return to Leads.";
   }
 
   const customer = rawCustomer
@@ -66,39 +66,39 @@ export default async function NewQuotePage({
     paramWarning = paramWarning ? `${paramWarning} ${extra}` : extra;
   }
 
-  if (salesIntake && customer) {
-    if (salesIntake.customerId != null && salesIntake.customerId !== customer.id) {
+  if (lead && customer) {
+    if (lead.customerId != null && lead.customerId !== customer.id) {
       paramWarning =
-        "This sales intake is linked to a different customer than the one in the URL. Sales intake and customer context were cleared—open Create quote from the sales intake or customer record that should anchor the quote.";
+        "This lead is linked to a different customer than the one in the URL. Lead and customer context were cleared—open Create quote from the lead or customer record that should anchor the quote.";
     } else {
-      validatedSalesIntakeId = salesIntake.id;
+      validatedLeadId = lead.id;
       validatedCustomerId = customer.id;
-      contextLines.push({ label: "Sales intake", value: salesIntake.title });
+      contextLines.push({ label: "Lead", value: lead.title });
       contextLines.push({ label: "Customer", value: customer.displayName });
       defaultTitle = customer.displayName;
     }
-  } else if (salesIntake && !rawCustomer) {
-    validatedSalesIntakeId = salesIntake.id;
-    contextLines.push({ label: "Sales intake", value: salesIntake.title });
-    if (salesIntake.customerId) {
+  } else if (lead && !rawCustomer) {
+    validatedLeadId = lead.id;
+    contextLines.push({ label: "Lead", value: lead.title });
+    if (lead.customerId) {
       const linked = await db.customer.findFirst({
-        where: { id: salesIntake.customerId, organizationId: ctx.organizationId },
+        where: { id: lead.customerId, organizationId: ctx.organizationId },
         select: { id: true, displayName: true },
       });
       if (linked) {
         validatedCustomerId = linked.id;
         contextLines.push({
-          label: "Customer (from sales intake)",
-          value: `${linked.displayName} — this quote will attach to both the sales intake and that customer because the sales intake already references them.`,
+          label: "Customer (from lead)",
+          value: `${linked.displayName} — this quote will attach to both the lead and that customer because the lead already references them.`,
         });
         defaultTitle = linked.displayName;
       } else {
-        defaultTitle = salesIntake.title;
+        defaultTitle = lead.title;
       }
     } else {
-      defaultTitle = salesIntake.title;
+      defaultTitle = lead.title;
     }
-  } else if (customer && !rawSalesIntake) {
+  } else if (customer && !rawLead) {
     validatedCustomerId = customer.id;
     contextLines.push({ label: "Customer", value: customer.displayName });
     defaultTitle = customer.displayName;
@@ -109,7 +109,7 @@ export default async function NewQuotePage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Quotes", href: "/sales?tab=proposals" },
+          { label: "Quotes", href: "/quotes" },
           { label: "New" },
         ]}
       />
@@ -117,7 +117,7 @@ export default async function NewQuotePage({
         title="New quote"
         description="Create a draft working quote in your development organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, live proposal preview from the saved record, and staff-only recorded send checkpoints when you want proof—not delivery or approval."
         actions={
-          <Link href="/sales?tab=proposals" className={listLinkClass}>
+          <Link href="/quotes" className={listLinkClass}>
             ← Quotes list
           </Link>
         }
@@ -126,12 +126,12 @@ export default async function NewQuotePage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Draft quote"
-          description="Organization scope is applied on the server from your session context—never from hidden fields alone. Sales intake and customer ids from the URL are validated here; create re-validates before insert."
+          description="Organization scope is applied on the server from your session context—never from hidden fields alone. Lead and customer ids from the URL are validated here; create re-validates before insert."
         />
         <QuoteDraftForm
-          cancelHref="/sales?tab=proposals"
+          cancelHref="/quotes"
           defaultTitle={defaultTitle}
-          validatedSalesIntakeId={validatedSalesIntakeId}
+          validatedLeadId={validatedLeadId}
           validatedCustomerId={validatedCustomerId}
           contextLines={contextLines}
           paramWarning={paramWarning}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, useEffect } from "react";
+import { useRef, useState, useTransition } from "react";
 import { X, Settings2, Check, Loader2 } from "lucide-react";
 import { updateWorkstationSettingsAction } from "@/app/(workspace)/workstation/workstation-settings-actions";
 
@@ -16,7 +16,7 @@ const QUICK_ACTION_OPTIONS = [
   { id: "browse-jobs", label: "Browse Jobs" },
 ];
 
-export function WorkstationSettingsDrawer({
+function WorkstationSettingsDrawerForm({
   initial,
 }: {
   initial: WorkstationSettingsInitial;
@@ -27,13 +27,6 @@ export function WorkstationSettingsDrawer({
   const [quickActions, setQuickActions] = useState<string[]>(initial.quickActions);
   const [urgentThresholdHours, setUrgentThresholdHours] = useState(initial.urgentThresholdHours);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // Sync state with props when they change (e.g. after revalidatePath)
-  useEffect(() => {
-    setShowQuickActions(initial.showQuickActions);
-    setQuickActions(initial.quickActions);
-    setUrgentThresholdHours(initial.urgentThresholdHours);
-  }, [initial.showQuickActions, initial.quickActions, initial.urgentThresholdHours]);
 
   function open() {
     dialogRef.current?.showModal();
@@ -188,4 +181,14 @@ export function WorkstationSettingsDrawer({
       </dialog>
     </>
   );
+}
+
+export function WorkstationSettingsDrawer({
+  initial,
+}: {
+  initial: WorkstationSettingsInitial;
+}) {
+  const settingsKey = JSON.stringify(initial);
+
+  return <WorkstationSettingsDrawerForm key={settingsKey} initial={initial} />;
 }

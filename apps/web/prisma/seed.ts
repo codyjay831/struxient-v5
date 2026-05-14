@@ -1,876 +1,411 @@
-import {
-  ExecutionStageKey,
-  LineItemTemplateTaskSource,
-  Prisma,
-  PrismaClient,
-  SalesIntakeSource,
-  SalesIntakeStatus,
-  QuoteStatus,
-  StaffRole,
-  TaskTemplateCategory,
-  JobStatus,
-  JobTaskStatus,
-  JobVisitStatus,
-  AttachmentStatus,
-  JobIssueType,
-  JobIssueSeverity,
-  JobIssueStatus,
-  JobPaymentRequirementStatus,
-  JobActivityType,
-  JobStageBlockType,
-} from "@prisma/client";
-import { join } from "path";
-import { mkdir, writeFile } from "fs/promises";
-import {
-  DEV_ORGANIZATION_ID,
-  DEV_ORGANIZATION_NAME,
-  DEV_ORGANIZATION_SLUG,
-  DEV_USER_ID,
-} from "../src/lib/dev-organization";
-import {
-  DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-  DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
-  DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-  DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-} from "../src/lib/public-request-settings-defaults";
-import {
-  QUOTE_LINE_LOCKED_STAGE_LABELS,
-  seedTradeLineItemPresets,
-} from "./seeds/trade-line-item-presets";
+/**
+ * Dev seed (post-Signal-Engine clean-break).
+ *
+ * Bootstraps a single development organization, owner membership, the 9 legacy
+ * stage rows the trade-preset seeds depend on (`legacy-${orgId}-${i}`), the
+ * trade-contractor Scope Library presets, and two demo draft quotes:
+ *
+ *   1. Kitchen Remodel — multi-trade scope materialized from the Scope Library.
+ *   2. Roof + Skylight — exercises the signal handshake end-to-end:
+ *      `dev-trade-roofing-full-tearoff-reroof` provides "roof-prepped" and
+ *      `dev-trade-roofing-skylight-install-fixed` requires it. Activating the
+ *      demo job and completing the dry-in task should unblock the skylight
+ *      install task.
+ *
+ * Stage rows are dynamic and per-org under the new Signal Engine model.
+ */
+
+import { LeadChannel, LeadStatus, Prisma, PrismaClient, QuoteStatus, StaffRole } from "@prisma/client";
+import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedKitchenRemodelDemoQuote } from "./seeds/demo-quote-kitchen-remodel";
+import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
 
 const prisma = new PrismaClient();
 
-/** Development seed data only — not production records. */
-async function main() {
-  console.log("[dev seed] Starting development seed…");
+const DEV_ORG_ID = "dev-org-id";
+const DEV_ORG_NAME = "Dev Contractor LLC";
+const DEV_ORG_SLUG = "dev-contractor";
+const DEV_USER_ID = "dev-user-id";
+const DEV_USER_EMAIL = "owner@dev.local";
+const DEV_USER_NAME = "Dev Owner";
+const DEV_CUSTOMER_ID = "dev-customer-seed";
 
-  const devOrg = await prisma.organization.upsert({
-    where: { id: DEV_ORGANIZATION_ID },
-    update: { name: DEV_ORGANIZATION_NAME, slug: DEV_ORGANIZATION_SLUG },
+const ROOF_SKYLIGHT_QUOTE_ID = "dev-quote-roof-skylight";
+
+/**
+ * Stage rows the trade-preset seeds index by position (`legacy-${orgId}-${i}`).
+ * Names mirror the historical 9-stage canon so existing trade preset
+ * `BUCKET_TO_LEGACY_ID` mappings stay correct.
+ */
+const LEGACY_STAGE_NAMES: ReadonlyArray<string> = [
+  "Pre-Construction",
+  "Permitting",
+  "Mobilization",
+  "Site Prep",
+  "Rough-In",
+  "Inspection",
+  "Finishes",
+  "Walkthrough",
+  "Closeout",
+];
+
+async function seedDevOrganization() {
+  await prisma.organization.upsert({
+    where: { id: DEV_ORG_ID },
+    update: { name: DEV_ORG_NAME, slug: DEV_ORG_SLUG },
+    create: { id: DEV_ORG_ID, name: DEV_ORG_NAME, slug: DEV_ORG_SLUG },
+  });
+}
+
+/**
+ * Public Request Settings — enables the public intake door at
+ * `/request/dev-contractor` and gives the form sensible defaults.
+ */
+async function seedPublicRequestSettings() {
+  await prisma.publicRequestSettings.upsert({
+    where: { organizationId: DEV_ORG_ID },
+    update: { enabled: true },
     create: {
-      id: DEV_ORGANIZATION_ID,
-      name: DEV_ORGANIZATION_NAME,
-      slug: DEV_ORGANIZATION_SLUG,
+      organizationId: DEV_ORG_ID,
+      enabled: true,
     },
   });
+}
 
-  console.log(`[dev seed] Organization: ${devOrg.name} (${devOrg.id})`);
-
-  const devUser = await prisma.user.upsert({
-    where: { id: DEV_USER_ID },
-    update: { email: "dev@struxient.local", name: "Dev User" },
-    create: {
-      id: DEV_USER_ID,
-      email: "dev@struxient.local",
-      name: "Dev User",
-    },
+/**
+ * Default WEB_FORM IntakeFormDefinition — what the public form renders when no
+ * custom form has been published. Mirrors `DEFAULT_INTAKE_FORM_SCHEMA` so the
+ * fallback path and the seeded path render identically.
+ */
+async function seedDefaultIntakeFormDefinition() {
+  const slug = "default";
+  const existing = await prisma.intakeFormDefinition.findUnique({
+    where: { organizationId_slug: { organizationId: DEV_ORG_ID, slug } },
+    select: { id: true },
   });
-
-  console.log(`[dev seed] User: ${devUser.name} (${devUser.id})`);
-
-  const devMembership = await prisma.membership.upsert({
-    where: {
-      userId_organizationId: {
-        userId: devUser.id,
-        organizationId: devOrg.id,
-      },
-    },
-    update: { role: StaffRole.OWNER },
-    create: {
-      userId: devUser.id,
-      organizationId: devOrg.id,
-      role: StaffRole.OWNER,
-    },
-  });
-
-  console.log(`[dev seed] Membership: ${devMembership.role} in ${devOrg.name}`);
-
-  const existingPublicSettings = await prisma.publicRequestSettings.findUnique({
-    where: { organizationId: devOrg.id },
-  });
-  if (!existingPublicSettings) {
-    await prisma.publicRequestSettings.create({
+  if (existing) {
+    await prisma.intakeFormDefinition.update({
+      where: { id: existing.id },
       data: {
-        organizationId: devOrg.id,
-        enabled: true,
-        formTitle: DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-        introMessage: DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
-        submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-        requestTypeOptionsJson: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+        name: "Service Request",
+        channel: LeadChannel.WEB_FORM,
+        isPublic: true,
+        isDefault: true,
+        archivedAt: null,
+        schema: DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
       },
     });
+    return;
   }
-
-  const devCustomers = [
-    {
-      id: "dev-customer-acme",
-      displayName: "Acme Corp",
-      companyName: "Acme Corporation",
-      email: "contact@acme.com",
-      phone: "555-0100",
-      notes: "[dev seed] Primary test customer.",
-      organizationId: devOrg.id,
+  await prisma.intakeFormDefinition.create({
+    data: {
+      organizationId: DEV_ORG_ID,
+      slug,
+      name: "Service Request",
+      channel: LeadChannel.WEB_FORM,
+      isPublic: true,
+      isDefault: true,
+      schema: DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
     },
-    {
-      id: "dev-customer-globex",
-      displayName: "Globex Corporation",
-      companyName: "Globex Corp",
-      email: "info@globex.com",
-      phone: "555-0200",
-      notes: "[dev seed] Secondary test customer.",
-      organizationId: devOrg.id,
-    },
-    {
-      id: "dev-customer-soylent",
-      displayName: "Soylent Corp",
-      companyName: "Soylent Corporation",
-      email: "hello@soylent.com",
-      phone: "555-0300",
-      notes: "[dev seed] Tertiary test customer.",
-      organizationId: devOrg.id,
-    },
-  ] as const;
-
-  for (const row of devCustomers) {
-    await prisma.customer.upsert({
-      where: { id: row.id },
-      update: {
-        displayName: row.displayName,
-        companyName: row.companyName,
-        email: row.email,
-        phone: row.phone,
-        notes: row.notes,
-        organizationId: row.organizationId,
-      },
-      create: row,
-    });
-  }
-
-  const convertedAt = new Date("2026-05-01T15:00:00.000Z");
-  const devSalesIntakes = [
-    {
-      id: "dev-lead-open-website",
-      organizationId: devOrg.id,
-      customerId: null as string | null,
-      status: SalesIntakeStatus.OPEN,
-      source: SalesIntakeSource.WEBSITE,
-      sourceDetail: "Contact form — commercial roof replacement",
-      title: "Website: roof replacement inquiry",
-      contactName: "Jordan Lee",
-      email: "jordan.lee@example.com",
-      phone: "555-0401",
-      notes: "[dev seed] Open lead; not linked to a customer.",
-      convertedAt: null as Date | null,
-    },
-    {
-      id: "dev-lead-qualifying-referral",
-      organizationId: devOrg.id,
-      customerId: null,
-      status: SalesIntakeStatus.QUALIFYING,
-      source: SalesIntakeSource.REFERRAL,
-      sourceDetail: "Referred by Riverside Builders",
-      title: "Referral: tenant improvement fit-out",
-      contactName: "Alex Morgan",
-      email: "alex.morgan@example.com",
-      phone: "555-0402",
-      notes: "[dev seed] In qualification; duplicate checks are future work.",
-      convertedAt: null,
-    },
-    {
-      id: "dev-lead-converted-acme",
-      organizationId: devOrg.id,
-      customerId: "dev-customer-acme",
-      status: SalesIntakeStatus.CONVERTED,
-      source: SalesIntakeSource.PHONE,
-      sourceDetail: null,
-      title: "Phone intake — Acme follow-up",
-      contactName: "Pat Acme",
-      email: "contact@acme.com",
-      phone: "555-0100",
-      notes: "[dev seed] Linked to dev-customer-acme for read-path testing.",
-      convertedAt,
-    },
-    {
-      id: "dev-lead-open-walkin",
-      organizationId: devOrg.id,
-      customerId: null,
-      status: SalesIntakeStatus.OPEN,
-      source: SalesIntakeSource.WALK_IN,
-      sourceDetail: null,
-      title: "Walk-in: service call scheduling",
-      contactName: null,
-      email: null,
-      phone: "555-0403",
-      notes: "[dev seed] Minimal contact fields.",
-      convertedAt: null,
-    },
-  ] as const;
-
-  for (const row of devSalesIntakes) {
-    await prisma.salesIntake.upsert({
-      where: { id: row.id },
-      update: {
-        organizationId: row.organizationId,
-        customerId: row.customerId,
-        status: row.status,
-        source: row.source,
-        sourceDetail: row.sourceDetail,
-        title: row.title,
-        contactName: row.contactName,
-        email: row.email,
-        phone: row.phone,
-        notes: row.notes,
-        convertedAt: row.convertedAt,
-      },
-      create: row,
-    });
-  }
-
-  const devQuoteRows = [
-    {
-      id: "dev-quote-title-only",
-      organizationId: devOrg.id,
-      customerId: null as string | null,
-      salesIntakeId: null as string | null,
-      status: QuoteStatus.DRAFT,
-      title: "[dev seed] Title-only draft quote",
-      internalNotes:
-        "[dev seed] No customer or sales intake; title satisfies the draft-only rule for orphan shells.",
-      subtotalCents: 0,
-      totalCents: 0,
-    },
-    {
-      id: "dev-quote-lead-website",
-      organizationId: devOrg.id,
-      customerId: null,
-      salesIntakeId: "dev-lead-open-website",
-      status: QuoteStatus.DRAFT,
-      title: "[dev seed] Sales intake-only draft (website roof inquiry)",
-      internalNotes: "[dev seed] Linked to dev-lead-open-website for read-path testing.",
-      subtotalCents: 0,
-      totalCents: 0,
-    },
-    {
-      id: "dev-quote-customer-globex",
-      organizationId: devOrg.id,
-      customerId: "dev-customer-globex",
-      salesIntakeId: null,
-      status: QuoteStatus.DRAFT,
-      title: "[dev seed] Customer-only draft (Globex)",
-      internalNotes: "[dev seed] Linked to dev-customer-globex for read-path testing.",
-      subtotalCents: 0,
-      totalCents: 0,
-    },
-    {
-      id: "dev-quote-archived-sample",
-      organizationId: devOrg.id,
-      customerId: null,
-      salesIntakeId: null,
-      status: QuoteStatus.ARCHIVED,
-      title: "[dev seed] Archived sample quote",
-      internalNotes: "[dev seed] Archived status for badge testing—no customer or sales intake.",
-      subtotalCents: 0,
-      totalCents: 0,
-    },
-    {
-      id: "dev-quote-acme-with-lines",
-      organizationId: devOrg.id,
-      customerId: "dev-customer-acme",
-      salesIntakeId: "dev-lead-converted-acme",
-      status: QuoteStatus.DRAFT,
-      title: "[dev seed] Acme quote with line items",
-      internalNotes:
-        "[dev seed] Linked to dev-customer-acme and dev-lead-converted-acme (consistent pair).",
-      subtotalCents: 85_000,
-      totalCents: 85_000,
-    },
-  ] as const;
-
-  for (const q of devQuoteRows) {
-    await prisma.quoteLineItem.deleteMany({ where: { quoteId: q.id } });
-    await prisma.quote.upsert({
-      where: { id: q.id },
-      update: {
-        organizationId: q.organizationId,
-        customerId: q.customerId,
-        salesIntakeId: q.salesIntakeId,
-        status: q.status,
-        title: q.title,
-        internalNotes: q.internalNotes,
-        subtotalCents: q.subtotalCents,
-        totalCents: q.totalCents,
-      },
-      create: {
-        id: q.id,
-        organizationId: q.organizationId,
-        customerId: q.customerId,
-        salesIntakeId: q.salesIntakeId,
-        status: q.status,
-        title: q.title,
-        internalNotes: q.internalNotes,
-        subtotalCents: q.subtotalCents,
-        totalCents: q.totalCents,
-      },
-    });
-  }
-
-  await prisma.quoteLineItem.deleteMany({
-    where: { quoteId: "dev-quote-acme-with-lines" },
   });
-  const devTaskTemplateSeeds = [
-    {
-      id: "dev-task-template-seed-panel-photos",
-      title: "[dev seed] Photo existing main panel",
-      stageKey: ExecutionStageKey.site_visit,
-      category: TaskTemplateCategory.PHOTO_EVIDENCE,
-      instructions: "Wide shot of the panel interior and label; note any visible defects.",
-    },
-    {
-      id: "dev-task-template-seed-permit-intake",
-      title: "[dev seed] Submit permit application",
-      stageKey: ExecutionStageKey.permitting,
-      category: TaskTemplateCategory.PERMIT,
-      instructions: "Use jurisdiction checklist; attach site photos and single-line when required.",
-    },
-    {
-      id: "dev-task-template-seed-closeout-walk",
-      title: "[dev seed] Customer walkthrough",
-      stageKey: ExecutionStageKey.closeout,
-      category: TaskTemplateCategory.CUSTOMER_COMMUNICATION,
-      instructions: null as string | null,
-    },
-  ] as const;
+}
 
-  for (const row of devTaskTemplateSeeds) {
-    await prisma.taskTemplate.upsert({
-      where: { id: row.id },
+async function seedDevOwnerUserAndMembership() {
+  await prisma.user.upsert({
+    where: { id: DEV_USER_ID },
+    update: { email: DEV_USER_EMAIL, name: DEV_USER_NAME },
+    create: { id: DEV_USER_ID, email: DEV_USER_EMAIL, name: DEV_USER_NAME },
+  });
+
+  const existing = await prisma.membership.findUnique({
+    where: { userId_organizationId: { userId: DEV_USER_ID, organizationId: DEV_ORG_ID } },
+  });
+  if (!existing) {
+    await prisma.membership.create({
+      data: {
+        userId: DEV_USER_ID,
+        organizationId: DEV_ORG_ID,
+        role: StaffRole.OWNER,
+      },
+    });
+  }
+}
+
+async function seedLegacyStages() {
+  for (let i = 0; i < LEGACY_STAGE_NAMES.length; i++) {
+    const id = `legacy-${DEV_ORG_ID}-${i}`;
+    await prisma.stage.upsert({
+      where: { id },
       update: {
-        organizationId: devOrg.id,
-        title: row.title,
-        stageKey: row.stageKey,
-        category: row.category,
-        instructions: row.instructions,
+        organizationId: DEV_ORG_ID,
+        name: LEGACY_STAGE_NAMES[i],
+        sortOrder: i,
         archivedAt: null,
       },
       create: {
-        id: row.id,
-        organizationId: devOrg.id,
-        title: row.title,
-        stageKey: row.stageKey,
-        category: row.category,
-        instructions: row.instructions,
+        id,
+        organizationId: DEV_ORG_ID,
+        name: LEGACY_STAGE_NAMES[i],
+        sortOrder: i,
       },
     });
   }
+}
 
-  const devLineTemplateWithExecutionId = "dev-line-template-seed-with-execution";
-  await prisma.lineItemTemplateTask.deleteMany({
-    where: { lineItemTemplateId: devLineTemplateWithExecutionId },
-  });
-  await prisma.lineItemTemplate.upsert({
-    where: { id: devLineTemplateWithExecutionId },
+async function seedDevCustomer() {
+  await prisma.customer.upsert({
+    where: { id: DEV_CUSTOMER_ID },
     update: {
-      organizationId: devOrg.id,
-      description: "[dev seed] Sample saved line item with default execution",
-      defaultQuantity: new Prisma.Decimal("1"),
-      defaultUnitAmountCents: 500_00,
-      defaultInternalNotes: "[dev seed] Two default tasks below (one from reusable, one custom).",
-      archivedAt: null,
+      organizationId: DEV_ORG_ID,
+      displayName: "Demo Customer",
+      email: "demo.customer@example.com",
     },
     create: {
-      id: devLineTemplateWithExecutionId,
-      organizationId: devOrg.id,
-      description: "[dev seed] Sample saved line item with default execution",
-      defaultQuantity: new Prisma.Decimal("1"),
-      defaultUnitAmountCents: 500_00,
-      defaultInternalNotes: "[dev seed] Two default tasks below (one from reusable, one custom).",
+      id: DEV_CUSTOMER_ID,
+      organizationId: DEV_ORG_ID,
+      displayName: "Demo Customer",
+      email: "demo.customer@example.com",
     },
   });
-  await prisma.lineItemTemplateTask.createMany({
-    data: [
-      {
-        id: "dev-line-template-task-from-reusable",
-        lineItemTemplateId: devLineTemplateWithExecutionId,
-        sourceType: LineItemTemplateTaskSource.TASK_TEMPLATE,
-        sourceTaskTemplateId: "dev-task-template-seed-panel-photos",
-        title: "[dev seed] Photo existing main panel",
-        stageKey: ExecutionStageKey.site_visit,
-        category: TaskTemplateCategory.PHOTO_EVIDENCE,
-        instructions:
-          "Wide shot of the panel interior and label; note any visible defects.",
-        sortOrder: 0,
-      },
-      {
-        id: "dev-line-template-task-custom",
-        lineItemTemplateId: devLineTemplateWithExecutionId,
-        sourceType: LineItemTemplateTaskSource.CUSTOM,
-        sourceTaskTemplateId: null,
-        title: "[dev seed] Confirm roof access ladder location",
-        stageKey: ExecutionStageKey.intake_review,
-        category: TaskTemplateCategory.GENERAL,
-        instructions: "Office calls ahead; note any HOA gate codes in internal notes.",
-        sortOrder: 0,
-      },
-    ],
-  });
+}
 
-  await prisma.quoteLineItem.createMany({
-    data: [
-      {
-        id: "dev-line-acme-roof",
-        quoteId: "dev-quote-acme-with-lines",
-        sortOrder: 0,
-        description: "[dev seed] Commercial roof labor (sample line)",
-        quantity: new Prisma.Decimal("4"),
-        unitAmountCents: 15_000,
-        lineTotalCents: 60_000,
-        internalNotes: "[dev seed] Estimator-facing note on a sample line.",
-      },
-      {
-        id: "dev-line-acme-materials",
-        quoteId: "dev-quote-acme-with-lines",
-        sortOrder: 1,
-        description: "[dev seed] Materials allowance",
-        quantity: new Prisma.Decimal("1"),
-        unitAmountCents: 25_000,
-        lineTotalCents: 25_000,
-        internalNotes: null,
-      },
-    ],
-  });
-
-  await prisma.quoteLineExecutionTask.deleteMany({
-    where: { quoteLineItemId: "dev-line-acme-roof" },
-  });
-  await prisma.quoteLineExecutionTask.create({
-    data: {
-      id: "dev-quote-line-exec-acme-roof",
-      quoteLineItemId: "dev-line-acme-roof",
-      sourceLineItemTemplateTaskId: null,
-      sourceTaskTemplateId: null,
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-      title: "[dev seed] Confirm roof access for estimator",
-      stageKey: ExecutionStageKey.intake_review,
-      category: TaskTemplateCategory.GENERAL,
-      instructions: "Optional dev seed row for quote-line draft execution.",
-      sortOrder: 0,
+/**
+ * Roof + Skylight handshake demo. Materializes both roofing templates onto a
+ * fresh draft quote so the cross-line `roof-prepped` signal is wired and the
+ * "Install fixed skylight" task waits on the dry-in task.
+ */
+async function seedRoofSkylightHandshakeDemoQuote() {
+  await prisma.quote.upsert({
+    where: { id: ROOF_SKYLIGHT_QUOTE_ID },
+    update: {
+      organizationId: DEV_ORG_ID,
+      customerId: DEV_CUSTOMER_ID,
+      status: QuoteStatus.DRAFT,
+      title: "Roof + Skylight — Signal Handshake Demo",
+      customerDocumentTitle: "Proposal: Re-Roof + Skylight Addition",
+      internalNotes:
+        "[dev seed] Demonstrates the Signal Engine — re-roof's dry-in task provides `roof-prepped`, which the skylight install task requires.",
+    },
+    create: {
+      id: ROOF_SKYLIGHT_QUOTE_ID,
+      organizationId: DEV_ORG_ID,
+      customerId: DEV_CUSTOMER_ID,
+      status: QuoteStatus.DRAFT,
+      title: "Roof + Skylight — Signal Handshake Demo",
+      customerDocumentTitle: "Proposal: Re-Roof + Skylight Addition",
+      internalNotes:
+        "[dev seed] Demonstrates the Signal Engine — re-roof's dry-in task provides `roof-prepped`, which the skylight install task requires.",
     },
   });
 
-  const tradeSeedResult = await seedTradeLineItemPresets(prisma, devOrg.id);
-  console.log(
-    `[dev seed] Trade presets: ${tradeSeedResult.tradesSeeded} trades, ` +
-      `${tradeSeedResult.lineItemsSeeded} line items, ` +
-      `${tradeSeedResult.tasksSeeded} default execution tasks.`,
-  );
-  for (const [bucketId, count] of Object.entries(tradeSeedResult.stageDistribution)) {
-    const label = QUOTE_LINE_LOCKED_STAGE_LABELS[
-      bucketId as keyof typeof QUOTE_LINE_LOCKED_STAGE_LABELS
-    ];
-    console.log(`[dev seed]   - ${label}: ${count} task${count === 1 ? "" : "s"}`);
+  await prisma.quoteLineItem.deleteMany({
+    where: { quoteId: ROOF_SKYLIGHT_QUOTE_ID },
+  });
+
+  const lines: { templateId: string; quantityOverride?: string }[] = [
+    { templateId: "dev-trade-roofing-full-tearoff-reroof" },
+    { templateId: "dev-trade-roofing-skylight-install-fixed" },
+  ];
+
+  let runningSubtotalCents = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const config = lines[i];
+    const template = await prisma.lineItemTemplate.findUnique({
+      where: { id: config.templateId, organizationId: DEV_ORG_ID },
+      include: { defaultExecutionTasks: true },
+    });
+    if (!template) {
+      console.warn(`[roof-skylight seed] missing template: ${config.templateId}`);
+      continue;
+    }
+
+    const quantity = new Prisma.Decimal(config.quantityOverride ?? template.defaultQuantity);
+    const lineTotalCents = quantity
+      .mul(new Prisma.Decimal(template.defaultUnitAmountCents))
+      .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
+      .toNumber();
+
+    runningSubtotalCents += lineTotalCents;
+
+    const createdLine = await prisma.quoteLineItem.create({
+      data: {
+        quoteId: ROOF_SKYLIGHT_QUOTE_ID,
+        sortOrder: i,
+        description: template.description,
+        customerScopeTitle: template.defaultCustomerScopeTitle,
+        customerScopeDescription: template.defaultCustomerScopeDescription,
+        customerIncludedNotes: template.defaultCustomerIncludedNotes,
+        customerExcludedNotes: template.defaultCustomerExcludedNotes,
+        customerPresentationGroup: template.defaultCustomerPresentationGroup,
+        quantity,
+        unitAmountCents: template.defaultUnitAmountCents,
+        lineTotalCents,
+        internalNotes: template.defaultInternalNotes,
+        sourceLineItemTemplateId: template.id,
+      },
+    });
+
+    if (template.defaultExecutionTasks.length > 0) {
+      await prisma.quoteLineExecutionTask.createMany({
+        data: template.defaultExecutionTasks.map((tt) => ({
+          quoteLineItemId: createdLine.id,
+          sourceLineItemTemplateTaskId: tt.id,
+          sourceTaskTemplateId: tt.sourceTaskTemplateId,
+          sourceType: tt.sourceType,
+          title: tt.title,
+          stageId: tt.stageId,
+          category: tt.category,
+          instructions: tt.instructions,
+          providesSignals: tt.providesSignals,
+          requiresSignals: tt.requiresSignals,
+          hardSignal: tt.hardSignal,
+          sortOrder: tt.sortOrder,
+        })),
+      });
+    }
   }
 
-  const demoQuoteResult = await seedKitchenRemodelDemoQuote(
-    prisma,
-    devOrg.id,
-    "dev-customer-acme",
-  );
-  console.log(
-    `[dev seed] Demo quote: "${demoQuoteResult.quoteId}" created with ${demoQuoteResult.lineCount} lines.`,
-  );
-
-  // --- EXECUTION SHOWCASE DEMO SCENARIO ---
-  console.log("[dev seed] Starting Execution Showcase demo scenario…");
-
-  const demoCustomer = await prisma.customer.upsert({
-    where: { id: "dev-customer-demo-execution" },
-    update: {
-      displayName: "Demo Customer — Execution Showcase",
-      companyName: "Execution Showcase Corp",
-      email: "demo@execution.struxient",
-      phone: "555-0999",
-      organizationId: devOrg.id,
-    },
-    create: {
-      id: "dev-customer-demo-execution",
-      displayName: "Demo Customer — Execution Showcase",
-      companyName: "Execution Showcase Corp",
-      email: "demo@execution.struxient",
-      phone: "555-0999",
-      organizationId: devOrg.id,
-    },
+  await prisma.quote.update({
+    where: { id: ROOF_SKYLIGHT_QUOTE_ID },
+    data: { subtotalCents: runningSubtotalCents, totalCents: runningSubtotalCents },
   });
 
-  const demoSalesIntakes = [
+  return { quoteId: ROOF_SKYLIGHT_QUOTE_ID, lineCount: lines.length, totalCents: runningSubtotalCents };
+}
+
+async function seedSampleLeads() {
+  const leads = [
     {
-      id: "dev-lead-unlinked-demo",
-      title: "Demo Sales Intake — Unlinked (Needs Customer)",
-      status: SalesIntakeStatus.OPEN,
-      source: SalesIntakeSource.WEBSITE,
-      contactName: "Unlinked User",
-      email: "unlinked@example.com",
-      organizationId: devOrg.id,
+      id: "seed-lead-1",
+      organizationId: DEV_ORG_ID,
+      channel: LeadChannel.WEB_FORM,
+      status: LeadStatus.NEW,
+      contact: {
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "555-0101",
+      },
+      request: {
+        type: "Roof Leak",
+        neededByBucket: "ASAP",
+        scope: "Small leak in the master bedroom ceiling after last night's storm.",
+      },
+      signals: {
+        urgencyHint: "HIGH",
+      },
     },
     {
-      id: "dev-lead-linked-no-quote",
-      title: "Demo Sales Intake — Linked (Ready for Quote)",
-      status: SalesIntakeStatus.QUALIFYING,
-      source: SalesIntakeSource.REFERRAL,
-      customerId: demoCustomer.id,
-      contactName: "No Quote User",
-      organizationId: devOrg.id,
+      id: "seed-lead-2",
+      organizationId: DEV_ORG_ID,
+      channel: LeadChannel.MANUAL,
+      status: LeadStatus.TRIAGING,
+      contact: {
+        name: "Jane Smith",
+        email: "jane.smith@example.com",
+        phone: "555-0102",
+      },
+      request: {
+        type: "Electrical Panel",
+        neededByBucket: "THIS_WEEK",
+        scope: "Looking to upgrade from 100A to 200A service.",
+      },
+      signals: {
+        notes: "Called in from Yelp. Seems like a serious buyer.",
+      },
     },
     {
-      id: "dev-lead-linked-draft-quote",
-      title: "Demo Sales Intake — Linked (Has Draft Quote)",
-      status: SalesIntakeStatus.QUALIFYING,
-      source: SalesIntakeSource.PHONE,
-      customerId: demoCustomer.id,
-      contactName: "Draft Quote User",
-      organizationId: devOrg.id,
+      id: "seed-lead-3",
+      organizationId: DEV_ORG_ID,
+      channel: LeadChannel.WEB_FORM,
+      status: LeadStatus.QUALIFIED,
+      contact: {
+        name: "Bob Brown",
+        email: "bob.brown@example.com",
+        phone: "555-0103",
+      },
+      request: {
+        type: "Kitchen Remodel",
+        neededByBucket: "THIS_MONTH",
+        scope: "Full gut remodel. Interested in high-end finishes.",
+      },
+      signals: {
+        suggestedTemplateIds: ["dev-trade-plumbing-fixture-install"],
+      },
+    },
+    {
+      id: "seed-lead-4",
+      organizationId: DEV_ORG_ID,
+      channel: LeadChannel.MANUAL,
+      status: LeadStatus.CONVERTED,
+      contact: {
+        name: "Alice Green",
+        email: "alice.green@example.com",
+        phone: "555-0104",
+      },
+      request: {
+        type: "Bathroom Tile",
+        neededByBucket: "FLEXIBLE",
+        scope: "Retiling the guest bathroom floor and shower surround.",
+      },
+      signals: {
+        notes: "Walk-in lead. Already has a quote started.",
+      },
     },
   ];
 
-  for (const salesIntake of demoSalesIntakes) {
-    await prisma.salesIntake.upsert({
-      where: { id: salesIntake.id },
-      update: salesIntake,
-      create: salesIntake,
+  for (const lead of leads) {
+    await prisma.lead.upsert({
+      where: { id: lead.id },
+      update: {
+        ...lead,
+        contact: lead.contact as unknown as Prisma.InputJsonValue,
+        request: lead.request as unknown as Prisma.InputJsonValue,
+        signals: lead.signals as unknown as Prisma.InputJsonValue,
+      },
+      create: {
+        ...lead,
+        contact: lead.contact as unknown as Prisma.InputJsonValue,
+        request: lead.request as unknown as Prisma.InputJsonValue,
+        signals: lead.signals as unknown as Prisma.InputJsonValue,
+      },
     });
   }
+}
 
-  const demoQuote = await prisma.quote.upsert({
-    where: { id: "dev-quote-demo-execution" },
-    update: {
-      title: "Demo Quote — Execution Showcase",
-      status: QuoteStatus.APPROVED,
-      customerId: demoCustomer.id,
-      salesIntakeId: "dev-lead-linked-draft-quote",
-      totalCents: 1250000,
-      organizationId: devOrg.id,
-    },
-    create: {
-      id: "dev-quote-demo-execution",
-      title: "Demo Quote — Execution Showcase",
-      status: QuoteStatus.APPROVED,
-      customerId: demoCustomer.id,
-      salesIntakeId: "dev-lead-linked-draft-quote",
-      totalCents: 1250000,
-      organizationId: devOrg.id,
-    },
-  });
+async function main() {
+  console.log("Seeding dev organization, owner membership, and Stage rows…");
+  await seedDevOrganization();
+  await seedDevOwnerUserAndMembership();
+  await seedLegacyStages();
+  await seedDevCustomer();
 
-  console.log("[dev seed] Demo sales intakes and quote created.");
+  console.log("Seeding public request settings + default intake form definition…");
+  await seedPublicRequestSettings();
+  await seedDefaultIntakeFormDefinition();
 
-  const demoJob = await prisma.job.upsert({
-    where: { id: "dev-job-demo-execution" },
-    update: {
-      title: "Demo Job — Execution Showcase",
-      status: JobStatus.ACTIVE,
-      quoteId: demoQuote.id,
-      customerId: demoCustomer.id,
-      salesIntakeId: "dev-lead-linked-draft-quote",
-      organizationId: devOrg.id,
-    },
-    create: {
-      id: "dev-job-demo-execution",
-      title: "Demo Job — Execution Showcase",
-      status: JobStatus.ACTIVE,
-      quoteId: demoQuote.id,
-      customerId: demoCustomer.id,
-      salesIntakeId: "dev-lead-linked-draft-quote",
-      organizationId: devOrg.id,
-    },
-  });
+  console.log("Seeding trade-contractor Scope Library presets…");
+  const presets = await seedTradeLineItemPresets(prisma, DEV_ORG_ID);
+  console.log(
+    `  ${presets.tradesSeeded} trades, ${presets.lineItemsSeeded} line items, ${presets.tasksSeeded} tasks`,
+  );
 
-  // Clean up existing stages/tasks for idempotency
-  await prisma.jobTask.deleteMany({ where: { jobId: demoJob.id } });
-  await prisma.jobStage.deleteMany({ where: { jobId: demoJob.id } });
+  console.log("Seeding Kitchen Remodel demo quote…");
+  const kitchen = await seedKitchenRemodelDemoQuote(prisma, DEV_ORG_ID, DEV_CUSTOMER_ID);
+  console.log(
+    `  quoteId=${kitchen.quoteId} lines=${kitchen.lineCount} total=${(kitchen.totalCents / 100).toFixed(2)}`,
+  );
 
-  const stagePreCon = await prisma.jobStage.create({
-    data: {
-      id: "dev-stage-pre-con",
-      jobId: demoJob.id,
-      blockType: JobStageBlockType.SHARED,
-      stageKey: ExecutionStageKey.pre_install,
-      title: "Pre-Construction",
-      sortOrder: 10,
-    },
-  });
+  console.log("Seeding Roof + Skylight signal-handshake demo quote…");
+  const roofSkylight = await seedRoofSkylightHandshakeDemoQuote();
+  console.log(
+    `  quoteId=${roofSkylight.quoteId} lines=${roofSkylight.lineCount} total=${(roofSkylight.totalCents / 100).toFixed(2)}`,
+  );
 
-  const stageInstall = await prisma.jobStage.create({
-    data: {
-      id: "dev-stage-install",
-      jobId: demoJob.id,
-      blockType: JobStageBlockType.SHARED,
-      stageKey: ExecutionStageKey.installation,
-      title: "Installation",
-      sortOrder: 20,
-    },
-  });
+  console.log("Seeding sample leads…");
+  await seedSampleLeads();
 
-  const stageCloseout = await prisma.jobStage.create({
-    data: {
-      id: "dev-stage-closeout",
-      jobId: demoJob.id,
-      blockType: JobStageBlockType.SHARED,
-      stageKey: ExecutionStageKey.closeout,
-      title: "Final Inspection & Closeout",
-      sortOrder: 30,
-    },
-  });
-
-  console.log("[dev seed] Demo job and stages created.");
-
-  const demoTasks = [
-    {
-      id: "dev-task-ready",
-      jobId: demoJob.id,
-      jobStageId: stagePreCon.id,
-      title: "Demo Task — Ready to Complete",
-      category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.pre_install,
-      status: JobTaskStatus.TODO,
-      sortOrder: 1,
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-    {
-      id: "dev-task-note",
-      jobId: demoJob.id,
-      jobStageId: stagePreCon.id,
-      title: "Demo Task — Needs Note Proof",
-      category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.pre_install,
-      status: JobTaskStatus.TODO,
-      sortOrder: 2,
-      completionRequirementsJson: { noteRequired: true },
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-    {
-      id: "dev-task-photo",
-      jobId: demoJob.id,
-      jobStageId: stageInstall.id,
-      title: "Demo Task — Needs Photo Proof",
-      category: TaskTemplateCategory.PHOTO_EVIDENCE,
-      stageKey: ExecutionStageKey.installation,
-      status: JobTaskStatus.TODO,
-      sortOrder: 1,
-      completionRequirementsJson: { photoRequired: true },
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-    {
-      id: "dev-task-completed",
-      jobId: demoJob.id,
-      jobStageId: stagePreCon.id,
-      title: "Demo Task — Completed with Activity",
-      category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.pre_install,
-      status: JobTaskStatus.DONE,
-      completedAt: new Date(Date.now() - 86400000 * 2), // 2 days ago
-      completedByUserId: devUser.id,
-      completionNote: "Completed successfully during pre-con walk.",
-      sortOrder: 0,
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-    {
-      id: "dev-task-blocked-issue",
-      jobId: demoJob.id,
-      jobStageId: stageInstall.id,
-      title: "Demo Task — Blocked by Issue",
-      category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.installation,
-      status: JobTaskStatus.TODO,
-      sortOrder: 2,
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-    {
-      id: "dev-task-blocked-payment",
-      jobId: demoJob.id,
-      jobStageId: stageInstall.id,
-      title: "Demo Task — Blocked by Payment",
-      category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.installation,
-      status: JobTaskStatus.TODO,
-      sortOrder: 3,
-      sourceType: LineItemTemplateTaskSource.CUSTOM,
-    },
-  ];
-
-  for (const task of demoTasks) {
-    await prisma.jobTask.create({ data: task });
-  }
-
-  console.log("[dev seed] Demo tasks created.");
-
-  await prisma.jobIssue.deleteMany({ where: { jobId: demoJob.id } });
-  const demoIssue = await prisma.jobIssue.create({
-    data: {
-      id: "dev-issue-blocking",
-      organizationId: devOrg.id,
-      jobId: demoJob.id,
-      jobTaskId: "dev-task-blocked-issue",
-      type: JobIssueType.SITE_CONDITION,
-      severity: JobIssueSeverity.BLOCKS_WORK,
-      status: JobIssueStatus.OPEN,
-      title: "Demo Issue — Site Access Blocked",
-      description: "Main gate code changed; waiting for customer to provide new code.",
-      createdByUserId: devUser.id,
-    },
-  });
-
-  await prisma.jobPaymentRequirement.deleteMany({ where: { jobId: demoJob.id } });
-  const paymentDeposit = await prisma.jobPaymentRequirement.create({
-    data: {
-      id: "dev-payment-deposit",
-      organizationId: devOrg.id,
-      jobId: demoJob.id,
-      title: "Demo Deposit — Blocks Installation",
-      amountCents: 500000,
-      status: JobPaymentRequirementStatus.DUE,
-      requiredBeforeStageId: stageInstall.id,
-      notes: "50% deposit required before installation begins.",
-    },
-  });
-
-  const paymentPaid = await prisma.jobPaymentRequirement.create({
-    data: {
-      id: "dev-payment-paid",
-      organizationId: devOrg.id,
-      jobId: demoJob.id,
-      title: "Demo Paid Requirement — Does Not Block",
-      amountCents: 10000,
-      status: JobPaymentRequirementStatus.PAID,
-      paidAt: new Date(Date.now() - 86400000 * 5),
-      notes: "Initial consultation fee.",
-    },
-  });
-
-  console.log("[dev seed] Demo issues and payments created.");
-
-  await prisma.jobVisit.deleteMany({ where: { jobId: demoJob.id } });
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 14, 0);
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 9, 0);
-  const lastWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 11, 0);
-
-  await prisma.jobVisit.createMany({
-    data: [
-      {
-        id: "dev-visit-today",
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        scheduledStartAt: today,
-        scheduledEndAt: new Date(today.getTime() + 3600000 * 2),
-        status: JobVisitStatus.SCHEDULED,
-        notes: "Today's demo visit.",
-      },
-      {
-        id: "dev-visit-tomorrow",
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        scheduledStartAt: tomorrow,
-        scheduledEndAt: new Date(tomorrow.getTime() + 3600000 * 4),
-        status: JobVisitStatus.SCHEDULED,
-        notes: "Upcoming visit for tomorrow.",
-      },
-      {
-        id: "dev-visit-yesterday",
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        scheduledStartAt: yesterday,
-        scheduledEndAt: new Date(yesterday.getTime() + 3600000),
-        status: JobVisitStatus.SCHEDULED,
-        notes: "Missed visit from yesterday.",
-      },
-      {
-        id: "dev-visit-completed",
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        scheduledStartAt: lastWeek,
-        scheduledEndAt: new Date(lastWeek.getTime() + 3600000 * 3),
-        status: JobVisitStatus.COMPLETED,
-        notes: "Successfully completed visit from last week.",
-      },
-    ],
-  });
-
-  await prisma.jobActivity.deleteMany({ where: { jobId: demoJob.id } });
-  await prisma.jobActivity.createMany({
-    data: [
-      {
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        type: JobActivityType.TASK_COMPLETED,
-        title: "Task completed: Demo Task — Completed with Activity",
-        details: "Outcome: Completed successfully during pre-con walk.",
-        actorUserId: devUser.id,
-        createdAt: new Date(Date.now() - 86400000 * 2),
-      },
-      {
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        type: JobActivityType.PAYMENT_REQUIREMENT_CREATED,
-        title: "Payment requirement created: Demo Deposit — Blocks Installation",
-        details: "Amount: $5,000.00",
-        actorUserId: devUser.id,
-        createdAt: new Date(Date.now() - 86400000 * 4),
-      },
-      {
-        organizationId: devOrg.id,
-        jobId: demoJob.id,
-        type: JobActivityType.ISSUE_CREATED,
-        title: "Issue reported: Demo Issue — Site Access Blocked",
-        details: "Severity: BLOCKS_WORK",
-        actorUserId: devUser.id,
-        createdAt: new Date(Date.now() - 86400000 * 1),
-      },
-    ],
-  });
-
-  console.log("[dev seed] Demo visits and activities created.");
-
-  await prisma.attachment.deleteMany({ where: { jobId: demoJob.id } });
-  const attachmentReady = await prisma.attachment.create({
-    data: {
-      id: "dev-attachment-ready",
-      organizationId: devOrg.id,
-      jobId: demoJob.id,
-      jobTaskId: "dev-task-completed",
-      fileName: "demo-proof.jpg",
-      fileKey: "dev-attachment-ready-demo-proof.jpg",
-      contentType: "image/jpeg",
-      fileSize: 1024,
-      status: AttachmentStatus.READY,
-      uploadedByUserId: devUser.id,
-    },
-  });
-
-  const attachmentPending = await prisma.attachment.create({
-    data: {
-      id: "dev-attachment-pending",
-      organizationId: devOrg.id,
-      jobId: demoJob.id,
-      jobTaskId: "dev-task-photo",
-      fileName: "pending-upload.jpg",
-      fileKey: "dev-attachment-pending-pending-upload.jpg",
-      contentType: "image/jpeg",
-      fileSize: 2048,
-      status: AttachmentStatus.PENDING,
-      uploadedByUserId: devUser.id,
-    },
-  });
-
-  // Create a dummy file for the READY attachment in local storage
-  const uploadDir = join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(join(uploadDir, attachmentReady.fileKey), "dummy-image-content");
-
-  console.log("[dev seed] Demo attachments and dummy file created.");
-
-  console.log("[dev seed] Execution Showcase demo scenario completed.");
-  console.log("[dev seed] Completed (idempotent upserts).");
+  console.log("Done.");
 }
 
 main()

@@ -1,3 +1,7 @@
+# Repo root must stay deps-free — all Node deps live in apps/web/.
+# If you see node_modules/ here, someone ran `npm install` at the root by mistake.
+/node_modules
+
 # Next.js app (`apps/web/`)
 apps/web/node_modules
 apps/web/.next
@@ -10,3 +14,10 @@ apps/web/.vercel
 .DS_Store
 Thumbs.db
 *.swp
+
+# Cursor IDE debug logs
+.cursor/debug*.log
+
+# Local command output / debug artifacts
+apps/web/.lint-out.txt
+debug-*.log

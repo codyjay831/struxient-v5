@@ -15,13 +15,14 @@ The **baseline for what was sold** at activation time is defined by the **approv
 
 **v5 app slice:** after **`APPROVED`** (commercial acceptance recorded), **internal** quote-line draft execution may still be edited until **job activation** exists—commercial checkpoints and customer projections remain **commercial-only** (no internal execution leakage).
 
-**v5 app slice (Job runtime V1):** **activation** is the boundary at which execution becomes runtime: `Job` / `JobStage` / `JobTask` rows are **copies** of the quote's draft execution at activation time. Later quote / template edits **must not** mutate already-activated job tasks—runtime rows preserve lineage (`sourceQuoteLineItemId`, `sourceQuoteLineExecutionTaskId`, `sourceTaskTemplateId`) but never live-read from the source.
+**v5 app slice (Job runtime V1):** **activation** is the boundary at which execution becomes runtime: `Job`, `JobStage`, `JobTask`, and `JobSignal` rows are materialized. Activation copies the quote's draft execution tasks including their **Provides** and **Requires** signal wiring. Later quote / template edits **must not** mutate already-activated job tasks—runtime rows preserve lineage (`sourceQuoteLineItemId`, `sourceQuoteLineExecutionTaskId`, `sourceTaskTemplateId`) but never live-read from the source.
 
 ## I3 — No manual rebuild as the default activation path
 
 After customer **approval / signature**, the system **must** provide a **direct materialization** of executable work aligned to the approved quote intent.
 
 - **Must not:** require users to re-enter the same scope as the **default** path to begin work.  
+- **Must:** auto-satisfy any required signal that has no provider in the job at activation time **unless** the task is marked as requiring a **Hard Signal**.
 - **May:** allow optional reconfiguration when reality demands it, with **traceability** (event/correction posture).
 
 ## I4 — Template instance independence
@@ -47,18 +48,19 @@ If work cannot proceed, the system should represent **a attributable reason** (p
 
 Non-trivial interruptions should record **what happened**, **what is required next**, and **who owns the next step** at the experience level (storage mechanism is implementation).
 
-## I8 — Flexibility without losing “next”
+## I8 — Flexibility via Signals
 
-Workflow structure must support **dependencies and ordering** without becoming **brittle** to normal change.
+Workflow structure must support **dependencies and ordering** via a **Signal Bus** without becoming **brittle** to normal change.
 
+- **Must not:** rely on internal database IDs for task-to-task dependencies; use named **Signals** (e.g., `roof-sealed`) instead.
 - **Must not:** adopt a model where legitimate field changes routinely destroy executability without a recovery path.  
-- **Must:** support **detours** and **return** semantics at the conceptual level.
+- **Must:** support **Events** that can hijack signals to pause work and provide a return path.
 
-## I9 — Payment schedule legibility
+## I9 — Payment schedule as Signal provider
 
 Payment expectations must be understandable **before** and **after** signing, internally and (where applicable) in the portal.
 
-- **Must:** represent **what is owed**, **when**, and **whether work is gated** when gating is in play.
+- **Must:** represent **what is owed**, **when**, and **whether work is gated** by publishing a signal (e.g., `payment:deposit:cleared`) when conditions are met.
 
 ## I10 — Workstation is action-first
 
@@ -80,20 +82,21 @@ The template library **must** support saving **line-item-only** templates **and*
 
 The product **must** support:
 
-- **Planning execution during the quote** (optional richness: stages/tasks on line items, often from templates), **and**  
-- **Deferring execution planning until after approval** (commercially complete quote, minimal or no task graph),
+- **Planning execution during the quote** (optional richness: tasks on line items, often from templates with pre-wired signals), **and**  
+- **Deferring execution planning until after approval** (commercially complete quote, minimal or no signal wiring),
 
 **both** as first-class paths. Neither path may be the only “correct” workflow.
 
 ## I15 — Post-sign workflow refinement
 
-After customer **approval / signature**, users **must** be able to refine the internal execution plan—during **Execution Review** (pre-activation) and again on the **job** after activation (tasks/stages, assignments, ordering, additions)—as **normal operations**. Quote-time execution drafts **may** carry forward but **must not** create a canonically “locked” internal graph that can only be changed by rebuilding the sold quote, except through explicit **change-order / recommit** flows that affect **sold scope**.
+After customer **approval / signature**, users **must** be able to refine the internal execution plan—during **Execution Review** (pre-activation) and again on the **job** after activation (tasks/stages, assignments, signal wiring, additions)—as **normal operations**. Quote-time execution drafts **may** carry forward but **must not** create a canonically “locked” internal graph that can only be changed by rebuilding the sold quote, except through explicit **change-order / recommit** flows that affect **sold scope**.
 
-## I16 — Construction issues and events: guided, always actionable
+## I16 — Construction issues and events: signal muting
 
 Recording a **construction issue** or operational **event** (delay, defect, discovery, failed inspection, supply problem, etc.) **must** have a **primary, low-error path** that:
 
-- **Produces attributable state** (cause, owner, blockers, and follow-up work or explicit “waiting” with a reason)—not **only** an unstructured note.  
+- **Produces attributable state** (cause, owner, and signal-blocking behavior)—not **only** an unstructured note.  
+- **Mutes signals** of the affected task/stage so downstream work is automatically paused.
 - **Surfaces in the Workstation** (or equivalent operational home) so “what now” stays trustworthy.  
 - **Allows correction** if the user misclassified the issue, without corrupting **sold commercial baseline** except through explicit change-order / scope flows.
 
@@ -160,18 +163,17 @@ Struxient v5 supports both light and dark appearance modes. The design system sh
 
 > **Canon phrase:** Stages are presets and containers. Tasks are the execution power layer.
 
-MVP execution planning ships **default stage containers** so users do not have to design stages from scratch. The real operational power in v5 lives in **line items, tasks, payments / payment gates, activity history, approvals, execution records, daily logs, and customer / job changes**—not in stage architecture.
+MVP execution planning ships **default stage containers** so users do not have to design stages from scratch. The real operational power in v5 lives in **line items, tasks, signals, activity history, and customer / job changes**—not in stage architecture.
 
-The **default MVP stage preset** is **Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. A reserved **future** preset for smaller service execution is **Service Work** (candidate wordings: **Prepare / Perform Work / Wrap Up** or **Before Visit / On Site / Complete**)—same core line-item / stage / task model, smaller preset.
+The **default MVP stage preset** is **Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. These are stored in an org-scoped **Stage** table, not a hardcoded enum.
 
-- **Must:** treat stages as **lightweight default containers / presets** that group tasks for legibility; depth and ordering live on **tasks** (and downstream models), not on stages.  
-- **Must:** route MVP UI through the **Standard Project** preset so users can **quote** and **plan** without first designing a workflow.  
-- **Must:** keep the implementation **preset-flexible**—presets must be able to be **renamed, hidden, merged, specialized, or selected** per real contractor usage later (e.g., the future **Service Work** preset). Hard-coding the five **Standard Project** labels as the **only** model anywhere in code or canon is a violation.  
+- **Must:** treat stages as **lightweight default containers / presets** that group tasks for legibility; depth and ordering live on **tasks** (via signals), not on stages.  
+- **Must:** keep the implementation **preset-flexible**—presets must be able to be **renamed, hidden, merged, specialized, or selected** per real contractor usage.
+- **Must:** support **Stage Gates** where a stage can require or provide signals.
 - **Must not:** introduce **kanban** language (no “board / column / swimlane” framing for stages).  
 - **Must not:** introduce **placement** language (stages do not “place” line items or tasks).  
-- **Must not:** require users to design custom workflows / stage architecture **before** they can quote or plan work.  
-- **Must not:** ship a separate **task engine** for service execution; service work uses the same model with a smaller preset when that preset lands.  
-- **Must not:** push expressive depth (custom workflow design, kanban-style operations, stage-level dependencies, placement semantics) into stages in MVP.
+- **Must not:** force users into a single rigid stage model; the **Stage** table is the source of truth.
+- **Must not:** push expressive depth (custom workflow design, kanban-style operations, placement semantics) into stages in MVP.
 
 Detailed product framing and the do/do-not list live in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
 

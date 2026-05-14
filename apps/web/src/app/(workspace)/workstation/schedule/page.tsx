@@ -11,7 +11,7 @@ export default async function WorkstationScheduleLensPage() {
   const ctx = await getRequestContextOrThrow();
 
   // Count active jobs and tasks that would normally be scheduled
-  const [activeJobsCount, todoTasksCount] = await Promise.all([
+  const [activeJobsCount] = await Promise.all([
     db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE } }),
     db.jobTask.count({ where: { job: { organizationId: ctx.organizationId }, status: JobTaskStatus.TODO } }),
   ]);

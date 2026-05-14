@@ -43,7 +43,8 @@ v5 canon already addresses (1)–(3) elsewhere; this file ties them to **what to
 
 **Leave behind / redesign consciously:**
 
-- Anything that made **flowspec / workflow builder** feel like the **price of admission** for quoting or executing. v5 prioritizes **flexible planning** and **post-sign refinement** over “draw the full machine up front.”  
+- Anything that made **flowspec / workflow builder** feel like the **price of admission** for quoting or executing. v5 prioritizes **flexible planning** via **Signals** and **post-sign refinement** over “draw the full machine up front.”  
+- **Anti-FlowSpec stance:** v5 explicitly rejects the v2 "FlowSpec" engine (Workflow/Node/Outcome/Gate) as too complex for users. The **Signal Bus** is the lightweight replacement.
 - Any UX that **locked** execution structure because it existed on the quote.  
 - **Clerk** for authentication—v2 used Clerk; **v5 canon forbids Clerk** for any user class (**I18**). Reuse v2 **pages and layout patterns**, not its **auth vendor**.
 

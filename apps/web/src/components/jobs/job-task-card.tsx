@@ -10,7 +10,7 @@ import {
 } from "@/lib/task-readiness";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
-import { ChevronRight, Lock } from "lucide-react";
+import { ChevronRight, Lock, Zap } from "lucide-react";
 
 type Task = JobTaskExecutionTask;
 
@@ -21,8 +21,9 @@ export function JobTaskCard({
   jobContextLabel,
   jobsiteAddressLine,
   customerId,
-  salesIntakeEditHref,
+  leadEditHref,
   task,
+  liveSignals,
 }: {
   jobId: string;
   jobStageId: string;
@@ -30,16 +31,21 @@ export function JobTaskCard({
   jobContextLabel: string;
   jobsiteAddressLine: string | null;
   customerId: string | null;
-  salesIntakeEditHref: string | null;
+  leadEditHref: string | null;
   task: Task;
+  liveSignals: string[];
 }) {
   const router = useRouter();
   const [surfaceOpen, setSurfaceOpen] = useState(false);
 
-  const derivedState = deriveTaskState(task);
+  const derivedState = deriveTaskState(task, liveSignals);
   const isCompleted = derivedState === "COMPLETED";
-  const isBlocked = derivedState === "BLOCKED";
+  const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
+  const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";
+  const isBlocked = isBlockedByIssue || isBlockedBySignal;
+  
   const paymentBlocker = task.paymentBlockers.find((p) => p.status === "DUE");
+  const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
 
   const payload = {
     jobId,
@@ -48,9 +54,10 @@ export function JobTaskCard({
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
-    salesIntakeEditHref,
+    leadEditHref,
     jobHref: `/jobs/${jobId}`,
     task,
+    liveSignals,
   };
 
   return (
@@ -75,7 +82,7 @@ export function JobTaskCard({
               >
                 {task.title}
               </h4>
-              <StatusBadge label={taskStateLabel(derivedState, task)} tone={taskStateTone(derivedState)} />
+              <StatusBadge label={taskStateLabel(derivedState)} tone={taskStateTone(derivedState)} />
             </div>
             <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
               {stageTitle}
@@ -84,10 +91,26 @@ export function JobTaskCard({
               <p className="line-clamp-2 text-xs text-foreground-muted">{task.instructions}</p>
             )}
             {isBlocked && (
-              <p className="mt-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
-                <Lock className="size-3 shrink-0" />
-                {paymentBlocker ? `Payment: ${paymentBlocker.title}` : "Blocked by issue"}
-              </p>
+              <div className="mt-1 space-y-1">
+                {paymentBlocker && (
+                  <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
+                    <Lock className="size-3 shrink-0" />
+                    Payment: {paymentBlocker.title}
+                  </p>
+                )}
+                {isBlockedByIssue && !paymentBlocker && (
+                  <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
+                    <Lock className="size-3 shrink-0" />
+                    Blocked by issue
+                  </p>
+                )}
+                {isBlockedBySignal && (
+                  <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-accent">
+                    <Zap className="size-3 shrink-0" />
+                    Waiting on: {missingSignals.join(", ")}
+                  </p>
+                )}
+              </div>
             )}
           </div>
           <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-foreground-muted group-hover:text-foreground">

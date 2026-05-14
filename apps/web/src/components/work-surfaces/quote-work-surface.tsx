@@ -8,14 +8,14 @@
  * Modes change density / surrounding context, never core actions.
  *
  *   compact   — Workstation drawer
- *   standard  — Quotes list popup, Sales Intake Quote tab embed
+ *   standard  — Quotes list popup, Lead Quote tab embed
  *   full      — Quote full page (`/quotes/[quoteId]`) — the entire workspace body
  *
  * The surface owns the same five tabs the full Quote page used to render
  * separately:
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
- *   - Customer & Sales Intake — customer card + sales intake intake context
+ *   - Customer & Lead — customer card + lead intake context
  *   - Send & Accept   — inline Send/Approve + checkpoint history + preview link
  *   - Record          — archive/restore + internal notes + record details
  *
@@ -30,7 +30,7 @@
  *   - OPEN_JOB (job page)
  *
  * Workspace-safe mutations (every mode — actions return structured state
- * instead of `redirect()`, so popup/drawer/sales-intake-tab containers stay open):
+ * instead of `redirect()`, so popup/drawer/lead-tab containers stay open):
  *   - line item add / edit / delete (`QuoteLineItemsWorkspaceEditor` in
  *     `standard`/`compact`; `QuoteDraftWorkspaceControls` in `full` — the
  *     full-page editor's redirecting form actions are a no-op when the user
@@ -49,7 +49,7 @@
  *
  * After every workspace-safe mutation, the surface calls `router.refresh()`
  * (always) and the optional `onWorkSurfaceMutated` prop (when supplied by
- * a popup/drawer/sales-intake-tab container that lazy-loaded its
+ * a popup/drawer/lead-tab container that lazy-loaded its
  * `QuoteWorkSurfaceData` payload via `loadQuoteWorkSurfaceAction`).
  */
 import { useCallback, useEffect, useRef, useState, useActionState } from "react";
@@ -81,6 +81,8 @@ import { SignalCard } from "@/components/ui/signal-card";
 import {
   approveQuoteWorkspaceAction,
   sendQuoteWorkspaceAction,
+  revokeQuoteShareTokenAction,
+  extendQuoteShareTokenAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import { activateQuoteJobWorkspaceAction } from "@/app/(workspace)/quotes/quote-job-activation-actions";
@@ -131,9 +133,9 @@ export type QuoteWorkSurfaceProps = {
   workspaceTabs: QuoteWorkspaceTabData;
   /**
    * Suppress the `mode="standard"` internal identity row when the container
-   * chrome already prints the quote's status/title/customer/sales intake (e.g. the
-   * Quotes list popup chrome). Default `false` preserves the embedded Sales Intake
-   * Quote tab UX, where the surrounding Sales Intake container shows sales intake identity
+   * chrome already prints the quote's status/title/customer/lead (e.g. the
+   * Quotes list popup chrome). Default `false` preserves the embedded Lead
+   * Quote tab UX, where the surrounding Lead container shows lead identity
    * and the quote needs its own.
    */
   suppressIdentityRow?: boolean;
@@ -142,7 +144,7 @@ export type QuoteWorkSurfaceProps = {
   /**
    * Called after a workspace-safe mutation (line item add/edit/delete,
    * inline send/approve) so the container can re-fetch its lazy-loaded
-   * QuoteWorkSurfaceData payload. Required for popup/drawer/sales-intake-tab
+   * QuoteWorkSurfaceData payload. Required for popup/drawer/lead-tab
    * containers that load via `loadQuoteWorkSurfaceAction`. Server-rendered
    * full-page and Workstation containers can omit this — `revalidatePath`
    * + `router.refresh()` already covers them — but providing it is
@@ -150,19 +152,19 @@ export type QuoteWorkSurfaceProps = {
    */
   onWorkSurfaceMutated?: () => void;
   /**
-   * When true, the surface is rendered inside the Sales Intake workspace Quote tab.
+   * When true, the surface is rendered inside the Lead workspace Quote tab.
    * Lets the surface defer service-address ownership to the surrounding
-   * Sales Intake Customer Info area: the missing-address CTA routes back to the
-   * Sales Intake block instead of opening a quote-owned dialog, and the present-
-   * address callout is suppressed (the Sales Intake shell already shows it).
+   * Lead Customer Info area: the missing-address CTA routes back to the
+   * Lead block instead of opening a quote-owned dialog, and the present-
+   * address callout is suppressed (the Lead shell already shows it).
    *
    * Optional + defaults to `false` so Workstation / standalone Quote page
    * usage is unchanged.
    */
-  embeddedInSalesIntake?: boolean;
+  embeddedInLead?: boolean;
   /**
-   * Required when `embeddedInSalesIntake` is true — handler invoked by the
-   * embedded missing-address CTA so the Sales Intake workspace can switch to the
+   * Required when `embeddedInLead` is true — handler invoked by the
+   * embedded missing-address CTA so the Lead workspace can switch to the
    * Customer Info tab and scroll the Service address block into view.
    */
   onRequestServiceAddress?: () => void;
@@ -308,8 +310,7 @@ function QuoteProposalPreviewEmbedded({
       <div className="border-t border-border pt-4">
         <p className={sectionLabelClass}>Internal note</p>
         <p className="mt-1 text-[0.65rem] leading-relaxed text-foreground-subtle">
-          This is an internal preview of the customer proposal. E-sign and automated
-          delivery are not wired in this build.
+          This is an internal preview of the customer proposal. We&apos;ll email the customer a secure link they can review, sign, and download. E-sign vendor (DocuSign / Adobe Sign) integration is optional and not enabled.
         </p>
       </div>
     </div>
@@ -333,102 +334,176 @@ function QuoteExecutionPreviewEmbedded({
       id: l.id,
       description: l.description,
       sortOrder: l.sortOrder,
-      executionOrder: l.executionOrder,
-      executionReviewStatus: l.executionReviewStatus,
-      executionMergeMode: l.executionMergeMode,
       tasks: (draftTasksByLineId[l.id] ?? []).map((t) => ({
         id: t.id,
         title: t.title,
-        stageKey: t.stageKey,
+        stageId: t.stageId,
         category: t.category,
+        providesSignals: t.providesSignals,
+        requiresSignals: t.requiresSignals,
+        hardSignal: t.hardSignal,
         sortOrder: t.sortOrder,
       })),
     })),
   });
 
-  const { sharedStages, separateBlocks } = model;
+  const { summary, handshakes, orphans, lineReadiness } = model;
+
+  if (summary.totalTasks === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-8 text-center">
+        <p className="text-sm text-foreground-muted">
+          No draft execution tasks have been added to this quote yet.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {sharedStages.length > 0 && (
-        <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
-          <SectionHeading
-            title="Shared job stages (preview)"
-            description="Tasks from lines set to use shared job stages, merged by canonical phase."
-          />
-          <div className="mt-4 space-y-6">
-            {sharedStages.map((stage) => (
-              <section key={stage.stageKey}>
-                <h4 className="mb-2 text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                  {stage.stageLabel}
-                </h4>
-                <ul className="space-y-2">
-                  {stage.tasks.map((t) => (
-                    <li
-                      key={t.taskId}
-                      className="rounded-md border border-border/80 bg-surface/50 px-3 py-2"
-                    >
-                      <p className="text-sm font-medium text-foreground">{t.title}</p>
-                      <p className="mt-0.5 text-[0.65rem] text-foreground-muted">
-                        From line: {t.sourceLineDescription}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+      <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
+        <SectionHeading
+          title="Signal handshake preview"
+          description="How tasks unlock each other once the job is activated."
+        />
+        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <dt className={sectionLabelClass}>Lines</dt>
+            <dd className="mt-0.5 text-sm font-medium text-foreground">{summary.totalLines}</dd>
           </div>
-        </div>
-      )}
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <dt className={sectionLabelClass}>Tasks</dt>
+            <dd className="mt-0.5 text-sm font-medium text-foreground">{summary.totalTasks}</dd>
+          </div>
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <dt className={sectionLabelClass}>Handshakes</dt>
+            <dd className="mt-0.5 text-sm font-medium text-foreground">{handshakes.length}</dd>
+          </div>
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <dt className={sectionLabelClass}>Orphans</dt>
+            <dd className="mt-0.5 text-sm font-medium text-foreground">
+              {summary.orphanCount}
+              {summary.hardOrphanCount > 0 ? (
+                <span className="ml-1 text-xs text-danger">
+                  ({summary.hardOrphanCount} hard)
+                </span>
+              ) : null}
+            </dd>
+          </div>
+        </dl>
+      </div>
 
-      {separateBlocks.length > 0 && (
+      {handshakes.length > 0 && (
         <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <SectionHeading
-            title="Separate execution blocks (preview)"
-            description="Each block is one quoted scope kept apart from shared stages."
+            title="Wired handshakes"
+            description="Required signals that already have a provider in this quote."
           />
-          <div className="mt-4 space-y-6">
-            {separateBlocks.map((block) => (
-              <section
-                key={block.lineId}
-                className="rounded-lg border border-border-strong bg-surface/30 px-4 py-4 ring-1 ring-ring/10"
+          <ul className="mt-4 space-y-2">
+            {handshakes.map((h, idx) => (
+              <li
+                key={`${h.signal}-${h.providerTaskId}-${h.consumerTaskId}-${idx}`}
+                className="rounded-md border border-border/80 bg-surface/50 px-3 py-2"
               >
-                <div className="mb-3 flex items-center gap-2">
-                  <Layers className="size-4 text-foreground-subtle" aria-hidden />
-                  <h4 className="text-sm font-semibold text-foreground">
-                    {block.lineDescription}
-                  </h4>
-                </div>
-                <div className="space-y-4 border-t border-border pt-3">
-                  {block.stages.map((st) => (
-                    <div key={st.stageKey}>
-                      <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                        {st.stageLabel}
-                      </p>
-                      <ul className="mt-2 space-y-1.5">
-                        {st.tasks.map((t) => (
-                          <li
-                            key={t.taskId}
-                            className="rounded border border-border/60 bg-background/40 px-2.5 py-1.5 text-sm text-foreground"
-                          >
-                            {t.title}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </section>
+                <p className="text-[0.65rem] font-mono font-bold uppercase tracking-wider text-accent">
+                  {h.signal}
+                </p>
+                <p className="mt-1 text-sm text-foreground">
+                  <span className="font-medium">{h.providerTaskTitle}</span>
+                  <span className="mx-1 text-foreground-subtle">→</span>
+                  <span className="font-medium">{h.consumerTaskTitle}</span>
+                </p>
+                <p className="mt-0.5 text-[0.65rem] text-foreground-muted">
+                  {h.providerLineDescription} → {h.consumerLineDescription}
+                </p>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
-      {sharedStages.length === 0 && separateBlocks.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-8 text-center">
-          <p className="text-sm text-foreground-muted">
-            No draft execution tasks have been added to this quote yet.
-          </p>
+      {orphans.length > 0 && (
+        <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
+          <SectionHeading
+            title="Orphan signals"
+            description="Required signals with no provider. Soft orphans auto-satisfy at activation; hard orphans block activation."
+          />
+          <ul className="mt-4 space-y-2">
+            {orphans.map((o, idx) => (
+              <li
+                key={`${o.signal}-${o.consumerTaskId}-${idx}`}
+                className="rounded-md border border-border/80 bg-surface/50 px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <p className="text-[0.65rem] font-mono font-bold uppercase tracking-wider text-accent">
+                    {o.signal}
+                  </p>
+                  {o.isHard ? (
+                    <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider text-danger">
+                      Hard
+                    </span>
+                  ) : (
+                    <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[0.55rem] font-medium uppercase tracking-wider text-foreground-subtle">
+                      Soft (auto-satisfied)
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-foreground">
+                  Required by <span className="font-medium">{o.consumerTaskTitle}</span>
+                </p>
+                <p className="mt-0.5 text-[0.65rem] text-foreground-muted">
+                  {o.consumerLineDescription}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {lineReadiness.length > 0 && (
+        <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
+          <SectionHeading
+            title="Per-line readiness"
+            description="Signal footprint of each quote line."
+          />
+          <ul className="mt-4 space-y-3">
+            {lineReadiness.map((l) => (
+              <li
+                key={l.lineId}
+                className="rounded-md border border-border/80 bg-surface/50 px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Layers className="size-3.5 text-foreground-subtle" aria-hidden />
+                  <p className="text-sm font-medium text-foreground">{l.description}</p>
+                  <span className="ml-auto text-[0.65rem] text-foreground-subtle">
+                    {l.taskCount} {l.taskCount === 1 ? "task" : "tasks"}
+                  </span>
+                </div>
+                {(l.providesSignals.length > 0 || l.requiresSignals.length > 0) && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {l.providesSignals.map((s) => (
+                      <span
+                        key={`p-${s}`}
+                        className="rounded bg-accent/10 px-1.5 py-0.5 text-[0.55rem] font-mono font-bold text-accent"
+                        title="Provides"
+                      >
+                        ↑ {s}
+                      </span>
+                    ))}
+                    {l.requiresSignals.map((s) => (
+                      <span
+                        key={`r-${s}`}
+                        className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[0.55rem] font-mono font-bold text-foreground-muted"
+                        title="Requires"
+                      >
+                        ↓ {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -465,6 +540,7 @@ function SendQuoteInlineButton({
 
   return (
     <form action={formAction} className="contents">
+      <input type="hidden" name="expiresInDays" value="30" />
       <button type="submit" disabled={isPending} aria-busy={isPending} className={cls}>
         <Send className="size-3.5 opacity-80" strokeWidth={2} />
         {isPending ? "Sending…" : label}
@@ -524,6 +600,139 @@ function ApproveQuoteInlineButton({
         </p>
       ) : null}
     </form>
+  );
+}
+
+function RevokeTokenButton({
+  quoteId,
+  onMutated,
+}: {
+  quoteId: string;
+  onMutated?: () => void;
+}) {
+  const [state, formAction, isPending] = useActionState(
+    revokeQuoteShareTokenAction.bind(null, quoteId),
+    workspaceActionInitial,
+  );
+  const handledKeyRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (state.success && handledKeyRef.current !== state) {
+      handledKeyRef.current = state;
+      onMutated?.();
+    }
+  }, [state, onMutated]);
+
+  return (
+    <form action={formAction} className="contents">
+      <button type="submit" disabled={isPending} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-[10px] font-medium text-foreground-muted transition-opacity hover:opacity-80 disabled:opacity-50">
+        {isPending ? "Revoking…" : "Revoke"}
+      </button>
+      {state.error ? (
+        <p className="basis-full text-[10px] text-danger" role="alert">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ExtendTokenButton({
+  quoteId,
+  onMutated,
+}: {
+  quoteId: string;
+  onMutated?: () => void;
+}) {
+  const [showDialog, setShowDialog] = useState(false);
+  const [state, formAction, isPending] = useActionState(
+    extendQuoteShareTokenAction.bind(null, quoteId),
+    workspaceActionInitial,
+  );
+  const handledKeyRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (state.success && handledKeyRef.current !== state) {
+      handledKeyRef.current = state;
+      setShowDialog(false);
+      onMutated?.();
+    }
+  }, [state, onMutated]);
+
+  if (showDialog) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+        <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
+          <h3 className="text-base font-bold text-foreground mb-4">
+            Extend / Rotate Token
+          </h3>
+          <form action={formAction} className="space-y-4">
+            <div>
+              <label htmlFor="expiresInDays" className="block text-xs font-medium text-foreground-subtle mb-1.5">
+                New expiry
+              </label>
+              <select
+                id="expiresInDays"
+                name="expiresInDays"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                defaultValue="30"
+              >
+                <option value="7">In 7 days</option>
+                <option value="14">In 14 days</option>
+                <option value="30">In 30 days (recommended)</option>
+                <option value="never">Never</option>
+              </select>
+            </div>
+            
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="rotateToken"
+                name="rotateToken"
+                value="true"
+                className="mt-0.5"
+              />
+              <label htmlFor="rotateToken" className="text-xs text-foreground-muted">
+                Generate a new link and email it to the customer (old link will stop working)
+              </label>
+            </div>
+
+            {state.error ? (
+              <p className="text-xs text-danger" role="alert">
+                {state.error}
+              </p>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDialog(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
+              >
+                {isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setShowDialog(true)}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-[10px] font-medium text-foreground-muted transition-opacity hover:opacity-80"
+    >
+      Extend / Rotate
+    </button>
   );
 }
 
@@ -707,29 +916,29 @@ function NextStepCard({
 function QuoteJobsiteCallout({
   quote,
   onMutated,
-  embeddedInSalesIntake = false,
+  embeddedInLead = false,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
   onMutated?: () => void;
-  embeddedInSalesIntake?: boolean;
+  embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
 
-  /* When the Quote is embedded inside the Sales Intake workspace AND the Sales Intake
+  /* When the Quote is embedded inside the Lead workspace AND the Lead
    * shell already shows the address prominently, suppress the present-
-   * address card here. The Sales Intake Customer Info block owns it. */
-  if (embeddedInSalesIntake && hasLine) {
+   * address card here. The Lead Customer Info block owns it. */
+  if (embeddedInLead && hasLine) {
     return null;
   }
 
-  /* Embedded missing-address: route the user back to the Sales Intake Customer Info
+  /* Embedded missing-address: route the user back to the Lead Customer Info
    * service-address block instead of opening a quote-owned dialog. The
    * primary CTA copy makes ownership obvious. */
-  if (embeddedInSalesIntake && !hasLine && onRequestServiceAddress) {
+  if (embeddedInLead && !hasLine && onRequestServiceAddress) {
     return (
       <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex gap-3">
@@ -776,13 +985,13 @@ function QuoteJobsiteCallout({
                       Add jobsite address
                     </button>
                   ) : null}
-                  {quote.salesIntakeHref && !quote.canAddServiceAddress ? (
-                    <Link href={`${quote.salesIntakeHref}/edit`} className={primaryBtnClass}>
+                  {quote.leadHref && !quote.canAddServiceAddress ? (
+                    <Link href={`${quote.leadHref}/edit`} className={primaryBtnClass}>
                       Add on request
                     </Link>
                   ) : null}
-                  {quote.salesIntakeHref && quote.canAddServiceAddress ? (
-                    <Link href={`${quote.salesIntakeHref}/edit`} className={secondaryBtnClass}>
+                  {quote.leadHref && quote.canAddServiceAddress ? (
+                    <Link href={`${quote.leadHref}/edit`} className={secondaryBtnClass}>
                       Edit request record
                     </Link>
                   ) : null}
@@ -818,8 +1027,8 @@ function FactsGrid({
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution") => void;
 }) {
   const { signals } = readiness;
-  const salesIntakeLabel =
-    quote.salesIntakeTitle ?? (mode === "standard" ? "Inside this intake" : "—");
+  const leadLabel =
+    quote.leadTitle ?? (mode === "standard" ? "Inside this intake" : "—");
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -851,11 +1060,11 @@ function FactsGrid({
       >
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <p className={sectionLabelClass}>Intake</p>
-          {quote.salesIntakeId && (
+          {quote.leadId && (
             <ArrowUpRight className="size-3 text-foreground-subtle opacity-0 group-hover:opacity-100 transition-opacity" />
           )}
         </div>
-        <p className="truncate text-sm font-medium text-foreground">{salesIntakeLabel}</p>
+        <p className="truncate text-sm font-medium text-foreground">{leadLabel}</p>
       </button>
       <div className="rounded-lg border border-border bg-surface p-3">
         <p className={`${sectionLabelClass} mb-0.5`}>Job</p>
@@ -885,7 +1094,7 @@ function OverviewTab({
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
   onMutated,
-  embeddedInSalesIntake,
+  embeddedInLead,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
@@ -896,7 +1105,7 @@ function OverviewTab({
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
-  embeddedInSalesIntake?: boolean;
+  embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
   const isFull = mode === "full";
@@ -922,7 +1131,7 @@ function OverviewTab({
       <QuoteJobsiteCallout
         quote={quote}
         onMutated={onMutated}
-        embeddedInSalesIntake={embeddedInSalesIntake}
+        embeddedInLead={embeddedInLead}
         onRequestServiceAddress={onRequestServiceAddress}
       />
 
@@ -1036,13 +1245,14 @@ function ScopeTab({
     isArchived,
     customerDocumentTitle,
     internalNotes,
-    hasSalesIntakeNotes,
+    hasLeadNotes,
     subtotalCents,
     totalCents,
     lineItems,
     lineItemTemplates,
     draftTasksByLineId,
     reusableTaskOptions,
+    stages,
   } = workspaceTabs;
   const lineCount = lineItems.length;
 
@@ -1060,13 +1270,14 @@ function ScopeTab({
         initialTitle={quote.title}
         initialInternalNotes={internalNotes}
         initialCustomerDocumentTitle={customerDocumentTitle}
-        hasSalesIntakeNotes={hasSalesIntakeNotes}
+        hasLeadNotes={hasLeadNotes}
         subtotalCents={subtotalCents}
         totalCents={totalCents}
         lineItems={lineItems}
         lineItemTemplates={lineItemTemplates}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
+        stages={stages}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
         onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
       />
@@ -1129,6 +1340,7 @@ function ScopeTab({
                       isExecutionEditable={isExecutionEditable}
                       draftTasks={draftTasksByLineId[line.id] ?? []}
                       reusableOptions={reusableTaskOptions}
+                      stages={stages}
                     />
                   </div>
                 </div>
@@ -1143,7 +1355,7 @@ function ScopeTab({
   /* Standard / compact + DRAFT — workspace-safe inline editor. Add / Edit /
    * Delete and Scope Library Apply-template submit through `*WorkspaceAction`
    * server actions and call `onMutated()` so the surrounding popup/drawer/
-   * sales-intake-tab can re-load its `QuoteWorkSurfaceData` payload. Per-line
+   * lead-tab can re-load its `QuoteWorkSurfaceData` payload. Per-line
    * execution editing is also supported in-place. */
   if (isCommercialEditable) {
     return (
@@ -1157,6 +1369,7 @@ function ScopeTab({
         lineItemTemplates={lineItemTemplates}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
+        stages={stages}
         shouldFocusAddForm={shouldFocusAddForm}
         onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
@@ -1221,6 +1434,7 @@ function ScopeTab({
                 isExecutionEditable={isExecutionEditable}
                 draftTasks={draftTasksByLineId[line.id] ?? []}
                 reusableOptions={reusableTaskOptions}
+                stages={stages}
               />
             </li>
           ))}
@@ -1242,29 +1456,29 @@ function ScopeTab({
   );
 }
 
-/* ─── Tab: Customer & Sales Intake ─────────────────────────────────────────────── */
+/* ─── Tab: Customer & Lead ─────────────────────────────────────────────── */
 
 function ContextTab({
   quote,
   workspaceTabs,
   onMutated,
-  embeddedInSalesIntake,
+  embeddedInLead,
   onRequestServiceAddress,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   onMutated?: () => void;
-  embeddedInSalesIntake?: boolean;
+  embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
-  const { customerName, customerHref, salesIntake } = workspaceTabs;
+  const { customerName, customerHref, lead } = workspaceTabs;
 
   return (
     <div className="space-y-4">
       <QuoteJobsiteCallout
         quote={quote}
         onMutated={onMutated}
-        embeddedInSalesIntake={embeddedInSalesIntake}
+        embeddedInLead={embeddedInLead}
         onRequestServiceAddress={onRequestServiceAddress}
       />
 
@@ -1335,19 +1549,19 @@ function ContextTab({
         )}
       </div>
 
-      {/* Sales Intake */}
+      {/* Lead */}
       <div className="rounded-xl border border-border bg-surface p-4">
         <p className={`${sectionLabelClass} mb-2`}>Intake</p>
-        {salesIntake ? (
+        {lead ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
               <div className="min-w-0">
                 <p className={sectionLabelClass}>Linked request</p>
                 <p className="mt-1 truncate text-sm font-medium text-foreground">
-                  {salesIntake.title}
+                  {lead.title}
                 </p>
               </div>
-              <Link href={salesIntake.href} className={listLinkClass}>
+              <Link href={lead.href} className={listLinkClass}>
                 Intake record
                 <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
               </Link>
@@ -1358,33 +1572,33 @@ function ContextTab({
               <p className={`${sectionLabelClass} mb-3`}>Intake context</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-3">
-                  {salesIntake.source ? (
+                  {lead.source ? (
                     <div>
                       <p className={sectionLabelClass}>Source</p>
                       <p className="mt-0.5 text-sm text-foreground">
-                        {salesIntake.source}
+                        {lead.source}
                       </p>
                     </div>
                   ) : null}
-                  {salesIntake.contactName ||
-                  salesIntake.email ||
-                  salesIntake.phone ? (
+                  {lead.contactName ||
+                  lead.email ||
+                  lead.phone ? (
                     <div>
                       <p className={sectionLabelClass}>Contact</p>
                       <div className="mt-0.5 space-y-0.5 text-sm">
-                        {salesIntake.contactName ? (
+                        {lead.contactName ? (
                           <p className="text-foreground">
-                            {salesIntake.contactName}
+                            {lead.contactName}
                           </p>
                         ) : null}
-                        {salesIntake.email ? (
+                        {lead.email ? (
                           <p className="text-foreground-muted break-all">
-                            {salesIntake.email}
+                            {lead.email}
                           </p>
                         ) : null}
-                        {salesIntake.phone ? (
+                        {lead.phone ? (
                           <p className="text-foreground-muted">
-                            {salesIntake.phone}
+                            {lead.phone}
                           </p>
                         ) : null}
                       </div>
@@ -1394,9 +1608,9 @@ function ContextTab({
                 <div>
                   <p className={sectionLabelClass}>Intake notes</p>
                   <div className="mt-1">
-                    {salesIntake.notes ? (
+                    {lead.notes ? (
                       <div className="rounded border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-foreground">
-                        {salesIntake.notes}
+                        {lead.notes}
                       </div>
                     ) : (
                       <p className="text-sm italic text-foreground-muted">
@@ -1411,13 +1625,13 @@ function ContextTab({
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-5 text-center">
             <p className="text-sm text-foreground-muted">
-              No sales intake linked to this quote.
+              No lead linked to this quote.
             </p>
             <p className="mt-1 text-xs text-foreground-subtle">
               Linking is optional. Use it when this quote comes from a tracked
-              sales intake.
+              lead.
             </p>
-            <Link href="/sales" className={`mt-3 ${listLinkClass}`}>
+            <Link href="/leads" className={`mt-3 ${listLinkClass}`}>
               Intakes
             </Link>
           </div>
@@ -1469,8 +1683,8 @@ function CheckpointList({
 
 /**
  * Workspace-safe activate button shown only when the quote is approved AND
- * the surface is embedded inside a Sales Intake workspace. Calls the same activation
- * transaction as the full-page form, but stays in the Sales Intake workspace and
+ * the surface is embedded inside a Lead workspace. Calls the same activation
+ * transaction as the full-page form, but stays in the Lead workspace and
  * shows an in-place success card with an Open job link.
  *
  * The full-page execution-review activation form continues to redirect — this
@@ -1591,7 +1805,7 @@ function SendAcceptTab({
   activePreview,
   onPreviewChange,
   onMutated,
-  embeddedInSalesIntake,
+  embeddedInLead,
 }: {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
@@ -1600,7 +1814,7 @@ function SendAcceptTab({
   activePreview: "none" | "proposal" | "execution";
   onPreviewChange: (preview: "none" | "proposal" | "execution") => void;
   onMutated?: () => void;
-  embeddedInSalesIntake?: boolean;
+  embeddedInLead?: boolean;
 }) {
   const { isArchived, sendCheckpoints, approvalCheckpoints } = workspaceTabs;
 
@@ -1713,11 +1927,36 @@ function SendAcceptTab({
                 Copy
               </button>
             </div>
-            {quote.lastSentEmailAtLabel && (
-              <p className="mt-2 text-[10px] text-foreground-subtle">
-                Last sent: {quote.lastSentEmailAtLabel}
-              </p>
-            )}
+            
+            {/* Token status */}
+            <div className="mt-2 space-y-1">
+              {quote.lastSentEmailAtLabel && (
+                <p className="text-[10px] text-foreground-subtle">
+                  Last sent: {quote.lastSentEmailAtLabel}
+                </p>
+              )}
+              {quote.shareTokenRevokedAt && (
+                <p className="text-[10px] text-danger">
+                  Revoked: {new Date(quote.shareTokenRevokedAt).toLocaleDateString()}
+                </p>
+              )}
+              {!quote.shareTokenRevokedAt && quote.shareTokenExpiresAt && (
+                <p className="text-[10px] text-foreground-subtle">
+                  Expires: {new Date(quote.shareTokenExpiresAt).toLocaleDateString()}
+                </p>
+              )}
+              {!quote.shareTokenRevokedAt && !quote.shareTokenExpiresAt && (
+                <p className="text-[10px] text-foreground-subtle">
+                  Never expires
+                </p>
+              )}
+            </div>
+
+            {/* Token management buttons */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <RevokeTokenButton quoteId={quote.id} onMutated={onMutated} />
+              <ExtendTokenButton quoteId={quote.id} onMutated={onMutated} />
+            </div>
           </div>
         )}
 
@@ -1770,11 +2009,11 @@ function SendAcceptTab({
           </div>
         ) : null}
 
-        {/* Embedded-only inline Activate job — keeps the user in the Sales Intake
+        {/* Embedded-only inline Activate job — keeps the user in the Lead
             workspace; the full quote page continues to use the redirecting
             QuoteActivateJobForm via the execution-review route. Only shown
             when the readiness story says activation is the next step. */}
-        {embeddedInSalesIntake &&
+        {embeddedInLead &&
         !isArchived &&
         readiness.state === "APPROVED_READY_TO_ACTIVATE" ? (
           <div className="mb-4">
@@ -1831,8 +2070,7 @@ function SendAcceptTab({
         <p className={`${sectionLabelClass} mb-1`}>Proposal preview</p>
         <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
           Internal preview from the current saved quote — not a customer portal.
-          E-sign and automated delivery are not wired in this build; use Send
-          quote and Mark approved as staff workflow steps.
+          We&apos;ll email the customer a secure link they can review, sign, and download. E-sign vendor (DocuSign / Adobe Sign) integration is optional and not enabled.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -2013,7 +2251,7 @@ export function QuoteWorkSurface({
   suppressIdentityRow = false,
   initialTab = "overview",
   onWorkSurfaceMutated,
-  embeddedInSalesIntake = false,
+  embeddedInLead = false,
   onRequestServiceAddress,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
@@ -2023,7 +2261,7 @@ export function QuoteWorkSurface({
   const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
     if (
       initialTab === "overview" &&
-      embeddedInSalesIntake &&
+      embeddedInLead &&
       workspaceTabs.lineItems.length === 0
     ) {
       return "scope";
@@ -2032,7 +2270,7 @@ export function QuoteWorkSurface({
   });
 
   const visibleTabs = TABS.filter((t) => {
-    if (embeddedInSalesIntake && t.id === "context") return false;
+    if (embeddedInLead && t.id === "context") return false;
     return true;
   });
   const [activePreview, setActivePreview] = useState<
@@ -2064,9 +2302,9 @@ export function QuoteWorkSurface({
     setShouldOpenScopeLibraryPicker(false);
 
   /* Always invalidate SSR-rendered surfaces (Workstation drawer, full Quote
-   * page, full Sales Intake page Quote tab) and additionally let the parent
+   * page, full Lead page Quote tab) and additionally let the parent
    * container re-fetch its lazy `loadQuoteWorkSurfaceAction` payload for
-   * popup/drawer/sales-intake-tab cases. This handler is the single source of
+   * popup/drawer/lead-tab cases. This handler is the single source of
    * truth for "the quote just changed inside the surface — refresh
    * everything that displays it without navigating away". */
   const handleSurfaceMutated = useCallback(() => {
@@ -2117,7 +2355,7 @@ export function QuoteWorkSurface({
           onRequestAddLineItem={handleRequestAddLineItem}
           onRequestScopeLibraryPicker={handleRequestScopeLibraryPicker}
           onMutated={handleSurfaceMutated}
-          embeddedInSalesIntake={embeddedInSalesIntake}
+          embeddedInLead={embeddedInLead}
           onRequestServiceAddress={onRequestServiceAddress}
         />
       )}
@@ -2139,7 +2377,7 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           onMutated={handleSurfaceMutated}
-          embeddedInSalesIntake={embeddedInSalesIntake}
+          embeddedInLead={embeddedInLead}
           onRequestServiceAddress={onRequestServiceAddress}
         />
       )}
@@ -2152,7 +2390,7 @@ export function QuoteWorkSurface({
           activePreview={activePreview}
           onPreviewChange={setActivePreview}
           onMutated={handleSurfaceMutated}
-          embeddedInSalesIntake={embeddedInSalesIntake}
+          embeddedInLead={embeddedInLead}
         />
       )}
       {activeTab === "record" && (

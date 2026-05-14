@@ -43,8 +43,17 @@
 
 | Term | Definition |
 |------|------------|
-| **Task** | Actionable unit with ownership and state; may exist in lead prep, quote prep, or job execution contexts. **Tasks are the execution power layer** in v5 (I24). |
-| **Stage** | Lightweight **preset / container** that groups tasks under a line item (or within a job) for legibility. **Not** the place v5 builds operational depth—canon phrase per **I24**: *Stages are presets and containers. Tasks are the execution power layer.* May ship inside **composite templates** with tasks. |
+| **Task** | Actionable unit with ownership and state; may exist in lead prep, quote prep, or job execution contexts. **Tasks are the execution power layer** in v5 (I24). May be **Smart** (wired with signals) or **Dumb** (simple checklist). |
+| **Smart Task** | A task wired with **Provides** or **Requires** signals to automate its readiness in a workflow. |
+| **Dumb Task** | A task with no signal requirements; behaves as a simple checklist item that is always ready to start. |
+| **Stage** | Lightweight **preset / container** that groups tasks under a line item (or within a job) for legibility. **Not** the place v5 builds operational depth—canon phrase per **I24**: *Stages are presets and containers. Tasks are the execution power layer.* May ship inside **composite templates** with tasks. Architecture allows stages to act as **Stage Gates** via signals. |
+| **Stage Gate** | A stage configured to **Require** signals (blocking the entire folder) or **Provide** a signal (firing only when all tasks in the stage are complete). |
+| **Signal** | A named fact (e.g., `roof-sealed`, `permit-approved`) broadcast by a task, stage, or external event to communicate readiness to other parts of the job. |
+| **Provides** | The signal a task or stage "shouts" upon completion. |
+| **Requires** | The signal(s) a task or stage "listens" for before it becomes actionable. |
+| **Signal Bus** | The per-job "fact bus" that stores all published signals; the source of truth for task readiness. |
+| **Event** | (Formerly Detour) A dynamic, unplanned task or signal added in the field to handle surprises (e.g., missed inspection) that can "hijack" the signal bus to block downstream work until resolved. |
+| **Merge Mode** | **(Deprecated)** Prior v5 concept for grouping tasks; replaced by Signal-based cross-line handshakes. |
 | **Stage preset** | Named ordered set of default stage containers (e.g. **Standard Project**) the product offers so users do not design stage architecture from scratch. Architecture must allow presets to be **renamed, hidden, merged, specialized, or selected** later (I24); MVP UI ships the **Standard Project** preset only. |
 | **Standard Project (default stage preset)** | MVP default preset: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. Used on quote-line draft execution and on activated jobs unless / until other presets ship. |
 | **Service Work (reserved preset)** | **Future** smaller preset for service execution; not in MVP. Candidate wordings: **Prepare / Perform Work / Wrap Up** *or* **Before Visit / On Site / Complete**. Same core line-item / stage / task model—**no** separate task engine. |

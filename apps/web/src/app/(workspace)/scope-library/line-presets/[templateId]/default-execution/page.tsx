@@ -7,7 +7,6 @@ import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library
 import { LineItemTemplateDefaultExecutionPanel } from "@/components/scope-library/line-item-template-default-execution-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { EXECUTION_STAGE_KEYS_ORDERED, getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import type {
   DefaultExecutionStageGroup,
@@ -39,48 +38,79 @@ export default async function LineItemTemplateDefaultExecutionPage({
     notFound();
   }
 
-  const rawTasks = await db.lineItemTemplateTask.findMany({
-    where: { lineItemTemplateId: id },
-    orderBy: [{ sortOrder: "asc" }],
-  });
+  const [rawTasks, stages, reusableRows] = await Promise.all([
+    db.lineItemTemplateTask.findMany({
+      where: { lineItemTemplateId: id },
+      include: { stage: { select: { name: true } } },
+      orderBy: [{ sortOrder: "asc" }],
+    }),
+    db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
+    }),
+    db.taskTemplate.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: { title: "asc" },
+      select: { id: true, title: true, stageId: true, category: true, stage: { select: { name: true } } },
+    }),
+  ]);
 
-  const tasksByStage = new Map<string, DefaultExecutionTaskRow[]>();
-  for (const sk of EXECUTION_STAGE_KEYS_ORDERED) {
-    tasksByStage.set(sk, []);
+  const tasksByStage = new Map<string | null, DefaultExecutionTaskRow[]>();
+  
+  // Initialize map with all stages plus a null key for tasks without a stage
+  tasksByStage.set(null, []);
+  for (const s of stages) {
+    tasksByStage.set(s.id, []);
   }
+
   for (const t of rawTasks) {
     const row: DefaultExecutionTaskRow = {
       id: t.id,
       title: t.title,
-      stageKey: t.stageKey,
+      stageId: t.stageId,
       category: t.category,
       instructions: t.instructions,
       sortOrder: t.sortOrder,
       sourceType: t.sourceType,
       sourceTaskTemplateId: t.sourceTaskTemplateId,
       sourceLineItemTemplateTaskId: null,
+      providesSignals: t.providesSignals,
+      requiresSignals: t.requiresSignals,
+      hardSignal: t.hardSignal,
+      requirementsJson: t.requirementsJson,
     };
-    tasksByStage.get(t.stageKey)?.push(row);
+    tasksByStage.get(t.stageId)?.push(row);
   }
 
-  const stagesWithTasks: DefaultExecutionStageGroup[] = EXECUTION_STAGE_KEYS_ORDERED.filter(
-    (sk) => (tasksByStage.get(sk)?.length ?? 0) > 0,
-  ).map((sk) => ({
-    stageKey: sk,
-    label: getExecutionStageLabel(sk),
-    tasks: tasksByStage.get(sk) ?? [],
-  }));
+  const stagesWithTasks: DefaultExecutionStageGroup[] = [];
+  
+  // First, add tasks with no stage
+  const noStageTasks = tasksByStage.get(null) || [];
+  if (noStageTasks.length > 0) {
+    stagesWithTasks.push({
+      stageId: null,
+      label: "No stage",
+      tasks: noStageTasks,
+    });
+  }
 
-  const reusableRows = await db.taskTemplate.findMany({
-    where: { organizationId: ctx.organizationId, archivedAt: null },
-    orderBy: { title: "asc" },
-    select: { id: true, title: true, stageKey: true, category: true },
-  });
+  // Then, add tasks grouped by stage in stage sortOrder
+  for (const s of stages) {
+    const tasks = tasksByStage.get(s.id) || [];
+    if (tasks.length > 0) {
+      stagesWithTasks.push({
+        stageId: s.id,
+        label: s.name,
+        tasks,
+      });
+    }
+  }
 
   const reusableOptions: ReusableTaskPickerOption[] = reusableRows.map((r) => ({
     id: r.id,
     title: r.title,
-    stageLabel: getExecutionStageLabel(r.stageKey),
+    stageLabel: r.stage?.name ?? "No stage",
     categoryLabel: getTaskTemplateCategoryLabel(r.category),
   }));
 
@@ -128,6 +158,7 @@ export default async function LineItemTemplateDefaultExecutionPage({
         presetDescription={preset.description}
         stagesWithTasks={stagesWithTasks}
         reusableOptions={reusableOptions}
+        stages={stages}
       />
     </div>
   );

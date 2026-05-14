@@ -1,4 +1,4 @@
-import { StaffRole, Job, Quote, SalesIntake, Customer } from "@prisma/client";
+import { StaffRole, Job, Quote } from "@prisma/client";
 import { DEV_ORGANIZATION_ID, DEV_USER_ID, DEV_ORGANIZATION_NAME, DEV_ORGANIZATION_SLUG } from "./dev-organization";
 import { auth } from "@/auth";
 import { db } from "./db";

@@ -41,7 +41,7 @@ export function QuoteCheckpointRecordedBody({
         </div>
       ) : null}
 
-      {document.customer || document.salesIntake ? (
+      {document.customer || document.lead ? (
         <div className="border-b border-border px-4 py-6 sm:px-6">
           <SectionHeading
             title="Prepared for"
@@ -53,8 +53,8 @@ export function QuoteCheckpointRecordedBody({
               <dd className="mt-1 text-sm text-foreground">{document.customer?.displayName ?? "—"}</dd>
             </div>
             <div>
-              <dt className={fieldLabelClass}>Sales intake title</dt>
-              <dd className="mt-1 text-sm text-foreground">{document.salesIntake?.title ?? "—"}</dd>
+              <dt className={fieldLabelClass}>Lead title</dt>
+              <dd className="mt-1 text-sm text-foreground">{document.lead?.title ?? "—"}</dd>
             </div>
           </dl>
         </div>

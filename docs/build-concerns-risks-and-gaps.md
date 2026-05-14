@@ -48,8 +48,9 @@
 | P1 | **Activation path** | I3: direct materialization after approval—exact steps (transaction boundaries, partial failure). | Duplicate entry or half-created jobs. | Spec activation saga: quote state → job + initial tasks + events. |
 | P2 | **Template instance rules** | I4: instance vs library mutation. | Cross-quote corruption. | Explicit copy-on-apply; library update from instance as single user action. |
 | P3 | **Change orders** | Append model + re-sign thresholds (locked §7). | Customer/legal mismatch. | CO entity model + diff UI + portal projection rules. |
-| P4 | **Construction issues** | Typed enums, spawn tasks, Workstation surfacing (locked §10, I16). | “Wall of notes,” blocked work invisible. | Issue create flow + task spawn hooks + workstation query integration. |
-| P5 | **Payment blocks** | Stripe + blocks on state transitions (locked §8). | Work starts unpaid or money state lies. | Configurable org rules; surface on Workstation (workstation-canon). |
+| P4 | **Construction issues** | Typed enums, signal muting, Workstation surfacing (locked §10, I16). | “Wall of notes,” blocked work invisible. | Issue create flow + signal muting hooks + workstation query integration. |
+| P5 | **Signal Engine** | Signal Bus, Provides/Requires, AI Secretary (locked §14). | Manual overhead, deadlocks, circular dependencies. | **RESOLVED 2026-05-13**: Signal Bus, task readiness, AI Secretary, and cycle detection implemented. |
+| P6 | **Payment signals** | Stripe + signals on payment cleared (locked §8, §14). | Work starts unpaid or money state lies. | **RESOLVED 2026-05-13**: `payment:cleared` signals wired to payment requirements. |
 
 ---
 
@@ -133,7 +134,7 @@ Canon names richer quote/job lifecycles in [locked-decisions-v1.md](./canon/lock
 | `declined` / `expired` / `superseded` | *(not persisted yet)* | Add when portal reject / expiry / supersede ships |
 | `active` execution | `JobStatus.ACTIVE` | One `Job` per `Quote` (`quoteId` unique) |
 | `scheduled` / `on_hold` / `complete` / `closed` / `cancelled` | *(not persisted yet)* | Add when job lifecycle UX needs them; today use issues/holds/activity |
-| Job task runtime | `JobTaskStatus.TODO` \| `IN_PROGRESS` \| `DONE` | Workstation + job detail |
+| Job task runtime | `JobTaskStatus.TODO` \| `DONE` | Workstation + job detail |
 
 **Rule:** do not migrate enums for parity alone. New values ship with the flow that needs them (portal decline, job hold, and so on).
 
@@ -165,3 +166,5 @@ Product canon: [domains-and-boundaries.md](./canon/domains-and-boundaries.md) (p
 | 2026-05-05 | Added §10 Fast Build vs Strict Correction (outside product canon). |
 | 2026-05-06 | D3 + §9 step 4 — aligned with [canon/quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md); `QuoteCheckpoint` naming guidance vs `QuoteRevision` / `ApprovedSnapshot`. |
 | 2026-05-12 | §11 lifecycle status mapping (canon vs current enums); §12 payment schedule / gate / task implementation contract. |
+| 2026-05-13 | Added P5 (Signal Engine) and P6 (Payment signals); updated P4 (Construction issues) for signal muting. |
+| 2026-05-13 | Resolved P5 and P6; updated §11 for JobTaskStatus collapse. |

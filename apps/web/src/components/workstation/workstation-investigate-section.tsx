@@ -20,7 +20,7 @@ import {
 } from "@/lib/workstation-investigate-signals";
 
 const RECORD_ICONS: Record<WorkstationInvestigateRecordType, LucideIcon> = {
-  "sales-intake": Inbox,
+  "lead": Inbox,
   quote: FileText,
   job: Briefcase,
   customer: UserRound,
@@ -29,7 +29,7 @@ const RECORD_ICONS: Record<WorkstationInvestigateRecordType, LucideIcon> = {
 };
 
 const RECORD_LABELS: Record<WorkstationInvestigateRecordType, string> = {
-  "sales-intake": "Sales Intake",
+  "lead": "Lead",
   quote: "Quote",
   job: "Job",
   customer: "Customer",
@@ -130,7 +130,7 @@ export function WorkstationInvestigateSection({
 
           <div className="mt-3">
             <p className="mb-3 text-xs leading-relaxed text-foreground-subtle">
-              {WORKSTATION_COPY.investigate.previewSectionSalesIntake}
+              {WORKSTATION_COPY.investigate.previewSectionLead}
             </p>
             <div className="space-y-2">
               {previewSignals.map((signal) => (

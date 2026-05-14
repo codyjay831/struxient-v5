@@ -25,13 +25,13 @@ Struxient v5 must support **fast quote turnover** and **flexible execution plann
 
 ### Posture A — Plan during the quote (“front-load”)
 
-Users may attach **stages, tasks, dependencies, resource hints** while quoting—especially when using templates or when the estimator already knows the crew path.
+Users may attach **tasks and signals** while quoting—especially when using templates or when the estimator already knows the trade handshakes. AI may suggest these signals automatically based on task names.
 
 **Intent:** capture reality while context is hot; reuse next time via templates.
 
 ### Posture B — Defer execution detail until after the quote (“sell first, plan second”)
 
-Users may ship a **commercially complete** quote with **minimal or no** execution graph, then **design or refine** the executable workflow **after** customer approval (or after deposit, mobilization, etc.—rules are product territory).
+Users may ship a **commercially complete** quote with **minimal or no** signal wiring, then **design or refine** the executable workflow **after** customer approval. The system auto-satisfies missing signals at activation to ensure work can start.
 
 **Intent:** keep quoting lightweight when speed matters; **do not** force a full execution design to win the job.
 
@@ -61,7 +61,7 @@ When **tasks and stages** are attached **during quoting**, systems often blur:
 
 3. **Clean handoff, messy-free default** — **Execution Review** (post-sign, pre-activation) should produce a **coherent** internal plan; **activation** then **materializes** runtime job work for the Workstation. Inherit draft structure when present, **without** trapping users in painful workarounds. If the quote carried **no** execution draft, the review + activation path still produces a **usable** job container ready for planning.
 
-4. **Post-sign refinement is normal; post-activation ops edits are normal** — Refining the internal execution plan **after customer sign** during **Execution Review**, then refining assignments, order, dependencies, and adding mobilization / inspection / punch tasks **on the job after activation**, is **expected**—not an exception. Early planning on the quote should **accelerate** delivery planning, not **cement** a wrong plan.
+4. **Post-sign refinement is normal; post-activation ops edits are normal** — Refining the internal execution plan **after customer sign** during **Execution Review**, then refining assignments, signal wiring, and adding mobilization / inspection / punch tasks **on the job after activation**, is **expected**—not an exception. Early planning on the quote should **accelerate** delivery planning, not **cement** a wrong plan.
 
 *(Exact UX mechanics—e.g., explicit “draft” toggles, separate tabs, copy-on-activate behaviors—are implementation; **canon** requires the **outcomes** above.)*
 
@@ -106,12 +106,12 @@ Use this sentence when a feature, prompt, or design discussion needs to settle t
 | Concept | Role in MVP execution planning |
 |---------|--------------------------------|
 | **Line item** | What was sold / scoped — the commercial anchor. |
-| **Stage** | Lightweight default **container / preset** that groups tasks for legibility. |
-| **Task** | The real **executable detail** — ownership, state, ordering, dependencies, blockers. |
+| **Stage** | Lightweight default **container / preset** that groups tasks for legibility. May act as a **Gate** via signals. |
+| **Task** | The real **executable detail** — ownership, state, and **Signal-based readiness**. |
 
 ### Default MVP stage preset — **Standard Project**
 
-The MVP ships with **one** named stage preset. The five containers must appear in this order:
+The MVP ships with a default set of stages stored in an org-scoped **Stage** table. The five containers typically appear in this order:
 
 1. **Pre-Construction**
 2. **Engineering & Permits**
@@ -119,16 +119,11 @@ The MVP ships with **one** named stage preset. The five containers must appear i
 4. **Installation**
 5. **Final Inspection & Closeout**
 
-This preset is the default **on quote-line draft execution and on post-activation jobs** in MVP. Adding a task is a per-stage action — there is no “pick a stage from a freeform list” design step required to start planning work.
+This preset is the default **on quote-line draft execution and on post-activation jobs** in MVP. Adding a task is a per-stage action. Users can rename, reorder, or add stages to fit their trade.
 
 ### Future possible preset — **Service Work** (not in MVP)
 
-Reserved for smaller / shorter service execution. Two candidate wordings; the product decision between them is deferred to real usage:
-
-- **Service Work** (working name): **Prepare** → **Perform Work** → **Wrap Up**
-- **Alternative if it tests better**: **Before Visit** → **On Site** → **Complete**
-
-Service work **must use the same core line item / stage / task model**. v5 **must not** introduce a separate task engine for service execution — the smaller preset is the only required adjustment.
+Reserved for smaller / shorter service execution. Service work **must use the same core line-item / stage / task model** driven by signals.
 
 ### Where the operational power lives
 
@@ -136,14 +131,14 @@ Stages **must not** become the main power layer. The real operational power in v
 
 - **Line items** (commercial anchor)
 - **Tasks** (executable detail)
-- **Payments / payment gates**
+- **Signals** (readiness and dependencies)
 - **Activity history**
 - **Approvals**
 - **Execution records**
 - **Daily logs**
 - **Customer / job changes**
 
-Features that would push expressive depth into stages (custom workflow designers, stage-level dependencies, kanban-style stage operations, placement semantics) **must not** ship in MVP.
+Features that would push expressive depth into stages (custom workflow designers, stage-level dependencies, kanban-style stage operations, placement semantics) **must not** ship in MVP. Stage-level signals are allowed for gating.
 
 ### MVP rules (do / do not)
 

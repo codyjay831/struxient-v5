@@ -184,7 +184,10 @@ function IssueCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             {issue.severity === JobIssueSeverity.BLOCKS_WORK && !isResolved && (
-              <AlertTriangle className="size-4 text-danger" aria-hidden />
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-danger" aria-hidden />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-danger">Mutes signals</span>
+              </div>
             )}
             <h3 className="text-sm font-semibold text-foreground">
               {issue.title}

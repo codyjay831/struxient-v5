@@ -58,8 +58,9 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 ## v5 app slice: Job runtime activation (minimal V1)
 
 - **`Job`** is the runtime execution record; **one job per quote** (`Job.quoteId @unique`). `JobStatus` = `ACTIVE | ARCHIVED` in V1—no scheduling, holds, or financial closeout yet.
-- **Activation** copies the approved quote's draft execution into runtime rows (`JobStage`, `JobTask`) inside one transaction; later quote / template edits **do not** mutate tasks already on the job.
-- **`JobStage.blockType`** distinguishes shared canonical phases (`SHARED`) from one-line work blocks (`SEPARATE_LINE_ITEM`)—same semantics as the execution review preview.
-- **Activation readiness rules (V1):** quote must be `APPROVED`, must have at least one line, no `UNREVIEWED` lines without tasks, no `NO_EXECUTION_NEEDED` lines that still carry tasks, and at least one executable task across the quote. "All commercial-only / zero tasks" currently **blocks** activation (no shell job in this slice).
+- **Activation** copies the approved quote's draft execution into runtime rows (`JobStage`, `JobTask`, `JobSignal`) inside one transaction; later quote / template edits **do not** mutate tasks already on the job.
+- **Signal Bus** is materialized at activation. Any required signals without a provider are auto-satisfied (soft dependencies) unless marked as **Hard Signals**.
+- **JobStage** rows are materialized from the org-scoped **Stage** table.
+- **Activation readiness rules (V1):** quote must be `APPROVED`, must have at least one line, no `UNREVIEWED` lines without tasks, no `NO_EXECUTION_NEEDED` lines that still carry tasks, and at least one executable task across the quote. "All commercial-only / zero tasks" currently **blocks** activation (no shell job in this slice). Hard signal orphans without a provider also block activation.
 - **No execution-confirmation checkpoint** at activation in V1—`Job.activatedAt` is the proof. A future `ACTIVATION` checkpoint may be added if customer-facing acceptance proof of activation is needed.
 - **Customer-facing checkpoints unchanged**: SEND / APPROVAL projections stay commercial-only; no internal execution leakage at activation.

@@ -66,7 +66,7 @@ export function QuoteArchivedRestorePanel({ id, quoteId }: { id?: string; quoteI
     <WorkspacePanel id={id} padding="compact" className="mb-6 border-border-strong">
       <SectionHeading
         title="Restore to draft"
-        description="Only action that mutates an archived quote here: status returns to Draft so your team can edit title, internal notes, and line items again. Stored totals and customer/sales intake links are unchanged."
+        description="Only action that mutates an archived quote here: status returns to Draft so your team can edit title, internal notes, and line items again. Stored totals and customer/lead links are unchanged."
       />
       <form action={formAction} className="mt-3 space-y-3">
         {state.error ? <FormError message={state.error} /> : null}

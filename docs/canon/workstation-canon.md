@@ -54,9 +54,9 @@ From the Workstation, a user should be able to recover answers quickly (exact UI
 2. **What is blocked?** (and **why**)  
 3. **What is overdue?**  
 4. **Which jobs need attention** even if no single task is “late”?  
-5. **What task comes next** in a given job’s executable path?  
-6. **What changed** since I last looked? (activity, edits, new events)  
-7. **What needs approval, payment, scheduling, or correction** before progress is safe or allowed?
+5. **What task comes next** in a given job’s executable path? (What signal is it waiting on?)
+6. **What changed** since I last looked? (activity, edits, new events, signal overrides)
+7. **What needs approval, payment, scheduling, or correction** before progress is safe or allowed? (Which signals are missing?)
 
 If a design choice makes these questions **harder** than today’s baseline for the persona, it should be treated as a **regression risk** unless canon is explicitly revised.
 
@@ -71,11 +71,12 @@ Non-exhaustive examples (may mirror v1 tab locks or evolve):
 - **Daily dashboard** — prioritized slice for “today.”  
 - **Job-centric lens** — attention and executable state **across** jobs, with drill-down to job detail where needed.  
 - **Task-centric lens** — tasks across jobs (assigned, unassigned, blocked).  
+- **Waiting lens** — tasks that are otherwise ready but waiting on a specific **Signal**.
 - **Calendar / schedule lens** — time-based constraints and commitments feeding readiness.  
 - **Analytics** — secondary to action; should not steal the default “landing” purpose unless configured.  
 - **Work priority views** — explicit sorting by urgency, SLA, payment gate, customer tier (rules product-defined).  
 - **Assigned / blocked / upcoming** — canonical triage lenses.  
-- **Payment-related blockers** — money as a first-class blocker surface, not only a finance screen.  
+- **Payment-related blockers** — money as a first-class signal provider, not only a finance screen.  
 - **Crew / resource needs** — surfacing understaffing, missing equipment, or missing parts that prevent execution.
 
 Canon treats these as **views over the same underlying truth**, not siloed conflicting queues.

@@ -9,14 +9,13 @@ const activeClass = `${baseClass} border-border-strong bg-foreground/5 text-fore
 export function ScopeLibrarySectionNav({
   active,
 }: {
-  active: "presets" | "tasks";
+  active: "presets" | "tasks" | "stages" | "signals";
 }) {
   return (
     <WorkspacePanel padding="compact" className="mb-6">
       <p className="text-xs font-medium text-foreground">Scope Library</p>
       <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-        Saved line items and reusable tasks. Applying either onto a quote copies values—library rows are
-        not live-linked to existing quotes.
+        Saved line items, reusable tasks, and workflow configuration.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
@@ -32,6 +31,20 @@ export function ScopeLibrarySectionNav({
           aria-current={active === "tasks" ? "page" : undefined}
         >
           Reusable tasks
+        </Link>
+        <Link
+          href="/scope-library/stages"
+          className={active === "stages" ? activeClass : inactiveClass}
+          aria-current={active === "stages" ? "page" : undefined}
+        >
+          Stages
+        </Link>
+        <Link
+          href="/scope-library/signals"
+          className={active === "signals" ? activeClass : inactiveClass}
+          aria-current={active === "signals" ? "page" : undefined}
+        >
+          Signals
         </Link>
       </div>
     </WorkspacePanel>

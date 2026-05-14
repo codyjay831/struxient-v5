@@ -8,7 +8,6 @@ const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 
 const JOB_TASK_STATUS_LABELS: Record<JobTaskStatus, string> = {
   TODO: "To do",
-  IN_PROGRESS: "In progress",
   DONE: "Done",
 };
 
@@ -34,8 +33,6 @@ export function jobTaskStatusBadgeTone(status: JobTaskStatus): StatusBadgeTone {
   switch (status) {
     case "DONE":
       return "approved";
-    case "IN_PROGRESS":
-      return "sent";
     case "TODO":
     default:
       return "draft";

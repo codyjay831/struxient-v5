@@ -20,12 +20,14 @@ export function QuoteSendCheckpointsStaffPanel({
   quoteStatus,
   sendCheckpoints,
   approvalCheckpoints,
+  customerEmail,
 }: {
   id?: string;
   quoteId: string;
   quoteStatus: QuoteStatus;
   sendCheckpoints: QuoteSendCheckpointSummary[];
   approvalCheckpoints: QuoteSendCheckpointSummary[];
+  customerEmail?: string | null;
 }) {
   const isArchived = quoteStatus === QuoteStatus.ARCHIVED;
   const canSendQuote = quoteStatus === QuoteStatus.DRAFT;
@@ -54,7 +56,7 @@ export function QuoteSendCheckpointsStaffPanel({
             editable only while Draft—after send, scope and pricing lock here until a future revision flow exists.
           </p>
           <div className="mt-3">
-            <QuoteRecordSendCheckpointForm quoteId={quoteId} />
+            <QuoteRecordSendCheckpointForm quoteId={quoteId} customerEmail={customerEmail} />
           </div>
         </div>
       ) : null}

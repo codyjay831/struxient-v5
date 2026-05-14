@@ -8,27 +8,27 @@
 
 ### Intent
 
-Leads enter from **many real-world channels**; the system must not assume a single front door.
+Leads enter from **many real-world channels**; the system must not assume a single front door. The **Intake Composer** allows organizations to build custom, multi-step forms tailored to their specific trades.
 
 ### Canonical channels (non-exhaustive)
 
-- Phone calls  
-- Text messages  
-- Email  
-- Website forms  
-- Customer portal actions  
-- Manual entry by office users  
-- Future integrations or imports  
+- Phone calls (Manual entry)
+- Website forms (WebFormAdapter)
+- Text messages (SMSAdapter - stubbed)
+- Email (EmailAdapter - stubbed)
+- Webhooks (WebhookAdapter - stubbed)
+- Manual entry by office users
 
 ### Behavioral requirements
 
 - A lead may be created **automatically** from a source or **manually** by a user.
-- Intake must support **simple** workflows (minimal fields, fast capture) and **advanced** workflows ( richer qualification, routing, and follow-on tasks).
-- Intake should preserve **provenance** (where it came from) in a way that downstream tagging and reporting can use.
+- Intake must support **dynamic forms** built from **System Atoms** (blessed fields like `contact.name`, `address.service`) and **Custom Fields** (trade-specific data).
+- **Conditional Visibility** allows forms to adapt to user input (e.g., showing emergency details only if "ASAP" is selected).
+- Intake should preserve **provenance** (channel) and a **formSnapshot** (immutable record of the form schema at the time of submission).
 
 ### Architectural note
 
-Treat intake as a **capability seam**: new sources should not require redesigning the core lead model each time.
+Treat intake as a **capability seam**: new sources should not require redesigning the core lead model each time. The **Lead** model uses a thin core with **JSONB** fields (`contact`, `request`, `address`, `signals`) for maximum flexibility.
 
 ---
 
@@ -173,10 +173,10 @@ Templates help users move faster; once applied, **quote/job instances** must be 
 
 Users must be able to:
 
-- **Plan during the quote** (tasks/stages attached while selling—often via templates), **or**  
+- **Plan during the quote** (tasks attached while selling—often via templates with pre-wired signals), **or**  
 - **Defer execution planning** until after customer approval, **without** being penalized for choosing either path.
 
-Rich execution structure on a quote must remain **refinable after customer signature** during **Execution Review** (internal, pre-activation), then **again on the job** as normal operational edits after activation. See [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+Rich execution structure on a quote must remain **refinable after customer signature** during **Execution Review** (internal, pre-activation), then **again on the job** as normal operational edits after activation. AI can assist in wiring signals during both phases. See [templates-and-execution-planning.md](./templates-and-execution-planning.md).
 
 ---
 
@@ -197,14 +197,14 @@ Quotes and tasks create a **clear executable path** that survives real life.
 - What needs to happen?  
 - Who is responsible?  
 - What comes next?  
-- What is blocked?  
+- What is blocked? (Waiting on which signal?)
 - What changed?  
 - What needs to be fixed?  
 - How do we return to the original path?  
 
 ### Structure vs rigidity
 
-Support **order and dependencies**, but avoid brittleness where normal change invalidates the plan. The posture: **enough structure** for clarity, **enough flexibility** for reality.
+Support **Signals**, but avoid brittleness where normal change invalidates the plan. The posture: **enough structure** for clarity, **enough flexibility** for reality. AI acts as a "Secretary" to handle the boring manual wiring.
 
 ---
 
@@ -222,11 +222,10 @@ Customer change requests, material issues, failed inspections, site discoveries,
 
 An event may create or trigger:
 
-- New line items (e.g., change order posture)  
-- New tasks  
-- A correction path  
-- A temporary detour  
-- A defined return point to the prior path  
+- New tasks that **publish signals** to unblock work.
+- New tasks that **require signals** to pause work.
+- A temporary detour that "hijacks" the signal bus.
+- A defined return point to the prior path.
 
 ### Transparency requirements
 
@@ -235,7 +234,7 @@ For meaningful interruptions, users should see:
 - **Cause** (what happened)  
 - **Remediation work** (what must be fixed)  
 - **Ownership** (who owns the fix)  
-- **Concurrency posture** (original paused vs can continue in parallel)  
+- **Signal impact** (what is paused/muted)
 - **Return** (how the job resumes the prior path when appropriate)  
 
 ### Anti-patterns
@@ -248,7 +247,7 @@ For meaningful interruptions, users should see:
 Field construction is **issue-prone by nature**. The product must offer a **primary path** that is **hard to get wrong**:
 
 - **Guided capture** — logging an issue should **not** depend on users understanding internal workflow theory. Prefer a small number of **clear choices** (what happened, severity, who is affected, does this stop work) over a blank text box as the only structure.  
-- **Always produces actionable state** — a meaningful issue should **materialize** as **visible work**: tasks, blockers, detours, or explicit “return when fixed” markers—**and** appear in the **Workstation** so the cockpit stays honest.  
+- **Always produces actionable state** — a meaningful issue should **mute signals** of the affected task/stage, automatically pausing downstream work and appearing in the **Workstation** as a blocker.
 - **Ownership and causality by default** — every recorded issue should support answering: **what changed**, **who owns the next step**, **what is blocked**, without hunting through unrelated notes.  
 - **Forgiving edits** — users should be able to **correct a mis-filed issue** or **re-scope follow-up tasks** without orphaning the job or breaking sold scope; commercial changes still flow through **explicit** change paths when needed.
 
@@ -263,7 +262,7 @@ Use a **small** default lifecycle so implementation stays predictable:
 3. **resolved** — the issue’s driving concern is handled for operational purposes (may still leave follow-up history).  
 4. **cancelled** or **misfiled** (optional) — duplicate, mistake, or withdrawn without implying the original problem was “fixed.”
 
-**Anchoring:** an issue may block a **job**, **task**, **stage**, or **line item** depending on what anchors exist. If the anchor is **unclear**, default to a **job-level** issue plus a **triage task** so ownership lands somewhere visible.
+**Anchoring:** an issue may block a **job**, **task**, **stage**, or **line item** by **muting** its signals. If the anchor is **unclear**, default to a **job-level** issue plus a **triage task** so ownership lands somewhere visible.
 
 **Tasks vs issue closure:** completing a **spawned task** may **suggest** resolution but must **not silently close** the construction issue unless the product **explicitly** defines auto-close rules. Otherwise humans keep explicit control over issue lifecycle.
 
@@ -338,8 +337,9 @@ Users should **not** have to manually rebuild the job from scratch after signing
 
 - **Approved quote → job:** customer approval creates (or advances into) a **job** as the executable container.  
 - **Sold line items** become the **job scope anchors** for commercial continuity.  
-- **Quote-time stages/tasks**, when present, **copy into** the job as **editable job instances**—the job graph is the operational home for refinement; quote-time structure is **seed**, not an unchangeable diagram.  
-- If **no** stages/tasks exist at approval, activation still produces a **usable job container** with a **planning prompt** or **starter task** so execution is not a blank slate.  
+- **Quote-time tasks**, when present, **copy into** the job as **editable job instances** including their **Signal** wiring—the job graph is the operational home for refinement; quote-time structure is **seed**, not an unchangeable diagram.  
+- **Signal Bus** is initialized; AI-suggested or manual signals become active.
+- If **no** tasks exist at approval, activation still produces a **usable job container** with a **planning prompt** or **starter task** so execution is not a blank slate.  
 - Activation **never mutates** **checkpoint proof** for what was approved at sign time; post-approval changes to sold terms flow through **change orders**, **approved change records**, and related canon paths—while **job execution** remains the operational home ([quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md)).
 
 ---
@@ -378,7 +378,7 @@ What is owed, when, what work depends on payment, what is paid/unpaid, and wheth
 
 ### Schedule vs gate vs task (short)
 
-The **payment schedule** is **money truth**. **Payment gates** are **readiness rules** derived from that truth. **Follow-up tasks** help people **act**; they are **not** the schedule. **Payment-block issues** explain stoppage; they **do not replace** the schedule. See [domains-and-boundaries.md](./domains-and-boundaries.md#boundary-payments-vs-scheduling-vs-tasks).
+The **payment schedule** is **money truth**. **Payment gates** are **readiness rules** (Signals) derived from that truth. **Follow-up tasks** help people **act**; they are **not** the schedule. **Payment-block issues** explain stoppage; they **do not replace** the schedule. See [domains-and-boundaries.md](./domains-and-boundaries.md#boundary-payments-vs-scheduling-vs-tasks).
 
 ---
 
@@ -406,3 +406,4 @@ See [overview.md](./overview.md). This experience canon exists to keep planning 
 
 *Canon update (2026-05-05): System signals vs user tags (§2); construction issue MVP lifecycle (§7); activation MVP behavior (§10); payment schedule vs gate vs task (§12).*  
 *Canon update (2026-05-06): §10 activation — checkpoint proof vs CO / activity wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*
+*Canon update (2026-05-13): Signals recast as the primary readiness engine; AI Secretary introduced; Detours renamed to Events; Stages moved to org-scoped table.*

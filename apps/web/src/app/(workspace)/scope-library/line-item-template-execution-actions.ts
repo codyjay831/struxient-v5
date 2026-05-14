@@ -1,11 +1,11 @@
 "use server";
 
-import { LineItemTemplateTaskSource, Prisma, type ExecutionStageKey } from "@prisma/client";
+import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
+import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
 import { lineItemTemplateDefaultExecutionPath } from "@/lib/line-item-template-execution-path";
 
@@ -39,8 +39,18 @@ function enforceMaxLength(
   return null;
 }
 
+function parseSignals(value: FormDataEntryValue | null): string[] {
+  if (value == null || typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
 async function touchLineItemTemplateUpdatedAt(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   templateId: string,
   organizationId: string,
 ) {
@@ -52,24 +62,24 @@ async function touchLineItemTemplateUpdatedAt(
 }
 
 async function nextSortOrderInStage(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   lineItemTemplateId: string,
-  stageKey: ExecutionStageKey,
+  stageId: string | null,
 ) {
   const agg = await tx.lineItemTemplateTask.aggregate({
-    where: { lineItemTemplateId, stageKey },
+    where: { lineItemTemplateId, stageId },
     _max: { sortOrder: true },
   });
   return (agg._max.sortOrder ?? -1) + 1;
 }
 
 async function renumberSortOrdersInStage(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   lineItemTemplateId: string,
-  stageKey: ExecutionStageKey,
+  stageId: string | null,
 ) {
   const rows = await tx.lineItemTemplateTask.findMany({
-    where: { lineItemTemplateId, stageKey },
+    where: { lineItemTemplateId, stageId },
     orderBy: { sortOrder: "asc" },
     select: { id: true },
   });
@@ -86,9 +96,13 @@ type ParsedTaskBody =
   | {
       data: {
         title: string;
-        stageKey: NonNullable<ReturnType<typeof parseExecutionStageKey>>;
+        stageId: string | null;
         category: NonNullable<ReturnType<typeof parseTaskTemplateCategory>>;
         instructions: string | null;
+        providesSignals: string[];
+        requiresSignals: string[];
+        hardSignal: boolean;
+        requirementsJson: TaskCompletionRequirements | null;
       };
     };
 
@@ -101,10 +115,7 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
   if (titleErr) {
     return titleErr;
   }
-  const stageKey = parseExecutionStageKey(formData.get("stageKey"));
-  if (!stageKey) {
-    return { error: "Choose a valid execution stage." };
-  }
+  const stageId = trimOrNull(formData.get("stageId"));
   const category = parseTaskTemplateCategory(formData.get("category"));
   if (!category) {
     return { error: "Choose a valid task category." };
@@ -120,12 +131,27 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
       return instErr;
     }
   }
+
+  const providesSignals = parseSignals(formData.get("providesSignals"));
+  const requiresSignals = parseSignals(formData.get("requiresSignals"));
+  const hardSignal = formData.get("hardSignal") === "on";
+
+  const requirementsJson = {
+    noteRequired: formData.get("noteRequired") === "on",
+    photoRequired: formData.get("photoRequired") === "on",
+    attachmentRequired: formData.get("attachmentRequired") === "on",
+  };
+
   return {
     data: {
       title,
-      stageKey,
+      stageId,
       category,
       instructions: instructionsRaw,
+      providesSignals,
+      requiresSignals,
+      hardSignal,
+      requirementsJson,
     },
   };
 }
@@ -164,7 +190,7 @@ export async function addLineItemTemplateTaskFromReusableAction(
       return { ok: false as const, code: "TEMPLATE" as const };
     }
 
-    const sortOrder = await nextSortOrderInStage(tx, tid, reusable.stageKey);
+    const sortOrder = await nextSortOrderInStage(tx, tid, reusable.stageId);
 
     await tx.lineItemTemplateTask.create({
       data: {
@@ -172,9 +198,13 @@ export async function addLineItemTemplateTaskFromReusableAction(
         sourceType: LineItemTemplateTaskSource.TASK_TEMPLATE,
         sourceTaskTemplateId: reusable.id,
         title: reusable.title,
-        stageKey: reusable.stageKey,
+        stageId: reusable.stageId,
         category: reusable.category,
         instructions: reusable.instructions,
+        providesSignals: reusable.providesSignals,
+        requiresSignals: reusable.requiresSignals,
+        hardSignal: reusable.hardSignal,
+        requirementsJson: reusable.requirementsJson || {},
         sortOrder,
       },
     });
@@ -225,7 +255,7 @@ export async function addLineItemTemplateTaskCustomAction(
       return false;
     }
 
-    const sortOrder = await nextSortOrderInStage(tx, tid, parsed.data.stageKey);
+    const sortOrder = await nextSortOrderInStage(tx, tid, parsed.data.stageId);
 
     await tx.lineItemTemplateTask.create({
       data: {
@@ -233,9 +263,13 @@ export async function addLineItemTemplateTaskCustomAction(
         sourceType: LineItemTemplateTaskSource.CUSTOM,
         sourceTaskTemplateId: null,
         title: parsed.data.title,
-        stageKey: parsed.data.stageKey,
+        stageId: parsed.data.stageId,
         category: parsed.data.category,
         instructions: parsed.data.instructions,
+        providesSignals: parsed.data.providesSignals,
+        requiresSignals: parsed.data.requiresSignals,
+        hardSignal: parsed.data.hardSignal,
+        requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         sortOrder,
       },
     });
@@ -288,22 +322,26 @@ export async function updateLineItemTemplateTaskAction(
       return { ok: false as const };
     }
 
-    const oldStage = existing.stageKey;
-    const newStage = parsed.data.stageKey;
+    const oldStageId = existing.stageId;
+    const newStageId = parsed.data.stageId;
 
-    if (newStage !== oldStage) {
-      const sortOrder = await nextSortOrderInStage(tx, tid, newStage);
+    if (newStageId !== oldStageId) {
+      const sortOrder = await nextSortOrderInStage(tx, tid, newStageId);
       await tx.lineItemTemplateTask.update({
         where: { id: kid },
         data: {
           title: parsed.data.title,
-          stageKey: newStage,
+          stageId: newStageId,
           category: parsed.data.category,
           instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           sortOrder,
         },
       });
-      await renumberSortOrdersInStage(tx, tid, oldStage);
+      await renumberSortOrdersInStage(tx, tid, oldStageId);
     } else {
       await tx.lineItemTemplateTask.update({
         where: { id: kid },
@@ -311,6 +349,10 @@ export async function updateLineItemTemplateTaskAction(
           title: parsed.data.title,
           category: parsed.data.category,
           instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         },
       });
     }
@@ -359,9 +401,9 @@ export async function deleteLineItemTemplateTaskAction(
       return { ok: false as const };
     }
 
-    const stageKey = existing.stageKey;
+    const stageId = existing.stageId;
     await tx.lineItemTemplateTask.delete({ where: { id: kid } });
-    await renumberSortOrdersInStage(tx, tid, stageKey);
+    await renumberSortOrdersInStage(tx, tid, stageId);
     await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
     return { ok: true as const };
   });
@@ -407,9 +449,9 @@ export async function moveLineItemTemplateTaskAction(
       return false;
     }
 
-    const stageKey = existing.stageKey;
+    const stageId = existing.stageId;
     const peers = await tx.lineItemTemplateTask.findMany({
-      where: { lineItemTemplateId: tid, stageKey },
+      where: { lineItemTemplateId: tid, stageId },
       orderBy: { sortOrder: "asc" },
     });
     const idx = peers.findIndex((p) => p.id === kid);

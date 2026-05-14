@@ -156,9 +156,10 @@ Audit **who invited whom**, **role changes**, and **org switches** (if you suppo
 - **Lead** → optional **Customer** association; may feed **Quote** preparation.
 - **Customer** has many **Quotes** / **Jobs** over time; carries **tags/metadata** for interpretation.
 - **Quote** has many **Line items**; line items may have **Tasks** and **attachments**.
-- **Approved quote** → **Job** (executable container) with **task graph** reflecting sold intent (plus lawful operational additions).
-- **Tasks** may depend on **tasks**, **payments**, **calendar**, **external readiness**, or **artifacts** (photos, permits).
-- **Events** attach to the **job/quote context** and **mutate** or **extend** the graph (never “silent side channels” for required work).
+- **Approved quote** → **Job** (executable container) with **Signal-based readiness** reflecting sold intent (plus lawful operational additions).
+- **Tasks** may depend on **Signals** (broadcast by other tasks, stages, payments, or events).
+- **Events** attach to the **job/quote context** and **publish signals** to mutate or extend the graph.
+- **Incompatibility:** If a required signal has no provider in the job, it is auto-satisfied at activation **unless** the task is marked as requiring a **Hard Signal**.
 
 ## Lifecycle intent (behavioral, not naming)
 

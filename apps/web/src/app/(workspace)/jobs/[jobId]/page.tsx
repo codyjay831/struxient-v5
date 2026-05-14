@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { JobStageBlockType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 
 import {
   formatJobStatus,
-  formatJobTaskStatus,
   jobStatusBadgeTone,
-  jobTaskStatusBadgeTone,
 } from "@/lib/job-display";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,8 +14,9 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { Briefcase, Layers, ListOrdered } from "lucide-react";
+import { Briefcase, Info, Zap } from "lucide-react";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
+import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { JobJobsitePanel } from "@/components/jobs/job-jobsite-panel";
 import { JobIssueManager } from "@/components/jobs/job-issue-manager";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
@@ -26,7 +24,9 @@ import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobVisitManager } from "@/components/jobs/job-visit-manager";
 import { JobTaskCard } from "@/components/jobs/job-task-card";
+import { JobEventButton } from "@/components/jobs/job-event-button";
 import { JobIssueStatus } from "@prisma/client";
+import { getLiveSignals } from "@/lib/signal-bus";
 
 export const dynamic = "force-dynamic";
 
@@ -46,154 +46,156 @@ export default async function JobDetailPage({
 
   const ctx = await getRequestContextOrThrow();
 
-  const job = await db.job.findFirst({
-    where: { id, organizationId: ctx.organizationId },
-
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      activatedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      quoteId: true,
-      visits: {
-        orderBy: [{ scheduledStartAt: "desc" }],
-        select: {
-          id: true,
-          scheduledStartAt: true,
-          scheduledEndAt: true,
-          status: true,
-          notes: true,
-          assignedUser: { select: { name: true, email: true } },
-        },
-      },
-      quote: { select: { id: true, title: true, organizationId: true } },
-      customer: {
-        select: {
-          id: true,
-          displayName: true,
-          organizationId: true,
-          serviceLocations: {
-            orderBy: { isPrimary: "desc" },
-            select: { formattedAddress: true, addressLine1: true, isPrimary: true },
+  const [job, liveSignals] = await Promise.all([
+    db.job.findFirst({
+      where: { id, organizationId: ctx.organizationId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        activatedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        quoteId: true,
+        visits: {
+          orderBy: [{ scheduledStartAt: "desc" }],
+          select: {
+            id: true,
+            scheduledStartAt: true,
+            scheduledEndAt: true,
+            status: true,
+            notes: true,
+            assignedUser: { select: { name: true, email: true } },
           },
         },
-      },
-      salesIntake: {
-        select: {
-          id: true,
-          title: true,
-          organizationId: true,
-          notes: true,
-          publicIntakeServiceLocation: true,
-        },
-      },
-      issues: {
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          title: true,
-          type: true,
-          severity: true,
-          status: true,
-          description: true,
-          resolutionNote: true,
-          resolvedAt: true,
-          createdAt: true,
-          jobStage: { select: { title: true } },
-          jobTask: { select: { title: true } },
-          followUpTask: {
-            select: {
-              id: true,
-              title: true,
-              status: true,
+        quote: { select: { id: true, title: true, organizationId: true } },
+        customer: {
+          select: {
+            id: true,
+            displayName: true,
+            organizationId: true,
+            serviceLocations: {
+              orderBy: { isPrimary: "desc" },
+              select: { formattedAddress: true, addressLine1: true, isPrimary: true },
             },
           },
         },
-      },
-      stages: {
-        orderBy: [{ sortOrder: "asc" }],
-        select: {
-          id: true,
-          stageKey: true,
-          title: true,
-          sortOrder: true,
-          blockType: true,
-          blockTitle: true,
-          blockSortOrder: true,
-          sourceQuoteLineItemId: true,
-          tasks: {
-            orderBy: [{ sortOrder: "asc" }],
-            select: {
-              id: true,
-              title: true,
-              status: true,
-              category: true,
-              instructions: true,
-              sourceQuoteLineItemId: true,
-              completedAt: true,
-              completionNote: true,
-              completionRequirementsJson: true,
-              attachments: {
-                where: { status: "READY" },
-                select: {
-                  id: true,
-                  fileName: true,
-                  fileKey: true,
-                  contentType: true,
+        lead: {
+          select: {
+            id: true,
+            organizationId: true,
+            contact: true,
+            request: true,
+            address: true,
+            signals: true,
+          },
+        },
+        issues: {
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            severity: true,
+            status: true,
+            description: true,
+            resolutionNote: true,
+            resolvedAt: true,
+            createdAt: true,
+            jobStage: { select: { title: true } },
+            jobTask: { select: { title: true } },
+            followUpTask: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+              },
+            },
+          },
+        },
+        stages: {
+          orderBy: [{ sortOrder: "asc" }],
+          select: {
+            id: true,
+            title: true,
+            sortOrder: true,
+            providesSignals: true,
+            requiresSignals: true,
+            tasks: {
+              orderBy: [{ sortOrder: "asc" }],
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                category: true,
+                instructions: true,
+                completedAt: true,
+                completionNote: true,
+                completionRequirementsJson: true,
+                providesSignals: true,
+                requiresSignals: true,
+                hardSignal: true,
+                attachments: {
+                  where: { status: "READY" },
+                  select: {
+                    id: true,
+                    fileName: true,
+                    fileKey: true,
+                    contentType: true,
+                  },
+                },
+                issues: {
+                  where: { status: JobIssueStatus.OPEN },
+                  select: { status: true, severity: true, jobTaskId: true, jobStageId: true },
                 },
               },
-              issues: {
-                where: { status: JobIssueStatus.OPEN },
-                select: { status: true, severity: true },
-              },
             },
           },
         },
-      },
-      paymentRequirements: {
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          title: true,
-          amountCents: true,
-          status: true,
-          notes: true,
-          requiredBeforeStageId: true,
-          requiredBeforeStage: { select: { title: true, sortOrder: true } },
-          paidAt: true,
-          waivedAt: true,
-          canceledAt: true,
+        paymentRequirements: {
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            amountCents: true,
+            status: true,
+            notes: true,
+            requiredBeforeStageId: true,
+            requiredBeforeStage: { select: { title: true, sortOrder: true } },
+            paidAt: true,
+            waivedAt: true,
+            canceledAt: true,
+          },
+        },
+        activities: {
+          orderBy: [{ createdAt: "desc" }],
+          take: 50,
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            details: true,
+            createdAt: true,
+            actorUser: { select: { name: true, email: true } },
+          },
+        },
+        dailyJobLogs: {
+          orderBy: [{ logDate: "desc" }],
+          take: 30,
+          select: {
+            id: true,
+            logDate: true,
+            summary: true,
+            internalNotes: true,
+            status: true,
+            reviewedAt: true,
+            reviewedByUser: { select: { name: true, email: true } },
+          },
         },
       },
-      activities: {
-        orderBy: [{ createdAt: "desc" }],
-        take: 50,
-        select: {
-          id: true,
-          type: true,
-          title: true,
-          details: true,
-          createdAt: true,
-          actorUser: { select: { name: true, email: true } },
-        },
-      },
-      dailyJobLogs: {
-        orderBy: [{ logDate: "desc" }],
-        take: 30,
-        select: {
-          id: true,
-          logDate: true,
-          summary: true,
-          internalNotes: true,
-          status: true,
-          reviewedAt: true,
-          reviewedByUser: { select: { name: true, email: true } },
-        },
-      },
-    },
-  });
+    }),
+    getLiveSignals(id),
+  ]);
 
   if (!job) {
     notFound();
@@ -202,54 +204,23 @@ export default async function JobDetailPage({
   const safeQuote = job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
   const safeCustomer =
     job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
-  const safeSalesIntake = job.salesIntake && job.salesIntake.organizationId === ctx.organizationId ? job.salesIntake : null;
+  const safeLead = job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: safeCustomer?.serviceLocations ?? [],
-    salesIntakeRow: safeSalesIntake
+    leadRow: safeLead
       ? {
-          publicIntakeServiceLocation: safeSalesIntake.publicIntakeServiceLocation,
-          notes: safeSalesIntake.notes,
+          address: safeLead.address,
+          signals: safeLead.signals,
         }
       : null,
   });
   const jobCustomerId = safeCustomer?.id ?? null;
-  const jobSalesIntakeEditHref = safeSalesIntake ? `/sales/${safeSalesIntake.id}/edit` : null;
+  const jobLeadEditHref = safeLead ? `/leads/${safeLead.id}/edit` : null;
 
-  const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
+  const safeLeadTitle = safeLead ? deriveLeadTitle(safeLead.contact, safeLead.request) : null;
+  const primaryIdentity = safeLeadTitle || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
-
-  const sharedStages = job.stages.filter((s) => s.blockType === JobStageBlockType.SHARED);
-
-  const separateStages = job.stages.filter(
-    (s) => s.blockType === JobStageBlockType.SEPARATE_LINE_ITEM,
-  );
-
-  type SeparateBlock = {
-    blockKey: string;
-    blockTitle: string;
-    blockSortOrder: number;
-    stages: typeof separateStages;
-  };
-
-  const blockMap = new Map<string, SeparateBlock>();
-  for (const stage of separateStages) {
-    const key = stage.sourceQuoteLineItemId ?? `__orphan_${stage.id}`;
-    const existing = blockMap.get(key);
-    if (existing) {
-      existing.stages.push(stage);
-    } else {
-      blockMap.set(key, {
-        blockKey: key,
-        blockTitle: stage.blockTitle ?? "Separate work block",
-        blockSortOrder: stage.blockSortOrder,
-        stages: [stage],
-      });
-    }
-  }
-  const separateBlocks: SeparateBlock[] = [...blockMap.values()].sort(
-    (a, b) => a.blockSortOrder - b.blockSortOrder || a.blockTitle.localeCompare(b.blockTitle),
-  );
 
   const totalTasks = job.stages.reduce((sum, s) => sum + s.tasks.length, 0);
   const activatedLabel = new Date(job.activatedAt).toLocaleString();
@@ -276,9 +247,13 @@ export default async function JobDetailPage({
             "Runtime job"
           )
         }
-        description="Stages and tasks were copied from the source quote at activation. Editing the source quote does not change tasks already on this job."
+        description="Stages and tasks were copied from the source quote at activation. Signals drive readiness across the job."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
+            <JobEventButton 
+              jobId={job.id} 
+              tasks={job.stages.flatMap(s => s.tasks.map(t => ({ id: t.id, title: t.title, stageTitle: s.title })))} 
+            />
             {safeQuote ? (
               <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
                 Open source quote
@@ -294,7 +269,7 @@ export default async function JobDetailPage({
       <JobJobsitePanel
         jobsiteAddressLine={jobsiteAddressLine}
         customerId={jobCustomerId}
-        salesIntakeEditHref={jobSalesIntakeEditHref}
+        leadEditHref={jobLeadEditHref}
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -324,9 +299,9 @@ export default async function JobDetailPage({
           <div>
             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Intake</dt>
             <dd className="mt-0.5 text-foreground">
-              {safeSalesIntake ? (
-                <Link href={`/sales/${safeSalesIntake.id}`} className="underline-offset-4 hover:underline">
-                  {safeSalesIntake.title}
+              {safeLead ? (
+                <Link href={`/leads/${safeLead.id}`} className="underline-offset-4 hover:underline">
+                  {safeLeadTitle ?? "Lead"}
                 </Link>
               ) : (
                 "—"
@@ -350,20 +325,31 @@ export default async function JobDetailPage({
 
       <section className="mb-8">
         <SectionHeading
-          title="Execution overview"
-          description="Counts reflect the snapshot copied at activation. Status changes and assignments will land in a later slice."
+          title="Signal Bus"
+          description="The live facts driving task readiness. Signals from completed tasks unblock downstream work."
         />
-        <ul className="grid gap-3 sm:grid-cols-3">
-          <li>
-            <SignalCard label="Stages" value={String(job.stages.length)} hint="Shared and separate combined." />
-          </li>
-          <li>
-            <SignalCard label="Shared stages" value={String(sharedStages.length)} hint="Canonical phases across lines." />
-          </li>
-          <li>
-            <SignalCard label="Separate work blocks" value={String(separateBlocks.length)} hint="One per source line." />
-          </li>
-        </ul>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <div className="col-span-1">
+            <SignalCard label="Live Signals" value={String(liveSignals.length)} hint="Active facts on the bus." />
+          </div>
+          <div className="col-span-3">
+            <div className="rounded-xl border border-border bg-surface p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle mb-2">Active Signals</p>
+              {liveSignals.length === 0 ? (
+                <p className="text-xs text-foreground-muted italic">No signals published yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {liveSignals.map(s => (
+                    <span key={s} className="inline-flex items-center gap-1 rounded bg-accent/10 px-2 py-1 text-[10px] font-mono font-bold text-accent">
+                      <Zap className="size-2.5" />
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
       
       <JobIssueManager
@@ -395,7 +381,7 @@ export default async function JobDetailPage({
           <EmptyState
             icon={Briefcase}
             title="No execution tasks on this job"
-            description="No stages or tasks were copied at activation. Activation requires at least one executable task on the source quote in this build."
+            description="No stages or tasks were copied at activation."
           >
             {safeQuote ? (
               <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
@@ -404,33 +390,37 @@ export default async function JobDetailPage({
             ) : null}
           </EmptyState>
         </WorkspacePanel>
-      ) : null}
-
-      {sharedStages.length > 0 ? (
+      ) : (
         <WorkspacePanel className="mb-6">
           <SectionHeading
-            title="Shared stages"
-            description="Tasks merged across quote lines using canonical phases. Order follows the canonical stage order, then line work order, then task order at activation."
+            title="Execution stages"
+            description="Tasks grouped by stage. Readiness is derived from the Signal Bus and open issues."
           />
-          <div className="space-y-6">
-            {sharedStages.map((stage) => (
+          <div className="space-y-8">
+            {job.stages.map((stage) => (
               <section key={stage.id}>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  {stage.title}
-                </h3>
+                <div className="mb-3 flex items-center justify-between gap-4 border-b border-border pb-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                    {stage.title}
+                  </h3>
+                  {stage.requiresSignals.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-medium text-foreground-subtle">Requires:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {stage.requiresSignals.map(s => (
+                          <span key={s} className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${liveSignals.includes(s) ? 'bg-success/10 text-success' : 'bg-accent/10 text-accent'}`}>
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {stage.tasks.length === 0 ? (
                   <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
                 ) : (
                   <ul className="space-y-3">
                     {stage.tasks.map((task) => {
-                      const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
-                        if (p.status !== "DUE") return false;
-                        if (p.requiredBeforeStageId === null) return true;
-                        if (p.requiredBeforeStage) {
-                          return stage.sortOrder >= p.requiredBeforeStage.sortOrder;
-                        }
-                        return false;
-                      });
                       return (
                         <li key={task.id}>
                           <JobTaskCard
@@ -442,8 +432,9 @@ export default async function JobDetailPage({
                             }
                             jobsiteAddressLine={jobsiteAddressLine}
                             customerId={jobCustomerId}
-                            salesIntakeEditHref={jobSalesIntakeEditHref}
-                            task={{ ...task, paymentBlockers: taskPaymentBlockers }}
+                            leadEditHref={jobLeadEditHref}
+                            task={{ ...task, paymentBlockers: [] }}
+                            liveSignals={liveSignals}
                           />
                         </li>
                       );
@@ -454,74 +445,11 @@ export default async function JobDetailPage({
             ))}
           </div>
         </WorkspacePanel>
-      ) : null}
-
-      {separateBlocks.length > 0 ? (
-        <WorkspacePanel>
-          <SectionHeading
-            title="Separate work blocks"
-            description="Each block is one quoted scope kept apart from shared stages. Tasks were copied at activation and remain pinned to the source line."
-          />
-          <div className="space-y-6">
-            {separateBlocks.map((block) => (
-              <section
-                key={block.blockKey}
-                className="rounded-lg border border-border-strong bg-surface/80 px-4 py-4 ring-1 ring-ring/20"
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <Layers className="size-4 text-foreground-subtle" aria-hidden />
-                  <h3 className="text-sm font-semibold text-foreground">{block.blockTitle}</h3>
-                </div>
-                <div className="space-y-4 border-t border-border pt-3">
-                  {block.stages.map((stage) => (
-                    <div key={stage.id}>
-                      <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                        {stage.title}
-                      </p>
-                      {stage.tasks.length === 0 ? (
-                        <p className="mt-2 text-xs text-foreground-muted">No tasks on this stage.</p>
-                      ) : (
-                        <ul className="mt-3 space-y-2">
-                          {stage.tasks.map((task) => {
-                            const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
-                              if (p.status !== "DUE") return false;
-                              if (p.requiredBeforeStageId === null) return true;
-                              if (p.requiredBeforeStage) {
-                                return stage.sortOrder >= p.requiredBeforeStage.sortOrder;
-                              }
-                              return false;
-                            });
-                            return (
-                              <li key={task.id}>
-                                <JobTaskCard
-                                  jobId={job.id}
-                                  jobStageId={stage.id}
-                                  stageTitle={stage.title}
-                                  jobContextLabel={
-                                    secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
-                                  }
-                                  jobsiteAddressLine={jobsiteAddressLine}
-                                  customerId={jobCustomerId}
-                                  salesIntakeEditHref={jobSalesIntakeEditHref}
-                                  task={{ ...task, paymentBlockers: taskPaymentBlockers }}
-                                />
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </WorkspacePanel>
-      ) : null}
+      )}
 
       <WorkspacePanel padding="compact" className="mt-6 border-dashed border-border bg-surface/80">
         <div className="flex gap-2">
-          <ListOrdered className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <Info className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <p className="text-xs leading-relaxed text-foreground-muted">
             Read-only stages and tasks for now. Status changes, assignments, scheduling, and field workflow ship in
             later slices—nothing here mutates the source quote.

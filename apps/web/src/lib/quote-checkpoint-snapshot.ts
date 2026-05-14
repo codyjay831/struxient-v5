@@ -4,9 +4,10 @@ import type {
   QuoteCustomerPreviewInput,
   QuoteCustomerPreviewLine,
 } from "@/lib/quote-customer-projection";
+import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 
 /** Column + JSON shape version for SEND checkpoint payloads. Bump when breaking stored shape. */
-export const QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 1;
+export const QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 2;
 
 /** Prisma `select` for quotes when building SEND checkpoint payloads — mirrors preview route (no internalNotes). */
 export const quoteSelectForCustomerProposalCheckpoint = {
@@ -14,6 +15,8 @@ export const quoteSelectForCustomerProposalCheckpoint = {
   organizationId: true,
   title: true,
   customerDocumentTitle: true,
+  customerId: true,
+  leadId: true,
   subtotalCents: true,
   totalCents: true,
   createdAt: true,
@@ -24,9 +27,10 @@ export const quoteSelectForCustomerProposalCheckpoint = {
       organizationId: true,
     },
   },
-  salesIntake: {
+  lead: {
     select: {
-      title: true,
+      contact: true,
+      request: true,
       organizationId: true,
     },
   },
@@ -62,7 +66,7 @@ export type QuoteRowForLiveCustomerPreviewPage = Prisma.QuoteGetPayload<{
   select: typeof quoteSelectForLiveCustomerPreviewPage;
 }>;
 
-/** Maps a checkpoint- or preview-shaped quote row to preview input (org-scoped customer/sales intake). */
+/** Maps a checkpoint- or preview-shaped quote row to preview input (org-scoped customer/lead). */
 export function quoteRowToCustomerPreviewInput(
   row: QuoteRowForCustomerProposalCheckpoint | QuoteRowForLiveCustomerPreviewPage,
   orgId: string,
@@ -71,14 +75,16 @@ export function quoteRowToCustomerPreviewInput(
     row.customer && row.customer.organizationId === orgId
       ? { displayName: row.customer.displayName }
       : null;
-  const salesIntake =
-    row.salesIntake && row.salesIntake.organizationId === orgId ? { title: row.salesIntake.title } : null;
+  const lead =
+    row.lead && row.lead.organizationId === orgId
+      ? { title: deriveLeadTitle(row.lead.contact, row.lead.request) }
+      : null;
   return {
     id: row.id,
     title: row.title,
     customerDocumentTitle: row.customerDocumentTitle,
     customer,
-    salesIntake,
+    lead,
     lineItems: row.lineItems.map((line) => ({
       id: line.id,
       sortOrder: line.sortOrder,
@@ -106,7 +112,7 @@ type WirePreviewDocument = {
   quoteId: string;
   documentTitle: string;
   customer: { displayName: string } | null;
-  salesIntake: { title: string } | null;
+  lead: { title: string } | null;
   lineItems: WirePreviewLine[];
   subtotalCents: number;
   totalCents: number;
@@ -131,7 +137,7 @@ export function serializeCustomerPreviewDocumentForCheckpoint(
       quoteId: document.quoteId,
       documentTitle: document.documentTitle,
       customer: document.customer,
-      salesIntake: document.salesIntake,
+      lead: document.lead,
       lineItems: document.lineItems.map((l) => ({ ...l })),
       subtotalCents: document.subtotalCents,
       totalCents: document.totalCents,
@@ -151,7 +157,7 @@ function revivePreviewDocument(wire: WirePreviewDocument): QuoteCustomerPreviewD
     quoteId: wire.quoteId,
     documentTitle: wire.documentTitle,
     customer: wire.customer,
-    salesIntake: wire.salesIntake,
+    lead: wire.lead,
     lineItems: wire.lineItems,
     subtotalCents: wire.subtotalCents,
     totalCents: wire.totalCents,
@@ -222,9 +228,9 @@ export function parseQuoteSendCheckpointSnapshot(
   if (customer != null && (!isRecord(customer) || typeof customer.displayName !== "string")) {
     return { ok: false, error: "Checkpoint customer context is invalid." };
   }
-  const salesIntake = d.salesIntake;
-  if (salesIntake != null && (!isRecord(salesIntake) || typeof salesIntake.title !== "string")) {
-    return { ok: false, error: "Checkpoint sales intake context is invalid." };
+  const lead = d.lead;
+  if (lead != null && (!isRecord(lead) || typeof lead.title !== "string")) {
+    return { ok: false, error: "Checkpoint lead context is invalid." };
   }
 
   const wire: WirePreviewDocument = {
@@ -235,7 +241,7 @@ export function parseQuoteSendCheckpointSnapshot(
       customer == null
         ? null
         : { displayName: (customer as { displayName: string }).displayName },
-    salesIntake: salesIntake == null ? null : { title: (salesIntake as { title: string }).title },
+    lead: lead == null ? null : { title: (lead as { title: string }).title },
     lineItems: d.lineItems as WirePreviewLine[],
     subtotalCents: d.subtotalCents,
     totalCents: d.totalCents,

@@ -11,11 +11,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
-import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
+import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 
 export const dynamic = "force-dynamic";
 
@@ -35,40 +34,49 @@ export default async function QuoteExecutionReviewPreviewPage({
 
   const ctx = await getRequestContextOrThrow();
 
-  const row = await db.quote.findFirst({
-    where: { id: qid, organizationId: ctx.organizationId },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      job: { select: { id: true } },
-      lineItems: {
-        orderBy: [{ sortOrder: "asc" }],
-        select: {
-          id: true,
-          description: true,
-          sortOrder: true,
-          executionOrder: true,
-          executionReviewStatus: true,
-          executionMergeMode: true,
-          draftExecutionTasks: {
-            orderBy: [{ sortOrder: "asc" }],
-            select: {
-              id: true,
-              title: true,
-              stageKey: true,
-              category: true,
-              instructions: true,
-              sortOrder: true,
-              sourceType: true,
-              sourceTaskTemplateId: true,
-              sourceLineItemTemplateTaskId: true,
+  const [row, stages] = await Promise.all([
+    db.quote.findFirst({
+      where: { id: qid, organizationId: ctx.organizationId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        job: { select: { id: true } },
+        lineItems: {
+          orderBy: [{ sortOrder: "asc" }],
+          select: {
+            id: true,
+            description: true,
+            sortOrder: true,
+            draftExecutionTasks: {
+              orderBy: [{ sortOrder: "asc" }],
+              select: {
+                id: true,
+                title: true,
+                stageId: true,
+                stage: { select: { name: true } },
+                category: true,
+                instructions: true,
+                sortOrder: true,
+                sourceType: true,
+                sourceTaskTemplateId: true,
+                sourceLineItemTemplateTaskId: true,
+                providesSignals: true,
+                requiresSignals: true,
+                hardSignal: true,
+                requirementsJson: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (!row) {
     notFound();
@@ -84,13 +92,18 @@ export default async function QuoteExecutionReviewPreviewPage({
     draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
       id: t.id,
       title: t.title,
-      stageKey: t.stageKey,
+      stageId: t.stageId,
+      stageName: t.stage?.name,
       category: t.category,
       instructions: t.instructions,
       sortOrder: t.sortOrder,
       sourceType: t.sourceType,
       sourceTaskTemplateId: t.sourceTaskTemplateId,
       sourceLineItemTemplateTaskId: t.sourceLineItemTemplateTaskId,
+      providesSignals: t.providesSignals,
+      requiresSignals: t.requiresSignals,
+      hardSignal: t.hardSignal,
+      requirementsJson: t.requirementsJson,
     }));
   }
 
@@ -99,12 +112,12 @@ export default async function QuoteExecutionReviewPreviewPage({
         await db.taskTemplate.findMany({
           where: { organizationId: ctx.organizationId, archivedAt: null },
           orderBy: { title: "asc" },
-          select: { id: true, title: true, stageKey: true, category: true },
+          select: { id: true, title: true, stage: { select: { name: true } }, category: true },
         })
       ).map((r) => ({
         id: r.id,
         title: r.title,
-        stageLabel: getExecutionStageLabel(r.stageKey),
+        stageLabel: r.stage?.name ?? "No stage",
         categoryLabel: getTaskTemplateCategoryLabel(r.category),
       }))
     : [];
@@ -117,14 +130,15 @@ export default async function QuoteExecutionReviewPreviewPage({
       id: l.id,
       description: l.description,
       sortOrder: l.sortOrder,
-      executionOrder: l.executionOrder,
-      executionReviewStatus: l.executionReviewStatus,
-      executionMergeMode: l.executionMergeMode,
       tasks: l.draftExecutionTasks.map((t) => ({
         id: t.id,
         title: t.title,
-        stageKey: t.stageKey,
+        stageId: t.stageId,
+        stageName: t.stage?.name,
         category: t.category,
+        providesSignals: t.providesSignals,
+        requiresSignals: t.requiresSignals,
+        hardSignal: t.hardSignal,
         sortOrder: t.sortOrder,
       })),
     })),
@@ -139,9 +153,13 @@ export default async function QuoteExecutionReviewPreviewPage({
       lines: row.lineItems.map((l) => ({
         id: l.id,
         description: l.description,
-        executionReviewStatus: l.executionReviewStatus,
-        executionMergeMode: l.executionMergeMode,
-        taskCount: l.draftExecutionTasks.length,
+        tasks: l.draftExecutionTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          providesSignals: t.providesSignals,
+          requiresSignals: t.requiresSignals,
+          hardSignal: t.hardSignal,
+        })),
       })),
     });
     activation = readiness.ready
@@ -158,7 +176,7 @@ export default async function QuoteExecutionReviewPreviewPage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales" },
-          { label: "Proposals", href: "/sales?tab=proposals" },
+          { label: "Proposals", href: "/quotes" },
           { label: row.title, href: `/quotes/${qid}` },
           { label: "Execution preview" },
         ]}
@@ -170,7 +188,7 @@ export default async function QuoteExecutionReviewPreviewPage({
           activation.state === "activated"
             ? `Job already exists for “${row.title}”. Internal planning here does not change tasks already on the job.`
             : row.status === QuoteStatus.APPROVED
-              ? `Review internal draft execution for “${row.title}” before activating a job. Commercial terms are already approved; activation copies these stages and tasks into a runtime job.`
+              ? `Review internal draft execution for “${row.title}” before activating a job. Commercial terms are already approved; activation copies these stages and signals into a runtime job.`
               : `Preview how draft execution on “${row.title}” would become a job plan after activation. Activation is enabled once the quote is approved.`
         }
         actions={
@@ -188,6 +206,7 @@ export default async function QuoteExecutionReviewPreviewPage({
         activation={activation}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
+        stages={stages}
       />
     </div>
   );

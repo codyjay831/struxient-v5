@@ -15,7 +15,7 @@ export function WorkstationFilterBar({
   const searchParams = useSearchParams();
   const filters: { id: WorkstationFilterCategory; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "salesIntakes", label: "Intakes" },
+    { id: "leads", label: "Intakes" },
     { id: "quotes", label: "Quotes" },
     { id: "jobs", label: "Jobs" },
     { id: "tasks", label: "Tasks" },
@@ -26,6 +26,29 @@ export function WorkstationFilterBar({
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+      <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
+        {(["attention", "today", "waiting", "upcoming", "all"] as WorkstationLens[]).map((l) => {
+          const active = currentLens === l;
+          const params = new URLSearchParams(searchParams.toString());
+          if (l === "attention") params.delete("lens");
+          else params.set("lens", l);
+
+          return (
+            <Link
+              key={l}
+              href={`?${params.toString()}`}
+              className={[
+                "rounded-md px-2 py-1 text-[0.6rem] font-bold uppercase tracking-wider transition-colors",
+                active
+                  ? "bg-accent text-accent-contrast"
+                  : "bg-foreground/5 text-foreground-subtle hover:bg-foreground/10",
+              ].join(" ")}
+            >
+              {l}
+            </Link>
+          );
+        })}
+      </div>
       {filters.map((f) => {
         const active = currentFilter === f.id;
         
@@ -100,8 +123,17 @@ export function WorkstationFocusCard({
               {item.isBlocked && (
                 <span className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-danger">
                   <AlertCircle className="size-3" />
-                  Blocked
+                  {item.missingSignals ? "Waiting on Signal" : "Blocked"}
                 </span>
+              )}
+              {item.missingSignals && (
+                <div className="flex flex-wrap gap-1">
+                  {item.missingSignals.map(s => (
+                    <span key={s} className="rounded bg-accent/10 px-1.5 py-0.5 text-[0.6rem] font-mono font-bold text-accent">
+                      {s}
+                    </span>
+                  ))}
+                </div>
               )}
               {item.status && (
                 <span className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
@@ -181,8 +213,17 @@ export function WorkstationQueueItem({
           {item.isBlocked && (
             <span className="flex items-center gap-1 text-[0.6rem] font-bold uppercase tracking-wider text-danger">
               <AlertCircle className="size-2.5" />
-              Blocked
+              {item.missingSignals ? "Waiting" : "Blocked"}
             </span>
+          )}
+          {item.missingSignals && (
+            <div className="flex flex-wrap gap-1">
+              {item.missingSignals.map(s => (
+                <span key={s} className="rounded bg-accent/10 px-1 py-0.5 text-[0.5rem] font-mono font-bold text-accent">
+                  {s}
+                </span>
+              ))}
+            </div>
           )}
           {isHighPriority && !item.isBlocked && (
             <span className="inline-flex size-1.5 rounded-full bg-danger animate-pulse" />
@@ -217,7 +258,7 @@ export function WorkstationClearedState({
   const isFiltered = filter && filter !== "all";
   
   let title = "Today is clear";
-  let description = "No urgent sales intake, quote, payment, job, task, or activity reviews need action right now.";
+  let description = "No urgent lead, quote, payment, job, task, or activity reviews need action right now.";
 
   if (lens === "waiting") {
     title = "Nothing waiting";
@@ -250,10 +291,10 @@ export function WorkstationClearedState({
         ) : (
           <>
             <Link 
-              href="/sales" 
+              href="/leads" 
               className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
             >
-              Browse Sales Intakes
+              Browse Leads
             </Link>
             <Link 
               href="/jobs" 

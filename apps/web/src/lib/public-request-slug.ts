@@ -9,3 +9,11 @@ export function isValidPublicCompanySlugSegment(raw: string): boolean {
   }
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
 }
+
+/**
+ * URL-safe intake form slug segment: lowercase letters, digits, single hyphens between tokens.
+ * Matches the same rules as company slugs.
+ */
+export function isValidPublicFormSlugSegment(raw: string): boolean {
+  return isValidPublicCompanySlugSegment(raw);
+}

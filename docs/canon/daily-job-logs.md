@@ -6,7 +6,8 @@ Daily Job Logs are the official records of "what happened" on a job site for a s
 ## Core Principles
 1. **Truthful History**: A Daily Job Log records historical facts (activity, events, conditions).
 2. **Separation of Concerns**: 
-   - **Daily Job Log** = What happened.
+   - **Daily Job Log** = What happened (narrative).
+   - **Signal Bus** = Operational state (readiness).
    - **Tasks / Blockers / Actions** = What must happen next.
 3. **Human Review**: Staff must review and approve logs before they are considered "official" (REVIEWED status).
 

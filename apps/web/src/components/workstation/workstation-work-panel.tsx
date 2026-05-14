@@ -111,7 +111,7 @@ export function WorkstationWorkPanel({
                   href={item.href}
                   className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {item.kind === "quote" ? "Open quote record" : item.kind === "sales-intake" ? "Open sales intake workspace" : "Open full record"}
+                  {item.kind === "quote" ? "Open quote record" : item.kind === "lead" ? "Open lead workspace" : "Open full record"}
                   <ArrowRight className="size-4" />
                 </Link>
               )}

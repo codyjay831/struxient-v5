@@ -34,7 +34,7 @@ export default async function JobsPage() {
         quoteId: true,
         quote: { select: { id: true, title: true, organizationId: true } },
         customer: { select: { id: true, displayName: true, organizationId: true } },
-        salesIntake: { select: { id: true, title: true, organizationId: true } },
+        lead: { select: { id: true, title: true, organizationId: true } },
         _count: { select: { tasks: true, stages: true } },
       },
     }),
@@ -78,7 +78,7 @@ export default async function JobsPage() {
             title="No jobs yet"
             description="Jobs are created by activating an approved quote from its execution preview. Approve a quote and review its draft execution to enable activation."
           >
-            <Link href="/sales?tab=proposals" className={listLinkClass}>
+            <Link href="/quotes" className={listLinkClass}>
               Open quotes
             </Link>
           </EmptyState>
@@ -91,22 +91,22 @@ export default async function JobsPage() {
               job.quote && job.quote.organizationId === ctx.organizationId ? job.quote : null;
             const safeCustomer =
               job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
-            const safeSalesIntake =
-              job.salesIntake && job.salesIntake.organizationId === ctx.organizationId ? job.salesIntake : null;
+            const safeLead =
+              job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
 
             
-            const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
+            const primaryIdentity = safeLead?.title || safeCustomer?.displayName || job.title;
             const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
 
             const contextBits: string[] = [];
             if (safeCustomer) {
               contextBits.push(`Customer: ${safeCustomer.displayName}`);
             }
-            if (safeSalesIntake) {
-              contextBits.push(`Sales Intake: ${safeSalesIntake.title}`);
+            if (safeLead) {
+              contextBits.push(`Lead: ${safeLead.title}`);
             }
             if (contextBits.length === 0) {
-              contextBits.push("No customer or sales intake linked");
+              contextBits.push("No customer or lead linked");
             }
             return (
               <li key={job.id} className="px-4 py-4">
@@ -130,7 +130,7 @@ export default async function JobsPage() {
                       <p className="mt-1 text-xs text-foreground-muted">
                         From quote:{" "}
                         <Link
-                          href={`/sales?tab=proposals/${safeQuote.id}`}
+                          href={`/quotes/${safeQuote.id}`}
                           className="underline decoration-border underline-offset-4 hover:decoration-foreground"
                         >
                           {safeQuote.title}

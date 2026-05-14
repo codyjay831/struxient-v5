@@ -42,12 +42,12 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 | State | Meaning |
 |--------|---------|
-| `open` | Active lead; not yet converted or closed. |
-| `qualifying` | Optional—used when company wants explicit pipeline stage (else stay `open`). |
-| `quoted` | At least one quote sent or linked; still a lead until converted. |
-| `converted` | Linked to **customer** and primary opportunity captured; may still have open quotes. |
-| `lost` | Closed lost. |
-| `archived` | Inactive / noise cleared from default views. |
+| `NEW` | Active lead; not yet triaged. |
+| `TRIAGING` | Being reviewed by staff. |
+| `QUALIFIED` | Valid opportunity; ready for quote. |
+| `CONVERTED` | Linked to **customer** and primary opportunity captured; may still have open quotes. |
+| `LOST` | Closed lost. |
+| `ARCHIVED` | Inactive / noise cleared from default views. |
 
 ### Quote states
 
@@ -94,8 +94,9 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | Topic | v1 decision |
 |--------|-------------|
 | **Deduping** | **Warn-only** on create: same **normalized phone** or **email** within org shows **duplicate suggestion**; **no auto-merge** without user confirm. |
-| **Auto-assignment** | **Off by default**; optional org setting: **round-robin** among **Office** role users or **route by tag/source** (simple rules). |
-| **Queues** | Single **Inbox** list: `open` leads with optional **owner** filter; **unassigned** filter for triage. |
+| **Intake Composer** | Organizations build custom, multi-step forms using **System Atoms** and **Custom Fields**. |
+| **Channel Adapters** | Normalized input from **Web Forms**, **Manual Entry**, and future channels (Email, SMS, Webhook). |
+| **Queues** | Single **Inbox** list: `NEW` and `TRIAGING` leads; Gmail-style triage view with side-panel work surface. |
 
 ---
 
@@ -197,7 +198,22 @@ Default states: **open** → **triaged** or **in_progress** → **resolved**; op
 
 ---
 
-## 12. Second wave (explicitly after v1)
+## 14. Signal-Based Readiness Engine
+
+**v5 posture (Wedge):** Replace rigid task-to-task dependencies with a flexible **Signal Bus**. Tasks "provide" signals upon completion and "require" signals to become active.
+
+| Topic | v1 decision |
+|--------|-------------|
+| **Signal Bus** | Per-job fact store of published signals. |
+| **Readiness** | Task is `READY` if all `Requires` signals are present in the Bus and no Issue mutes it. |
+| **AI Secretary** | AI suggests signals and dependencies during template authoring and quote planning; never acts without human confirmation. |
+| **Soft Dependencies** | Required signals without a provider are auto-satisfied at activation to prevent deadlocks. |
+| **Hard Signals** | Explicitly marked signals that **must** have a provider; activation blocks if orphans exist. |
+| **Events** | Synthetic tasks that hijack signals to pause work; unblock by resolving the event. |
+
+---
+
+## 15. Second wave (explicitly after v1)
 
 | Area | Direction |
 |------|-----------|

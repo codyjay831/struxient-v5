@@ -17,7 +17,6 @@ import {
   quoteStatusIsArchived,
 } from "@/lib/quote-status-workflow";
 import { buildDefaultExecutionSummaryLine } from "@/lib/line-item-template-execution-summary";
-import { getExecutionStageLabel } from "@/lib/execution-stage-catalog";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
@@ -26,11 +25,12 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type {
   QuoteWorkspaceCheckpointPayload,
-  QuoteWorkspaceSalesIntake,
+  QuoteWorkspaceLead,
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
+import { projectLead } from "@/lib/lead/lead-projection";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -44,19 +44,6 @@ export type QuoteWorkSurfaceLoaderResult = {
   workspaceTabs: QuoteWorkspaceTabData;
 };
 
-/**
- * Org-scoped fetch + derive of everything `QuoteWorkSurface` needs across all
- * containers (Workstation drawer, Sales Intake Quote tab embed, Quotes list popup,
- * full Quote page).
- *
- * The result intentionally bundles three layers:
- *   - identity / summary  → `QuoteWorkSurfaceData`
- *   - readiness signals   → `QuoteReadiness`
- *   - workspace tab data  → `QuoteWorkspaceTabData`
- *
- * Same loader, same payload — the surface owns the workspace body and stays
- * identical regardless of container.
- */
 export async function loadQuoteWorkSurface(
   quoteId: string,
   orgId: string,
@@ -72,7 +59,7 @@ export async function loadQuoteWorkSurface(
       totalCents: true,
       internalNotes: true,
       lastSentEmailAt: true,
-      shareToken: { select: { token: true } },
+      shareToken: { select: { token: true, expiresAt: true, revokedAt: true } },
       createdAt: true,
       updatedAt: true,
       customerId: true,
@@ -89,18 +76,16 @@ export async function loadQuoteWorkSurface(
           },
         },
       },
-      salesIntakeId: true,
-      salesIntake: {
+      leadId: true,
+      lead: {
         select: {
           id: true,
-          title: true,
           organizationId: true,
-          notes: true,
-          source: true,
-          contactName: true,
-          email: true,
-          phone: true,
-          publicIntakeServiceLocation: true,
+          contact: true,
+          request: true,
+          address: true,
+          signals: true,
+          channel: true,
         },
       },
       job: { select: { id: true, status: true, organizationId: true } },
@@ -112,13 +97,18 @@ export async function loadQuoteWorkSurface(
             select: {
               id: true,
               title: true,
-              stageKey: true,
+              stageId: true,
+              stage: { select: { name: true, sortOrder: true } },
               category: true,
               instructions: true,
               sortOrder: true,
               sourceType: true,
               sourceTaskTemplateId: true,
               sourceLineItemTemplateTaskId: true,
+              providesSignals: true,
+              requiresSignals: true,
+              hardSignal: true,
+              requirementsJson: true,
             },
           },
         },
@@ -138,26 +128,41 @@ export async function loadQuoteWorkSurface(
         phone: rawCustomer.phone,
       }
     : null;
-  const rawSalesIntake =
-    row.salesIntake && row.salesIntake.organizationId === orgId ? row.salesIntake : null;
-  const salesIntake = rawSalesIntake
+  const rawLead =
+    row.lead && row.lead.organizationId === orgId ? row.lead : null;
+  const leadProjection = rawLead
+    ? projectLead({
+        id: rawLead.id,
+        status: "NEW" as never,
+        channel: rawLead.channel,
+        customerId: null,
+        convertedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        contact: rawLead.contact,
+        request: rawLead.request,
+        address: rawLead.address,
+        signals: rawLead.signals,
+      })
+    : null;
+  const lead = leadProjection
     ? {
-        id: rawSalesIntake.id,
-        title: rawSalesIntake.title,
-        notes: rawSalesIntake.notes,
-        source: rawSalesIntake.source,
-        contactName: rawSalesIntake.contactName,
-        email: rawSalesIntake.email,
-        phone: rawSalesIntake.phone,
+        id: leadProjection.id,
+        title: leadProjection.title,
+        notes: leadProjection.notes,
+        source: leadProjection.channel,
+        contactName: leadProjection.contactName,
+        email: leadProjection.email,
+        phone: leadProjection.phone,
       }
     : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: rawCustomer?.serviceLocations ?? [],
-    salesIntakeRow: rawSalesIntake
+    leadRow: rawLead
       ? {
-          publicIntakeServiceLocation: rawSalesIntake.publicIntakeServiceLocation,
-          notes: rawSalesIntake.notes,
+          address: rawLead.address,
+          signals: rawLead.signals,
         }
       : null,
   });
@@ -171,22 +176,22 @@ export async function loadQuoteWorkSurface(
       ? { id: row.job.id, status: row.job.status }
       : null;
 
-  /* Activation readiness — same source full Quote page used. */
   const activationReadiness = evaluateQuoteJobActivationReadiness({
     status: row.status,
     lines: row.lineItems.map((l) => ({
       id: l.id,
       description: l.description,
-      executionReviewStatus: l.executionReviewStatus,
-      executionMergeMode: l.executionMergeMode,
-      taskCount: l.draftExecutionTasks.length,
+      tasks: l.draftExecutionTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        providesSignals: t.providesSignals,
+        requiresSignals: t.requiresSignals,
+        hardSignal: t.hardSignal,
+      })),
     })),
   });
 
-  /* Send + approval checkpoints, with full sequence data for the Send & Accept
-   * tab. We intentionally fetch full lists (not just the latest) because the
-   * surface now renders the same list the full Quote page used to render. */
-  const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof] =
+  const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof, stages] =
     await Promise.all([
       db.quoteCheckpoint.findMany({
         where: {
@@ -227,6 +232,11 @@ export async function loadQuoteWorkSurface(
         orderBy: { createdAt: "desc" },
         select: { createdAt: true },
       }),
+      db.stage.findMany({
+        where: { organizationId: orgId, archivedAt: null },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true },
+      }),
     ]);
 
   const revisionDriftSinceLastProof = Boolean(
@@ -250,22 +260,15 @@ export async function loadQuoteWorkSurface(
     activationReadiness: {
       ready: activationReadiness.ready,
       totalTasksToActivate: activationReadiness.totalTasksToActivate,
-      needsAttentionLineCount:
-        activationReadiness.blockReasons.find(
-          (r) => r.code === "LINE_NEEDS_EXECUTION_REVIEW",
-        )?.lines.length ?? 0,
-      anomalyLineCount:
-        activationReadiness.blockReasons.find(
-          (r) => r.code === "LINE_COMMERCIAL_ONLY_HAS_TASKS",
-        )?.lines.length ?? 0,
+      needsAttentionLineCount: 0, // Deprecated
+      anomalyLineCount: 0, // Deprecated
     },
     latestSendAt: latestSend?.createdAt ?? undefined,
     latestApprovalAt: latestApproval?.createdAt ?? undefined,
     revisionDriftSinceLastProof,
   });
 
-  /* ── QuoteWorkSurfaceData (identity + summary) ────────────────────────── */
-  const primaryTitle = salesIntake?.title || customer?.displayName || row.title;
+  const primaryTitle = lead?.title || customer?.displayName || row.title;
   const subtitle = row.title !== primaryTitle ? row.title : null;
 
   const quote: QuoteWorkSurfaceData = {
@@ -279,9 +282,9 @@ export async function loadQuoteWorkSurface(
     customerId: customer?.id ?? null,
     customerDisplayName: customer?.displayName ?? null,
     customerHref: customer ? `/customers/${customer.id}` : null,
-    salesIntakeId: salesIntake?.id ?? null,
-    salesIntakeTitle: salesIntake?.title ?? null,
-    salesIntakeHref: salesIntake ? `/sales/${salesIntake.id}` : null,
+    leadId: lead?.id ?? null,
+    leadTitle: lead?.title ?? null,
+    leadHref: lead ? `/leads/${lead.id}` : null,
     totalCents: row.totalCents,
     subtotalCents: row.subtotalCents,
     lineItemCount: row.lineItems.length,
@@ -299,40 +302,29 @@ export async function loadQuoteWorkSurface(
     customerPhone: customer?.phone ?? null,
     customerFormattedPhone,
     shareToken: row.shareToken?.token ?? null,
+    shareTokenExpiresAt: row.shareToken?.expiresAt ?? null,
+    shareTokenRevokedAt: row.shareToken?.revokedAt ?? null,
     lastSentEmailAtLabel: row.lastSentEmailAt
       ? row.lastSentEmailAt.toLocaleDateString("en-US", dateOpts)
       : null,
   };
-
-  /* ── Workspace tab data ───────────────────────────────────────────────── */
-
-  /* Work-order ranks — same algorithm the full Quote page used. */
-  const workOrderOrderedIds = [...row.lineItems]
-    .sort((a, b) => {
-      if (a.executionOrder !== b.executionOrder) {
-        return a.executionOrder - b.executionOrder;
-      }
-      if (a.sortOrder !== b.sortOrder) {
-        return a.sortOrder - b.sortOrder;
-      }
-      return a.id.localeCompare(b.id);
-    })
-    .map((l) => l.id);
-  const workOrderRank = new Map(workOrderOrderedIds.map((id, i) => [id, i + 1]));
-  const workOrderTotal = workOrderOrderedIds.length;
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
   for (const line of row.lineItems) {
     draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
       id: t.id,
       title: t.title,
-      stageKey: t.stageKey,
+      stageId: t.stageId,
       category: t.category,
       instructions: t.instructions,
       sortOrder: t.sortOrder,
       sourceType: t.sourceType,
       sourceTaskTemplateId: t.sourceTaskTemplateId,
       sourceLineItemTemplateTaskId: t.sourceLineItemTemplateTaskId,
+      providesSignals: t.providesSignals,
+      requiresSignals: t.requiresSignals,
+      hardSignal: t.hardSignal,
+      requirementsJson: t.requirementsJson,
     }));
   }
 
@@ -352,11 +344,6 @@ export async function loadQuoteWorkSurface(
       lineTotalCents: line.lineTotalCents,
       internalNotes: line.internalNotes,
       executionSummary: { taskCount: exec.taskCount, summaryLine: exec.summaryLine },
-      executionReviewStatus: line.executionReviewStatus,
-      executionMergeMode: line.executionMergeMode,
-      executionOrder: line.executionOrder,
-      workOrderPosition: workOrderRank.get(line.id) ?? 1,
-      workOrderTotal,
     };
   });
 
@@ -367,7 +354,6 @@ export async function loadQuoteWorkSurface(
   );
   const isArchived = quoteStatusIsArchived(row.status);
 
-  /* Line-item templates — only meaningful while DRAFT (saved-line picker). */
   const lineItemTemplates: LineItemTemplatePickerRow[] = isCommercialEditable
     ? (
         await db.lineItemTemplate.findMany({
@@ -408,23 +394,27 @@ export async function loadQuoteWorkSurface(
       })
     : [];
 
-  /* Reusable task picker — only when execution editing is allowed. */
   const reusableTaskOptions: ReusableTaskPickerOption[] = isExecutionEditable
     ? (
         await db.taskTemplate.findMany({
           where: { organizationId: orgId, archivedAt: null },
           orderBy: { title: "asc" },
-          select: { id: true, title: true, stageKey: true, category: true },
+          select: {
+            id: true,
+            title: true,
+            stageId: true,
+            category: true,
+            stage: { select: { name: true } },
+          },
         })
       ).map((r) => ({
         id: r.id,
         title: r.title,
-        stageLabel: getExecutionStageLabel(r.stageKey),
+        stageLabel: r.stage?.name ?? "No stage",
         categoryLabel: getTaskTemplateCategoryLabel(r.category),
       }))
     : [];
 
-  /* Serialize checkpoints — drop `Date` for server-action safety. */
   function toCheckpointPayload(c: {
     id: string;
     sequence: number;
@@ -450,16 +440,16 @@ export async function loadQuoteWorkSurface(
   const sendCheckpoints = sendCheckpointRows.map(toCheckpointPayload);
   const approvalCheckpoints = approvalCheckpointRows.map(toCheckpointPayload);
 
-  const salesIntakePayload: QuoteWorkspaceSalesIntake | null = salesIntake
+  const leadPayload: QuoteWorkspaceLead | null = lead
     ? {
-        id: salesIntake.id,
-        title: salesIntake.title,
-        href: `/sales/${salesIntake.id}`,
-        notes: salesIntake.notes,
-        source: salesIntake.source,
-        contactName: salesIntake.contactName,
-        email: salesIntake.email,
-        phone: salesIntake.phone,
+        id: lead.id,
+        title: lead.title,
+        href: `/leads/${lead.id}`,
+        notes: lead.notes,
+        source: lead.source,
+        contactName: lead.contactName,
+        email: lead.email,
+        phone: lead.phone,
       }
     : null;
 
@@ -469,16 +459,17 @@ export async function loadQuoteWorkSurface(
     isArchived,
     customerDocumentTitle: row.customerDocumentTitle,
     internalNotes: row.internalNotes,
-    hasSalesIntakeNotes: Boolean(salesIntake?.notes),
+    hasLeadNotes: Boolean(lead?.notes),
     subtotalCents: row.subtotalCents,
     totalCents: row.totalCents,
     lineItems,
     lineItemTemplates,
     draftTasksByLineId,
     reusableTaskOptions,
+    stages,
     customerName: customer?.displayName ?? null,
     customerHref: customer ? `/customers/${customer.id}` : null,
-    salesIntake: salesIntakePayload,
+    lead: leadPayload,
     sendCheckpoints,
     approvalCheckpoints,
     createdAtIso: row.createdAt.toISOString(),

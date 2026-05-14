@@ -1,7 +1,8 @@
-import { JobIssueStatus, JobPaymentRequirementStatus } from "@prisma/client";
+import { JobIssueStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
+import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 
 /**
  * Loads a single job task with the same facts used for readiness on the job page,
@@ -21,6 +22,9 @@ export async function loadJobTaskExecutionPayload(
       completedAt: true,
       completionNote: true,
       completionRequirementsJson: true,
+      providesSignals: true,
+      requiresSignals: true,
+      hardSignal: true,
       jobStageId: true,
       jobStage: { select: { id: true, title: true, sortOrder: true } },
       job: {
@@ -38,13 +42,14 @@ export async function loadJobTaskExecutionPayload(
               },
             },
           },
-          salesIntake: {
+          lead: {
             select: {
               id: true,
-              title: true,
               organizationId: true,
-              notes: true,
-              publicIntakeServiceLocation: true,
+              contact: true,
+              request: true,
+              address: true,
+              signals: true,
             },
           },
           paymentRequirements: {
@@ -80,34 +85,28 @@ export async function loadJobTaskExecutionPayload(
   const job = task.job;
   const safeCustomer =
     job.customer && job.customer.organizationId === organizationId ? job.customer : null;
-  const safeSalesIntake =
-    job.salesIntake && job.salesIntake.organizationId === organizationId ? job.salesIntake : null;
+  const safeLead =
+    job.lead && job.lead.organizationId === organizationId ? job.lead : null;
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     customerLocations: safeCustomer?.serviceLocations ?? [],
-    salesIntakeRow: safeSalesIntake
+    leadRow: safeLead
       ? {
-          publicIntakeServiceLocation: safeSalesIntake.publicIntakeServiceLocation,
-          notes: safeSalesIntake.notes,
+          address: safeLead.address,
+          signals: safeLead.signals,
         }
       : null,
   });
-  const primaryIdentity = safeSalesIntake?.title || safeCustomer?.displayName || job.title;
+  const safeLeadTitle = safeLead
+    ? deriveLeadTitle(safeLead.contact, safeLead.request)
+    : null;
+  const primaryIdentity = safeLeadTitle || safeCustomer?.displayName || job.title;
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
   const jobContextLabel = secondaryIdentity
     ? `${primaryIdentity} · ${secondaryIdentity}`
     : primaryIdentity;
 
   const customerId = safeCustomer?.id ?? null;
-  const salesIntakeEditHref = safeSalesIntake ? `/sales/${safeSalesIntake.id}/edit` : null;
-
-  const taskPaymentBlockers = job.paymentRequirements.filter((p) => {
-    if (p.status !== JobPaymentRequirementStatus.DUE) return false;
-    if (p.requiredBeforeStageId === null) return true;
-    if (p.requiredBeforeStage) {
-      return task.jobStage.sortOrder >= p.requiredBeforeStage.sortOrder;
-    }
-    return false;
-  });
+  const leadEditHref = safeLead ? `/leads/${safeLead.id}/edit` : null;
 
   return {
     jobId: job.id,
@@ -116,7 +115,7 @@ export async function loadJobTaskExecutionPayload(
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
-    salesIntakeEditHref,
+    leadEditHref,
     jobHref: `/jobs/${job.id}`,
     task: {
       id: task.id,
@@ -128,7 +127,10 @@ export async function loadJobTaskExecutionPayload(
       completionRequirementsJson: task.completionRequirementsJson,
       attachments: task.attachments,
       issues: task.issues,
-      paymentBlockers: taskPaymentBlockers,
+      providesSignals: task.providesSignals,
+      requiresSignals: task.requiresSignals,
+      hardSignal: task.hardSignal,
+      paymentBlockers: [], // Deprecated: readiness now uses signals
     },
   };
 }

@@ -1,0 +1,289 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { formatDistanceToNow } from "date-fns";
+import type { LeadChannel, LeadStatus } from "@prisma/client";
+import type {
+  LeadContactJson,
+  LeadRequestJson,
+  LeadSignalsJson,
+} from "@/lib/lead/lead-projection";
+import {
+  User,
+  Mail,
+  Phone,
+  ChevronRight,
+  Archive,
+  CheckCircle2,
+  Search,
+  Filter,
+  GitMerge,
+  Loader2,
+  ArrowRight,
+} from "lucide-react";
+import {
+  archiveLeadInboxAction,
+  createQuoteFromLeadWorkspaceAction,
+} from "@/app/(workspace)/leads/lead-workspace-actions";
+import { useRouter } from "next/navigation";
+
+export type InboxLeadRow = {
+  id: string;
+  channel: LeadChannel;
+  status: LeadStatus;
+  createdAt: Date;
+  contact: LeadContactJson;
+  request: LeadRequestJson;
+  signals: LeadSignalsJson;
+};
+
+export type CandidateRow = {
+  id: string;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+};
+
+type LeadInboxClientProps = {
+  initialLeads: InboxLeadRow[];
+  candidates: CandidateRow[];
+};
+
+export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientProps) {
+  const router = useRouter();
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(initialLeads[0]?.id || null);
+  const [leads, setLeads] = useState(initialLeads);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isPromoting, setIsPromoting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+
+  const selectedLead = leads.find(l => l.id === selectedLeadId);
+  const candidateIds = selectedLead?.signals.duplicateCandidateIds ?? [];
+  const leadCandidates = candidates.filter(c => candidateIds.includes(c.id));
+
+  const handlePromote = async () => {
+    if (!selectedLeadId) return;
+    setIsPromoting(true);
+    try {
+      const result = await createQuoteFromLeadWorkspaceAction(selectedLeadId);
+      if (result.success) {
+        router.push(`/quotes/${result.quoteId}`);
+      } else {
+        alert(result.error);
+      }
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!selectedLeadId) return;
+    setIsArchiving(true);
+    try {
+      const result = await archiveLeadInboxAction(selectedLeadId);
+      if (result.success) {
+        const remaining = leads.filter((l) => l.id !== selectedLeadId);
+        setLeads(remaining);
+        setSelectedLeadId(remaining[0]?.id ?? null);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const filteredLeads = leads.filter(l => {
+    const contact = l.contact;
+    const name = contact.name?.toLowerCase() || "";
+    const email = contact.email?.toLowerCase() || "";
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || email.includes(query);
+  });
+
+  return (
+    <div className="flex-1 flex overflow-hidden bg-foreground/[0.02]">
+      {/* Sidebar List */}
+      <div className="w-full sm:w-[400px] border-r border-border bg-surface flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-border space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-foreground-subtle" />
+            <input
+              type="text"
+              placeholder="Search leads..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-foreground/[0.03] border-none rounded-lg text-sm focus:ring-2 focus:ring-accent/20"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <button className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground transition-colors">
+              <Filter className="mr-1.5 size-3" />
+              All Leads
+            </button>
+            <span className="text-[0.6rem] font-bold text-foreground-subtle uppercase tracking-widest">
+              {filteredLeads.length} Leads
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {filteredLeads.map((lead) => {
+            const contact = lead.contact;
+            const request = lead.request;
+            const isSelected = selectedLeadId === lead.id;
+
+            return (
+              <button
+                key={lead.id}
+                onClick={() => setSelectedLeadId(lead.id)}
+                className={`w-full text-left p-4 border-b border-border transition-all hover:bg-foreground/[0.01] ${
+                  isSelected ? "bg-accent/[0.03] border-l-4 border-l-accent" : "border-l-4 border-l-transparent"
+                }`}
+              >
+                <div className="flex items-start justify-between mb-1">
+                  <h3 className={`text-sm font-bold truncate ${isSelected ? "text-accent" : "text-foreground"}`}>
+                    {contact.name || "Unknown Lead"}
+                  </h3>
+                  <span className="text-[0.65rem] text-foreground-subtle whitespace-nowrap ml-2">
+                    {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
+                  </span>
+                </div>
+                <p className="text-xs text-foreground-muted line-clamp-1 mb-2">
+                  {request.scope || "No details provided"}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[0.6rem] font-bold text-foreground-subtle uppercase">
+                    {lead.channel}
+                  </span>
+                  {lead.status === "NEW" && (
+                    <span className="size-1.5 rounded-full bg-accent animate-pulse" />
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Content / Side Panel */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-surface">
+        {selectedLead ? (
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-surface z-10 shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="size-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+                  <User className="size-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-foreground tracking-tight">{selectedLead.contact.name}</h2>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-xs text-foreground-muted flex items-center gap-1">
+                      <Mail className="size-3" />
+                      {selectedLead.contact.email || "No email"}
+                    </span>
+                    <span className="text-xs text-foreground-muted flex items-center gap-1">
+                      <Phone className="size-3" />
+                      {selectedLead.contact.phone || "No phone"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {leadCandidates.length > 0 && (
+                  <button 
+                    onClick={() => setShowMergeDialog(true)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning hover:bg-warning/20 transition-colors text-xs font-bold"
+                  >
+                    <GitMerge className="size-4" />
+                    Merge ({leadCandidates.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={isArchiving}
+                  className="p-2 rounded-lg hover:bg-foreground/5 text-foreground-subtle transition-colors disabled:opacity-50"
+                  title="Archive"
+                >
+                  {isArchiving ? <Loader2 className="size-5 animate-spin" /> : <Archive className="size-5" />}
+                </button>
+                <div className="w-px h-6 bg-border mx-1" />
+                <button 
+                  onClick={handlePromote}
+                  disabled={isPromoting}
+                  className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {isPromoting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <CheckCircle2 className="mr-2 size-4" />}
+                  Promote to Quote
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <Link
+                href={`/leads/${selectedLead.id}`}
+                className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"
+              >
+                Open full lead workspace
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+            <div className="size-16 rounded-full bg-foreground/5 flex items-center justify-center text-foreground-subtle mb-6">
+              <Mail className="size-8" />
+            </div>
+            <h3 className="text-lg font-bold text-foreground">Select a lead to triage</h3>
+            <p className="text-sm text-foreground-muted mt-2 max-w-xs">
+              Choose a lead from the list on the left to view details and take action.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Merge Dialog */}
+      {showMergeDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/20 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-surface rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border">
+              <h3 className="text-lg font-bold text-foreground">Merge Lead</h3>
+              <p className="text-sm text-foreground-muted mt-1">
+                We found existing customers that match this lead&apos;s contact info.
+              </p>
+            </div>
+            <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
+              {leadCandidates.map(candidate => (
+                <button
+                  key={candidate.id}
+                  className="w-full text-left p-4 rounded-xl border border-border hover:border-accent/40 hover:bg-accent/[0.02] transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-bold text-foreground group-hover:text-accent transition-colors">{candidate.displayName}</h4>
+                    <ChevronRight className="size-4 text-foreground-subtle" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {candidate.email && <p className="text-xs text-foreground-muted">{candidate.email}</p>}
+                    {candidate.phone && <p className="text-xs text-foreground-muted">{candidate.phone}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 bg-foreground/[0.02] border-t border-border flex justify-end gap-3">
+              <button 
+                onClick={() => setShowMergeDialog(false)}
+                className="px-4 py-2 text-sm font-bold text-foreground-subtle hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

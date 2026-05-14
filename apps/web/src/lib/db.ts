@@ -1,4 +1,9 @@
-import { PrismaClient, StaffRole } from "@prisma/client";
+import { LeadChannel, PrismaClient, StaffRole, type Prisma } from "@prisma/client";
+import {
+  DEFAULT_INTAKE_FORM_DEFINITION,
+  type IntakeFormDefinitionShape,
+  type IntakeFormSchema,
+} from "@/lib/intake/default-intake-form";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -9,6 +14,125 @@ import {
   effectivePublicRequestSettingsFromRow,
   type EffectivePublicRequestSettings,
 } from "@/lib/public-request-settings-effective";
+import {
+  deriveLeadTitle,
+  readContact,
+  readRequest,
+  readSignals,
+} from "./lead/lead-projection";
+
+/**
+ * Prisma client extension that exposes virtual fields on `Lead` mapped from the
+ * JSONB columns. Lets readers continue to use `lead.title`, `lead.email`, etc.
+ * while the database stores `contact`, `request`, `signals`, `address` as JSONB.
+ *
+ * Each computed field declares its `needs:` so Prisma fetches the underlying
+ * JSONB column when the virtual field is selected.
+ */
+function buildExtendedClient(client: PrismaClient) {
+  return client.$extends({
+    name: "lead-projection",
+    result: {
+      lead: {
+        title: {
+          needs: { contact: true, request: true },
+          compute(lead) {
+            return deriveLeadTitle(lead.contact, lead.request);
+          },
+        },
+        contactName: {
+          needs: { contact: true },
+          compute(lead) {
+            return readContact(lead.contact).name;
+          },
+        },
+        email: {
+          needs: { contact: true },
+          compute(lead) {
+            return readContact(lead.contact).email;
+          },
+        },
+        phone: {
+          needs: { contact: true },
+          compute(lead) {
+            return readContact(lead.contact).phone;
+          },
+        },
+        notes: {
+          needs: { signals: true },
+          compute(lead) {
+            const s = readSignals(lead.signals);
+            return typeof s.notes === "string" ? s.notes : null;
+          },
+        },
+        sourceDetail: {
+          needs: { signals: true },
+          compute(lead) {
+            const s = readSignals(lead.signals);
+            return typeof s.sourceDetail === "string" ? s.sourceDetail : null;
+          },
+        },
+        source: {
+          needs: { channel: true },
+          compute(lead) {
+            return lead.channel;
+          },
+        },
+        requestType: {
+          needs: { request: true },
+          compute(lead) {
+            return readRequest(lead.request).type;
+          },
+        },
+        neededByBucket: {
+          needs: { request: true },
+          compute(lead) {
+            return readRequest(lead.request).neededByBucket;
+          },
+        },
+        neededByDate: {
+          needs: { request: true },
+          compute(lead) {
+            const r = readRequest(lead.request);
+            if (r.neededByDate instanceof Date) return r.neededByDate;
+            if (typeof r.neededByDate === "string") {
+              const d = new Date(r.neededByDate);
+              return Number.isNaN(d.getTime()) ? null : d;
+            }
+            return null;
+          },
+        },
+        scopeSummary: {
+          needs: { request: true },
+          compute(lead) {
+            return readRequest(lead.request).scope;
+          },
+        },
+        publicIntakeServiceLocation: {
+          needs: { address: true },
+          compute(lead) {
+            return lead.address as Prisma.JsonValue | null;
+          },
+        },
+      },
+    },
+  });
+}
+
+export type ExtendedPrismaClient = ReturnType<typeof buildExtendedClient>;
+
+/**
+ * Transaction client type for the extended Prisma client. Use this for any
+ * helper that accepts `tx` from `db.$transaction(async (tx) => { ... })`.
+ *
+ * The Prisma client extension changes the inferred shape of `tx`, so the
+ * built-in `Prisma.TransactionClient` no longer matches. Use this alias
+ * instead.
+ */
+export type ExtendedTransactionClient = Omit<
+  ExtendedPrismaClient,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
 
 const prismaClientSingleton = () => {
   if (!process.env.DATABASE_URL) {
@@ -16,14 +140,14 @@ const prismaClientSingleton = () => {
       "DATABASE_URL is not set. Copy apps/web/.env.example to apps/web/.env and set DATABASE_URL for your environment."
     );
   }
-  return new PrismaClient();
+  return buildExtendedClient(new PrismaClient());
 };
 
 declare global {
   var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
 }
 
-function getPrisma(): PrismaClient {
+function getPrisma(): ExtendedPrismaClient {
   if (!globalThis.prisma) {
     globalThis.prisma = prismaClientSingleton();
   }
@@ -34,12 +158,12 @@ function getPrisma(): PrismaClient {
  * Lazily instantiates Prisma so `next build` can load route modules without DATABASE_URL.
  * The first real query still requires DATABASE_URL and fails with the error above if unset.
  */
-export const db: PrismaClient = new Proxy({} as PrismaClient, {
+export const db: ExtendedPrismaClient = new Proxy({} as ExtendedPrismaClient, {
   get(_target, prop) {
     const client = getPrisma();
     const value = Reflect.get(client, prop) as unknown;
     if (typeof value === "function") {
-      return value.bind(client);
+      return (value as (...args: unknown[]) => unknown).bind(client);
     }
     return value;
   },
@@ -119,21 +243,29 @@ export type PublicRequestIntakeBundle = {
   organizationDisplayName: string;
   companySlug: string;
   intake: EffectivePublicRequestSettings;
+  /**
+   * Active published WEB_FORM IntakeFormDefinition (channel=WEB_FORM, isPublic, isDefault,
+   * archivedAt=null) when one exists. Falls back to `DEFAULT_INTAKE_FORM_DEFINITION` for
+   * organizations that have not customized their public request form.
+   */
+  formDefinition: IntakeFormDefinitionShape;
 };
 
 /**
- * Public `/request/[slug]` payload: org display name, slug, and effective intake settings.
- * Returns null when no organization matches the slug.
+ * Public `/request/[companySlug]` or `/request/[companySlug]/[formSlug]` payload.
+ * Returns null when no organization matches the slug or the form is not found/public.
  */
-export async function getPublicRequestIntakeBundleBySlug(
-  slug: string,
+export async function getPublicRequestIntakeBundle(
+  companySlug: string,
+  formSlug?: string,
 ): Promise<PublicRequestIntakeBundle | null> {
-  const normalized = slug.trim().toLowerCase();
-  if (!normalized) {
+  const normalizedCompany = companySlug.trim().toLowerCase();
+  if (!normalizedCompany) {
     return null;
   }
+
   const org = await db.organization.findFirst({
-    where: { slug: normalized },
+    where: { slug: normalizedCompany },
     select: {
       id: true,
       name: true,
@@ -154,15 +286,75 @@ export async function getPublicRequestIntakeBundleBySlug(
       },
     },
   });
+
   if (!org?.slug) {
     return null;
   }
+
   const intake = effectivePublicRequestSettingsFromRow(org.publicRequestSettings);
+
+  // When formSlug is provided, load that specific form.
+  // When omitted, load the org's default public WEB_FORM form.
+  const formWhere: Prisma.IntakeFormDefinitionWhereInput = {
+    organizationId: org.id,
+    channel: LeadChannel.WEB_FORM,
+    isPublic: true,
+    archivedAt: null,
+  };
+
+  if (formSlug) {
+    formWhere.slug = formSlug.trim().toLowerCase();
+  } else {
+    formWhere.isDefault = true;
+  }
+
+  const published = await db.intakeFormDefinition.findFirst({
+    where: formWhere,
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      channel: true,
+      isPublic: true,
+      isDefault: true,
+      schema: true,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  let formDefinition: IntakeFormDefinitionShape;
+  if (published && published.schema && typeof published.schema === "object") {
+    formDefinition = {
+      id: published.id,
+      name: published.name,
+      slug: published.slug,
+      channel: published.channel,
+      isPublic: published.isPublic,
+      isDefault: published.isDefault,
+      schema: published.schema as unknown as IntakeFormSchema,
+    };
+  } else {
+    // Fallback only for the default route if no default form is found in DB.
+    if (formSlug) {
+      return null;
+    }
+    formDefinition = DEFAULT_INTAKE_FORM_DEFINITION;
+  }
 
   return {
     organizationId: org.id,
     organizationDisplayName: org.name,
     companySlug: org.slug,
     intake,
+    formDefinition,
   };
+}
+
+/**
+ * Legacy wrapper for `/request/[slug]`.
+ */
+export async function getPublicRequestIntakeBundleBySlug(
+  slug: string,
+): Promise<PublicRequestIntakeBundle | null> {
+  return getPublicRequestIntakeBundle(slug);
 }

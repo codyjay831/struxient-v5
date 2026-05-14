@@ -6,7 +6,7 @@ import {
   deleteQuoteLineItemAction,
   updateDraftQuoteDetailsAction,
   updateQuoteLineItemAction,
-  copySalesIntakeToQuoteNotesAction,
+  copyLeadToQuoteNotesAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
@@ -66,13 +66,13 @@ function QuoteDraftDetailsForm({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasSalesIntakeNotes,
+  hasLeadNotes,
 }: {
   quoteId: string;
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasSalesIntakeNotes: boolean;
+  hasLeadNotes: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateDraftQuoteDetailsAction.bind(null, quoteId),
@@ -80,7 +80,7 @@ function QuoteDraftDetailsForm({
   );
 
   const [copyState, copyAction, isCopyPending] = useActionState(
-    copySalesIntakeToQuoteNotesAction.bind(null, quoteId),
+    copyLeadToQuoteNotesAction.bind(null, quoteId),
     initialActionState,
   );
 
@@ -110,13 +110,13 @@ function QuoteDraftDetailsForm({
           <label className="block">
             <div className="flex items-center justify-between">
               <span className={fieldLabelClass}>Internal quote notes (staff-only)</span>
-              {hasSalesIntakeNotes && (
+              {hasLeadNotes && (
                 <div className="flex items-center gap-2">
                   <button
                     formAction={copyAction}
                     disabled={isCopyPending}
                     className="text-[10px] font-medium text-foreground-subtle underline decoration-border underline-offset-2 hover:decoration-foreground disabled:opacity-50"
-                    title="Append sales intake notes to this field. Does not overwrite existing text."
+                    title="Append lead notes to this field. Does not overwrite existing text."
                   >
                     {isCopyPending ? "Copying..." : "Copy intake into quote notes"}
                   </button>
@@ -365,13 +365,14 @@ export type QuoteDraftWorkspaceControlsProps = {
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasSalesIntakeNotes: boolean;
+  hasLeadNotes: boolean;
   subtotalCents: number;
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
   lineItemTemplates: LineItemTemplatePickerRow[];
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  stages: { id: string; name: string }[];
   /** From quote Overview — open Scope Library picker on Scope tab (full page). */
   shouldOpenScopeLibraryPicker?: boolean;
   onScopeLibraryPickerOpenConsumed?: () => void;
@@ -383,13 +384,14 @@ export function QuoteDraftWorkspaceControls({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasSalesIntakeNotes,
+  hasLeadNotes,
   subtotalCents,
   totalCents,
   lineItems,
   lineItemTemplates,
   draftTasksByLineId,
   reusableTaskOptions,
+  stages,
   shouldOpenScopeLibraryPicker = false,
   onScopeLibraryPickerOpenConsumed,
 }: QuoteDraftWorkspaceControlsProps) {
@@ -404,7 +406,7 @@ export function QuoteDraftWorkspaceControls({
         initialTitle={initialTitle}
         initialInternalNotes={initialInternalNotes}
         initialCustomerDocumentTitle={initialCustomerDocumentTitle}
-        hasSalesIntakeNotes={hasSalesIntakeNotes}
+        hasLeadNotes={hasLeadNotes}
       />
 
       <WorkspacePanel id={id} className="border-border-strong shadow-md ring-1 ring-ring/30">
@@ -485,6 +487,7 @@ export function QuoteDraftWorkspaceControls({
                       isExecutionEditable
                       draftTasks={draftTasksByLineId[line.id] ?? []}
                       reusableOptions={reusableTaskOptions}
+                      stages={stages}
                     />
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">

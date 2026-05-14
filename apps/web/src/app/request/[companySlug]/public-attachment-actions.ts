@@ -13,7 +13,7 @@ export type PublicUploadAttachmentState = {
   storageProvider?: "local" | "gcs";
 };
 
-export async function getPublicSalesIntakeAttachmentUploadUrlAction(
+export async function getPublicLeadAttachmentUploadUrlAction(
   companySlug: string,
   fileName: string,
   contentType: string,
@@ -47,7 +47,7 @@ export async function getPublicSalesIntakeAttachmentUploadUrlAction(
 
   try {
     // Create the attachment record first to get a real ID
-    // Note: No salesIntakeId yet, it will be associated during sales intake submission
+    // Note: No leadId yet, it will be associated during lead submission
     const attachment = await db.attachment.create({
       data: {
         organizationId: org.id,

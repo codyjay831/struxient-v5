@@ -16,7 +16,7 @@ const listLinkClass =
 
 /**
  * Full Quote page. The page is now a thin host: load via `loadQuoteWorkSurface`
- * (the same loader Workstation, the Sales Intake Quote tab, and the Quotes popup use)
+ * (the same loader Workstation, the Lead Quote tab, and the Quotes popup use)
  * and hand the payload to `QuoteWorkspaceShell`, which renders
  * `<QuoteWorkSurface mode="full" />` as the entire workspace body. There is no
  * separate full-page client to maintain.
@@ -49,7 +49,7 @@ export default async function QuoteDetailPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales" },
-            { label: "Quotes", href: "/sales?tab=proposals" },
+            { label: "Quotes", href: "/quotes" },
             { label: "Not found" },
           ]}
         />
@@ -58,7 +58,7 @@ export default async function QuoteDetailPage({
           title="Quote"
           description="No quote exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
           actions={
-            <Link href="/sales?tab=proposals" className={listLinkClass}>
+            <Link href="/quotes" className={listLinkClass}>
               ← Quotes list
             </Link>
           }
@@ -76,7 +76,7 @@ export default async function QuoteDetailPage({
           title="Quote not found"
           description="This id is not a quote record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
         >
-          <Link href="/sales?tab=proposals" className={listLinkClass}>
+          <Link href="/quotes" className={listLinkClass}>
             Back to quotes
           </Link>
         </EmptyState>

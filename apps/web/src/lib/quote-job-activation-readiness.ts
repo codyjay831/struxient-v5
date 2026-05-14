@@ -1,19 +1,20 @@
-import {
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
-  QuoteStatus,
-} from "@prisma/client";
+import { QuoteStatus } from "@prisma/client";
 
 /**
- * Plain input for {@link evaluateQuoteJobActivationReadiness} — same shape pattern as
- * the execution-review preview model so server actions and the preview view can share inputs.
+ * Plain input for {@link evaluateQuoteJobActivationReadiness}
  */
+export type QuoteActivationTaskInput = {
+  id: string;
+  title: string;
+  providesSignals: string[];
+  requiresSignals: string[];
+  hardSignal: boolean;
+};
+
 export type QuoteActivationLineInput = {
   id: string;
   description: string;
-  executionReviewStatus: QuoteLineExecutionReviewStatus;
-  executionMergeMode: QuoteLineExecutionMergeMode;
-  taskCount: number;
+  tasks: QuoteActivationTaskInput[];
 };
 
 export type QuoteActivationReadinessInput = {
@@ -22,36 +23,30 @@ export type QuoteActivationReadinessInput = {
 };
 
 /**
- * Why activation is not currently allowed (machine-readable; UI maps to copy).
- * Order matters — the first matching reason should be presented.
+ * Why activation is not currently allowed.
  */
 export type QuoteActivationBlockReasonCode =
   | "QUOTE_NOT_APPROVED"
   | "QUOTE_HAS_NO_LINES"
-  | "LINE_NEEDS_EXECUTION_REVIEW"
-  | "LINE_COMMERCIAL_ONLY_HAS_TASKS"
-  | "NO_EXECUTION_TASKS";
+  | "NO_EXECUTION_TASKS"
+  | "HARD_SIGNAL_NO_PROVIDER"
+  | "CIRCULAR_SIGNAL_DEPENDENCY";
 
 export type QuoteActivationBlockReason = {
   code: QuoteActivationBlockReasonCode;
   message: string;
-  /** Lines that triggered this reason (when applicable). */
-  lines: { id: string; description: string }[];
+  /** Tasks or signals that triggered this reason (when applicable). */
+  details?: string[];
 };
 
 export type QuoteJobActivationReadiness = {
   ready: boolean;
   totalTasksToActivate: number;
-  sharedTaskCount: number;
-  separateBlockCount: number;
-  separateBlockTaskCount: number;
   blockReasons: QuoteActivationBlockReason[];
 };
 
 /**
  * Decides whether an APPROVED quote can be activated into a job.
- * Pure / deterministic — server action calls this inside the activation transaction
- * and the preview view calls it for read-only "Activate job" gating.
  */
 export function evaluateQuoteJobActivationReadiness(
   input: QuoteActivationReadinessInput,
@@ -62,7 +57,6 @@ export function evaluateQuoteJobActivationReadiness(
     reasons.push({
       code: "QUOTE_NOT_APPROVED",
       message: "Approve the quote before activation.",
-      lines: [],
     });
   }
 
@@ -70,77 +64,100 @@ export function evaluateQuoteJobActivationReadiness(
     reasons.push({
       code: "QUOTE_HAS_NO_LINES",
       message: "This quote has no line items—activation requires at least one scope row.",
-      lines: [],
     });
   }
 
-  const needsReviewLines = input.lines.filter(
-    (l) =>
-      l.executionReviewStatus === QuoteLineExecutionReviewStatus.UNREVIEWED &&
-      l.taskCount === 0,
-  );
-  if (needsReviewLines.length > 0) {
-    reasons.push({
-      code: "LINE_NEEDS_EXECUTION_REVIEW",
-      message:
-        "Some lines still need an execution decision—add tasks or mark the line no execution needed before activation.",
-      lines: needsReviewLines.map((l) => ({ id: l.id, description: l.description })),
-    });
-  }
+  const allTasks = input.lines.flatMap((l) => l.tasks);
+  const totalTasksToActivate = allTasks.length;
 
-  const anomalyLines = input.lines.filter(
-    (l) =>
-      l.executionReviewStatus === QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED &&
-      l.taskCount > 0,
-  );
-  if (anomalyLines.length > 0) {
-    reasons.push({
-      code: "LINE_COMMERCIAL_ONLY_HAS_TASKS",
-      message:
-        "Some lines are marked no execution needed but still have draft tasks—fix planning on those lines first.",
-      lines: anomalyLines.map((l) => ({ id: l.id, description: l.description })),
-    });
-  }
-
-  const sharedTaskCount = input.lines.reduce(
-    (sum, l) =>
-      l.executionReviewStatus !== QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED &&
-      l.executionMergeMode === QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES
-        ? sum + l.taskCount
-        : sum,
-    0,
-  );
-  const separateContributingLines = input.lines.filter(
-    (l) =>
-      l.executionReviewStatus !== QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED &&
-      l.executionMergeMode === QuoteLineExecutionMergeMode.KEEP_SEPARATE_BLOCK &&
-      l.taskCount > 0,
-  );
-  const separateBlockTaskCount = separateContributingLines.reduce(
-    (sum, l) => sum + l.taskCount,
-    0,
-  );
-  const totalTasksToActivate = sharedTaskCount + separateBlockTaskCount;
-
-  if (
-    reasons.length === 0 &&
-    input.lines.length > 0 &&
-    totalTasksToActivate === 0
-  ) {
+  if (input.lines.length > 0 && totalTasksToActivate === 0) {
     reasons.push({
       code: "NO_EXECUTION_TASKS",
-      message:
-        "No execution tasks to activate—mark at least one line for execution work before activation.",
-      lines: [],
+      message: "No execution tasks to activate—add at least one task before activation.",
+    });
+  }
+
+  // 1. Check for Hard Signal Orphans
+  const allProvidedSignals = new Set(allTasks.flatMap((t) => t.providesSignals));
+  const hardOrphans: string[] = [];
+
+  for (const task of allTasks) {
+    if (task.hardSignal) {
+      for (const req of task.requiresSignals) {
+        if (!allProvidedSignals.has(req)) {
+          hardOrphans.push(`${task.title} requires hard signal "${req}" but no task provides it.`);
+        }
+      }
+    }
+  }
+
+  if (hardOrphans.length > 0) {
+    reasons.push({
+      code: "HARD_SIGNAL_NO_PROVIDER",
+      message: "Some tasks require hard signals that have no provider in this job.",
+      details: hardOrphans,
+    });
+  }
+
+  // 2. Check for Circular Dependencies (Graph-based Cycle Detection)
+  const circulars: string[] = [];
+  
+  // Build a map of signal -> tasks that provide it
+  const signalProviders = new Map<string, string[]>();
+  for (const task of allTasks) {
+    for (const signal of task.providesSignals) {
+      const providers = signalProviders.get(signal) || [];
+      providers.push(task.id);
+      signalProviders.set(signal, providers);
+    }
+  }
+
+  // DFS to find cycles
+  const visited = new Set<string>();
+  const recStack = new Set<string>();
+
+  function hasCycle(taskId: string, path: string[]): boolean {
+    if (recStack.has(taskId)) {
+      const cyclePath = path.slice(path.indexOf(taskId));
+      circulars.push(`Cycle detected: ${cyclePath.join(" -> ")} -> ${taskId}`);
+      return true;
+    }
+    if (visited.has(taskId)) return false;
+
+    visited.add(taskId);
+    recStack.add(taskId);
+
+    const task = allTasks.find(t => t.id === taskId);
+    if (task) {
+      for (const req of task.requiresSignals) {
+        const providers = signalProviders.get(req) || [];
+        for (const providerId of providers) {
+          if (hasCycle(providerId, [...path, taskId])) return true;
+        }
+      }
+    }
+
+    recStack.delete(taskId);
+    return false;
+  }
+
+  for (const task of allTasks) {
+    if (!visited.has(task.id)) {
+      hasCycle(task.id, []);
+    }
+  }
+
+  if (circulars.length > 0) {
+    reasons.push({
+      code: "CIRCULAR_SIGNAL_DEPENDENCY",
+      message: "Circular signal dependencies detected.",
+      details: circulars,
     });
   }
 
   return {
     ready: reasons.length === 0,
     totalTasksToActivate,
-    sharedTaskCount,
-    separateBlockCount: separateContributingLines.length,
-    separateBlockTaskCount,
     blockReasons: reasons,
   };
 }

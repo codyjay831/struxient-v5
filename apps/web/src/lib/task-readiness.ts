@@ -1,10 +1,11 @@
-import { JobTaskStatus, JobIssueStatus, JobIssueSeverity, JobPaymentRequirementStatus, Prisma } from "@prisma/client";
+import { JobIssueStatus, JobIssueSeverity, JobTaskStatus } from "@prisma/client";
 
 export type TaskDerivedState =
   | "COMPLETED"
-  | "BLOCKED"
+  | "BLOCKED_BY_ISSUE"
+  | "BLOCKED_BY_SIGNAL"
   | "NEEDS_PROOF"
-  | "READY_TO_COMPLETE";
+  | "READY";
 
 export type TaskCompletionRequirements = {
   noteRequired?: boolean;
@@ -13,41 +14,75 @@ export type TaskCompletionRequirements = {
 };
 
 export type TaskReadinessInput = {
+  status: JobTaskStatus;
   completedAt: Date | null;
   completionNote: string | null;
   completionRequirementsJson: unknown;
   attachments: { id: string }[];
+  requiresSignals: string[];
   issues: {
     status: JobIssueStatus;
     severity: JobIssueSeverity;
   }[];
-  paymentBlockers: {
-    status: JobPaymentRequirementStatus;
-    title: string;
-  }[];
+  stage?: {
+    requiresSignals: string[];
+    issues: {
+      status: JobIssueStatus;
+      severity: JobIssueSeverity;
+    }[];
+  } | null;
 };
 
 /**
- * Derives the operational state of a task based on its facts, blockers, and requirements.
- * Users do not manually set these states; they are an explanation of reality.
+ * Derives the operational state of a task based on its facts, blockers, and signals.
  */
-export function deriveTaskState(task: TaskReadinessInput): TaskDerivedState {
-  if (task.completedAt) {
+export function deriveTaskState(
+  task: TaskReadinessInput,
+  liveSignals: string[]
+): TaskDerivedState {
+  if (task.status === JobTaskStatus.DONE || task.completedAt) {
     return "COMPLETED";
   }
 
-  const isIssueBlocked = task.issues.some(
+  // 1. Check for blocking issues (Task level)
+  const hasTaskBlockingIssue = task.issues.some(
     (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
   );
-
-  const isPaymentBlocked = task.paymentBlockers.some(
-    (p) => p.status === JobPaymentRequirementStatus.DUE
-  );
-
-  if (isIssueBlocked || isPaymentBlocked) {
-    return "BLOCKED";
+  if (hasTaskBlockingIssue) {
+    return "BLOCKED_BY_ISSUE";
   }
 
+  // 2. Check for blocking issues (Stage level)
+  if (task.stage) {
+    const hasStageBlockingIssue = task.stage.issues.some(
+      (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
+    );
+    if (hasStageBlockingIssue) {
+      return "BLOCKED_BY_ISSUE";
+    }
+  }
+
+  // 3. Check for missing signals (Stage level)
+  if (task.stage && task.stage.requiresSignals.length > 0) {
+    const missingStageSignals = task.stage.requiresSignals.filter(
+      (s) => !liveSignals.includes(s)
+    );
+    if (missingStageSignals.length > 0) {
+      return "BLOCKED_BY_SIGNAL";
+    }
+  }
+
+  // 4. Check for missing signals (Task level)
+  if (task.requiresSignals.length > 0) {
+    const missingTaskSignals = task.requiresSignals.filter(
+      (s) => !liveSignals.includes(s)
+    );
+    if (missingTaskSignals.length > 0) {
+      return "BLOCKED_BY_SIGNAL";
+    }
+  }
+
+  // 5. Check for completion requirements (if unblocked)
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
   
   if (requirements.noteRequired && !task.completionNote) {
@@ -58,22 +93,72 @@ export function deriveTaskState(task: TaskReadinessInput): TaskDerivedState {
     return "NEEDS_PROOF";
   }
 
-  return "READY_TO_COMPLETE";
+  return "READY";
 }
 
-export function taskStateLabel(state: TaskDerivedState, input?: TaskReadinessInput): string {
+export type StageDerivedState =
+  | "COMPLETED"
+  | "BLOCKED_BY_ISSUE"
+  | "BLOCKED_BY_SIGNAL"
+  | "READY";
+
+export type StageReadinessInput = {
+  requiresSignals: string[];
+  issues: {
+    status: JobIssueStatus;
+    severity: JobIssueSeverity;
+  }[];
+  tasks: TaskReadinessInput[];
+};
+
+/**
+ * Derives the operational state of a stage.
+ */
+export function deriveStageState(
+  stage: StageReadinessInput,
+  liveSignals: string[]
+): StageDerivedState {
+  // 1. Check if all tasks are completed
+  const allTasksCompleted = stage.tasks.length > 0 && stage.tasks.every(
+    (t) => t.status === JobTaskStatus.DONE || t.completedAt
+  );
+  if (allTasksCompleted) {
+    return "COMPLETED";
+  }
+
+  // 2. Check for blocking issues
+  const hasBlockingIssue = stage.issues.some(
+    (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
+  );
+  if (hasBlockingIssue) {
+    return "BLOCKED_BY_ISSUE";
+  }
+
+  // 3. Check for missing signals
+  if (stage.requiresSignals.length > 0) {
+    const missingSignals = stage.requiresSignals.filter(
+      (s) => !liveSignals.includes(s)
+    );
+    if (missingSignals.length > 0) {
+      return "BLOCKED_BY_SIGNAL";
+    }
+  }
+
+  return "READY";
+}
+
+export function taskStateLabel(state: TaskDerivedState): string {
   switch (state) {
     case "COMPLETED":
       return "Completed";
-    case "BLOCKED":
-      if (input?.paymentBlockers.some(p => p.status === JobPaymentRequirementStatus.DUE)) {
-        return "Payment required";
-      }
-      return "Blocked";
+    case "BLOCKED_BY_ISSUE":
+      return "Blocked by issue";
+    case "BLOCKED_BY_SIGNAL":
+      return "Waiting on signal";
     case "NEEDS_PROOF":
       return "Needs proof";
-    case "READY_TO_COMPLETE":
-      return "Ready to complete";
+    case "READY":
+      return "Ready";
   }
 }
 
@@ -81,11 +166,13 @@ export function taskStateTone(state: TaskDerivedState): "approved" | "danger" | 
   switch (state) {
     case "COMPLETED":
       return "approved";
-    case "BLOCKED":
+    case "BLOCKED_BY_ISSUE":
       return "danger";
+    case "BLOCKED_BY_SIGNAL":
+      return "warning";
     case "NEEDS_PROOF":
       return "warning";
-    case "READY_TO_COMPLETE":
+    case "READY":
       return "sent";
   }
 }

@@ -1,6 +1,4 @@
 import type {
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
   QuoteStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
@@ -14,10 +12,10 @@ export type QuoteListRowPayload = {
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; displayName: string } | null;
-  salesIntake: { id: string; title: string } | null;
+  lead: { id: string; title: string } | null;
 };
 
-/** Minimal quote row for sales intake/customer detail sidebars (org-scoped). */
+/** Minimal quote row for lead/customer detail sidebars (org-scoped). */
 export type QuoteLinkedSummary = {
   id: string;
   title: string;
@@ -44,13 +42,6 @@ export type QuoteLineItemPayload = {
     taskCount: number;
     summaryLine: string | null;
   };
-  /** Internal execution planning — not customer-facing. */
-  executionReviewStatus: QuoteLineExecutionReviewStatus;
-  executionMergeMode: QuoteLineExecutionMergeMode;
-  executionOrder: number;
-  /** 1-based position after sorting by execution order on the quote. */
-  workOrderPosition: number;
-  workOrderTotal: number;
 };
 
 /** Minimal SEND checkpoint row for quote detail (staff-only list; not a version manager). */
@@ -73,9 +64,9 @@ export type QuoteDetailPayload = {
   createdAt: Date;
   updatedAt: Date;
   customerId: string | null;
-  salesIntakeId: string | null;
-  customer: { id: string; displayName: string } | null;
-  salesIntake: {
+  leadId: string | null;
+  customer: { id: string; displayName: string; email: string | null } | null;
+  lead: {
     id: string;
     title: string;
     notes: string | null;

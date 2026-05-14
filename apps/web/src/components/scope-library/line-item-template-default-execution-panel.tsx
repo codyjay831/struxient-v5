@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { LineItemTemplateTaskSource } from "@prisma/client";
+import { LineItemTemplateTaskSource, type TaskTemplateCategory } from "@prisma/client";
 import {
   addLineItemTemplateTaskCustomAction,
   addLineItemTemplateTaskFromReusableAction,
@@ -21,14 +21,16 @@ import {
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
-import { executionStageSelectOptions } from "@/lib/execution-stage-catalog";
 import { taskTemplateCategorySelectOptions, getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import type {
   DefaultExecutionStageGroup,
   DefaultExecutionTaskRow,
   ReusableTaskPickerOption,
 } from "@/lib/line-item-template-default-execution-display";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Zap, Sparkles } from "lucide-react";
+import { suggestSignalsForTask } from "@/lib/ai/signal-suggester";
+import type { TaskCompletionRequirements } from "@/lib/task-readiness";
+import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -66,12 +68,143 @@ function sourceLabel(sourceType: LineItemTemplateTaskSource): string {
     : "Custom task";
 }
 
+function SmartTaskDisclosure({ 
+  providesSignals: initialProvides, 
+  requiresSignals: initialRequires, 
+  hardSignal,
+  requirementsJson,
+  title,
+  category,
+}: { 
+  providesSignals?: string[], 
+  requiresSignals?: string[], 
+  hardSignal?: boolean,
+  requirementsJson?: unknown,
+  title?: string,
+  category?: string,
+}) {
+  const [provides, setProvides] = useState(initialProvides?.join(", ") || "");
+  const [requires, setRequires] = useState(initialRequires?.join(", ") || "");
+  
+  const handleSuggest = () => {
+    if (!title) {
+      toast.error("Enter a task title first to get suggestions.");
+      return;
+    }
+    const suggestions = suggestSignalsForTask(title, category || "GENERAL");
+    
+    if (suggestions.provides.length > 0 || suggestions.requires.length > 0) {
+      const newProvides = Array.from(new Set([...(provides ? provides.split(",").map(s => s.trim()) : []), ...suggestions.provides])).join(", ");
+      const newRequires = Array.from(new Set([...(requires ? requires.split(",").map(s => s.trim()) : []), ...suggestions.requires])).join(", ");
+      
+      setProvides(newProvides);
+      setRequires(newRequires);
+      toast.success("AI Secretary suggested signals.");
+    } else {
+      toast.info("No obvious signals found for this title.");
+    }
+  };
+
+  const reqs = (requirementsJson ?? {}) as TaskCompletionRequirements;
+  return (
+    <div className="mt-4 space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-primary">
+          <Zap className="h-3 w-3" />
+          Smart Task Configuration
+        </div>
+        <button
+          type="button"
+          onClick={handleSuggest}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+        >
+          <Sparkles className="size-3" />
+          Suggest Signals
+        </button>
+      </div>
+      
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-3">
+          <label className="block">
+            <span className={fieldLabelClass}>Provides signals</span>
+            <input
+              name="providesSignals"
+              type="text"
+              className={controlClass}
+              value={provides}
+              onChange={(e) => setProvides(e.target.value)}
+              placeholder="e.g. roof-sealed, permit-ready"
+            />
+          </label>
+
+          <label className="block">
+            <span className={fieldLabelClass}>Requires signals</span>
+            <input
+              name="requiresSignals"
+              type="text"
+              className={controlClass}
+              value={requires}
+              onChange={(e) => setRequires(e.target.value)}
+              placeholder="e.g. materials-on-site"
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              name="hardSignal"
+              type="checkbox"
+              defaultChecked={hardSignal}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <span className="text-xs font-medium text-foreground">Hard dependency</span>
+          </label>
+        </div>
+
+        <div className="space-y-3">
+          <span className={fieldLabelClass}>Completion Proof</span>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2">
+              <input
+                name="noteRequired"
+                type="checkbox"
+                defaultChecked={reqs.noteRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">Note required</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                name="photoRequired"
+                type="checkbox"
+                defaultChecked={reqs.photoRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">Photo required</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                name="attachmentRequired"
+                type="checkbox"
+                defaultChecked={reqs.attachmentRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">File attachment required</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddTaskSection({
   lineItemTemplateId,
   reusableOptions,
+  stages,
 }: {
   lineItemTemplateId: string;
   reusableOptions: ReusableTaskPickerOption[];
+  stages: { id: string, name: string }[];
 }) {
   const [reusableState, reusableAction, reusablePending] = useActionState(
     addLineItemTemplateTaskFromReusableAction.bind(null, lineItemTemplateId),
@@ -82,8 +215,11 @@ function AddTaskSection({
     initialFormState,
   );
 
-  const stageOptions = executionStageSelectOptions();
   const categoryOptions = taskTemplateCategorySelectOptions();
+  const [customTitle, setCustomTitle] = useState("");
+  const [customCategory, setCustomCategory] = useState<string>(
+    categoryOptions[0]?.value ?? "GENERAL",
+  );
 
   return (
     <details className={detailsShellClass}>
@@ -102,14 +238,7 @@ function AddTaskSection({
             {reusableState.error ? <FormError message={reusableState.error} /> : null}
             {reusableOptions.length === 0 ? (
               <p className="text-xs text-foreground-muted">
-                No reusable tasks in your library yet. Add some under{" "}
-                <a
-                  href="/scope-library/tasks"
-                  className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
-                >
-                  Reusable tasks
-                </a>
-                , or use a custom task below.
+                No reusable tasks in your library yet.
               </p>
             ) : (
               <>
@@ -128,10 +257,6 @@ function AddTaskSection({
                     ))}
                   </select>
                 </label>
-                <p className="text-[0.7rem] leading-relaxed text-foreground-subtle">
-                  Title, stage, category, and instructions are copied from the library entry. Editing this
-                  line later won&apos;t change the reusable task.
-                </p>
                 <button type="submit" className={primaryButtonClass} disabled={reusablePending}>
                   {reusablePending ? "Adding…" : "Add copied task"}
                 </button>
@@ -155,15 +280,18 @@ function AddTaskSection({
                 maxLength={TASK_TEMPLATE_FIELD_LIMITS.title}
                 className={controlClass}
                 autoComplete="off"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className={fieldLabelClass}>Stage</span>
-                <select name="stageKey" required className={controlClass} defaultValue={stageOptions[0]?.value}>
-                  {stageOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
+                <select name="stageId" className={controlClass}>
+                  <option value="">(No stage)</option>
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
                     </option>
                   ))}
                 </select>
@@ -174,7 +302,8 @@ function AddTaskSection({
                   name="category"
                   required
                   className={controlClass}
-                  defaultValue={categoryOptions[0]?.value}
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
                 >
                   {categoryOptions.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -188,11 +317,14 @@ function AddTaskSection({
               <span className={fieldLabelClass}>Instructions (optional)</span>
               <textarea
                 name="instructions"
-                rows={3}
+                rows={2}
                 maxLength={TASK_TEMPLATE_FIELD_LIMITS.instructions}
                 className={controlClass}
               />
             </label>
+
+            <SmartTaskDisclosure title={customTitle} category={customCategory} />
+
             <button type="submit" className={primaryButtonClass} disabled={customPending}>
               {customPending ? "Saving…" : "Save custom task"}
             </button>
@@ -206,15 +338,19 @@ function AddTaskSection({
 function ExecutionTaskRow({
   lineItemTemplateId,
   task,
+  stages,
   isFirstInStage,
   isLastInStage,
 }: {
   lineItemTemplateId: string;
   task: DefaultExecutionTaskRow;
+  stages: { id: string, name: string }[];
   isFirstInStage: boolean;
   isLastInStage: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [title, setTitle] = useState(task.title);
+  const [category, setCategory] = useState(task.category);
   const [updateState, updateAction, updatePending] = useActionState(
     updateLineItemTemplateTaskAction.bind(null, lineItemTemplateId, task.id),
     initialFormState,
@@ -232,7 +368,6 @@ function ExecutionTaskRow({
     initialFormState,
   );
 
-  const stageOptions = executionStageSelectOptions();
   const categoryOptions = taskTemplateCategorySelectOptions();
 
   return (
@@ -248,6 +383,20 @@ function ExecutionTaskRow({
               {truncatePreview(task.instructions)}
             </p>
           ) : null}
+          {(task.providesSignals.length > 0 || task.requiresSignals.length > 0) && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {task.requiresSignals.map(s => (
+                <span key={s} className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-strong">
+                  Requires: {s}
+                </span>
+              ))}
+              {task.providesSignals.map(s => (
+                <span key={s} className="rounded bg-approved/10 px-1.5 py-0.5 text-[10px] font-medium text-approved-strong">
+                  Provides: {s}
+                </span>
+              ))}
+            </div>
+          )}
           {moveUpState.error || moveDownState.error || deleteState.error ? (
             <p className="mt-2 text-xs text-danger" role="alert">
               {moveUpState.error || moveDownState.error || deleteState.error}
@@ -284,7 +433,7 @@ function ExecutionTaskRow({
             </button>
           </form>
           <form action={deleteAction} className="inline">
-            <button type="submit" className={dangerButtonClass} disabled={deletePending} title="Remove from this saved line item only">
+            <button type="submit" className={dangerButtonClass} disabled={deletePending}>
               {deletePending ? "…" : "Remove"}
             </button>
           </form>
@@ -303,22 +452,34 @@ function ExecutionTaskRow({
               defaultValue={task.title}
               className={controlClass}
               autoComplete="off"
+              onChange={(e) => setTitle(e.target.value)}
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className={fieldLabelClass}>Stage</span>
-              <select name="stageKey" required className={controlClass} defaultValue={task.stageKey}>
-                {stageOptions.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+              <select 
+                name="stageId" 
+                className={controlClass} 
+                defaultValue={task.stageId ?? ""}
+              >
+                <option value="">(No stage)</option>
+                {stages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
                   </option>
                 ))}
               </select>
             </label>
             <label className="block">
               <span className={fieldLabelClass}>Category</span>
-              <select name="category" required className={controlClass} defaultValue={task.category}>
+              <select 
+                name="category" 
+                required 
+                className={controlClass} 
+                defaultValue={task.category}
+                onChange={(e) => setCategory(e.target.value as TaskTemplateCategory)}
+              >
                 {categoryOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -331,12 +492,22 @@ function ExecutionTaskRow({
             <span className={fieldLabelClass}>Instructions (optional)</span>
             <textarea
               name="instructions"
-              rows={3}
+              rows={2}
               maxLength={TASK_TEMPLATE_FIELD_LIMITS.instructions}
               defaultValue={task.instructions ?? ""}
               className={controlClass}
             />
           </label>
+
+          <SmartTaskDisclosure 
+            providesSignals={task.providesSignals}
+            requiresSignals={task.requiresSignals}
+            hardSignal={task.hardSignal}
+            requirementsJson={task.requirementsJson}
+            title={title}
+            category={category}
+          />
+
           <button type="submit" className={primaryButtonClass} disabled={updatePending}>
             {updatePending ? "Saving…" : "Save changes"}
           </button>
@@ -351,11 +522,13 @@ export function LineItemTemplateDefaultExecutionPanel({
   presetDescription,
   stagesWithTasks,
   reusableOptions,
+  stages,
 }: {
   lineItemTemplateId: string;
   presetDescription: string;
   stagesWithTasks: DefaultExecutionStageGroup[];
   reusableOptions: ReusableTaskPickerOption[];
+  stages: { id: string, name: string }[];
 }) {
   const totalTasks = stagesWithTasks.reduce((n, s) => n + s.tasks.length, 0);
 
@@ -363,21 +536,25 @@ export function LineItemTemplateDefaultExecutionPanel({
     <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
       <SectionHeading
         title="How this work usually runs"
-        description={`Optional default execution for “${presetDescription}”. These tasks can be copied into quotes later—they are not shown to customers here.`}
+        description={`Optional default execution for “${presetDescription}”.`}
       />
-      <AddTaskSection lineItemTemplateId={lineItemTemplateId} reusableOptions={reusableOptions} />
+      <AddTaskSection 
+        lineItemTemplateId={lineItemTemplateId} 
+        reusableOptions={reusableOptions} 
+        stages={stages}
+      />
 
       <div className="mt-8">
         {totalTasks === 0 ? (
           <EmptyState
             icon={ClipboardList}
             title="No default execution yet"
-            description="This saved line item is fine with pricing and scope only. When you’re ready, add reusable or custom tasks above—nothing is required to use this preset on quotes."
+            description="Add reusable or custom tasks above."
           />
         ) : (
           <div className="space-y-8">
             {stagesWithTasks.map((stage) => (
-              <section key={stage.stageKey}>
+              <section key={stage.stageId ?? "no-stage"}>
                 <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                   {stage.label}
                 </h2>
@@ -387,6 +564,7 @@ export function LineItemTemplateDefaultExecutionPanel({
                       key={task.id}
                       lineItemTemplateId={lineItemTemplateId}
                       task={task}
+                      stages={stages}
                       isFirstInStage={idx === 0}
                       isLastInStage={idx === stage.tasks.length - 1}
                     />

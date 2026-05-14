@@ -13,7 +13,6 @@ import {
   X, 
   Check, 
   CalendarClock,
-  MoreVertical
 } from "lucide-react";
 import { 
   createJobVisitAction, 

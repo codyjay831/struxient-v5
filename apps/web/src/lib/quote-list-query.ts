@@ -104,11 +104,13 @@ export function quoteListWhere(
             },
           },
           {
-            salesIntake: {
+            lead: {
               is: {
                 OR: [
-                  { title: { contains: term, mode: "insensitive" } },
-                  { contactName: { contains: term, mode: "insensitive" } },
+                  { contact: { path: ["name"], string_contains: term } },
+                  { contact: { path: ["email"], string_contains: term } },
+                  { request: { path: ["type"], string_contains: term } },
+                  { request: { path: ["scope"], string_contains: term } },
                 ],
               },
             },
@@ -155,5 +157,5 @@ export function serializeQuotesListHref(overrides: {
     params.set("sort", sort);
   }
   const qs = params.toString();
-  return qs ? `/sales?tab=proposals&${qs}` : "/sales?tab=proposals";
+  return qs ? `/quotes?${qs}` : "/quotes";
 }

@@ -24,7 +24,7 @@ export default async function PublicQuotePage({
         include: {
           organization: { select: { name: true } },
           customer: { select: { displayName: true, organizationId: true } },
-          salesIntake: { select: { title: true, organizationId: true } },
+          lead: { select: { contact: true, request: true, organizationId: true } },
           lineItems: {
             orderBy: { sortOrder: "asc" },
           },

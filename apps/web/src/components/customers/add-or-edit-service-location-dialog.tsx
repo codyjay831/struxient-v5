@@ -10,7 +10,7 @@ import { ServiceAddressCaptureField } from "@/components/forms/service-address-c
 import {
   PUBLIC_INTAKE_SERVICE_LOCATION_SCHEMA_VERSION,
   type PublicIntakeServiceLocationV1,
-} from "@/lib/public-intake-service-location";
+} from "@/lib/public-lead-service-location";
 import { CustomerServiceLocationSource } from "@prisma/client";
 
 const fieldLabelClass =

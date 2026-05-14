@@ -3,7 +3,6 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { getStorageProvider } from "@/lib/storage";
 import { AttachmentStatus } from "@prisma/client";
-import { Readable } from "stream";
 
 /**
  * Protected media route for task proof attachments.

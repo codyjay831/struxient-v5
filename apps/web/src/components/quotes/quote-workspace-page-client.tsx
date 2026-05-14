@@ -3,7 +3,7 @@
 /**
  * QuoteWorkspacePageClient — client component for the full Quote record page.
  *
- * Renders a tabbed workspace (Overview, Scope, Customer & Sales Intake, Send & Accept,
+ * Renders a tabbed workspace (Overview, Scope, Customer & Lead, Send & Accept,
  * Record) that sits below the server-rendered identity header and readiness panel.
  * Receives pre-fetched data directly — Date objects are serialized transparently
  * by Next.js App Router across the server→client boundary.
@@ -11,7 +11,7 @@
  * Tab overview:
  *   Overview       — status, total, lines, linked context, readiness summary
  *   Scope          — QuoteDraftWorkspaceControls (draft) or read-only line items
- *   Customer&Sales Intake — customer card, sales intake context, intake notes
+ *   Customer&Lead — customer card, lead context, intake notes
  *   Send & Accept  — commercial checkpoints, proposal preview link
  *   Record         — archive controls, internal notes, record details, activity
  */
@@ -71,7 +71,7 @@ type QuoteWorkspaceTab = "overview" | "scope" | "context" | "sendaccept" | "reco
 const WS_TABS: { id: QuoteWorkspaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
-  { id: "context", label: "Customer & Sales Intake" },
+  { id: "context", label: "Customer & Lead" },
   { id: "sendaccept", label: "Send & Accept" },
   { id: "record", label: "Record" },
 ];
@@ -122,7 +122,7 @@ function OverviewTab({
       </div>
 
       {/* ── Linked context compact ──────────────────────────────────────── */}
-      {(quote.customer || quote.salesIntake) && (
+      {(quote.customer || quote.lead) && (
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className={`${sectionLabelClass} mb-3`}>Linked context</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -138,18 +138,18 @@ function OverviewTab({
                 </Link>
               </div>
             )}
-            {quote.salesIntake && (
+            {quote.lead && (
               <div>
-                <p className={`${sectionLabelClass} mb-0.5`}>Sales intake</p>
+                <p className={`${sectionLabelClass} mb-0.5`}>Lead</p>
                 <Link
-                  href={`/sales/${quote.salesIntake.id}`}
+                  href={`/leads/${quote.lead.id}`}
                   className="text-sm font-medium text-foreground hover:underline underline-offset-2 inline-flex items-center gap-1"
                 >
-                  {quote.salesIntake.title}
+                  {quote.lead.title}
                   <ArrowUpRight className="w-3 h-3 opacity-50" strokeWidth={1.5} />
                 </Link>
-                {quote.salesIntake.contactName && (
-                  <p className="text-xs text-foreground-muted mt-0.5">{quote.salesIntake.contactName}</p>
+                {quote.lead.contactName && (
+                  <p className="text-xs text-foreground-muted mt-0.5">{quote.lead.contactName}</p>
                 )}
               </div>
             )}
@@ -224,12 +224,14 @@ function ScopeTab({
   lineItemTemplates,
   draftTasksByLineId,
   reusableTaskOptions,
+  stages,
   activatedJobId,
 }: {
   quote: QuoteDetailPayload;
   lineItemTemplates: LineItemTemplatePickerRow[];
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  stages: { id: string; name: string }[];
   activatedJobId: string | null;
 }) {
   const isCommercialEditable = quoteStatusAllowsCommercialEdits(quote.status);
@@ -248,13 +250,14 @@ function ScopeTab({
         initialTitle={quote.title}
         initialInternalNotes={quote.internalNotes}
         initialCustomerDocumentTitle={quote.customerDocumentTitle}
-        hasSalesIntakeNotes={Boolean(quote.salesIntake?.notes)}
+        hasLeadNotes={Boolean(quote.lead?.notes)}
         subtotalCents={quote.subtotalCents}
         totalCents={quote.totalCents}
         lineItems={quote.lineItems}
         lineItemTemplates={lineItemTemplates}
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
+        stages={stages}
       />
     );
   }
@@ -307,6 +310,7 @@ function ScopeTab({
                     isExecutionEditable={executionPlanningEditable}
                     draftTasks={draftTasksByLineId[line.id] ?? []}
                     reusableOptions={reusableTaskOptions}
+                    stages={stages}
                   />
                 </div>
               </div>
@@ -318,11 +322,11 @@ function ScopeTab({
   );
 }
 
-/* ─── Tab: Customer & Sales Intake ───────────────────────────────────────── */
+/* ─── Tab: Customer & Lead ───────────────────────────────────────── */
 
 function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
   const hasCustomer = quote.customer != null;
-  const hasSalesIntake = quote.salesIntake != null;
+  const hasLead = quote.lead != null;
 
   return (
     <div className="space-y-4">
@@ -363,50 +367,50 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
         )}
       </WorkspacePanel>
 
-      {/* ── Sales intake ─────────────────────────────────────────────────── */}
+      {/* ── Lead ─────────────────────────────────────────────────── */}
       <WorkspacePanel>
         <SectionHeading
-          title="Sales intake"
-          description="The sales intake this quote is tied to. Intake notes and contact context are shown when linked."
+          title="Lead"
+          description="The lead this quote is tied to. Intake notes and contact context are shown when linked."
         />
-        {hasSalesIntake ? (
+        {hasLead ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
               <div>
-                <p className={sectionLabelClass}>Linked sales intake</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{quote.salesIntake!.title}</p>
+                <p className={sectionLabelClass}>Linked lead</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{quote.lead!.title}</p>
               </div>
-              <Link href={`/sales/${quote.salesIntake!.id}`} className={listLinkClass}>
-                Sales intake record
+              <Link href={`/leads/${quote.lead!.id}`} className={listLinkClass}>
+                Lead record
                 <ArrowUpRight className="w-3 h-3 ml-1" strokeWidth={1.5} />
               </Link>
             </div>
 
-            {/* Sales intake context */}
+            {/* Lead context */}
             <div className="rounded-lg border border-border bg-foreground/[0.01] px-4 py-5">
               <h4 className="mb-4 text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                Sales intake context
+                Lead context
               </h4>
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-4">
-                  {quote.salesIntake!.source && (
+                  {quote.lead!.source && (
                     <div>
                       <p className={sectionLabelClass}>Source</p>
-                      <p className="mt-1 text-sm text-foreground">{quote.salesIntake!.source}</p>
+                      <p className="mt-1 text-sm text-foreground">{quote.lead!.source}</p>
                     </div>
                   )}
-                  {(quote.salesIntake!.contactName || quote.salesIntake!.email || quote.salesIntake!.phone) && (
+                  {(quote.lead!.contactName || quote.lead!.email || quote.lead!.phone) && (
                     <div>
                       <p className={sectionLabelClass}>Contact</p>
                       <div className="mt-1 space-y-0.5 text-sm">
-                        {quote.salesIntake!.contactName && (
-                          <p className="text-foreground">{quote.salesIntake!.contactName}</p>
+                        {quote.lead!.contactName && (
+                          <p className="text-foreground">{quote.lead!.contactName}</p>
                         )}
-                        {quote.salesIntake!.email && (
-                          <p className="text-foreground-muted">{quote.salesIntake!.email}</p>
+                        {quote.lead!.email && (
+                          <p className="text-foreground-muted">{quote.lead!.email}</p>
                         )}
-                        {quote.salesIntake!.phone && (
-                          <p className="text-foreground-muted">{quote.salesIntake!.phone}</p>
+                        {quote.lead!.phone && (
+                          <p className="text-foreground-muted">{quote.lead!.phone}</p>
                         )}
                       </div>
                     </div>
@@ -415,9 +419,9 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
                 <div>
                   <p className={sectionLabelClass}>Intake notes</p>
                   <div className="mt-2">
-                    {quote.salesIntake!.notes ? (
+                    {quote.lead!.notes ? (
                       <div className="rounded border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-foreground">
-                        {quote.salesIntake!.notes}
+                        {quote.lead!.notes}
                       </div>
                     ) : (
                       <p className="text-sm text-foreground-muted italic">No intake notes provided.</p>
@@ -429,12 +433,12 @@ function ContextTab({ quote }: { quote: QuoteDetailPayload }) {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-6 text-center">
-            <p className="text-sm text-foreground-muted">No sales intake linked to this quote.</p>
+            <p className="text-sm text-foreground-muted">No lead linked to this quote.</p>
             <p className="mt-1 text-xs text-foreground-subtle">
-              Linking is optional. Use it when this quote comes from a tracked sales intake.
+              Linking is optional. Use it when this quote comes from a tracked lead.
             </p>
-            <Link href="/sales" className={`mt-4 ${listLinkClass}`}>
-              Sales intakes
+            <Link href="/leads" className={`mt-4 ${listLinkClass}`}>
+              Leads
             </Link>
           </div>
         )}
@@ -464,6 +468,7 @@ function SendAcceptTab({
         quoteStatus={quote.status}
         sendCheckpoints={sendCheckpoints}
         approvalCheckpoints={approvalCheckpoints}
+        customerEmail={quote.customer?.email ?? quote.lead?.email ?? null}
       />
 
       {/* Proposal preview */}
@@ -482,8 +487,7 @@ function SendAcceptTab({
           </Link>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
-          E-sign and automated delivery are not wired in this build — use Send quote and Mark
-          approved as staff workflow steps when those moments matter.
+          We&apos;ll email the customer a secure link they can review, sign, and download. E-sign vendor (DocuSign / Adobe Sign) integration is optional and not enabled.
         </p>
       </WorkspacePanel>
 
@@ -592,6 +596,7 @@ export type QuoteWorkspacePageClientProps = {
   activatedJobId: string | null;
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  stages: { id: string; name: string }[];
   quoteReadiness: QuoteReadiness;
 };
 
@@ -603,6 +608,7 @@ export function QuoteWorkspacePageClient({
   activatedJobId,
   draftTasksByLineId,
   reusableTaskOptions,
+  stages,
   quoteReadiness,
 }: QuoteWorkspacePageClientProps) {
   const [activeTab, setActiveTab] = useState<QuoteWorkspaceTab>("overview");
@@ -642,6 +648,7 @@ export function QuoteWorkspacePageClient({
           lineItemTemplates={lineItemTemplates}
           draftTasksByLineId={draftTasksByLineId}
           reusableTaskOptions={reusableTaskOptions}
+          stages={stages}
           activatedJobId={activatedJobId}
         />
       )}

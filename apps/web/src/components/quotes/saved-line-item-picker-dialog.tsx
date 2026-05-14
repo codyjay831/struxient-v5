@@ -323,7 +323,7 @@ function ApplyTemplateWorkspaceForm({
 }
 
 function ArchiveTemplateForm({ quoteId, templateId }: { quoteId: string; templateId: string }) {
-  const [state, formAction, isPending] = useActionState(
+  const [, formAction, isPending] = useActionState(
     archiveLineItemTemplateAction.bind(null, quoteId, templateId),
     initialActionState,
   );

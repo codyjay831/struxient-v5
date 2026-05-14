@@ -11,7 +11,10 @@ import {
   taskStateTone,
   type TaskCompletionRequirements,
 } from "@/lib/task-readiness";
-import { completeJobTaskAction, updateJobTaskStatusAction } from "@/app/(workspace)/jobs/job-task-actions";
+import {
+  completeJobTaskAction,
+  overrideJobTaskReadinessAction,
+} from "@/app/(workspace)/jobs/job-task-actions";
 import {
   uploadTaskAttachmentAction,
   getTaskAttachmentUploadUrlAction,
@@ -31,7 +34,7 @@ import {
   Lock,
   MessageSquare,
   Paperclip,
-  Play,
+  ShieldAlert,
   X,
 } from "lucide-react";
 
@@ -40,6 +43,7 @@ export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
   clearWorkstationSelectionOnComplete?: boolean;
   showCloseControl?: boolean;
   onClose?: () => void;
+  liveSignals: string[];
 };
 
 const addressPrimaryBtnClass =
@@ -55,12 +59,13 @@ export function TaskWorkSurface({
   jobContextLabel,
   jobsiteAddressLine,
   customerId,
-  salesIntakeEditHref,
+  leadEditHref,
   jobHref,
   task: initialTask,
   clearWorkstationSelectionOnComplete,
   showCloseControl,
   onClose,
+  liveSignals,
 }: TaskWorkSurfaceProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -72,19 +77,24 @@ export function TaskWorkSurface({
   const [showNoteForm, setShowForm] = useState(false);
   const [note, setNote] = useState(initialTask.completionNote || "");
 
+  const attachmentSyncKey = initialTask.attachments.map((a) => a.id).join(",");
+  const issuesSyncKey = initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|");
+  const paymentSyncKey = initialTask.paymentBlockers.map((p) => `${p.status}:${p.title}`).join("|");
+
   /* Sync local editor state when the server task snapshot changes (e.g. after router.refresh()). */
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync; avoids stale edits after refresh
     setTask(initialTask);
     setNote(initialTask.completionNote || "");
   }, [
+    initialTask,
     initialTask.id,
     initialTask.status,
     initialTask.completedAt,
     initialTask.completionNote,
-    initialTask.attachments.map((a) => a.id).join(","),
-    initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|"),
-    initialTask.paymentBlockers.map((p) => `${p.status}:${p.title}`).join("|"),
+    attachmentSyncKey,
+    issuesSyncKey,
+    paymentSyncKey,
   ]);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
@@ -111,14 +121,17 @@ export function TaskWorkSurface({
     router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
   }, [clearWorkstationSelectionOnComplete, pathname, router, searchParams]);
 
-  const derivedState = deriveTaskState(task);
+  const derivedState = deriveTaskState(task, liveSignals);
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
 
   const isCompleted = derivedState === "COMPLETED";
-  const isBlocked = derivedState === "BLOCKED";
+  const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
+  const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";
+  const isBlocked = isBlockedByIssue || isBlockedBySignal;
   const needsProof = derivedState === "NEEDS_PROOF";
 
   const paymentBlocker = task.paymentBlockers.find((p) => p.status === "DUE");
+  const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
 
   const handleComplete = () => {
     setActionMessage(null);
@@ -148,15 +161,25 @@ export function TaskWorkSurface({
     });
   };
 
-  const handleStartTask = () => {
+  const handleOverride = () => {
     setActionMessage(null);
     startTransition(async () => {
-      const result = await updateJobTaskStatusAction(task.id, JobTaskStatus.IN_PROGRESS);
+      const result = await overrideJobTaskReadinessAction(task.id, note);
       if (result.error) {
         setActionMessage({ tone: "error", text: result.error });
       } else {
-        setTask((t) => ({ ...t, status: JobTaskStatus.IN_PROGRESS }));
+        setShowForm(false);
+        setActionMessage({ tone: "success", text: "Task completed via manager override." });
+        setTask((t) => ({
+          ...t,
+          status: JobTaskStatus.DONE,
+          completedAt: new Date(),
+          completionNote: note.trim() || "MANAGER OVERRIDE",
+        }));
         refreshAfterMutation();
+        if (clearWorkstationSelectionOnComplete) {
+          clearWorkstationSelection();
+        }
       }
     });
   };
@@ -255,7 +278,7 @@ export function TaskWorkSurface({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-bold tracking-tight text-foreground">{task.title}</h3>
-          <StatusBadge label={taskStateLabel(derivedState, task)} tone={taskStateTone(derivedState)} />
+          <StatusBadge label={taskStateLabel(derivedState)} tone={taskStateTone(derivedState)} />
         </div>
         {showCloseControl && onClose && (
           <button
@@ -312,8 +335,8 @@ export function TaskWorkSurface({
                     Add jobsite address
                   </button>
                 ) : null}
-                {!customerId && salesIntakeEditHref ? (
-                  <Link href={salesIntakeEditHref} className={addressPrimaryBtnClass}>
+                {!customerId && leadEditHref ? (
+                  <Link href={leadEditHref} className={addressPrimaryBtnClass}>
                     Add on request
                   </Link>
                 ) : null}
@@ -358,11 +381,33 @@ export function TaskWorkSurface({
       )}
 
       {isBlocked && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
-          <Lock className="size-3 shrink-0" />
-          <span>
-            {paymentBlocker ? `Blocked by unpaid payment: ${paymentBlocker.title}` : "Blocked by open issue"}
-          </span>
+        <div className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
+          <div className="flex gap-3">
+            <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-bold text-foreground">Task is blocked</h4>
+              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                {paymentBlocker ? `Requires payment: ${paymentBlocker.title}` : isBlockedByIssue ? "Blocked by an open issue." : `Waiting on signals: ${missingSignals.join(", ")}`}
+              </p>
+            </div>
+          </div>
+          
+          <div className="border-t border-danger/10 pt-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-danger-subtle mb-2">Manager Override</p>
+            <p className="mb-3 text-[10px] leading-relaxed text-foreground-muted">
+              If this work is actually ready despite the blockers above, a manager can override the engine. 
+              This action is audited.
+            </p>
+            <button
+              type="button"
+              onClick={handleOverride}
+              disabled={isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-danger hover:bg-danger/5 disabled:opacity-50"
+            >
+              <ShieldAlert className="size-3" />
+              Audit-Override & Complete
+            </button>
+          </div>
         </div>
       )}
 
@@ -435,18 +480,6 @@ export function TaskWorkSurface({
       )}
 
       <div className="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:gap-2 sm:pt-4">
-        {task.status === JobTaskStatus.TODO && !isCompleted && !isBlocked && (
-          <button
-            type="button"
-            onClick={handleStartTask}
-            disabled={isPending}
-            className={`${actionBtnBaseClass} border border-border bg-surface text-foreground hover:border-border-strong`}
-          >
-            {isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
-            Start task
-          </button>
-        )}
-
         {!isCompleted && !isBlocked && (
           <button
             type="button"

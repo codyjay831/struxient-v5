@@ -31,7 +31,10 @@ export default async function ScopeLibraryPage() {
       priceBufferPercentage: true,
       tags: true,
       defaultExecutionTasks: {
-        select: { stageKey: true, category: true },
+        select: {
+          stage: { select: { name: true, sortOrder: true } },
+          category: true,
+        },
       },
     },
   });

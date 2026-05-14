@@ -19,7 +19,7 @@ const initialActionState: QuoteFormState = {};
 export type QuoteDraftFormProps = {
   cancelHref: string;
   defaultTitle: string;
-  validatedSalesIntakeId: string | null;
+  validatedLeadId: string | null;
   validatedCustomerId: string | null;
   contextLines: { label: string; value: string }[];
   paramWarning: string | null;
@@ -28,7 +28,7 @@ export type QuoteDraftFormProps = {
 export function QuoteDraftForm({
   cancelHref,
   defaultTitle,
-  validatedSalesIntakeId,
+  validatedLeadId,
   validatedCustomerId,
   contextLines,
   paramWarning,
@@ -59,7 +59,7 @@ export function QuoteDraftForm({
         </p>
       ) : null}
 
-      {validatedSalesIntakeId ? <input type="hidden" name="salesIntakeId" value={validatedSalesIntakeId} /> : null}
+      {validatedLeadId ? <input type="hidden" name="leadId" value={validatedLeadId} /> : null}
       {validatedCustomerId ? (
         <input type="hidden" name="customerId" value={validatedCustomerId} />
       ) : null}
@@ -71,7 +71,7 @@ export function QuoteDraftForm({
           </p>
           <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
             These links were validated for your organization. Customer id may be attached
-            automatically when the sales intake already has a customer—both ids are re-checked on save.
+            automatically when the lead already has a customer—both ids are re-checked on save.
           </p>
           <dl className="mt-3 space-y-2 text-sm">
             {contextLines.map((row) => (
@@ -92,7 +92,7 @@ export function QuoteDraftForm({
           <input
             name="title"
             type="text"
-            required={validatedSalesIntakeId == null && validatedCustomerId == null}
+            required={validatedLeadId == null && validatedCustomerId == null}
             maxLength={QUOTE_FIELD_LIMITS.title}
             defaultValue={defaultTitle}
             placeholder="e.g. Roof replacement — Main Street"
@@ -101,9 +101,9 @@ export function QuoteDraftForm({
           />
         </label>
         <p className="mt-1.5 text-xs text-foreground-muted">
-          {validatedSalesIntakeId || validatedCustomerId
-            ? "Prefilled from context—you can edit before saving. If you clear the title, the server will derive a short default from the sales intake or customer."
-            : "Required for a title-only draft (no sales intake or customer on this quote yet)."}
+          {validatedLeadId || validatedCustomerId
+            ? "Prefilled from context—you can edit before saving. If you clear the title, the server will derive a short default from the lead or customer."
+            : "Required for a title-only draft (no lead or customer on this quote yet)."}
         </p>
       </div>
 

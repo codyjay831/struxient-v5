@@ -7,9 +7,9 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   normalizeAddressDedupKey,
   upsertCustomerServiceLocationFromIntakeSnapshot,
-} from "@/lib/customer-service-location-from-sales-intake";
+} from "@/lib/customer-service-location-from-lead";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
-import type { PublicIntakeServiceLocationV1 } from "@/lib/public-intake-service-location";
+import type { PublicIntakeServiceLocationV1 } from "@/lib/public-lead-service-location";
 import { CUSTOMER_FIELD_LIMITS } from "./customer-field-limits";
 
 export type CustomerServiceLocationFormState = {
@@ -21,7 +21,7 @@ function revalidateCustomerSurfaces(customerId: string) {
   const cid = customerId.trim();
   revalidatePath("/customers");
   revalidatePath(`/customers/${cid}`);
-  revalidatePath("/sales");
+  revalidatePath("/leads");
   revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/workstation");
@@ -90,7 +90,7 @@ export async function createCustomerServiceLocationAction(
         customerId: cid,
         snapshot,
         label: null,
-        createdFromSalesIntakeId: null,
+        createdFromLeadId: null,
       });
     });
 

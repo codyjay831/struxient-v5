@@ -12,17 +12,30 @@ export const dynamic = "force-dynamic";
 export default async function ScopeLibraryTasksPage() {
   const ctx = await getRequestContextOrThrow();
 
-  const rows = await db.taskTemplate.findMany({
-    where: { organizationId: ctx.organizationId, archivedAt: null },
-    orderBy: { updatedAt: "desc" },
-  });
+  const [rows, stages] = await Promise.all([
+    db.taskTemplate.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      include: { stage: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" },
+    }),
+    db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   const templates: TaskTemplateLibraryRow[] = rows.map((t) => ({
     id: t.id,
     title: t.title,
-    stageKey: t.stageKey,
+    stageId: t.stageId,
+    stageName: t.stage?.name,
     category: t.category,
     instructions: t.instructions,
+    providesSignals: t.providesSignals,
+    requiresSignals: t.requiresSignals,
+    hardSignal: t.hardSignal,
+    requirementsJson: t.requirementsJson,
   }));
 
   return (
@@ -32,11 +45,11 @@ export default async function ScopeLibraryTasksPage() {
       />
       <PageHeader
         title="Reusable tasks"
-        description="Internal task templates with fixed execution stages—library only; quotes and jobs will copy from here when execution planning ships."
+        description="Internal task templates with Signal-based readiness. library only; quotes and jobs will copy from here."
       />
       <ScopeLibrarySectionNav active="tasks" />
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-        <ScopeLibraryTaskTemplatesPanel templates={templates} />
+        <ScopeLibraryTaskTemplatesPanel templates={templates} stages={stages} />
       </WorkspacePanel>
     </div>
   );

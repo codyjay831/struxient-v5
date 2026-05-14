@@ -1,15 +1,5 @@
 /**
  * Serializable workspace-tab payload consumed by `QuoteWorkSurface`.
- *
- * Lives in `lib/` (no React, no `"use client"`, no `"use server"`) so it can
- * pass cleanly through:
- *   - server-component → client-component (RSC payload)
- *   - server action return value (e.g. `loadQuoteWorkSurfaceAction` for the
- *     Quotes list popup, `loadSalesIntakeActiveQuoteWorkSurfaceAction` for the Sales Intakes
- *     popup Quote tab)
- *
- * All `Date` values are pre-converted to ISO strings + display labels so the
- * payload stays serializable across server actions.
  */
 
 import type { QuoteLineItemPayload } from "@/lib/quote-display";
@@ -32,8 +22,8 @@ export type QuoteWorkspaceCheckpointPayload = {
   source?: "STAFF" | "CUSTOMER_PORTAL";
 };
 
-/** Sales intake context shown inside the Customer & Sales Intake tab. */
-export type QuoteWorkspaceSalesIntake = {
+/** Lead context shown inside the Customer & Lead tab. */
+export type QuoteWorkspaceLead = {
   id: string;
   title: string;
   href: string;
@@ -45,14 +35,10 @@ export type QuoteWorkspaceSalesIntake = {
 };
 
 /**
- * Everything `QuoteWorkSurface` needs to render its workspace tabs (Overview,
- * Scope, Customer & Sales Intake, Send & Accept, Record). Identity + totals + readiness
- * already live on `QuoteWorkSurfaceData` / `QuoteReadiness` and are passed
- * separately.
+ * Everything `QuoteWorkSurface` needs to render its workspace tabs.
  */
 export type QuoteWorkspaceTabData = {
-  /* Permission flags derived from quote status — let the surface decide which
-   * forms it can render inline. */
+  /* Permission flags derived from quote status */
   isCommercialEditable: boolean;
   isExecutionEditable: boolean;
   isArchived: boolean;
@@ -60,18 +46,19 @@ export type QuoteWorkspaceTabData = {
   /* Scope tab */
   customerDocumentTitle: string | null;
   internalNotes: string | null;
-  hasSalesIntakeNotes: boolean;
+  hasLeadNotes: boolean;
   subtotalCents: number;
   totalCents: number;
   lineItems: QuoteLineItemPayload[];
   lineItemTemplates: LineItemTemplatePickerRow[];
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
+  stages: { id: string, name: string }[];
 
-  /* Customer & Sales Intake tab */
+  /* Customer & Lead tab */
   customerName: string | null;
   customerHref: string | null;
-  salesIntake: QuoteWorkspaceSalesIntake | null;
+  lead: QuoteWorkspaceLead | null;
 
   /* Send & Accept tab */
   sendCheckpoints: QuoteWorkspaceCheckpointPayload[];

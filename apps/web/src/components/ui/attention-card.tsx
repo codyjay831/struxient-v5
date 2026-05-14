@@ -46,9 +46,9 @@ export type AttentionCardExpandable = {
 export type AttentionCardProps = {
   /** The issue headline — the thing that needs attention. */
   title: string;
-  /** Short uppercase eyebrow label (e.g. "Sales Intake", "Quote", "Future signal"). */
+  /** Short uppercase eyebrow label (e.g. "Lead", "Quote", "Future signal"). */
   eyebrow: string;
-  /** Readiness headline from shared workflow (e.g. quote/sales intake progress label). */
+  /** Readiness headline from shared workflow (e.g. quote/lead progress label). */
   statusLabel?: string;
   /** Optional Lucide icon shown alongside the eyebrow. */
   icon?: LucideIcon;

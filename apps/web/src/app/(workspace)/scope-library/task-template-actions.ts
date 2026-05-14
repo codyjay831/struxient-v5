@@ -1,10 +1,11 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
+import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "./task-template-field-limits";
 
 export type TaskTemplateFormState = {
@@ -37,14 +38,28 @@ function enforceMaxLength(
   return null;
 }
 
+function parseSignals(value: FormDataEntryValue | null): string[] {
+  if (value == null || typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
 function parseTaskTemplateUpsertForm(
   formData: FormData,
 ): TaskTemplateFormState | {
   data: {
     title: string;
-    stageKey: NonNullable<ReturnType<typeof parseExecutionStageKey>>;
+    stageId: string | null;
     category: NonNullable<ReturnType<typeof parseTaskTemplateCategory>>;
     instructions: string | null;
+    providesSignals: string[];
+    requiresSignals: string[];
+    hardSignal: boolean;
+    requirementsJson: TaskCompletionRequirements | null;
   };
 } {
   const title = trimRequired(formData.get("title"));
@@ -56,10 +71,7 @@ function parseTaskTemplateUpsertForm(
     return titleErr;
   }
 
-  const stageKey = parseExecutionStageKey(formData.get("stageKey"));
-  if (!stageKey) {
-    return { error: "Choose a valid execution stage." };
-  }
+  const stageId = trimOrNull(formData.get("stageId"));
 
   const category = parseTaskTemplateCategory(formData.get("category"));
   if (!category) {
@@ -78,12 +90,26 @@ function parseTaskTemplateUpsertForm(
     }
   }
 
+  const providesSignals = parseSignals(formData.get("providesSignals"));
+  const requiresSignals = parseSignals(formData.get("requiresSignals"));
+  const hardSignal = formData.get("hardSignal") === "on";
+
+  const requirementsJson = {
+    noteRequired: formData.get("noteRequired") === "on",
+    photoRequired: formData.get("photoRequired") === "on",
+    attachmentRequired: formData.get("attachmentRequired") === "on",
+  };
+
   return {
     data: {
       title,
-      stageKey,
+      stageId,
       category,
       instructions: instructionsRaw,
+      providesSignals,
+      requiresSignals,
+      hardSignal,
+      requirementsJson,
     },
   };
 }
@@ -103,18 +129,19 @@ export async function createTaskTemplateFromScopeLibraryAction(
     data: {
       organizationId: ctx.organizationId,
       title: parsed.data.title,
-      stageKey: parsed.data.stageKey,
+      stageId: parsed.data.stageId,
       category: parsed.data.category,
       instructions: parsed.data.instructions,
+      providesSignals: parsed.data.providesSignals,
+      requiresSignals: parsed.data.requiresSignals,
+      hardSignal: parsed.data.hardSignal,
+      requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
     },
   });
 
   redirect("/scope-library/tasks");
 }
 
-/**
- * `templateId` must be supplied via `.bind(null, template.id)`.
- */
 export async function updateTaskTemplateFromScopeLibraryAction(
   templateId: string,
   _prevState: TaskTemplateFormState,
@@ -140,9 +167,13 @@ export async function updateTaskTemplateFromScopeLibraryAction(
     },
     data: {
       title: parsed.data.title,
-      stageKey: parsed.data.stageKey,
+      stageId: parsed.data.stageId,
       category: parsed.data.category,
       instructions: parsed.data.instructions,
+      providesSignals: parsed.data.providesSignals,
+      requiresSignals: parsed.data.requiresSignals,
+      hardSignal: parsed.data.hardSignal,
+      requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
     },
   });
 
@@ -156,9 +187,6 @@ export async function updateTaskTemplateFromScopeLibraryAction(
   redirect("/scope-library/tasks");
 }
 
-/**
- * `templateId` must be supplied via `.bind(null, template.id)`.
- */
 export async function archiveTaskTemplateFromScopeLibraryAction(
   templateId: string,
   _prevState: TaskTemplateFormState,

@@ -1,15 +1,10 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
-import {
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
-  QuoteStatus,
-} from "@prisma/client";
-import { EXECUTION_STAGE_KEYS_ORDERED } from "@/lib/execution-stage-catalog";
+import { QuoteStatus } from "@prisma/client";
 import { computeLineTotalCents } from "@/lib/quote-money";
+import type { ExtendedTransactionClient } from "@/lib/db";
 
-export type QuoteRollupTx = Pick<Prisma.TransactionClient, "quoteLineItem" | "quote">;
+export type QuoteRollupTx = Pick<ExtendedTransactionClient, "quoteLineItem" | "quote">;
 
 export async function recalculateQuoteRollupsInTx(
   tx: QuoteRollupTx,
@@ -39,7 +34,7 @@ export async function recalculateQuoteRollupsInTx(
  * Shared by workspace quote actions and public instant-quote intake.
  */
 export async function performApplyLineItemTemplateToQuoteTx(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   quoteId: string,
   templateId: string,
   organizationId: string,
@@ -93,21 +88,17 @@ export async function performApplyLineItemTemplateToQuoteTx(
       lineTotalCents: lineTotal.lineTotalCents,
       internalNotes: template.defaultInternalNotes,
       sourceLineItemTemplateId: template.id,
-      executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
-      executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
-      executionOrder: nextOrder,
     },
   });
 
   const templateTasks = await tx.lineItemTemplateTask.findMany({
     where: { lineItemTemplateId: template.id },
+    include: { stage: { select: { sortOrder: true } } },
   });
   const sortedTemplateTasks = [...templateTasks].sort((a, b) => {
-    const ia = EXECUTION_STAGE_KEYS_ORDERED.indexOf(a.stageKey);
-    const ib = EXECUTION_STAGE_KEYS_ORDERED.indexOf(b.stageKey);
-    if (ia !== ib) {
-      return ia - ib;
-    }
+    const sa = a.stage?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const sb = b.stage?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (sa !== sb) return sa - sb;
     return a.sortOrder - b.sortOrder;
   });
   for (const tt of sortedTemplateTasks) {
@@ -118,10 +109,14 @@ export async function performApplyLineItemTemplateToQuoteTx(
         sourceTaskTemplateId: tt.sourceTaskTemplateId,
         sourceType: tt.sourceType,
         title: tt.title,
-        stageKey: tt.stageKey,
+        stageId: tt.stageId,
         category: tt.category,
         instructions: tt.instructions,
         sortOrder: tt.sortOrder,
+        requirementsJson: tt.requirementsJson ?? {},
+        providesSignals: tt.providesSignals ?? [],
+        requiresSignals: tt.requiresSignals ?? [],
+        hardSignal: tt.hardSignal ?? false,
       },
     });
   }

@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { SalesIntakeSource, CustomerServiceLocationSource } from "@prisma/client";
+import type { LeadChannel, CustomerServiceLocationSource } from "@prisma/client";
 import { MapPin } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -19,10 +19,10 @@ const listLinkClass =
 const secondaryBtnClass =
   "inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground";
 
-function serviceLocationProvenanceCaption(source: SalesIntakeSource | null | undefined): string | null {
+function serviceLocationProvenanceCaption(source: LeadChannel | null | undefined): string | null {
   if (!source) return null;
-  if (source === "PUBLIC_REQUEST_LINK") return "From public request";
-  return "From linked sales intake";
+  if (source === "WEB_FORM") return "From public request";
+  return "From linked lead";
 }
 
 function SetPrimaryServiceLocationButton({
@@ -71,7 +71,7 @@ export type CustomerServiceLocationRow = {
   longitude: number | null;
   source: CustomerServiceLocationSource;
   isPrimary: boolean;
-  createdFromSalesIntake: { id: string; title: string; source: SalesIntakeSource } | null;
+  createdFromLead: { id: string; title: string; channel: LeadChannel; source?: LeadChannel } | null;
 };
 
 export function CustomerServiceLocationsPanel({
@@ -102,9 +102,10 @@ export function CustomerServiceLocationsPanel({
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
           {locations.map((loc) => {
-            const salesIntake = loc.createdFromSalesIntake;
+            const lead = loc.createdFromLead;
+            const channelOrSource = lead?.channel ?? lead?.source ?? null;
             const sourceCaption =
-              salesIntake?.source != null ? serviceLocationProvenanceCaption(salesIntake.source) : null;
+              channelOrSource != null ? serviceLocationProvenanceCaption(channelOrSource) : null;
             return (
               <li key={loc.id} className="px-4 py-4">
                 <div className="flex items-start gap-2">
@@ -157,15 +158,15 @@ export function CustomerServiceLocationsPanel({
                         />
                       ) : null}
                     </div>
-                    {salesIntake ? (
+                    {lead ? (
                       <p className="mt-2 text-xs text-foreground-subtle">
                         <Link
-                          href={`/sales/${salesIntake.id}`}
+                          href={`/leads/${lead.id}`}
                           className="font-medium text-foreground underline-offset-4 hover:underline"
                         >
-                          View linked sales intake
+                          View linked lead
                         </Link>
-                        <span className="text-foreground-muted"> · {salesIntake.title}</span>
+                        <span className="text-foreground-muted"> · {lead.title}</span>
                       </p>
                     ) : null}
                   </div>

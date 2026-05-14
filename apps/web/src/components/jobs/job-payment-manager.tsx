@@ -40,7 +40,7 @@ export function JobPaymentManager({
   initialRequirements: PaymentRequirement[];
   stages: Pick<JobStage, "id" | "title">[];
 }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending] = useTransition();
   const [showForm, setShowForm] = useState(false);
   const [showHistorical, setShowHistorical] = useState(false);
 

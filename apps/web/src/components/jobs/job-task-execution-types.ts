@@ -23,6 +23,9 @@ export type JobTaskExecutionTask = {
     status: JobIssueStatus;
     severity: JobIssueSeverity;
   }[];
+  providesSignals: string[];
+  requiresSignals: string[];
+  hardSignal: boolean;
   paymentBlockers: {
     status: JobPaymentRequirementStatus;
     title: string;
@@ -34,12 +37,12 @@ export type JobTaskExecutionPayload = {
   jobStageId: string;
   stageTitle: string;
   jobContextLabel: string;
-  /** Jobsite / project address for field context (customer profile or sales intake). */
+  /** Jobsite / project address for field context (customer profile or lead). */
   jobsiteAddressLine: string | null;
   /** When set, the crew can add a saved service address from this task panel. */
   customerId: string | null;
   /** Staff path to add a structured address on the linked request when there is no customer yet. */
-  salesIntakeEditHref: string | null;
+  leadEditHref: string | null;
   jobHref: string;
   task: JobTaskExecutionTask;
 };

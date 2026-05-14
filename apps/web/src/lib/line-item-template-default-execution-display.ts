@@ -1,5 +1,4 @@
 import type {
-  ExecutionStageKey,
   LineItemTemplateTaskSource,
   TaskTemplateCategory,
 } from "@prisma/client";
@@ -7,7 +6,7 @@ import type {
 export type DefaultExecutionTaskRow = {
   id: string;
   title: string;
-  stageKey: ExecutionStageKey;
+  stageId: string | null;
   category: TaskTemplateCategory;
   instructions: string | null;
   sortOrder: number;
@@ -15,10 +14,14 @@ export type DefaultExecutionTaskRow = {
   sourceTaskTemplateId: string | null;
   /** Quote-line draft rows only — set when copied from a saved line item default task. */
   sourceLineItemTemplateTaskId?: string | null;
+  providesSignals: string[];
+  requiresSignals: string[];
+  hardSignal: boolean;
+  requirementsJson: unknown;
 };
 
 export type DefaultExecutionStageGroup = {
-  stageKey: ExecutionStageKey;
+  stageId: string | null;
   label: string;
   tasks: DefaultExecutionTaskRow[];
 };

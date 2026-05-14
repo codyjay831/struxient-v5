@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import { X, Upload, FileText, Loader2 } from "lucide-react";
 
 export type FileWithStatus = {
@@ -62,9 +63,12 @@ export function MultiFilePicker({
             className="group relative flex size-20 items-center justify-center rounded-xl border border-border bg-surface overflow-hidden"
           >
             {isImage(f.file.type) ? (
-              <img
+              <Image
                 src={URL.createObjectURL(f.file)}
                 alt={f.file.name}
+                width={80}
+                height={80}
+                unoptimized
                 className="size-full object-cover opacity-60 group-hover:opacity-40 transition-opacity"
               />
             ) : (

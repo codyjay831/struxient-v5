@@ -2,7 +2,7 @@ import {
   buildManualPublicIntakeSnapshotFromFreeText,
   sanitizePublicIntakeServiceLocationFromClient,
   type PublicIntakeServiceLocationV1,
-} from "@/lib/public-intake-service-location";
+} from "@/lib/public-lead-service-location";
 
 const MAX_JSON = 16_000;
 

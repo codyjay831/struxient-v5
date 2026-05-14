@@ -1,7 +1,7 @@
-import type { SalesIntakeCommercialProgress } from "@/lib/sales-commercial-progress";
+import type { LeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import {
-  resolveSalesIntakeCommercialProgressActionHref,
-} from "@/lib/sales-commercial-progress";
+  resolveLeadCommercialProgressActionHref,
+} from "@/lib/lead-commercial-progress";
 import type { QuoteReadiness } from "@/lib/quote-readiness";
 import { resolveQuoteReadinessActionHref } from "@/lib/quote-readiness";
 
@@ -28,7 +28,7 @@ export type RecordActionPriority =
   | "satisfied";
 
 export type RecordActionState = {
-  kind: "sales-intake" | "quote" | "job" | "payment";
+  kind: "lead" | "quote" | "job" | "payment";
   recordId: string;
   title: string;
   subtitle?: string;
@@ -78,10 +78,10 @@ export function buildQuoteRecordActionState(input: {
   title: string;
   subtitle?: string;
   customerId: string | null;
-  salesIntakeId: string | null;
+  leadId: string | null;
   readiness: QuoteReadiness;
 }): RecordActionState {
-  const { quoteId, title, subtitle, customerId, salesIntakeId, readiness } = input;
+  const { quoteId, title, subtitle, customerId, leadId, readiness } = input;
 
   const requiredItems: string[] = [];
   const optionalItems: string[] = [];
@@ -89,13 +89,13 @@ export function buildQuoteRecordActionState(input: {
 
   if (customerId) {
     satisfiedItems.push("Customer is linked to this quote.");
-  } else if (salesIntakeId) {
+  } else if (leadId) {
     requiredItems.push(
       "Link a customer record — quotes move faster when billing and history share one customer row.",
     );
   } else {
     requiredItems.push(
-      "Attach a customer or a sales intake — this quote is not anchored to a relationship record yet.",
+      "Attach a customer or a lead — this quote is not anchored to a relationship record yet.",
     );
   }
 
@@ -157,7 +157,7 @@ export function buildQuoteRecordActionState(input: {
   let priority: RecordActionPriority = "actionable";
   if (readiness.state === "SENT_AWAITING_CUSTOMER") {
     priority = "watching";
-  } else if (!customerId && !salesIntakeId) {
+  } else if (!customerId && !leadId) {
     priority = "blocking";
   } else if (
     readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW" ||
@@ -185,13 +185,13 @@ export function buildQuoteRecordActionState(input: {
   };
 }
 
-export function buildSalesIntakeRecordActionState(input: {
-  salesIntakeId: string;
+export function buildLeadRecordActionState(input: {
+  leadId: string;
   title: string;
   subtitle?: string;
-  progress: SalesIntakeCommercialProgress;
+  progress: LeadCommercialProgress;
 }): RecordActionState {
-  const { salesIntakeId, title, subtitle, progress } = input;
+  const { leadId, title, subtitle, progress } = input;
 
   const requiredItems: string[] = [];
   const optionalItems: string[] = [];
@@ -207,7 +207,7 @@ export function buildSalesIntakeRecordActionState(input: {
     case "ADD_CONTACT_INFO":
       if (progress.primaryAction?.kind === "QUALIFY_INTAKE") {
         requiredItems.push(
-          "Review intake, then mark the sales intake as qualifying when it is real work.",
+          "Review intake, then mark the lead as qualifying when it is real work.",
         );
         if (progress.secondaryAction?.kind !== "EDIT_CONTACT_INFO") {
           satisfiedItems.push("Basic contact details are on file.");
@@ -217,7 +217,7 @@ export function buildSalesIntakeRecordActionState(input: {
       }
       break;
     case "NEEDS_CUSTOMER":
-      requiredItems.push("Link an existing customer or create a new one from this sales intake.");
+      requiredItems.push("Link an existing customer or create a new one from this lead.");
       break;
     case "READY_FOR_QUOTE":
       satisfiedItems.push("Customer is linked and ready.");
@@ -264,7 +264,7 @@ export function buildSalesIntakeRecordActionState(input: {
           primary.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
           primary.kind === "QUALIFY_INTAKE"
             ? undefined
-            : resolveSalesIntakeCommercialProgressActionHref(primary, { salesIntakeId }),
+            : resolveLeadCommercialProgressActionHref(primary, { leadId }),
       }
     : null;
 
@@ -275,7 +275,7 @@ export function buildSalesIntakeRecordActionState(input: {
       label: secondary.label,
       description: "Secondary path — usually opens the full record or a related flow.",
       surface: "full-record",
-      href: resolveSalesIntakeCommercialProgressActionHref(secondary, { salesIntakeId }),
+      href: resolveLeadCommercialProgressActionHref(secondary, { leadId }),
     });
   }
 
@@ -294,8 +294,8 @@ export function buildSalesIntakeRecordActionState(input: {
   }
 
   return {
-    kind: "sales-intake",
-    recordId: salesIntakeId,
+    kind: "lead",
+    recordId: leadId,
     title,
     subtitle,
     statusLabel: progress.label,

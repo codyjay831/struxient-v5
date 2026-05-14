@@ -1,18 +1,12 @@
 "use server";
 
-import {
-  LineItemTemplateTaskSource,
-  Prisma,
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
-  type ExecutionStageKey,
-} from "@prisma/client";
+import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
-import { parseExecutionStageKey } from "@/lib/execution-stage-catalog";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
+import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
 
 export type QuoteLineExecutionFormState = {
@@ -45,7 +39,17 @@ function enforceMaxLength(
   return null;
 }
 
-async function touchQuoteUpdatedAt(tx: Prisma.TransactionClient, quoteId: string, organizationId: string) {
+function parseSignals(value: FormDataEntryValue | null): string[] {
+  if (value == null || typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
+async function touchQuoteUpdatedAt(tx: ExtendedTransactionClient, quoteId: string, organizationId: string) {
   await tx.$executeRaw`
     UPDATE "Quote"
     SET "updatedAt" = NOW()
@@ -54,24 +58,24 @@ async function touchQuoteUpdatedAt(tx: Prisma.TransactionClient, quoteId: string
 }
 
 async function nextSortOrderInStage(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   quoteLineItemId: string,
-  stageKey: ExecutionStageKey,
+  stageId: string | null,
 ) {
   const agg = await tx.quoteLineExecutionTask.aggregate({
-    where: { quoteLineItemId, stageKey },
+    where: { quoteLineItemId, stageId },
     _max: { sortOrder: true },
   });
   return (agg._max.sortOrder ?? -1) + 1;
 }
 
 async function renumberSortOrdersInStage(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   quoteLineItemId: string,
-  stageKey: ExecutionStageKey,
+  stageId: string | null,
 ) {
   const rows = await tx.quoteLineExecutionTask.findMany({
-    where: { quoteLineItemId, stageKey },
+    where: { quoteLineItemId, stageId },
     orderBy: { sortOrder: "asc" },
     select: { id: true },
   });
@@ -88,9 +92,13 @@ type ParsedTaskBody =
   | {
       data: {
         title: string;
-        stageKey: NonNullable<ReturnType<typeof parseExecutionStageKey>>;
+        stageId: string | null;
         category: NonNullable<ReturnType<typeof parseTaskTemplateCategory>>;
         instructions: string | null;
+        providesSignals: string[];
+        requiresSignals: string[];
+        hardSignal: boolean;
+        requirementsJson: TaskCompletionRequirements | null;
       };
     };
 
@@ -103,10 +111,7 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
   if (titleErr) {
     return titleErr;
   }
-  const stageKey = parseExecutionStageKey(formData.get("stageKey"));
-  if (!stageKey) {
-    return { error: "Choose a valid execution stage." };
-  }
+  const stageId = trimOrNull(formData.get("stageId"));
   const category = parseTaskTemplateCategory(formData.get("category"));
   if (!category) {
     return { error: "Choose a valid task category." };
@@ -122,18 +127,33 @@ function parseTaskBodyFromForm(formData: FormData): ParsedTaskBody {
       return instErr;
     }
   }
+
+  const providesSignals = parseSignals(formData.get("providesSignals"));
+  const requiresSignals = parseSignals(formData.get("requiresSignals"));
+  const hardSignal = formData.get("hardSignal") === "on";
+
+  const requirementsJson = {
+    noteRequired: formData.get("noteRequired") === "on",
+    photoRequired: formData.get("photoRequired") === "on",
+    attachmentRequired: formData.get("attachmentRequired") === "on",
+  };
+
   return {
     data: {
       title,
-      stageKey,
+      stageId,
       category,
       instructions: instructionsRaw,
+      providesSignals,
+      requiresSignals,
+      hardSignal,
+      requirementsJson,
     },
   };
 }
 
 async function assertDraftQuoteLine(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   quoteId: string,
   lineItemId: string,
   organizationId: string,
@@ -155,23 +175,6 @@ async function assertDraftQuoteLine(
 const QUOTE_LINE_EXECUTION_LOCKED_ERROR =
   "This quote line is not editable. The quote may be archived, a job may already be activated, or it is outside your organization.";
 
-async function clearNoExecutionNeededWhenTasksAdded(
-  tx: Prisma.TransactionClient,
-  lineItemId: string,
-) {
-  await tx.quoteLineItem.updateMany({
-    where: {
-      id: lineItemId,
-      executionReviewStatus: QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED,
-    },
-    data: { executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED },
-  });
-}
-
-/**
- * Allowlisted internal surfaces a quote-line execution edit may have been launched from.
- * Parsed strictly from form data — no arbitrary URL is ever passed to {@link revalidatePath}.
- */
 export type QuoteLineExecutionRevalidateScope = "quote" | "execution-review";
 
 function parseRevalidateScope(
@@ -183,11 +186,6 @@ function parseRevalidateScope(
   return "quote";
 }
 
-/**
- * Always revalidate the quote-detail page (canonical home of draft execution) and
- * additionally revalidate the execution-review page when the edit was launched from there.
- * Both paths are constructed from the validated quote id — never from raw input.
- */
 function revalidateQuoteLineExecutionSurfaces(
   quoteId: string,
   scope: QuoteLineExecutionRevalidateScope,
@@ -230,7 +228,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
       return { ok: false as const, code: "TEMPLATE" as const };
     }
 
-    const sortOrder = await nextSortOrderInStage(tx, lid, reusable.stageKey);
+    const sortOrder = await nextSortOrderInStage(tx, lid, reusable.stageId);
 
     await tx.quoteLineExecutionTask.create({
       data: {
@@ -239,14 +237,17 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
         sourceTaskTemplateId: reusable.id,
         sourceType: LineItemTemplateTaskSource.TASK_TEMPLATE,
         title: reusable.title,
-        stageKey: reusable.stageKey,
+        stageId: reusable.stageId,
         category: reusable.category,
         instructions: reusable.instructions,
+        providesSignals: reusable.providesSignals,
+        requiresSignals: reusable.requiresSignals,
+        hardSignal: reusable.hardSignal,
+        requirementsJson: reusable.requirementsJson || {},
         sortOrder,
       },
     });
 
-    await clearNoExecutionNeededWhenTasksAdded(tx, lid);
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
@@ -290,7 +291,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
       return false;
     }
 
-    const sortOrder = await nextSortOrderInStage(tx, lid, parsed.data.stageKey);
+    const sortOrder = await nextSortOrderInStage(tx, lid, parsed.data.stageId);
 
     await tx.quoteLineExecutionTask.create({
       data: {
@@ -299,14 +300,17 @@ export async function addQuoteLineExecutionTaskCustomAction(
         sourceTaskTemplateId: null,
         sourceType: LineItemTemplateTaskSource.CUSTOM,
         title: parsed.data.title,
-        stageKey: parsed.data.stageKey,
+        stageId: parsed.data.stageId,
         category: parsed.data.category,
         instructions: parsed.data.instructions,
+        providesSignals: parsed.data.providesSignals,
+        requiresSignals: parsed.data.requiresSignals,
+        hardSignal: parsed.data.hardSignal,
+        requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         sortOrder,
       },
     });
 
-    await clearNoExecutionNeededWhenTasksAdded(tx, lid);
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;
   });
@@ -369,22 +373,26 @@ export async function updateQuoteLineExecutionTaskAction(
       return { ok: false as const };
     }
 
-    const oldStage = existing.stageKey;
-    const newStage = parsed.data.stageKey;
+    const oldStageId = existing.stageId;
+    const newStageId = parsed.data.stageId;
 
-    if (newStage !== oldStage) {
-      const sortOrder = await nextSortOrderInStage(tx, lid, newStage);
+    if (newStageId !== oldStageId) {
+      const sortOrder = await nextSortOrderInStage(tx, lid, newStageId);
       await tx.quoteLineExecutionTask.update({
         where: { id: kid },
         data: {
           title: parsed.data.title,
-          stageKey: newStage,
+          stageId: newStageId,
           category: parsed.data.category,
           instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           sortOrder,
         },
       });
-      await renumberSortOrdersInStage(tx, lid, oldStage);
+      await renumberSortOrdersInStage(tx, lid, oldStageId);
     } else {
       await tx.quoteLineExecutionTask.update({
         where: { id: kid },
@@ -392,6 +400,10 @@ export async function updateQuoteLineExecutionTaskAction(
           title: parsed.data.title,
           category: parsed.data.category,
           instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         },
       });
     }
@@ -415,6 +427,7 @@ export async function deleteQuoteLineExecutionTaskAction(
   _prevState: QuoteLineExecutionFormState,
   formData: FormData,
 ): Promise<QuoteLineExecutionFormState> {
+  void formData;
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   const kid = taskId.trim();
@@ -453,9 +466,9 @@ export async function deleteQuoteLineExecutionTaskAction(
       return { ok: false as const };
     }
 
-    const stageKey = existing.stageKey;
+    const stageId = existing.stageId;
     await tx.quoteLineExecutionTask.delete({ where: { id: kid } });
-    await renumberSortOrdersInStage(tx, lid, stageKey);
+    await renumberSortOrdersInStage(tx, lid, stageId);
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
@@ -476,6 +489,7 @@ export async function moveQuoteLineExecutionTaskAction(
   _prevState: QuoteLineExecutionFormState,
   formData: FormData,
 ): Promise<QuoteLineExecutionFormState> {
+  void formData;
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   const kid = taskId.trim();
@@ -514,9 +528,9 @@ export async function moveQuoteLineExecutionTaskAction(
       return false;
     }
 
-    const stageKey = existing.stageKey;
+    const stageId = existing.stageId;
     const peers = await tx.quoteLineExecutionTask.findMany({
-      where: { quoteLineItemId: lid, stageKey },
+      where: { quoteLineItemId: lid, stageId },
       orderBy: { sortOrder: "asc" },
     });
     const idx = peers.findIndex((p) => p.id === kid);
@@ -543,156 +557,6 @@ export async function moveQuoteLineExecutionTaskAction(
       where: { id: a.id },
       data: { sortOrder: b.sortOrder },
     });
-
-    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
-    return true;
-  });
-
-  if (!ok) {
-    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
-  }
-
-  revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
-  return {};
-}
-
-export async function updateQuoteLineExecutionSettingsAction(
-  quoteId: string,
-  lineItemId: string,
-  _prevState: QuoteLineExecutionFormState,
-  formData: FormData,
-): Promise<QuoteLineExecutionFormState> {
-  const qid = quoteId.trim();
-  const lid = lineItemId.trim();
-  if (!qid || !lid) {
-    return { error: "Missing quote or line item." };
-  }
-
-  const mergeRaw = trimRequired(formData.get("executionMergeMode"));
-  if (
-    mergeRaw !== QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES &&
-    mergeRaw !== QuoteLineExecutionMergeMode.KEEP_SEPARATE_BLOCK
-  ) {
-    return { error: "Choose how this scope should land in the job plan." };
-  }
-  const executionMergeMode = mergeRaw as QuoteLineExecutionMergeMode;
-
-  const markNoExecution = formData.get("noExecutionNeeded") === "on";
-  const nextReviewStatus = markNoExecution
-    ? QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED
-    : QuoteLineExecutionReviewStatus.UNREVIEWED;
-
-  const ctx = await getRequestContextOrThrow();
-
-  const outcome = await db.$transaction(async (tx) => {
-    const line = await tx.quoteLineItem.findFirst({
-      where: {
-        id: lid,
-        quoteId: qid,
-        quote: {
-          organizationId: ctx.organizationId,
-          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
-          job: { is: null },
-        },
-      },
-      select: { id: true },
-    });
-    if (!line) {
-      return { ok: false as const, code: "LINE" as const };
-    }
-
-    if (markNoExecution) {
-      const taskCount = await tx.quoteLineExecutionTask.count({
-        where: { quoteLineItemId: lid },
-      });
-      if (taskCount > 0) {
-        return { ok: false as const, code: "TASKS" as const };
-      }
-    }
-
-    await tx.quoteLineItem.update({
-      where: { id: lid },
-      data: {
-        executionMergeMode,
-        executionReviewStatus: nextReviewStatus,
-      },
-    });
-
-    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
-    return { ok: true as const };
-  });
-
-  if (!outcome.ok) {
-    if (outcome.code === "TASKS") {
-      return {
-        error:
-          "Remove draft tasks from this line before marking it commercial-only, or leave tasks and keep execution planning on.",
-      };
-    }
-    return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
-  }
-
-  revalidateQuoteLineExecutionSurfaces(qid, parseRevalidateScope(formData.get("revalidateScope")));
-  return {};
-}
-
-export async function moveQuoteLineWorkOrderAction(
-  quoteId: string,
-  lineItemId: string,
-  direction: "earlier" | "later",
-  _prevState: QuoteLineExecutionFormState,
-  formData: FormData,
-): Promise<QuoteLineExecutionFormState> {
-  void _prevState;
-  const qid = quoteId.trim();
-  const lid = lineItemId.trim();
-  if (!qid || !lid) {
-    return { error: "Missing quote or line item." };
-  }
-
-  const ctx = await getRequestContextOrThrow();
-
-  const ok = await db.$transaction(async (tx) => {
-    const line = await tx.quoteLineItem.findFirst({
-      where: {
-        id: lid,
-        quoteId: qid,
-        quote: {
-          organizationId: ctx.organizationId,
-          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
-          job: { is: null },
-        },
-      },
-      select: { id: true },
-    });
-    if (!line) {
-      return false;
-    }
-
-    const ordered = await tx.quoteLineItem.findMany({
-      where: { quoteId: qid },
-      orderBy: [{ executionOrder: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
-      select: { id: true },
-    });
-    const idx = ordered.findIndex((r) => r.id === lid);
-    if (idx < 0) {
-      return false;
-    }
-    const swapIdx = direction === "earlier" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= ordered.length) {
-      return true;
-    }
-
-    const ids = ordered.map((r) => r.id);
-    const tmp = ids[idx]!;
-    ids[idx] = ids[swapIdx]!;
-    ids[swapIdx] = tmp;
-    for (let i = 0; i < ids.length; i++) {
-      await tx.quoteLineItem.update({
-        where: { id: ids[i] },
-        data: { executionOrder: i },
-      });
-    }
 
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;

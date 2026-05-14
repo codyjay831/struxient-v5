@@ -13,8 +13,6 @@
 import {
   Prisma,
   QuoteStatus,
-  QuoteLineExecutionReviewStatus,
-  QuoteLineExecutionMergeMode,
   type PrismaClient,
 } from "@prisma/client";
 
@@ -26,13 +24,13 @@ type DemoLineConfig = {
 };
 
 const KITCHEN_REMODEL_LINES: DemoLineConfig[] = [
-  { templateId: "dev-trade-framing-interior-non-loadbearing-wall", quantityOverride: "15" },
+  { templateId: "dev-trade-framing-interior-wall-framing", quantityOverride: "20" },
   { templateId: "dev-trade-electrical-kitchen-remodel-rough-in" },
   { templateId: "dev-trade-electrical-recessed-lighting-circuit", quantityOverride: "8" },
   { templateId: "dev-trade-plumbing-kitchen-sink-faucet-disposal" },
   { templateId: "dev-trade-hvac-duct-run-modification" },
-  { templateId: "dev-trade-drywall-hang-and-finish", quantityOverride: "600" },
-  { templateId: "dev-trade-painting-interior-room-repaint", quantityOverride: "1" },
+  { templateId: "dev-trade-drywall-hang-tape-finish-l4", quantityOverride: "600" },
+  { templateId: "dev-trade-painting-interior-repaint-2coat", quantityOverride: "1" },
 ];
 
 export async function seedKitchenRemodelDemoQuote(
@@ -107,9 +105,6 @@ export async function seedKitchenRemodelDemoQuote(
         lineTotalCents,
         internalNotes: template.defaultInternalNotes,
         sourceLineItemTemplateId: template.id,
-        executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
-        executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
-        executionOrder: i,
       },
     });
 
@@ -122,9 +117,12 @@ export async function seedKitchenRemodelDemoQuote(
           sourceTaskTemplateId: tt.sourceTaskTemplateId,
           sourceType: tt.sourceType,
           title: tt.title,
-          stageKey: tt.stageKey,
+          stageId: tt.stageId,
           category: tt.category,
           instructions: tt.instructions,
+          providesSignals: tt.providesSignals,
+          requiresSignals: tt.requiresSignals,
+          hardSignal: tt.hardSignal,
           sortOrder: tt.sortOrder,
         })),
       });

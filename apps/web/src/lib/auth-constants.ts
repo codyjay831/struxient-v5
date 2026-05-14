@@ -9,7 +9,7 @@ export const STAFF_CAPABILITIES = {
   [StaffRole.ADMIN]: ["*"],
   [StaffRole.OFFICE]: [
     "view_all",
-    "manage_sales_intakes",
+    "manage_leads",
     "manage_quotes",
     "manage_customers",
     "record_payments",

@@ -2,11 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  ExecutionStageKey,
   JobIssueSeverity,
   JobIssueStatus,
   JobIssueType,
-  JobStageBlockType,
   JobTaskStatus,
   LineItemTemplateTaskSource,
   TaskTemplateCategory,
@@ -15,10 +13,8 @@ import {
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
-import {
-  getExecutionStageLabel,
-  getExecutionStageSortOrder,
-} from "@/lib/execution-stage-catalog";
+
+const CORRECTIONS_STAGE_NAME = "Corrections";
 
 export type CreateJobIssueInput = {
   jobId: string;
@@ -172,25 +168,47 @@ export async function createFollowUpTaskFromIssueAction(input: CreateFollowUpTas
     throw new Error("A follow-up task already exists for this issue.");
   }
 
-  // Find or create the 'corrections' stage for this job
-  let stage = await db.jobStage.findFirst({
+  // Resolve a "Corrections" Stage row for this org; create one if missing so
+  // follow-up tasks always have a place to land.
+  let correctionsStage = await db.stage.findFirst({
     where: {
-      jobId: issue.jobId,
-      stageKey: ExecutionStageKey.corrections,
-      blockType: JobStageBlockType.SHARED,
+      organizationId,
+      name: CORRECTIONS_STAGE_NAME,
+      archivedAt: null,
     },
   });
+  if (!correctionsStage) {
+    const maxSort = await db.stage.aggregate({
+      where: { organizationId },
+      _max: { sortOrder: true },
+    });
+    correctionsStage = await db.stage.create({
+      data: {
+        organizationId,
+        name: CORRECTIONS_STAGE_NAME,
+        sortOrder: (maxSort._max.sortOrder ?? 0) + 10,
+      },
+    });
+  }
 
-  if (!stage) {
-    stage = await db.jobStage.create({
+  // Find or create the corrections JobStage on this job, anchored to the org stage.
+  let jobStage = await db.jobStage.findFirst({
+    where: {
+      jobId: issue.jobId,
+      stageId: correctionsStage.id,
+    },
+  });
+  if (!jobStage) {
+    const maxJobStageSort = await db.jobStage.aggregate({
+      where: { jobId: issue.jobId },
+      _max: { sortOrder: true },
+    });
+    jobStage = await db.jobStage.create({
       data: {
         jobId: issue.jobId,
-        blockType: JobStageBlockType.SHARED,
-        stageKey: ExecutionStageKey.corrections,
-        title: getExecutionStageLabel(ExecutionStageKey.corrections),
-        sortOrder: getExecutionStageSortOrder(ExecutionStageKey.corrections),
-        blockTitle: null,
-        blockSortOrder: 0,
+        stageId: correctionsStage.id,
+        title: correctionsStage.name,
+        sortOrder: (maxJobStageSort._max.sortOrder ?? 0) + 10,
       },
     });
   }
@@ -199,15 +217,15 @@ export async function createFollowUpTaskFromIssueAction(input: CreateFollowUpTas
   const task = await db.jobTask.create({
     data: {
       jobId: issue.jobId,
-      jobStageId: stage.id,
+      jobStageId: jobStage.id,
       sourceJobIssueId: issue.id,
       sourceType: LineItemTemplateTaskSource.CUSTOM,
       title: input.title,
       category: TaskTemplateCategory.GENERAL,
-      stageKey: ExecutionStageKey.corrections,
+      stageId: correctionsStage.id,
       instructions: input.instructions,
       status: JobTaskStatus.TODO,
-      sortOrder: 0, // Will land at top or bottom depending on existing tasks
+      sortOrder: 0,
     },
   });
 

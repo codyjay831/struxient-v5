@@ -11,11 +11,6 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 
 /**
  * Client-side toggle that opens the inline draft execution editor directly under the line item.
- * Stays on the same URL — no navigation. Cancel just collapses the editor.
- *
- * `revalidateScope` controls which Next route(s) the underlying server actions revalidate so the
- * editor stays in place whether it is hosted on the quote detail page (default) or on the
- * execution-review confirmation surface.
  */
 export function QuoteLineDraftExecutionInlineToggle({
   quoteId,
@@ -23,6 +18,7 @@ export function QuoteLineDraftExecutionInlineToggle({
   taskCount,
   draftTasks,
   reusableOptions,
+  stages,
   revalidateScope = "quote",
   openLabelOverride,
 }: {
@@ -31,6 +27,7 @@ export function QuoteLineDraftExecutionInlineToggle({
   taskCount: number;
   draftTasks: readonly QuoteLineDraftExecutionTaskRow[];
   reusableOptions: ReusableTaskPickerOption[];
+  stages: { id: string, name: string }[];
   revalidateScope?: QuoteLineExecutionRevalidateScope;
   /** Optional override for the open-button label (e.g. "Edit execution" on review). */
   openLabelOverride?: string;
@@ -55,6 +52,7 @@ export function QuoteLineDraftExecutionInlineToggle({
           lineItemId={lineItemId}
           tasks={draftTasks}
           reusableOptions={reusableOptions}
+          stages={stages}
           revalidateScope={revalidateScope}
         />
       ) : null}

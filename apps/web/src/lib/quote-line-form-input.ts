@@ -4,7 +4,7 @@
  * Lives in `lib/` (not in a `"use server"` module) so both
  * `quote-form-actions.ts` (full-page redirecting actions) and
  * `workstation/quote-workspace-actions.ts` (workspace-safe wrappers used
- * inside QuoteWorkSurface popup/drawer/sales-intake-tab) can import the same
+ * inside QuoteWorkSurface popup/drawer/lead-tab) can import the same
  * validator without crossing the server-action export rule.
  *
  * No DB, no `"use server"`, no `revalidatePath`, no `redirect`.

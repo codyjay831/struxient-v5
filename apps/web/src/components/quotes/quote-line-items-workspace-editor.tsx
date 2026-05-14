@@ -3,11 +3,11 @@
 /**
  * QuoteLineItemsWorkspaceEditor — workspace-safe Scope tab body.
  *
- * Used inside QuoteWorkSurface in `standard` (Quotes popup, Sales Intake Quote tab)
+ * Used inside QuoteWorkSurface in `standard` (Quotes popup, Lead Quote tab)
  * and `compact` (Workstation drawer) modes when the quote is editable
  * (DRAFT). Calls the workspace-safe `*WorkspaceAction` server actions which
  * return `{ success } | { error }` instead of `redirect()`, so the
- * surrounding popup/drawer/sales-intake-tab stays open after add/edit/delete and
+ * surrounding popup/drawer/lead-tab stays open after add/edit/delete and
  * after applying a Scope Library template.
  *
  * Full-mode (the `/quotes/[id]` page) still uses
@@ -365,6 +365,8 @@ export type QuoteLineItemsWorkspaceEditorProps = {
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   /** Reusable task options for copying into line execution. */
   reusableTaskOptions: ReusableTaskPickerOption[];
+  /** Available stages for inline draft-execution editing. */
+  stages: { id: string; name: string }[];
   /**
    * When true, the editor mounts with the add-line form open and focuses
    * the first field. The editor calls `onAddOpenConsumed` once it has
@@ -394,6 +396,7 @@ export function QuoteLineItemsWorkspaceEditor({
   lineItemTemplates,
   draftTasksByLineId,
   reusableTaskOptions,
+  stages,
   shouldFocusAddForm = false,
   onAddOpenConsumed,
   shouldOpenScopeLibraryPicker = false,
@@ -531,6 +534,7 @@ export function QuoteLineItemsWorkspaceEditor({
                       isExecutionEditable
                       draftTasks={draftTasksByLineId[line.id] ?? []}
                       reusableOptions={reusableTaskOptions}
+                      stages={stages}
                     />
                   </div>
                   {isEditing ? null : (

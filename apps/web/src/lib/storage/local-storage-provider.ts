@@ -1,7 +1,7 @@
 import { StorageProvider } from "./storage-provider";
 import { Readable } from "stream";
 import { join } from "path";
-import { readFile, access, mkdir, writeFile, unlink } from "fs/promises";
+import { access, mkdir, writeFile, unlink } from "fs/promises";
 import { createReadStream } from "fs";
 
 export class LocalStorageProvider implements StorageProvider {

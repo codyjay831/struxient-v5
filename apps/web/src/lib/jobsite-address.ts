@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { intakeSnapshotForCustomerFromSalesIntake } from "@/lib/customer-service-location-from-sales-intake";
+import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
 
 export type CustomerJobsiteLocationRow = {
   formattedAddress: string;
@@ -8,7 +8,7 @@ export type CustomerJobsiteLocationRow = {
 };
 
 /**
- * Single display line for a customer’s saved service locations (primary wins).
+ * Single display line for a customer's saved service locations (primary wins).
  */
 export function jobsiteLineFromCustomerLocations(
   locations: CustomerJobsiteLocationRow[],
@@ -27,13 +27,14 @@ export function jobsiteLineFromCustomerLocations(
 }
 
 /**
- * Display line for where work happens from a sales intake row (structured field + legacy notes).
+ * Display line for where work happens from a lead row (structured address JSONB
+ * + legacy notes carried inside the signals JSONB).
  */
-export function jobsiteLineFromSalesIntake(row: {
-  publicIntakeServiceLocation: Prisma.JsonValue | null;
-  notes: string | null;
+export function jobsiteLineFromLead(row: {
+  address: Prisma.JsonValue | null;
+  signals: Prisma.JsonValue | null;
 }): string | null {
-  const snap = intakeSnapshotForCustomerFromSalesIntake(row);
+  const snap = intakeSnapshotForCustomerFromLead(row);
   if (!snap) {
     return null;
   }
@@ -42,21 +43,21 @@ export function jobsiteLineFromSalesIntake(row: {
 }
 
 /**
- * Prefer customer profile locations; otherwise fall back to the linked sales intake’s intake address.
+ * Prefer customer profile locations; otherwise fall back to the linked lead's intake address.
  */
 export function resolveJobsiteLineForQuoteOrJob(params: {
   customerLocations: CustomerJobsiteLocationRow[];
-  salesIntakeRow: {
-    publicIntakeServiceLocation: Prisma.JsonValue | null;
-    notes: string | null;
+  leadRow: {
+    address: Prisma.JsonValue | null;
+    signals: Prisma.JsonValue | null;
   } | null;
 }): string | null {
   const fromCustomer = jobsiteLineFromCustomerLocations(params.customerLocations);
   if (fromCustomer) {
     return fromCustomer;
   }
-  if (params.salesIntakeRow) {
-    return jobsiteLineFromSalesIntake(params.salesIntakeRow);
+  if (params.leadRow) {
+    return jobsiteLineFromLead(params.leadRow);
   }
   return null;
 }

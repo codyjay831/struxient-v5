@@ -1,6 +1,6 @@
 import {
   JobStatus,
-  SalesIntakeStatus,
+  LeadStatus,
   QuoteStatus,
   JobIssueSeverity,
   JobIssueStatus,
@@ -13,17 +13,18 @@ import {
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import { getSalesIntakeCommercialProgress } from "@/lib/sales-commercial-progress";
+import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import {
-  buildSalesIntakeRecordActionState,
+  buildLeadRecordActionState,
   buildQuoteRecordActionState,
   toEmbeddedWorkflow,
   type WorkItemEmbeddedWorkflow,
 } from "@/lib/record-workflow-surface";
 import { deriveTaskState, taskStateLabel } from "./task-readiness";
+import { getLiveSignals } from "./signal-bus";
 
 export type WorkstationWorkItemKind =
-  | "sales-intake"
+  | "lead"
   | "quote"
   | "job"
   | "task"
@@ -50,7 +51,7 @@ export type WorkstationLens =
 
 export type WorkstationFilterCategory =
   | "all"
-  | "salesIntakes"
+  | "leads"
   | "quotes"
   | "jobs"
   | "tasks"
@@ -76,6 +77,7 @@ export type WorkstationWorkItem = {
   href?: string;
   updatedAt: Date;
   isBlocked?: boolean;
+  missingSignals?: string[];
   /** Shared readiness / checklist model for Workstation + full-record alignment. */
   workflow?: WorkItemEmbeddedWorkflow;
 };
@@ -84,7 +86,7 @@ export type WorkstationSummary = {
   investigateCount: number;
   activeJobsCount: number;
   openTasksCount: number;
-  openSalesIntakesQuotesCount: number;
+  openLeadsQuotesCount: number;
   scheduledTodayCount: number;
   dailyLogsToReviewCount: number;
 };
@@ -117,7 +119,7 @@ function lanesForQuoteWorkflow(
   return { ...base, lens };
 }
 
-function lanesForSalesIntakeWorkflow(
+function lanesForLeadWorkflow(
   workflow: WorkItemEmbeddedWorkflow,
   isUnlinked: boolean,
 ): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
@@ -142,7 +144,7 @@ function lanesForSalesIntakeWorkflow(
   return { group: "ready", priority: "medium", lens: "today" };
 }
 
-export function compareWorkstationSalesIntakeOrder(
+export function compareWorkstationLeadOrder(
   a: WorkstationWorkItem,
   b: WorkstationWorkItem,
 ): number {
@@ -161,9 +163,11 @@ export async function queryWorkstationWorkItems(
   const now = new Date();
   const urgentThreshold = new Date(now.getTime() - urgentThresholdHours * 60 * 60 * 1000);
 
-  // 1. Sales Intakes
-  const salesIntakes = await db.salesIntake.findMany({
-    where: { organizationId, status: { in: [SalesIntakeStatus.OPEN, SalesIntakeStatus.QUALIFYING] } },
+  const pipelineStatuses = [LeadStatus.NEW, LeadStatus.TRIAGING];
+
+  // 1. Leads
+  const leads = await db.lead.findMany({
+    where: { organizationId, status: { in: pipelineStatuses } },
     include: {
       customer: true,
       visitRequests: {
@@ -180,20 +184,20 @@ export async function queryWorkstationWorkItems(
     },
   });
 
-  for (const salesIntake of salesIntakes) {
-    const isUnlinked = salesIntake.customerId === null;
-    const hasActiveQuote = salesIntake.quotes.length > 0;
+  for (const lead of leads) {
+    const isUnlinked = lead.customerId === null;
+    const hasActiveQuote = lead.quotes.length > 0;
 
     if (hasActiveQuote) continue;
 
-    const progress = getSalesIntakeCommercialProgress({
-      salesIntake: {
-        status: salesIntake.status,
-        customerId: salesIntake.customerId,
-        email: salesIntake.email,
-        phone: salesIntake.phone,
+    const progress = getLeadCommercialProgress({
+      lead: {
+        status: lead.status,
+        customerId: lead.customerId,
+        email: lead.email,
+        phone: lead.phone,
       },
-      quotes: salesIntake.quotes.map((q) => ({
+      quotes: lead.quotes.map((q) => ({
         id: q.id,
         title: q.title,
         status: q.status,
@@ -204,22 +208,22 @@ export async function queryWorkstationWorkItems(
       })),
     });
 
-    const recordState = buildSalesIntakeRecordActionState({
-      salesIntakeId: salesIntake.id,
-      title: salesIntake.title,
-      subtitle: salesIntake.contactName || salesIntake.email || salesIntake.phone || undefined,
+    const recordState = buildLeadRecordActionState({
+      leadId: lead.id,
+      title: lead.title,
+      subtitle: lead.contactName || lead.email || lead.phone || undefined,
       progress,
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority, lens } = lanesForSalesIntakeWorkflow(workflow, isUnlinked);
+    const { group, priority, lens } = lanesForLeadWorkflow(workflow, isUnlinked);
 
-    // Prioritize sales intakes with pending visit requests
-    const pendingVisit = salesIntake.visitRequests[0];
+    // Prioritize leads with pending visit requests
+    const pendingVisit = lead.visitRequests[0];
     let effectivePriority = pendingVisit ? "critical" : priority;
     
     // Senior logic: items updated within the threshold are also high priority
-    if (effectivePriority !== "critical" && salesIntake.updatedAt > urgentThreshold) {
+    if (effectivePriority !== "critical" && lead.updatedAt > urgentThreshold) {
       effectivePriority = "high";
     }
 
@@ -228,23 +232,23 @@ export async function queryWorkstationWorkItems(
     const effectiveReason = pendingVisit 
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
       : workflow.reason;
-    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Sales Intakes.");
+    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Leads.");
 
     items.push({
-      id: `sales-intake-${salesIntake.id}`,
-      kind: "sales-intake",
-      title: salesIntake.title,
-      subtitle: salesIntake.contactName || salesIntake.email || salesIntake.phone || undefined,
-      status: salesIntake.status,
+      id: `lead-${lead.id}`,
+      kind: "lead",
+      title: lead.title,
+      subtitle: lead.contactName || lead.email || lead.phone || undefined,
+      status: lead.status,
       priority: effectivePriority as WorkstationWorkItemPriority,
       group: effectiveGroup,
       lens: effectiveLens,
-      filterCategory: "salesIntakes",
+      filterCategory: "leads",
       reason: effectiveReason,
       nextStep: effectiveNextStep,
-      recordId: salesIntake.id,
-      href: `/sales/${salesIntake.id}`,
-      updatedAt: salesIntake.updatedAt,
+      recordId: lead.id,
+      href: `/leads/${lead.id}`,
+      updatedAt: lead.updatedAt,
       workflow,
     });
   }
@@ -254,7 +258,7 @@ export async function queryWorkstationWorkItems(
     where: { organizationId, status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] } },
     include: {
       customer: true,
-      salesIntake: true,
+      lead: true,
       job: true,
       checkpoints: {
         where: { kind: QuoteCheckpointKind.APPROVAL },
@@ -278,9 +282,13 @@ export async function queryWorkstationWorkItems(
       lines: quote.lineItems.map((l) => ({
         id: l.id,
         description: l.description,
-        executionReviewStatus: l.executionReviewStatus,
-        executionMergeMode: l.executionMergeMode,
-        taskCount: l.draftExecutionTasks.length,
+        tasks: l.draftExecutionTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          providesSignals: t.providesSignals,
+          requiresSignals: t.requiresSignals,
+          hardSignal: t.hardSignal,
+        })),
       })),
     });
 
@@ -296,20 +304,20 @@ export async function queryWorkstationWorkItems(
         ready: activationReadiness.ready,
         totalTasksToActivate: activationReadiness.totalTasksToActivate,
         needsAttentionLineCount: activationReadiness.blockReasons.filter(
-          (r) => r.code === "LINE_NEEDS_EXECUTION_REVIEW",
+          (r) => r.code === "HARD_SIGNAL_NO_PROVIDER",
         ).length,
         anomalyLineCount: activationReadiness.blockReasons.filter(
-          (r) => r.code === "LINE_COMMERCIAL_ONLY_HAS_TASKS",
+          (r) => r.code === "CIRCULAR_SIGNAL_DEPENDENCY",
         ).length,
       },
     });
 
     if (readiness.state === "JOB_ACTIVE" || readiness.state === "ARCHIVED") continue;
 
-    const primaryIdentity = quote.salesIntake?.title || quote.customer?.displayName || quote.title;
+    const primaryIdentity = quote.lead?.title || quote.customer?.displayName || quote.title;
     const secondaryIdentity = quote.title !== primaryIdentity ? quote.title : null;
 
-    const parentLabel = quote.customer?.displayName || quote.salesIntake?.title || undefined;
+    const parentLabel = quote.customer?.displayName || quote.lead?.title || undefined;
     const subtitle = secondaryIdentity
       ? `Quote: ${secondaryIdentity}`
       : quote.customer?.displayName || undefined;
@@ -319,7 +327,7 @@ export async function queryWorkstationWorkItems(
       title: primaryIdentity,
       subtitle,
       customerId: quote.customerId,
-      salesIntakeId: quote.salesIntakeId,
+      leadId: quote.leadId,
       readiness,
     });
     const workflow = toEmbeddedWorkflow(recordState);
@@ -348,9 +356,9 @@ export async function queryWorkstationWorkItems(
       reason: isCustomerAccepted ? "Accepted by customer via portal." : workflow.reason,
       nextStep: workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
-      parentRecordId: quote.customerId || quote.salesIntakeId || undefined,
+      parentRecordId: quote.customerId || quote.leadId || undefined,
       parentLabel,
-      href: quote.salesIntakeId ? `/sales/${quote.salesIntakeId}` : `/quotes/${quote.id}`,
+      href: quote.leadId ? `/leads/${quote.leadId}` : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
       workflow,
     });
@@ -361,11 +369,18 @@ export async function queryWorkstationWorkItems(
     where: { organizationId, status: JobStatus.ACTIVE },
     include: {
       customer: true,
-      salesIntake: true,
+      lead: true,
       tasks: {
         where: { completedAt: null },
         include: { 
-          jobStage: true,
+          jobStage: {
+            select: {
+              id: true,
+              title: true,
+              sortOrder: true,
+              requiresSignals: true,
+            }
+          },
           attachments: { 
             where: { status: "READY" },
             select: { id: true } 
@@ -396,9 +411,10 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const job of jobs) {
+    const liveSignals = await getLiveSignals(job.id);
     const unpaidRequirements = job.paymentRequirements.filter(p => p.status === JobPaymentRequirementStatus.DUE);
     const isJobBlocked = job.issues.length > 0 || unpaidRequirements.length > 0;
-    const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
+    const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
     const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
     // 3a. Scheduling Signals
@@ -469,7 +485,7 @@ export async function queryWorkstationWorkItems(
         reason: payment.requiredBeforeStageId ? "Payment required before next stage." : "Required payment is due.",
         nextStep: "Record payment or waive.",
         recordId: job.id,
-        parentRecordId: job.customerId || job.salesIntakeId || undefined,
+        parentRecordId: job.customerId || job.leadId || undefined,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: payment.updatedAt,
@@ -493,7 +509,7 @@ export async function queryWorkstationWorkItems(
           reason: "Active job with open tasks has no upcoming visits.",
           nextStep: "Schedule a job visit.",
           recordId: job.id,
-          parentRecordId: job.customerId || job.salesIntakeId || undefined,
+          parentRecordId: job.customerId || job.leadId || undefined,
           parentLabel: primaryJobIdentity,
           href: `/jobs/${job.id}`,
           updatedAt: job.updatedAt,
@@ -512,31 +528,24 @@ export async function queryWorkstationWorkItems(
 
     for (const task of sortedTasks) {
       const isPrimary = task.id === primaryTaskId;
-      const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
+      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
-      const taskPaymentBlockers = unpaidRequirements.filter((p) => {
-        // Job-level gate blocks everything
-        if (p.requiredBeforeStageId === null) return true;
-
-        // Stage-level gate blocks its stage and all subsequent stages
-        if (p.requiredBeforeStage) {
-          return task.jobStage.sortOrder >= p.requiredBeforeStage.sortOrder;
-        }
-
-        return false;
-      });
-
       const derivedState = deriveTaskState({
+        status: task.status,
         completedAt: task.completedAt,
         completionNote: task.completionNote,
         completionRequirementsJson: task.completionRequirementsJson,
         attachments: task.attachments,
+        requiresSignals: task.requiresSignals,
         issues: task.issues,
-        paymentBlockers: taskPaymentBlockers,
-      });
+        stage: {
+          requiresSignals: task.jobStage.requiresSignals,
+          issues: [], // Job-level issues already check muted state
+        },
+      }, liveSignals);
 
-      let priority: WorkstationWorkItemPriority = derivedState === "READY_TO_COMPLETE" ? "high" : "medium";
+      let priority: WorkstationWorkItemPriority = derivedState === "READY" ? "high" : "medium";
 
       // If not the primary task for this job, demote it so it doesn't take the XL card
       // while earlier work is incomplete.
@@ -544,44 +553,40 @@ export async function queryWorkstationWorkItems(
         priority = "low";
       }
 
-      const lens: WorkstationLens = derivedState === "BLOCKED" ? "waiting" : priority === "high" ? "attention" : "today";
-      const group: WorkstationWorkItemGroup = derivedState === "BLOCKED" ? "blocked" : "active";
+      const isBlocked = derivedState === "BLOCKED_BY_ISSUE" || derivedState === "BLOCKED_BY_SIGNAL";
+      const lens: WorkstationLens = isBlocked ? "waiting" : priority === "high" ? "attention" : "today";
+      const group: WorkstationWorkItemGroup = isBlocked ? "blocked" : "active";
+
+      const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s))
+        .concat(task.jobStage.requiresSignals.filter(s => !liveSignals.includes(s)));
 
       items.push({
         id: `task-${task.id}`,
         kind: "task",
         title: task.title,
         subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""} · ${task.jobStage.title}`,
-        status: taskStateLabel(derivedState, {
-          completedAt: task.completedAt,
-          completionNote: task.completionNote,
-          completionRequirementsJson: task.completionRequirementsJson,
-          attachments: task.attachments,
-          issues: task.issues,
-          paymentBlockers: taskPaymentBlockers,
-        }),
+        status: taskStateLabel(derivedState),
         priority,
         group,
         lens,
         filterCategory: "tasks",
-        reason: derivedState === "BLOCKED" ? 
-                (taskPaymentBlockers.length > 0 ? "Task is blocked by unpaid payment." : "Task is blocked by an open issue.") : 
+        reason: derivedState === "BLOCKED_BY_ISSUE" ? "Blocked by an open issue." :
+                derivedState === "BLOCKED_BY_SIGNAL" ? `Waiting on signal: ${missingSignals.join(", ")}` :
                 derivedState === "NEEDS_PROOF" ? "Task needs completion proof." :
                 "Task is ready to complete.",
-        nextStep: derivedState === "BLOCKED" ? 
-                  (taskPaymentBlockers.length > 0 ? "Record payment." : "Resolve the issue.") : 
-                  "Complete the task.",
+        nextStep: isBlocked ? "Resolve blocker." : "Complete the task.",
         recordId: task.id,
         parentRecordId: job.id,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: task.updatedAt,
-        isBlocked: derivedState === "BLOCKED",
+        isBlocked,
+        missingSignals: missingSignals.length > 0 ? missingSignals : undefined,
       });
     }
 
     if (job.tasks.length === 0) {
-      const primaryJobIdentity = job.salesIntake?.title || job.customer?.displayName || job.title;
+      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
       items.push({
@@ -597,7 +602,7 @@ export async function queryWorkstationWorkItems(
         reason: "Active job has no remaining TODO or IN_PROGRESS tasks.",
         nextStep: "Review job completion or add tasks.",
         recordId: job.id,
-        parentRecordId: job.customerId || job.salesIntakeId || undefined,
+        parentRecordId: job.customerId || job.leadId || undefined,
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
@@ -617,7 +622,7 @@ export async function queryWorkstationWorkItems(
       job: {
         include: {
           customer: true,
-          salesIntake: true,
+          lead: true,
         },
       },
     },
@@ -626,7 +631,7 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const issue of issues) {
-    const primaryJobIdentity = issue.job.salesIntake?.title || issue.job.customer?.displayName || issue.job.title;
+    const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
     const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
 
     items.push({
@@ -659,7 +664,7 @@ export async function queryWorkstationWorkItems(
       job: {
         include: {
           customer: true,
-          salesIntake: true,
+          lead: true,
         },
       },
       requiredBeforeStage: true,
@@ -669,7 +674,7 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const payment of duePayments) {
-    const primaryJobIdentity = payment.job.salesIntake?.title || payment.job.customer?.displayName || payment.job.title;
+    const primaryJobIdentity = payment.job.lead?.title || payment.job.customer?.displayName || payment.job.title;
     const secondaryJobIdentity = payment.job.title !== primaryJobIdentity ? payment.job.title : null;
 
     const amountLabel = payment.amountCents
@@ -710,7 +715,7 @@ export async function queryWorkstationWorkItems(
       job: {
         include: {
           customer: true,
-          salesIntake: true,
+          lead: true,
         },
       },
     },
@@ -719,7 +724,7 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const log of draftLogs) {
-    const primaryJobIdentity = log.job.salesIntake?.title || log.job.customer?.displayName || log.job.title;
+    const primaryJobIdentity = log.job.lead?.title || log.job.customer?.displayName || log.job.title;
     const secondaryJobIdentity = log.job.title !== primaryJobIdentity ? log.job.title : null;
 
     items.push({
@@ -752,7 +757,7 @@ export function getWorkstationSummary(items: WorkstationWorkItem[]): Workstation
       items.filter((i) => i.kind === "job" || i.kind === "task").map((i) => i.parentRecordId || i.recordId),
     ).size,
     openTasksCount: items.filter((i) => i.kind === "task").length,
-    openSalesIntakesQuotesCount: items.filter((i) => i.kind === "sales-intake" || i.kind === "quote").length,
+    openLeadsQuotesCount: items.filter((i) => i.kind === "lead" || i.kind === "quote").length,
     scheduledTodayCount: items.filter((i) => i.kind === "schedule" && i.status === "Today").length,
     dailyLogsToReviewCount: items.filter((i) => i.kind === "daily-log").length,
   };

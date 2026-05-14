@@ -12,7 +12,7 @@ export type QuoteWorkSurfaceData = {
   id: string;
   /** Internal quote title (e.g. "Q-2026-001"). */
   title: string;
-  /** Display identity title — sales intake title → customer name → quote title. */
+  /** Display identity title — lead title → customer name → quote title. */
   primaryTitle: string;
   /** Secondary identity (rendered as "Quote: …") when distinct from primaryTitle. */
   subtitle: string | null;
@@ -22,9 +22,9 @@ export type QuoteWorkSurfaceData = {
   customerId: string | null;
   customerDisplayName: string | null;
   customerHref: string | null;
-  salesIntakeId: string | null;
-  salesIntakeTitle: string | null;
-  salesIntakeHref: string | null;
+  leadId: string | null;
+  leadTitle: string | null;
+  leadHref: string | null;
   totalCents: number;
   subtotalCents: number;
   lineItemCount: number;
@@ -37,7 +37,7 @@ export type QuoteWorkSurfaceData = {
   quoteHref: string;
   proposalPreviewHref: string;
   executionReviewHref: string;
-  /** Jobsite / project address: customer profile first, else linked sales intake. */
+  /** Jobsite / project address: customer profile first, else linked lead. */
   jobsiteAddressLine: string | null;
   /** True when no resolved jobsite line exists for this quote. */
   jobsiteMissing: boolean;
@@ -51,4 +51,8 @@ export type QuoteWorkSurfaceData = {
   shareToken?: string | null;
   /** Optional display label for last sent email (Phase F). */
   lastSentEmailAtLabel?: string | null;
+  /** Token expiration date */
+  shareTokenExpiresAt?: Date | null;
+  /** Token revocation date */
+  shareTokenRevokedAt?: Date | null;
 };

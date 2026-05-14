@@ -1,5 +1,4 @@
 import { db } from "./db";
-import { JobActivityType } from "@prisma/client";
 
 export type GenerateDailyJobLogDraftInput = {
   organizationId: string;

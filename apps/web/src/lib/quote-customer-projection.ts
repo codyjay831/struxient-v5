@@ -28,7 +28,7 @@ export type QuoteCustomerPreviewInput = {
   title: string;
   customerDocumentTitle: string | null;
   customer: { displayName: string } | null;
-  salesIntake: { title: string } | null;
+  lead: { title: string } | null;
   lineItems: QuoteCustomerPreviewLineInput[];
   subtotalCents: number;
   totalCents: number;
@@ -61,12 +61,14 @@ export type QuoteCustomerPreviewDocument = {
   /** Resolved proposal document title: customerDocumentTitle ?? title. */
   documentTitle: string;
   customer: { displayName: string } | null;
-  salesIntake: { title: string } | null;
+  lead: { title: string } | null;
   lineItems: QuoteCustomerPreviewLine[];
   subtotalCents: number;
   totalCents: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Forward-compat placeholder for payment milestones (empty for now). */
+  paymentMilestones?: never[];
 };
 
 /** Staff-only signals for the internal preview route (omit on any future customer channel). */
@@ -101,8 +103,8 @@ function resolveLineTitle(input: QuoteCustomerPreviewLineInput): {
     return { lineTitle: explicit, usedInternalDescriptionForTitle: false };
   }
   return {
-    lineTitle: input.description,
-    usedInternalDescriptionForTitle: true,
+    lineTitle: input.customerScopeTitle?.trim() || "Line Item",
+    usedInternalDescriptionForTitle: !input.customerScopeTitle?.trim(),
   };
 }
 
@@ -164,7 +166,7 @@ export function buildCustomerQuotePreviewDocument(
       quoteId: quote.id,
       documentTitle,
       customer: quote.customer,
-      salesIntake: quote.salesIntake,
+      lead: quote.lead,
       lineItems: mapped,
       subtotalCents: quote.subtotalCents,
       totalCents: quote.totalCents,

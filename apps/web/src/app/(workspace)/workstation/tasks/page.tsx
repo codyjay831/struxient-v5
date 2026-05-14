@@ -6,10 +6,9 @@ import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
-import { JobTaskStatus } from "@prisma/client";
-import { 
-  WorkstationQueueItem, 
-  WorkstationClearedState 
+import {
+  WorkstationQueueItem,
+  WorkstationClearedState,
 } from "@/components/workstation/workstation-ui";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +25,6 @@ export default async function WorkstationTasksLensPage({
   const allItems = await queryWorkstationWorkItems(ctx.organizationId);
   const taskItems = allItems.filter((i) => i.kind === "task");
 
-  const inProgressCount = taskItems.filter(i => i.status === JobTaskStatus.IN_PROGRESS).length;
-
   const selectedItem = selectedId ? taskItems.find((i) => i.id === selectedId) : null;
 
   return (
@@ -38,12 +35,6 @@ export default async function WorkstationTasksLensPage({
         </h2>
         <div className="flex items-center gap-4 text-xs font-medium text-foreground-muted">
           <span>{taskItems.length} total tasks</span>
-          {inProgressCount > 0 && (
-            <span className="flex items-center gap-1 text-accent">
-              <span className="size-1.5 rounded-full bg-accent" />
-              {inProgressCount} in progress
-            </span>
-          )}
         </div>
       </div>
 
@@ -73,7 +64,7 @@ export default async function WorkstationTasksLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <Link href="/sales?tab=proposals" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        <Link href="/quotes" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
           {WORKSTATION_COPY.continuation.openQuotes}
         </Link>
         <Link href="/jobs" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
@@ -93,5 +84,8 @@ async function TaskDetailWrapper({ taskId }: { taskId: string }) {
 
   if (!payload) return null;
 
-  return <TaskWorkSurface {...payload} clearWorkstationSelectionOnComplete />;
+  const { getLiveSignals } = await import("@/lib/signal-bus");
+  const liveSignals = await getLiveSignals(payload.jobId);
+
+  return <TaskWorkSurface {...payload} liveSignals={liveSignals} clearWorkstationSelectionOnComplete />;
 }

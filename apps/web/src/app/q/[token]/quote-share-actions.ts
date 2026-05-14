@@ -15,9 +15,13 @@ import {
 } from "@/lib/quote-checkpoint-snapshot";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import { revalidatePath } from "next/cache";
-import { notifyQuoteAccepted } from "@/lib/notifications";
+import { notifyQuoteAccepted, notifyQuoteChangeRequested } from "@/lib/notifications";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { renderQuoteAcceptancePdf } from "@/lib/quote-pdf";
+import { getStorageProvider } from "@/lib/storage";
+import { LocalStorageProvider } from "@/lib/storage/local-storage-provider";
+import { AttachmentStatus } from "@prisma/client";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -74,15 +78,32 @@ export async function requestQuoteChangesAction(
 
       const quote = shareToken.quote;
 
-      // Log the request as a checkpoint or comment (for now, we'll just log it to console/stub)
-      console.log(`[Quote Change Request] Quote ${quote.id}: ${message}`);
+      // Create change request record
+      await tx.quoteChangeRequest.create({
+        data: {
+          organizationId: quote.organizationId,
+          quoteId: quote.id,
+          token,
+          message: message.trim(),
+          submittedFromIp: ip,
+          userAgent: headerList.get("user-agent") ?? null,
+        },
+      });
 
-      return { quoteId: quote.id, organizationId: quote.organizationId };
+      return { quoteId: quote.id, organizationId: quote.organizationId, message: message.trim() };
     });
 
     revalidatePath(`/quotes/${result.quoteId}`);
     revalidatePath("/workstation");
-    revalidatePath("/sales");
+    revalidatePath("/leads");
+
+    // Notify staff
+    void notifyQuoteChangeRequested({
+      organizationId: result.organizationId,
+      quoteId: result.quoteId,
+      message: result.message,
+      submittedFromIp: ip,
+    });
 
     return { success: true };
   } catch (e) {
@@ -110,6 +131,8 @@ export async function acceptQuoteFromTokenAction(
 
   const headerList = await headers();
   const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  const userAgent = headerList.get("user-agent") ?? null;
+  
   if (!(await checkRateLimit(ip, { windowMs: RATE_LIMIT_WINDOW_MS, max: MAX_REQUESTS_PER_WINDOW, keyPrefix: "quote-accept" }))) {
     return { error: "Too many requests. Please try again in an hour." };
   }
@@ -183,6 +206,8 @@ export async function acceptQuoteFromTokenAction(
         data: {
           acceptedAt: new Date(),
           acceptedByName: acceptedByName.trim(),
+          acceptedFromIp: ip,
+          userAgent,
         },
       });
 
@@ -190,12 +215,17 @@ export async function acceptQuoteFromTokenAction(
         quoteId: quote.id,
         organizationId: quote.organizationId,
         totalCents: document.totalCents,
+        document,
+        customerId: quote.customerId,
+        leadId: quote.leadId,
       };
     });
 
+    const acceptedAtIso = new Date().toISOString();
+
     revalidatePath(`/quotes/${result.quoteId}`);
     revalidatePath("/workstation");
-    revalidatePath("/sales");
+    revalidatePath("/leads");
 
     // Non-blocking notification
     void notifyQuoteAccepted({
@@ -204,6 +234,60 @@ export async function acceptQuoteFromTokenAction(
       acceptedByName: acceptedByName.trim(),
       totalCents: result.totalCents,
     });
+
+    // Generate and store signed PDF artifact
+    try {
+      const pdfBuffer = await renderQuoteAcceptancePdf(result.document, {
+        acceptedByName: acceptedByName.trim(),
+        acceptedAtIso,
+        ip,
+        userAgent,
+      });
+
+      const attachment = await db.attachment.create({
+        data: {
+          organizationId: result.organizationId,
+          quoteId: result.quoteId,
+          customerId: result.customerId,
+          leadId: result.leadId,
+          fileName: `quote_signed_${result.quoteId}.pdf`,
+          fileKey: "PENDING", // Temporary
+          contentType: "application/pdf",
+          fileSize: pdfBuffer.length,
+          description: "Quote Signed PDF",
+          status: AttachmentStatus.PENDING,
+        },
+      });
+
+      const storage = getStorageProvider();
+      const fileKey = storage.createObjectKey({
+        organizationId: result.organizationId,
+        attachmentId: attachment.id,
+        fileName: `quote_signed_${result.quoteId}.pdf`,
+      });
+
+      if (storage instanceof LocalStorageProvider) {
+        await storage.writeObject(fileKey, pdfBuffer);
+        await db.attachment.update({
+          where: { id: attachment.id },
+          data: {
+            fileKey,
+            status: AttachmentStatus.READY,
+          },
+        });
+      } else {
+        // Non-local providers (GCS) require a separate signed-URL upload flow;
+        // we leave the attachment row in PENDING for now so it isn't silently
+        // marked READY without a real object behind it.
+        console.warn(
+          "[acceptQuoteFromTokenAction] Skipping direct upload for non-local storage provider; attachment left PENDING.",
+        );
+      }
+    } catch (pdfError) {
+      console.error("[acceptQuoteFromTokenAction] PDF generation/storage failed:", pdfError);
+      // We don't fail the whole action if PDF storage fails, but we log it.
+      // The quote is still marked as APPROVED in the DB.
+    }
 
     return { success: true };
   } catch (e) {

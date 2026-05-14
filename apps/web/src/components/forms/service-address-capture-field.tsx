@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { SALES_INTAKE_FIELD_LIMITS } from "@/app/(workspace)/sales/sales-field-limits";
+import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/leads/lead-field-limits";
 import {
   PUBLIC_INTAKE_SERVICE_LOCATION_SCHEMA_VERSION,
   type PublicIntakeServiceLocationV1,
-} from "@/lib/public-intake-service-location";
+} from "@/lib/public-lead-service-location";
 
 function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
   if (typeof window === "undefined") {
@@ -119,12 +119,14 @@ export type ServiceAddressCaptureFieldProps = {
   defaultDisplayAddress?: string;
   /** Serialized snapshot for edit / republish — keeps hidden JSON in sync on first paint. */
   initialStructuredJson?: string;
+  onDisplayAddressChange?: (value: string) => void;
+  onStructuredJsonChange?: (value: string) => void;
 };
 
 /**
  * One visible “service address / project location” field with optional Places assist
  * on the same input. Structured capture is posted via hidden `publicIntakeServiceLocation`;
- * the visible line uses `serviceAddress` (matches public intake and staff sales intake forms).
+ * the visible line uses `serviceAddress` (matches public intake and staff lead forms).
  */
 export function ServiceAddressCaptureField({
   googleMapsApiKey,
@@ -133,6 +135,8 @@ export function ServiceAddressCaptureField({
   required = false,
   defaultDisplayAddress = "",
   initialStructuredJson = "",
+  onDisplayAddressChange,
+  onStructuredJsonChange,
 }: ServiceAddressCaptureFieldProps) {
   const placesEnabled = googleMapsApiKey.trim().length > 0;
   const fieldId = useId();
@@ -142,12 +146,15 @@ export function ServiceAddressCaptureField({
   const applyPlace = useCallback((place: google.maps.places.PlaceResult) => {
     const snap = placeToSnapshot(place);
     if (!snap) return;
-    setStructuredJson(JSON.stringify(snap));
+    const json = JSON.stringify(snap);
+    setStructuredJson(json);
+    onStructuredJsonChange?.(json);
     const display = snap.formattedAddress.trim() || snap.addressLine1;
     if (addressInputRef.current && display) {
       addressInputRef.current.value = display;
+      onDisplayAddressChange?.(display);
     }
-  }, []);
+  }, [onDisplayAddressChange, onStructuredJsonChange]);
 
   useEffect(() => {
     if (!placesEnabled || !addressInputRef.current) {
@@ -201,7 +208,7 @@ export function ServiceAddressCaptureField({
           name="serviceAddress"
           type="text"
           required={required}
-          maxLength={SALES_INTAKE_FIELD_LIMITS.publicIntakeServiceAddress}
+          maxLength={LEAD_FIELD_LIMITS.publicIntakeServiceAddress}
           autoComplete="street-address"
           defaultValue={defaultDisplayAddress}
           placeholder={
@@ -210,8 +217,10 @@ export function ServiceAddressCaptureField({
               : "Enter the full service or project address"
           }
           className={controlClass}
-          onChange={() => {
+          onChange={(e) => {
             setStructuredJson("");
+            onStructuredJsonChange?.("");
+            onDisplayAddressChange?.(e.target.value);
           }}
         />
       </label>

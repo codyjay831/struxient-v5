@@ -3,9 +3,9 @@ import { db } from "./db";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-export type SalesIntakeNotificationPayload = {
+export type LeadNotificationPayload = {
   organizationId: string;
-  salesIntakeId: string;
+  leadId: string;
   contactName: string;
   email: string;
   phone: string;
@@ -19,11 +19,28 @@ export type QuoteAcceptanceNotificationPayload = {
   totalCents: number;
 };
 
+export type QuoteSentNotificationPayload = {
+  organizationId: string;
+  quoteId: string;
+  customerEmail: string;
+  customerName: string;
+  organizationDisplayName: string;
+  shareUrl: string;
+  expiresAt?: Date | null;
+};
+
+export type QuoteChangeRequestNotificationPayload = {
+  organizationId: string;
+  quoteId: string;
+  message: string;
+  submittedFromIp?: string;
+};
+
 /**
- * Triggered when a new sales intake is submitted via the public intake form.
+ * Triggered when a new lead is submitted via the public intake form.
  */
-export async function notifySalesIntakeSubmitted(payload: SalesIntakeNotificationPayload) {
-  console.log(`[Notification] New Sales Intake Submitted:`, payload);
+export async function notifyLeadSubmitted(payload: LeadNotificationPayload) {
+  console.log(`[Notification] New Lead Submitted:`, payload);
 
   if (!resend) {
     console.warn("[Notification] Resend API key not found, skipping email.");
@@ -46,14 +63,14 @@ export async function notifySalesIntakeSubmitted(payload: SalesIntakeNotificatio
       await resend.emails.send({
         from: "Struxient <notifications@struxient.com>",
         to: staffEmails,
-        subject: `New Sales Intake: ${payload.contactName}`,
+        subject: `New Lead: ${payload.contactName}`,
         html: `
-          <h1>New Sales Intake Received</h1>
+          <h1>New Lead Received</h1>
           <p><strong>Name:</strong> ${payload.contactName}</p>
           <p><strong>Email:</strong> ${payload.email}</p>
           <p><strong>Phone:</strong> ${payload.phone}</p>
           <p><strong>Request Type:</strong> ${payload.requestType}</p>
-          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/sales/${payload.salesIntakeId}">View Sales Intake in Dashboard</a></p>
+          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/leads/${payload.leadId}">View Lead in Dashboard</a></p>
         `,
       });
     }
@@ -73,7 +90,7 @@ export async function notifySalesIntakeSubmitted(payload: SalesIntakeNotificatio
       });
     }
   } catch (error) {
-    console.error("[Notification] Failed to send sales intake notifications:", error);
+    console.error("[Notification] Failed to send lead notifications:", error);
   }
 }
 
@@ -117,10 +134,10 @@ export async function notifyQuoteAccepted(payload: QuoteAcceptanceNotificationPa
     // 2. Send confirmation to the customer (if we have their email)
     const quote = await db.quote.findUnique({
       where: { id: payload.quoteId },
-      include: { customer: true, salesIntake: true },
+      include: { customer: true, lead: true },
     });
 
-    const customerEmail = quote?.customer?.email || quote?.salesIntake?.email;
+    const customerEmail = quote?.customer?.email || quote?.lead?.email;
 
     if (customerEmail) {
       await resend.emails.send({
@@ -135,5 +152,112 @@ export async function notifyQuoteAccepted(payload: QuoteAcceptanceNotificationPa
     }
   } catch (error) {
     console.error("[Notification] Failed to send quote notifications:", error);
+  }
+}
+
+/**
+ * Triggered when staff send a quote to a customer.
+ */
+export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
+  console.log(`[Notification] Quote Sent:`, payload);
+
+  if (!resend) {
+    console.warn("[Notification] Resend API key not found, skipping email.");
+    return;
+  }
+
+  try {
+    const expiryText = payload.expiresAt
+      ? `This link expires on ${payload.expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+      : "This link does not expire.";
+
+    // 1. Send proposal link to customer
+    await resend.emails.send({
+      from: "Struxient <notifications@struxient.com>",
+      to: payload.customerEmail,
+      subject: `Your proposal from ${payload.organizationDisplayName}`,
+      html: `
+        <h1>Your proposal is ready</h1>
+        <p>Hi ${payload.customerName},</p>
+        <p>Your proposal from <strong>${payload.organizationDisplayName}</strong> is ready to review.</p>
+        <p><a href="${payload.shareUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 16px 0;">View Proposal</a></p>
+        <p style="font-size: 14px; color: #666;">Or copy this link: ${payload.shareUrl}</p>
+        <p style="font-size: 14px; color: #666;">${expiryText}</p>
+        <p>You can review the details, download a PDF, and accept the proposal directly from the link above.</p>
+        <p>Best regards,<br/>${payload.organizationDisplayName}</p>
+      `,
+    });
+
+    // 2. CC staff (Owners and Admins) for visibility
+    const staffMembers = await db.membership.findMany({
+      where: {
+        organizationId: payload.organizationId,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+      include: { user: true },
+    });
+
+    const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
+
+    if (staffEmails.length > 0) {
+      await resend.emails.send({
+        from: "Struxient <notifications@struxient.com>",
+        to: staffEmails,
+        subject: `Quote sent to ${payload.customerName}`,
+        html: `
+          <h1>Quote Sent</h1>
+          <p>The quote for <strong>${payload.customerName}</strong> has been sent.</p>
+          <p><strong>Customer Email:</strong> ${payload.customerEmail}</p>
+          <p><strong>Proposal Link:</strong> ${payload.shareUrl}</p>
+          <p style="font-size: 14px; color: #666;">${expiryText}</p>
+          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/quotes/${payload.quoteId}">View Quote in Dashboard</a></p>
+        `,
+      });
+    }
+  } catch (error) {
+    console.error("[Notification] Failed to send quote sent notifications:", error);
+  }
+}
+
+/**
+ * Triggered when a customer requests changes to a quote via the public portal.
+ */
+export async function notifyQuoteChangeRequested(payload: QuoteChangeRequestNotificationPayload) {
+  console.log(`[Notification] Quote Change Requested:`, payload);
+
+  if (!resend) {
+    console.warn("[Notification] Resend API key not found, skipping email.");
+    return;
+  }
+
+  try {
+    const staffMembers = await db.membership.findMany({
+      where: {
+        organizationId: payload.organizationId,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+      include: { user: true },
+    });
+
+    const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
+
+    if (staffEmails.length > 0) {
+      await resend.emails.send({
+        from: "Struxient <notifications@struxient.com>",
+        to: staffEmails,
+        subject: "Customer Requested Changes to Quote",
+        html: `
+          <h1>Change Request Received</h1>
+          <p>A customer has requested changes to a quote:</p>
+          <blockquote style="border-left: 4px solid #e5e7eb; padding-left: 16px; margin: 16px 0; color: #374151;">
+            ${payload.message}
+          </blockquote>
+          ${payload.submittedFromIp ? `<p style="font-size: 14px; color: #666;">Submitted from IP: ${payload.submittedFromIp}</p>` : ""}
+          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/quotes/${payload.quoteId}">View Quote in Dashboard</a></p>
+        `,
+      });
+    }
+  } catch (error) {
+    console.error("[Notification] Failed to send change request notifications:", error);
   }
 }

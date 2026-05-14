@@ -23,14 +23,12 @@ import {
   getTaskTemplateCategoryLabel,
 } from "@/lib/task-template-category";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
-import {
-  QUOTE_LINE_DEFAULT_STAGES_ORDERED,
-  groupKeyForStageKey,
-  type QuoteLineDefaultStage,
-  type QuoteLineDefaultStageId,
-} from "@/lib/quote-line-default-stage-catalog";
-import type { ExecutionStageKey, LineItemTemplateTaskSource, TaskTemplateCategory } from "@prisma/client";
+import type { LineItemTemplateTaskSource, TaskTemplateCategory } from "@prisma/client";
 import { quoteLineDraftExecutionSourceLabel } from "@/lib/quote-line-execution-source-label";
+import { Zap, Sparkles } from "lucide-react";
+import { suggestSignalsForTask } from "@/lib/ai/signal-suggester";
+import type { TaskCompletionRequirements } from "@/lib/task-readiness";
+import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -44,13 +42,17 @@ const initialFormState: QuoteLineExecutionFormState = {};
 export type QuoteLineDraftExecutionTaskRow = {
   id: string;
   title: string;
-  stageKey: ExecutionStageKey;
+  stageId: string | null;
   category: TaskTemplateCategory;
   instructions: string | null;
   sortOrder: number;
   sourceType: LineItemTemplateTaskSource;
   sourceTaskTemplateId: string | null;
   sourceLineItemTemplateTaskId: string | null;
+  providesSignals: string[];
+  requiresSignals: string[];
+  hardSignal: boolean;
+  requirementsJson: unknown;
 };
 
 function FormError({ message }: { message: string }) {
@@ -72,21 +74,133 @@ function truncatePreview(text: string, max = 96): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
-function groupTasksByStage(
-  tasks: readonly QuoteLineDraftExecutionTaskRow[],
-): Record<QuoteLineDefaultStageId, QuoteLineDraftExecutionTaskRow[]> {
-  const buckets = {} as Record<QuoteLineDefaultStageId, QuoteLineDraftExecutionTaskRow[]>;
-  for (const stage of QUOTE_LINE_DEFAULT_STAGES_ORDERED) {
-    buckets[stage.id] = [];
-  }
-  for (const t of tasks) {
-    const groupId = groupKeyForStageKey(t.stageKey);
-    buckets[groupId].push(t);
-  }
-  for (const stage of QUOTE_LINE_DEFAULT_STAGES_ORDERED) {
-    buckets[stage.id].sort((a, b) => a.sortOrder - b.sortOrder);
-  }
-  return buckets;
+function SmartTaskDisclosure({ 
+  providesSignals: initialProvides, 
+  requiresSignals: initialRequires, 
+  hardSignal,
+  requirementsJson,
+  title,
+  category,
+}: { 
+  providesSignals?: string[], 
+  requiresSignals?: string[], 
+  hardSignal?: boolean,
+  requirementsJson?: unknown,
+  title?: string,
+  category?: string,
+}) {
+  const [provides, setProvides] = useState(initialProvides?.join(", ") || "");
+  const [requires, setRequires] = useState(initialRequires?.join(", ") || "");
+  
+  const handleSuggest = () => {
+    if (!title) {
+      toast.error("Enter a task title first to get suggestions.");
+      return;
+    }
+    const suggestions = suggestSignalsForTask(title, category || "GENERAL");
+    
+    if (suggestions.provides.length > 0 || suggestions.requires.length > 0) {
+      const newProvides = Array.from(new Set([...(provides ? provides.split(",").map(s => s.trim()) : []), ...suggestions.provides])).join(", ");
+      const newRequires = Array.from(new Set([...(requires ? requires.split(",").map(s => s.trim()) : []), ...suggestions.requires])).join(", ");
+      
+      setProvides(newProvides);
+      setRequires(newRequires);
+      toast.success("AI Secretary suggested signals.");
+    } else {
+      toast.info("No obvious signals found for this title.");
+    }
+  };
+
+  const reqs = (requirementsJson ?? {}) as TaskCompletionRequirements;
+  return (
+    <div className="mt-4 space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-primary">
+          <Zap className="h-3 w-3" />
+          Smart Task Configuration
+        </div>
+        <button
+          type="button"
+          onClick={handleSuggest}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+        >
+          <Sparkles className="size-3" />
+          Suggest Signals
+        </button>
+      </div>
+      
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-3">
+          <label className="block">
+            <span className={fieldLabelClass}>Provides signals</span>
+            <input
+              name="providesSignals"
+              type="text"
+              className={controlClass}
+              value={provides}
+              onChange={(e) => setProvides(e.target.value)}
+              placeholder="e.g. roof-sealed, permit-ready"
+            />
+          </label>
+
+          <label className="block">
+            <span className={fieldLabelClass}>Requires signals</span>
+            <input
+              name="requiresSignals"
+              type="text"
+              className={controlClass}
+              value={requires}
+              onChange={(e) => setRequires(e.target.value)}
+              placeholder="e.g. materials-on-site"
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              name="hardSignal"
+              type="checkbox"
+              defaultChecked={hardSignal}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <span className="text-xs font-medium text-foreground">Hard dependency</span>
+          </label>
+        </div>
+
+        <div className="space-y-3">
+          <span className={fieldLabelClass}>Completion Proof</span>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2">
+              <input
+                name="noteRequired"
+                type="checkbox"
+                defaultChecked={reqs.noteRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">Note required</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                name="photoRequired"
+                type="checkbox"
+                defaultChecked={reqs.photoRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">Photo required</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                name="attachmentRequired"
+                type="checkbox"
+                defaultChecked={reqs.attachmentRequired}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-foreground">File attachment required</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StageTaskEditForm({
@@ -106,12 +220,15 @@ function StageTaskEditForm({
     updateQuoteLineExecutionTaskAction.bind(null, quoteId, lineItemId, task.id),
     initialFormState,
   );
+  const [title, setTitle] = useState(task.title);
+  const [category, setCategory] = useState(task.category);
+
   const categoryOptions = taskTemplateCategorySelectOptions();
 
   return (
     <form action={action} className="mt-3 space-y-3 border-t border-border pt-3">
       {state.error ? <FormError message={state.error} /> : null}
-      <input type="hidden" name="stageKey" value={task.stageKey} />
+      <input type="hidden" name="stageId" value={task.stageId ?? ""} />
       <input type="hidden" name="revalidateScope" value={revalidateScope} />
       <label className="block">
         <span className={fieldLabelClass}>Title</span>
@@ -123,6 +240,7 @@ function StageTaskEditForm({
           defaultValue={task.title}
           className={controlClass}
           autoComplete="off"
+          onChange={(e) => setTitle(e.target.value)}
         />
       </label>
       <label className="block">
@@ -132,6 +250,7 @@ function StageTaskEditForm({
           required
           className={controlClass}
           defaultValue={task.category}
+          onChange={(e) => setCategory(e.target.value as TaskTemplateCategory)}
         >
           {categoryOptions.map((o) => (
             <option key={o.value} value={o.value}>
@@ -144,12 +263,22 @@ function StageTaskEditForm({
         <span className={fieldLabelClass}>Instructions (optional)</span>
         <textarea
           name="instructions"
-          rows={3}
+          rows={2}
           maxLength={TASK_TEMPLATE_FIELD_LIMITS.instructions}
           defaultValue={task.instructions ?? ""}
           className={controlClass}
         />
       </label>
+
+      <SmartTaskDisclosure 
+        providesSignals={task.providesSignals}
+        requiresSignals={task.requiresSignals}
+        hardSignal={task.hardSignal}
+        requirementsJson={task.requirementsJson}
+        title={title}
+        category={category}
+      />
+
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={primaryButtonClass} disabled={pending}>
           {pending ? "Saving…" : "Save task"}
@@ -213,6 +342,20 @@ function StageTaskRow({
               {truncatePreview(task.instructions)}
             </p>
           ) : null}
+          {(task.providesSignals.length > 0 || task.requiresSignals.length > 0) && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {task.requiresSignals.map(s => (
+                <span key={s} className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-strong">
+                  Requires: {s}
+                </span>
+              ))}
+              {task.providesSignals.map(s => (
+                <span key={s} className="rounded bg-approved/10 px-1.5 py-0.5 text-[10px] font-medium text-approved-strong">
+                  Provides: {s}
+                </span>
+              ))}
+            </div>
+          )}
           {moveUpState.error || moveDownState.error || deleteState.error ? (
             <p className="mt-2 text-xs text-danger" role="alert">
               {moveUpState.error || moveDownState.error || deleteState.error}
@@ -285,7 +428,7 @@ function AddCustomTaskInStageForm({
 }: {
   quoteId: string;
   lineItemId: string;
-  stage: QuoteLineDefaultStage;
+  stage: { id: string | null, name: string };
   revalidateScope: QuoteLineExecutionRevalidateScope;
   onClose: () => void;
 }) {
@@ -293,15 +436,18 @@ function AddCustomTaskInStageForm({
     addQuoteLineExecutionTaskCustomAction.bind(null, quoteId, lineItemId),
     initialFormState,
   );
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+
   const categoryOptions = taskTemplateCategorySelectOptions();
 
   return (
     <form action={action} className="mt-3 space-y-3 rounded-md border border-dashed border-border bg-background/40 px-3 py-3">
       {state.error ? <FormError message={state.error} /> : null}
-      <input type="hidden" name="stageKey" value={stage.defaultStageKey} />
+      <input type="hidden" name="stageId" value={stage.id ?? ""} />
       <input type="hidden" name="revalidateScope" value={revalidateScope} />
       <p className="text-[0.7rem] font-medium uppercase tracking-wide text-foreground-subtle">
-        Add task to {stage.label}
+        Add task to {stage.name}
       </p>
       <label className="block">
         <span className={fieldLabelClass}>Title</span>
@@ -312,6 +458,8 @@ function AddCustomTaskInStageForm({
           maxLength={TASK_TEMPLATE_FIELD_LIMITS.title}
           className={controlClass}
           autoComplete="off"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
         />
       </label>
       <label className="block">
@@ -321,6 +469,7 @@ function AddCustomTaskInStageForm({
           required
           className={controlClass}
           defaultValue={categoryOptions[0]?.value}
+          onChange={(e) => setCategory(e.target.value)}
         >
           {categoryOptions.map((o) => (
             <option key={o.value} value={o.value}>
@@ -333,11 +482,14 @@ function AddCustomTaskInStageForm({
         <span className={fieldLabelClass}>Instructions (optional)</span>
         <textarea
           name="instructions"
-          rows={3}
+          rows={2}
           maxLength={TASK_TEMPLATE_FIELD_LIMITS.instructions}
           className={controlClass}
         />
       </label>
+
+      <SmartTaskDisclosure title={title} category={category} />
+
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={primaryButtonClass} disabled={pending}>
           {pending ? "Adding…" : "Add task"}
@@ -365,7 +517,7 @@ function AddReusableTaskInStageForm({
 }: {
   quoteId: string;
   lineItemId: string;
-  stage: QuoteLineDefaultStage;
+  stage: { id: string | null, name: string };
   reusableOptions: ReusableTaskPickerOption[];
   revalidateScope: QuoteLineExecutionRevalidateScope;
   onClose: () => void;
@@ -384,7 +536,7 @@ function AddReusableTaskInStageForm({
       {state.error ? <FormError message={state.error} /> : null}
       <input type="hidden" name="revalidateScope" value={revalidateScope} />
       <p className="text-[0.7rem] font-medium uppercase tracking-wide text-foreground-subtle">
-        Copy reusable task into {stage.label}
+        Copy reusable task into {stage.name}
       </p>
       <label className="block">
         <span className={fieldLabelClass}>Reusable task</span>
@@ -401,11 +553,6 @@ function AddReusableTaskInStageForm({
           ))}
         </select>
       </label>
-      <p className="text-[0.7rem] leading-relaxed text-foreground-subtle">
-        Title, category, and instructions are copied from your reusable task. The reusable task&apos;s
-        own stage is preserved on the copy — it may sit under a different stage section than{" "}
-        {stage.label}.
-      </p>
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={primaryButtonClass} disabled={pending}>
           {pending ? "Adding…" : "Add copied task"}
@@ -423,7 +570,7 @@ function AddReusableTaskInStageForm({
   );
 }
 
-type AddMode = null | { mode: "custom" | "reusable"; stageId: QuoteLineDefaultStageId };
+type AddMode = null | { mode: "custom" | "reusable"; stageId: string | null };
 
 function StageSection({
   quoteId,
@@ -437,7 +584,7 @@ function StageSection({
 }: {
   quoteId: string;
   lineItemId: string;
-  stage: QuoteLineDefaultStage;
+  stage: { id: string | null, name: string };
   tasks: QuoteLineDraftExecutionTaskRow[];
   reusableOptions: ReusableTaskPickerOption[];
   addMode: AddMode;
@@ -451,7 +598,7 @@ function StageSection({
     <section className="rounded-lg border border-border bg-surface/60 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          {stage.label}
+          {stage.name}
           <span className="ml-2 font-normal normal-case text-foreground-muted">
             {tasks.length === 0
               ? "No tasks yet"
@@ -521,53 +668,56 @@ function StageSection({
   );
 }
 
-/**
- * Inline draft execution editor rendered directly inside a quote line item card.
- *
- * Always shows five default stage sections (Pre-Construction, Engineering & Permits,
- * Materials, Installation, Final Inspection & Closeout). Each section lists its tasks
- * and offers per-stage "Add task" buttons. There is no stage dropdown in the primary
- * editing surface and no separate execution page — saves persist via revalidate-only
- * server actions on the same quote URL.
- */
 export function QuoteLineDraftExecutionInlinePanel({
   quoteId,
   lineItemId,
   tasks,
   reusableOptions,
+  stages,
   revalidateScope = "quote",
 }: {
   quoteId: string;
   lineItemId: string;
   tasks: readonly QuoteLineDraftExecutionTaskRow[];
   reusableOptions: ReusableTaskPickerOption[];
-  /**
-   * Which surface launched this editor. Quote detail (default) refreshes only the quote page;
-   * "execution-review" additionally refreshes the execution-review page so saves stay in place
-   * without navigating the user away from that confirmation surface.
-   */
+  stages: { id: string, name: string }[];
   revalidateScope?: QuoteLineExecutionRevalidateScope;
 }) {
-  const tasksByStage = groupTasksByStage(tasks);
   const [addMode, setAddMode] = useState<AddMode>(null);
+
+  const tasksByStage = new Map<string | null, QuoteLineDraftExecutionTaskRow[]>();
+  tasksByStage.set(null, []);
+  for (const s of stages) {
+    tasksByStage.set(s.id, []);
+  }
+  for (const t of tasks) {
+    tasksByStage.get(t.stageId)?.push(t);
+  }
+
+  const sections: { id: string | null, name: string, tasks: QuoteLineDraftExecutionTaskRow[] }[] = [];
+  
+  const noStageTasks = tasksByStage.get(null) || [];
+  if (noStageTasks.length > 0) {
+    sections.push({ id: null, name: "No stage", tasks: noStageTasks });
+  }
+
+  for (const s of stages) {
+    sections.push({ id: s.id, name: s.name, tasks: tasksByStage.get(s.id) || [] });
+  }
 
   return (
     <div className="mt-3 rounded-lg border border-border-strong bg-foreground/[0.02] p-4 ring-1 ring-ring/20">
       <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
         Draft execution for this line
       </p>
-      <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-        Internal planning only — these tasks stay independent from the customer proposal and from
-        Scope Library reusable tasks.
-      </p>
       <div className="mt-4 space-y-3">
-        {QUOTE_LINE_DEFAULT_STAGES_ORDERED.map((stage) => (
+        {sections.map((section) => (
           <StageSection
-            key={stage.id}
+            key={section.id ?? "no-stage"}
             quoteId={quoteId}
             lineItemId={lineItemId}
-            stage={stage}
-            tasks={tasksByStage[stage.id]}
+            stage={section}
+            tasks={section.tasks}
             reusableOptions={reusableOptions}
             addMode={addMode}
             setAddMode={setAddMode}

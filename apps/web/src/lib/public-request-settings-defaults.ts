@@ -8,7 +8,7 @@ export const DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE =
   "Use this page to send a brief request. You do not need a Struxient account.";
 
 export type PublicRequestTypeOption = {
-  /** Stable key stored on the sales intake (lowercase slug). */
+  /** Stable key stored on the lead (lowercase slug). */
   value: string;
   /** Customer-facing label. */
   label: string;

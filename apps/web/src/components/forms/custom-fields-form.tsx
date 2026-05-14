@@ -1,12 +1,12 @@
 "use client";
 
-import { SalesCustomFieldType } from "@prisma/client";
+import { LeadCustomFieldType } from "@prisma/client";
 
 export type CustomFieldDefPayload = {
   id: string;
   key: string;
   label: string;
-  type: SalesCustomFieldType;
+  type: LeadCustomFieldType;
   options: string[];
   isRequired: boolean;
 };

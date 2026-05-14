@@ -18,7 +18,7 @@ const LENSES: { href: string; label: string; icon: LucideIcon; lens: string }[] 
   { href: "/workstation?lens=all", label: "All", icon: LayoutDashboard, lens: "all" },
 ];
 
-function lensActive(pathname: string, searchParams: URLSearchParams, lens: string, href: string) {
+function lensActive(pathname: string, searchParams: URLSearchParams, lens: string) {
   const currentLens = searchParams.get("lens") || "attention";
   if (pathname !== "/workstation") return false;
   return currentLens === lens;
@@ -27,7 +27,7 @@ function lensActive(pathname: string, searchParams: URLSearchParams, lens: strin
 export function WorkstationShell() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeLens = LENSES.find(l => lensActive(pathname, searchParams, l.lens, l.href)) || LENSES[0];
+  const activeLens = LENSES.find(l => lensActive(pathname, searchParams, l.lens)) || LENSES[0];
 
   return (
     <div className="mb-8 space-y-6">
@@ -43,8 +43,8 @@ export function WorkstationShell() {
           </div>
           <nav aria-label="Workstation lenses">
             <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-              {LENSES.map(({ href, label, icon: Icon, lens }) => {
-                const active = lensActive(pathname, searchParams, lens, href);
+              {LENSES.map(({ label, icon: Icon, lens }) => {
+                const active = lensActive(pathname, searchParams, lens);
                 
                 // Preserve selectedId and selectedKind if they exist
                 const params = new URLSearchParams(searchParams.toString());

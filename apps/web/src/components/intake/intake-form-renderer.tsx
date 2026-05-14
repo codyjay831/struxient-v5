@@ -1,0 +1,547 @@
+"use client";
+
+import { useActionState, useId, useMemo, useRef, useState } from "react";
+import { INTAKE_ATOMS } from "@/lib/intake/atoms";
+import { PublicIntakeServiceAddressField } from "@/app/request/[companySlug]/public-intake-service-address-field";
+import { NeededByBucket } from "@prisma/client";
+import { MultiFilePicker } from "@/components/forms/multi-file-picker";
+import { Check, ChevronLeft, ChevronRight, Loader2, Calendar, Clock } from "lucide-react";
+import type {
+  IntakeFormDefinitionShape,
+  IntakeFormFieldRef,
+  IntakeFormSection,
+} from "@/lib/intake/default-intake-form";
+
+const fieldLabelClass =
+  "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
+const controlClass =
+  "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+const primaryButtonClass =
+  "inline-flex w-full items-center justify-center rounded-lg border border-border bg-accent px-4 py-2.5 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto";
+const secondaryButtonClass =
+  "inline-flex w-full items-center justify-center rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/[0.02] disabled:opacity-50 sm:w-auto";
+
+const NEEDED_BY_BUCKET_OPTIONS: { value: NeededByBucket | ""; label: string }[] = [
+  { value: "", label: "Select timing" },
+  { value: "ASAP", label: "ASAP" },
+  { value: "THIS_WEEK", label: "This week" },
+  { value: "THIS_MONTH", label: "This month" },
+  { value: "FLEXIBLE", label: "Flexible" },
+  { value: "SPECIFIC_DATE", label: "Specific date" },
+];
+
+export type IntakeRequestTypeOption = { value: string; label: string };
+
+export type IntakeSubmitState = {
+  error?: string;
+  success?: boolean;
+};
+
+export type IntakeFormRendererProps = {
+  formDefinition: IntakeFormDefinitionShape;
+  companySlug: string;
+  organizationDisplayName: string;
+  submitAction: (
+    prevState: IntakeSubmitState,
+    formData: FormData,
+  ) => Promise<IntakeSubmitState>;
+  googleMapsApiKey?: string;
+  /**
+   * Optional uploader. Receives the user-selected files and returns the persisted
+   * attachment ids that should be POSTed back as the `attachmentIds` form value.
+   */
+  onFilesSelected?: (files: File[]) => Promise<string[]>;
+  /**
+   * Optional list of request-type choices (driven by `PublicRequestSettings.offerings`).
+   * When provided, the `request.type` atom renders as a SELECT and posts the value's
+   * machine key as `requestType`. Falls back to a free text input when omitted.
+   */
+  requestTypeOptions?: IntakeRequestTypeOption[];
+};
+
+export function IntakeFormRenderer({
+  formDefinition,
+  organizationDisplayName,
+  submitAction,
+  googleMapsApiKey = "",
+  onFilesSelected,
+  requestTypeOptions,
+}: IntakeFormRendererProps) {
+  const [state, formAction, isPending] = useActionState<IntakeSubmitState, FormData>(
+    submitAction,
+    {},
+  );
+  const formRef = useRef<HTMLFormElement>(null);
+  const headingId = useId();
+
+  const [step, setStep] = useState(1);
+  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({});
+  const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const publicIntakeClientKey = useMemo(
+    () =>
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "",
+    [],
+  );
+
+  const sections: IntakeFormSection[] = formDefinition.schema.sections ?? [];
+  const currentSection = sections[step - 1];
+
+  const handleNext = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.preventDefault();
+    if (step < sections.length) {
+      setStep(step + 1);
+      // Scroll to top of form when moving to next step
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleBack = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.preventDefault();
+    if (step > 1) {
+      setStep(step - 1);
+      // Scroll to top of form when moving back
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Prevent Enter from submitting the form prematurely if we are not on the last step.
+    // We only allow Enter to submit if we are on the last step and not in a textarea.
+    if (e.key === "Enter") {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "TEXTAREA") return;
+
+      if (step < sections.length) {
+        e.preventDefault();
+        handleNext();
+      }
+    }
+  };
+
+  const handleFilesChange = async (files: File[]) => {
+    if (!onFilesSelected) return;
+    setIsUploading(true);
+    try {
+      const ids = await onFilesSelected(files);
+      setAttachmentIds((prev) => [...prev, ...ids]);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const updateFieldValue = (key: string, value: unknown) => {
+    setFieldValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const isVisible = (field: IntakeFormFieldRef) => {
+    if (!field.visibleIf) return true;
+    const { fieldKey, equals, in: inValues, notEmpty } = field.visibleIf;
+    const val = fieldValues[fieldKey];
+
+    if (equals !== undefined) return val === equals;
+    if (inValues !== undefined) return Array.isArray(inValues) && inValues.includes(val as string | number | boolean);
+    if (notEmpty) return val !== undefined && val !== null && val !== "";
+
+    return true;
+  };
+
+  if (state.success) {
+    return (
+      <div className="rounded-xl border border-border bg-surface px-5 py-12 text-center shadow-sm animate-in fade-in zoom-in-95 duration-300">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-success text-success-contrast mb-6">
+          <Check className="size-6" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground tracking-tight">Request received</h2>
+        <p className="mt-3 text-sm leading-relaxed text-foreground-muted max-w-sm mx-auto">
+          Thank you. Your request has been sent to <strong>{organizationDisplayName}</strong>.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-6"
+      aria-labelledby={headingId}
+      onKeyDown={handleKeyDown}
+    >
+      <h2 id={headingId} className="sr-only">
+        {formDefinition.name} for {organizationDisplayName}
+      </h2>
+
+      {/* Honeypot — bots fill it in, humans never see it. */}
+      <div aria-hidden className="hidden">
+        <label>
+          Company website
+          <input type="text" name="companyWebsite" tabIndex={-1} autoComplete="off" />
+        </label>
+      </div>
+
+      {/* Idempotency key — server uses this to dedupe accidental double submits. */}
+      <input type="hidden" name="publicIntakeClientKey" value={publicIntakeClientKey} />
+
+      {/* Immutable proof of which IntakeFormDefinition this submit was rendered against. */}
+      <input type="hidden" name="formDefinitionId" value={formDefinition.id} />
+
+      {/* Persisted attachment ids (from object-storage upload). */}
+      <input type="hidden" name="attachmentIds" value={attachmentIds.join(",")} />
+
+      {sections.length > 1 && (
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-2 px-1">
+            {sections.map((section, idx) => (
+              <span
+                key={section.key}
+                className={`text-[0.65rem] font-bold uppercase tracking-widest transition-colors duration-300 ${
+                  idx + 1 <= step ? "text-accent" : "text-foreground-subtle"
+                }`}
+              >
+                {section.title}
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            {sections.map((section, idx) => (
+              <div
+                key={section.key}
+                className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+                  idx + 1 <= step ? "bg-accent" : "bg-border"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {state.error ? (
+        <p
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+          role="alert"
+        >
+          {state.error}
+        </p>
+      ) : null}
+
+      {sections.map((section, sIdx) => {
+        const isStepActive = sIdx + 1 === step;
+
+        return (
+          <div
+            key={section.key}
+            className={`space-y-5 ${isStepActive ? "animate-in fade-in slide-in-from-right-4 duration-300" : "hidden"}`}
+          >
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-foreground tracking-tight">
+                {section.title}
+              </h3>
+              {section.description && (
+                <p className="text-sm text-foreground-muted">{section.description}</p>
+              )}
+            </div>
+
+            {section.fields.map((field) => {
+              if (!isVisible(field)) return null;
+              const atom = INTAKE_ATOMS[field.key];
+              if (!atom) return null;
+
+              switch (field.key) {
+                case "contact.name":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <input
+                          name="contactName"
+                          type="text"
+                          required={atom.required && isStepActive}
+                          className={controlClass}
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  );
+                case "contact.email":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <input
+                          name="email"
+                          type="email"
+                          required={atom.required && isStepActive}
+                          className={controlClass}
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  );
+                case "contact.phone":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <input
+                          name="phone"
+                          type="tel"
+                          required={atom.required && isStepActive}
+                          className={controlClass}
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  );
+                case "address.service":
+                  return (
+                    <div key={field.key}>
+                      <PublicIntakeServiceAddressField
+                        googleMapsApiKey={googleMapsApiKey}
+                        fieldLabelClass={fieldLabelClass}
+                        controlClass={controlClass}
+                        required={atom.required && isStepActive}
+                        defaultDisplayAddress={fieldValues[field.key] as string ?? ""}
+                        initialStructuredJson={fieldValues["address.service.structured"] as string ?? ""}
+                        onDisplayAddressChange={(val) => updateFieldValue(field.key, val)}
+                        onStructuredJsonChange={(val) => updateFieldValue("address.service.structured", val)}
+                      />
+                    </div>
+                  );
+                case "scope.text":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <textarea
+                          name="requestDetails"
+                          required={atom.required && isStepActive}
+                          rows={5}
+                          className={`${controlClass} min-h-[8rem] resize-y`}
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  );
+                case "scope.photos":
+                  return (
+                    <div
+                      key={field.key}
+                      className="rounded-xl border border-border bg-foreground/[0.01] p-4"
+                    >
+                      <p className={`${fieldLabelClass} mb-4`}>{atom.label}</p>
+                      <MultiFilePicker onFilesSelected={handleFilesChange} />
+                    </div>
+                  );
+                case "timing.bucket":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <select
+                          name="neededByBucket"
+                          className={controlClass}
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        >
+                          {NEEDED_BY_BUCKET_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                case "timing.specificDate":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-foreground-subtle" />
+                          <input
+                            name="neededByDate"
+                            type="date"
+                            className={`${controlClass} pl-10`}
+                            defaultValue={fieldValues[field.key] as string ?? ""}
+                            onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  );
+                case "request.type":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        {requestTypeOptions && requestTypeOptions.length > 0 ? (
+                          <select
+                            name="requestType"
+                            className={controlClass}
+                            defaultValue={fieldValues[field.key] as string ?? requestTypeOptions[0]?.value ?? ""}
+                            onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                          >
+                            {requestTypeOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            name="requestType"
+                            type="text"
+                            className={controlClass}
+                            placeholder="e.g. Repair, Installation"
+                            defaultValue={fieldValues[field.key] as string ?? ""}
+                            onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                          />
+                        )}
+                      </label>
+                    </div>
+                  );
+                case "consent.terms":
+                  return (
+                    <div key={field.key} className="flex items-start gap-3 mt-2">
+                      <input
+                        name="consentTerms"
+                        type="checkbox"
+                        required={atom.required && isStepActive}
+                        className="mt-1 size-4 rounded border-border text-accent focus:ring-accent"
+                        defaultChecked={fieldValues[field.key] as boolean ?? false}
+                        onChange={(e) => updateFieldValue(field.key, e.target.checked)}
+                      />
+                      <span className="text-xs text-foreground-muted leading-relaxed">
+                        I agree to be contacted regarding my request.
+                      </span>
+                    </div>
+                  );
+                case "preferred.contactMethod":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <select
+                          name="preferredContactMethod"
+                          className={controlClass}
+                          defaultValue={fieldValues[field.key] as string ?? "EMAIL"}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        >
+                          <option value="EMAIL">Email</option>
+                          <option value="PHONE">Phone Call</option>
+                          <option value="SMS">Text Message</option>
+                        </select>
+                      </label>
+                    </div>
+                  );
+                case "visit.requestedDate":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-foreground-subtle" />
+                          <input
+                            name="requestedVisitDate"
+                            type="date"
+                            className={`${controlClass} pl-10`}
+                            defaultValue={fieldValues[field.key] as string ?? ""}
+                            onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  );
+                case "visit.window":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-foreground-subtle" />
+                          <select
+                            name="requestedVisitWindow"
+                            className={`${controlClass} pl-10`}
+                            defaultValue={fieldValues[field.key] as string ?? ""}
+                            onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                          >
+                            <option value="">Any time</option>
+                            <option value="MORNING">Morning (8am - 12pm)</option>
+                            <option value="AFTERNOON">Afternoon (12pm - 4pm)</option>
+                            <option value="EVENING">Evening (4pm - 8pm)</option>
+                          </select>
+                        </div>
+                      </label>
+                    </div>
+                  );
+                case "visit.notes":
+                  return (
+                    <div key={field.key}>
+                      <label className="block">
+                        <span className={fieldLabelClass}>{atom.label}</span>
+                        <textarea
+                          name="requestedVisitNotes"
+                          rows={3}
+                          className={controlClass}
+                          placeholder="Any special instructions for the visit?"
+                          defaultValue={fieldValues[field.key] as string ?? ""}
+                          onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </div>
+        );
+      })}
+
+      {sections.length > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row pt-4">
+          {step > 1 && (
+            <button
+              key="back-button"
+              type="button"
+              onClick={handleBack}
+              className={secondaryButtonClass}
+            >
+              <ChevronLeft className="mr-2 size-4" />
+              Back
+            </button>
+          )}
+          {step < sections.length && (
+            <button
+              key="next-button"
+              type="button"
+              onClick={handleNext}
+              className={primaryButtonClass}
+            >
+              Next
+              <ChevronRight className="ml-2 size-4" />
+            </button>
+          )}
+          {step === sections.length && (
+            <button
+              key="submit-button"
+              type="submit"
+              className={primaryButtonClass}
+              disabled={isPending || isUploading}
+            >
+              {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              {isUploading ? "Uploading..." : "Submit Request"}
+            </button>
+          )}
+        </div>
+      )}
+    </form>
+  );
+}

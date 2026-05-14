@@ -4,7 +4,7 @@
  * QuotesListClient — Quotes page list rows + native `<dialog>` popup that
  * hosts `<QuoteWorkSurface mode="standard" />`.
  *
- * Mirrors `SalesIntakesListClient`:
+ * Mirrors `LeadsListClient`:
  *   - row click opens the popup (no hard navigation to /quotes/[id])
  *   - native `<dialog>` chrome with click-outside + Escape close
  *   - popup body re-keys on the open quote so internal state resets when the
@@ -31,11 +31,11 @@ import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-load
 
 export type SerializedQuoteListRow = {
   id: string;
-  /** Display title — sales intake title → customer name → quote title (same rule the surface uses). */
+  /** Display title — lead title → customer name → quote title (same rule the surface uses). */
   primaryIdentity: string;
   /** Internal quote title when distinct from primary identity. */
   secondaryIdentity: string | null;
-  /** "Customer · Company · Sales Intake: Title · Contact" or "No customer or sales intake linked". */
+  /** "Customer · Company · Lead: Title · Contact" or "No customer or lead linked". */
   contextLine: string;
   /** Compact staleness, e.g. `Intake 2D 3H · Quote 6H` or `Quote 6H`. */
   ageLine: string;

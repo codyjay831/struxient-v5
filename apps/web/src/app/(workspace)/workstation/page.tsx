@@ -7,12 +7,11 @@ import {
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
-import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
 import {
   queryWorkstationWorkItems,
-  getWorkstationSummary,
-  compareWorkstationSalesIntakeOrder,
+  compareWorkstationLeadOrder,
   type WorkstationWorkItem,
   type WorkstationLens,
   type WorkstationFilterCategory,
@@ -21,28 +20,29 @@ import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
-import { WorkstationSalesIntakePanel } from "@/components/workstation/workstation-sales-intake-panel";
+import { WorkstationLeadPanel } from "@/components/workstation/workstation-lead-panel";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { db } from "@/lib/db";
 import { JobTaskStatus } from "@prisma/client";
-import { getSalesIntakeCommercialProgress } from "@/lib/sales-commercial-progress";
+import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import {
-  formatSalesIntakeSource,
-  formatSalesIntakeStatus,
-  salesIntakeStatusBadgeTone,
-} from "@/lib/sales-intake-display";
+  formatLeadChannel,
+  formatLeadStatus,
+  leadStatusBadgeTone,
+} from "@/lib/lead-display";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
-import { jobsiteLineFromSalesIntake } from "@/lib/jobsite-address";
-import { intakeSnapshotForCustomerFromSalesIntake } from "@/lib/customer-service-location-from-sales-intake";
-import type { SalesIntakeServiceAddressContext } from "@/app/(workspace)/sales/sales-workspace-actions";
+import { jobsiteLineFromLead } from "@/lib/jobsite-address";
+import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
+import { projectLead, deriveLeadTitle } from "@/lib/lead/lead-projection";
+import type { LeadServiceAddressContext } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { 
   WorkstationFocusCard, 
   WorkstationQueueItem, 
   WorkstationClearedState,
   WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
-import { Plus, Search, ListOrdered, History, Zap, Settings2 } from "lucide-react";
+import { Plus, ListOrdered, History, Zap } from "lucide-react";
 import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-settings-drawer";
 
 export const dynamic = "force-dynamic";
@@ -76,8 +76,6 @@ export default async function WorkstationTodayLensPage({
 
   const allItems = await queryWorkstationWorkItems(ctx.organizationId, urgentThresholdHours);
 
-  const summary = getWorkstationSummary(allItems);
-
   // Fetch recent activity for Priority 3 Notifications/Activity
   const recentActivity = await db.jobActivity.findMany({
     where: { job: { organizationId: ctx.organizationId } },
@@ -89,8 +87,8 @@ export default async function WorkstationTodayLensPage({
     },
   });
 
-  const unreviewedIntakesCount = await db.salesIntake.count({
-    where: { organizationId: ctx.organizationId, status: "OPEN" },
+  const unreviewedIntakesCount = await db.lead.count({
+    where: { organizationId: ctx.organizationId, status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] } },
   });
 
   // Filter by lens
@@ -117,7 +115,7 @@ export default async function WorkstationTodayLensPage({
   };
 
   // Prioritize for the selected view
-  const prioritizedItems = [...filteredItems].sort(compareWorkstationSalesIntakeOrder);
+  const prioritizedItems = [...filteredItems].sort(compareWorkstationLeadOrder);
 
   const focusItem = prioritizedItems[0];
   const queueItems = prioritizedItems.slice(1);
@@ -139,7 +137,7 @@ export default async function WorkstationTodayLensPage({
       {showQuickActions && (
         <section className="flex flex-wrap items-center gap-2">
           {quickActions.includes("new-intake") && (
-            <Link href="/sales/new" className={quickActionClass}>
+            <Link href="/leads/new" className={quickActionClass}>
               <div className="relative">
                 <Plus className="size-3.5" />
                 {unreviewedIntakesCount > 0 && (
@@ -153,7 +151,7 @@ export default async function WorkstationTodayLensPage({
             </Link>
           )}
           {quickActions.includes("new-quote") && (
-            <Link href="/sales?tab=proposals&new=true" className={quickActionClass}>
+            <Link href="/quotes/new" className={quickActionClass}>
               <Plus className="size-3.5" />
               New Quote
             </Link>
@@ -298,8 +296,8 @@ export default async function WorkstationTodayLensPage({
             {selectedItem.kind === "job" && (
               <JobDetailWrapper jobId={selectedItem.recordId} />
             )}
-            {selectedItem.kind === "sales-intake" && (
-              <SalesIntakeDetailWrapper salesIntakeId={selectedItem.recordId} />
+            {selectedItem.kind === "lead" && (
+              <LeadDetailWrapper leadId={selectedItem.recordId} />
             )}
             {selectedItem.kind === "quote" && (
               <QuoteDetailWrapper quoteId={selectedItem.recordId} />
@@ -327,9 +325,9 @@ export default async function WorkstationTodayLensPage({
 
         <HandoffPanel
           title="Authoritative record routes"
-          description="Quotes and sales intakes sit under Sales; customer rows under Relationships; job and schedule placeholders under Work."
+          description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work."
         >
-          <Link href="/sales?tab=proposals" className={handoffMutedLinkClass}>
+          <Link href="/quotes" className={handoffMutedLinkClass}>
             Quotes
           </Link>
           <Link href="/customers" className={handoffMutedLinkClass}>
@@ -353,7 +351,10 @@ async function TaskDetailWrapper({ taskId }: { taskId: string }) {
 
   if (!payload) return null;
 
-  return <TaskWorkSurface {...payload} clearWorkstationSelectionOnComplete />;
+  const { getLiveSignals } = await import("@/lib/signal-bus");
+  const liveSignals = await getLiveSignals(payload.jobId);
+
+  return <TaskWorkSurface {...payload} liveSignals={liveSignals} clearWorkstationSelectionOnComplete />;
 }
 
 async function JobDetailWrapper({ jobId }: { jobId: string }) {
@@ -363,7 +364,7 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
     include: {
       stages: true,
       tasks: {
-        where: { status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
+        where: { status: JobTaskStatus.TODO },
         orderBy: { sortOrder: "asc" },
         take: 1,
       },
@@ -374,10 +375,10 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
   const stageCount = job.stages.length;
   const activeTaskCount = await db.jobTask.count({
-    where: { 
-      jobId: job.id, 
-      status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] },
-      job: { organizationId: ctx.organizationId }
+    where: {
+      jobId: job.id,
+      status: JobTaskStatus.TODO,
+      job: { organizationId: ctx.organizationId },
     },
   });
 
@@ -392,24 +393,22 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
 const WORKSTATION_CUSTOMER_LINK_FETCH_CAP = 500;
 
-async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: string }) {
+async function LeadDetailWrapper({ leadId }: { leadId: string }) {
   const ctx = await getRequestContextOrThrow();
 
-  const salesIntake = await db.salesIntake.findFirst({
-    where: { id: salesIntakeId, organizationId: ctx.organizationId },
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, organizationId: ctx.organizationId },
 
     select: {
       id: true,
       status: true,
-      title: true,
-      contactName: true,
-      email: true,
-      phone: true,
-      notes: true,
-      source: true,
+      contact: true,
+      request: true,
+      address: true,
+      signals: true,
+      channel: true,
       customerId: true,
       createdAt: true,
-      publicIntakeServiceLocation: true,
       customer: { select: { id: true, displayName: true } },
       visitRequests: {
         where: { status: "PENDING" },
@@ -418,15 +417,29 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
     },
   });
 
-  if (!salesIntake) return null;
+  if (!lead) return null;
 
-  const jobsiteAddressLine = jobsiteLineFromSalesIntake({
-    publicIntakeServiceLocation: salesIntake.publicIntakeServiceLocation,
-    notes: salesIntake.notes,
+  const projected = projectLead({
+    id: lead.id,
+    status: lead.status,
+    channel: lead.channel,
+    customerId: lead.customerId,
+    convertedAt: null,
+    createdAt: lead.createdAt,
+    updatedAt: lead.createdAt,
+    contact: lead.contact,
+    request: lead.request,
+    address: lead.address,
+    signals: lead.signals,
+  });
+
+  const jobsiteAddressLine = jobsiteLineFromLead({
+    address: lead.address,
+    signals: lead.signals,
   });
 
   const linkedQuotes = await db.quote.findMany({
-    where: { salesIntakeId: salesIntake.id, organizationId: ctx.organizationId },
+    where: { leadId: lead.id, organizationId: ctx.organizationId },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -439,12 +452,12 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
     },
   });
 
-  const progress = getSalesIntakeCommercialProgress({
-    salesIntake: {
-      status: salesIntake.status,
-      customerId: salesIntake.customerId,
-      email: salesIntake.email,
-      phone: salesIntake.phone,
+  const progress = getLeadCommercialProgress({
+    lead: {
+      status: lead.status,
+      customerId: lead.customerId,
+      email: projected.email,
+      phone: projected.phone,
     },
     quotes: linkedQuotes.map((q) => ({
       id: q.id,
@@ -457,7 +470,7 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
     })),
   });
 
-  const hasCustomer = salesIntake.customerId !== null;
+  const hasCustomer = lead.customerId !== null;
   let customersForLink: { id: string; displayName: string }[] | undefined;
   if (!hasCustomer) {
     const rows = await db.customer.findMany({
@@ -479,10 +492,10 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
       statusTone: quoteStatusBadgeTone(q.status),
       totalCents: q.totalCents,
       lineItemCount: q._count.lineItems,
-      href: `/sales?tab=proposals/${q.id}`,
+      href: `/quotes/${q.id}`,
     }));
 
-  /* Embed QuoteWorkSurface(standard) inside the Sales Intake Quote tab when an active
+  /* Embed QuoteWorkSurface(standard) inside the Lead Quote tab when an active
    * quote exists. Same loader used by the Workstation quote drawer + full
    * Quote page so all containers see identical readiness state. */
   const activeQuoteId = progress.activeQuote?.id ?? null;
@@ -490,11 +503,11 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
     ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
     : null;
 
-  /* Pre-load Service address context for the Sales Intake workspace Customer Info
-   * block (same shape the Sales Intake full page passes). */
-  const intakeSnapshot = intakeSnapshotForCustomerFromSalesIntake({
-    publicIntakeServiceLocation: salesIntake.publicIntakeServiceLocation,
-    notes: salesIntake.notes,
+  /* Pre-load Service address context for the Lead workspace Customer Info
+   * block (same shape the Lead full page passes). */
+  const intakeSnapshot = intakeSnapshotForCustomerFromLead({
+    address: lead.address,
+    signals: lead.signals,
   });
   const intakeForBlock = intakeSnapshot
     ? {
@@ -505,10 +518,10 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
       }
     : { defaultDisplayAddress: "", structuredJson: "" };
 
-  let serviceAddressContext: SalesIntakeServiceAddressContext;
-  if (salesIntake.customerId) {
+  let serviceAddressContext: LeadServiceAddressContext;
+  if (lead.customerId) {
     const customerLocations = await db.customerServiceLocation.findMany({
-      where: { customerId: salesIntake.customerId, organizationId: ctx.organizationId },
+      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -524,13 +537,13 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
         longitude: true,
         source: true,
         isPrimary: true,
-        createdFromSalesIntake: { select: { id: true, title: true, source: true } },
+        createdFromLead: { select: { id: true, contact: true, request: true, channel: true } },
       },
     });
     serviceAddressContext = {
       customer: {
-        customerId: salesIntake.customerId,
-        customerHref: `/customers/${salesIntake.customerId}`,
+        customerId: lead.customerId,
+        customerHref: `/customers/${lead.customerId}`,
         serviceLocations: customerLocations.map((loc) => ({
           id: loc.id,
           formattedAddress: loc.formattedAddress,
@@ -545,11 +558,12 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
           longitude: loc.longitude,
           source: loc.source,
           isPrimary: loc.isPrimary,
-          createdFromSalesIntake: loc.createdFromSalesIntake
+          createdFromLead: loc.createdFromLead
             ? {
-                id: loc.createdFromSalesIntake.id,
-                title: loc.createdFromSalesIntake.title,
-                source: loc.createdFromSalesIntake.source,
+                id: loc.createdFromLead.id,
+                title: deriveLeadTitle(loc.createdFromLead.contact, loc.createdFromLead.request),
+                channel: loc.createdFromLead.channel,
+                source: loc.createdFromLead.channel,
               }
             : null,
         })),
@@ -562,33 +576,33 @@ async function SalesIntakeDetailWrapper({ salesIntakeId }: { salesIntakeId: stri
 
 
   return (
-    <WorkstationSalesIntakePanel
-      salesIntakeId={salesIntake.id}
-      salesIntakeTitle={salesIntake.title}
-      contactName={salesIntake.contactName}
-      email={salesIntake.email}
-      phone={salesIntake.phone}
-      notes={salesIntake.notes}
-      statusValue={salesIntake.status}
-      statusLabel={formatSalesIntakeStatus(salesIntake.status)}
-      statusTone={salesIntakeStatusBadgeTone(salesIntake.status)}
-      sourceLabel={formatSalesIntakeSource(salesIntake.source)}
-      source={salesIntake.source}
-      createdAtLabel={salesIntake.createdAt.toLocaleDateString("en-US", {
+    <WorkstationLeadPanel
+      leadId={lead.id}
+      leadTitle={projected.title}
+      contactName={projected.contactName}
+      email={projected.email}
+      phone={projected.phone}
+      notes={projected.notes}
+      statusValue={lead.status}
+      statusLabel={formatLeadStatus(lead.status)}
+      statusTone={leadStatusBadgeTone(lead.status)}
+      sourceLabel={formatLeadChannel(lead.channel)}
+      source={lead.channel}
+      createdAtLabel={lead.createdAt.toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
       })}
-      customerId={salesIntake.customerId}
-      customerDisplayName={salesIntake.customer?.displayName ?? null}
-      customerHref={salesIntake.customer ? `/customers/${salesIntake.customer.id}` : null}
+      customerId={lead.customerId}
+      customerDisplayName={lead.customer?.displayName ?? null}
+      customerHref={lead.customer ? `/customers/${lead.customer.id}` : null}
       customersForLink={customersForLink}
       linkedQuotes={surfaceQuotes}
       progress={progress}
       activeQuoteWorkSurface={activeQuoteWorkSurface}
       jobsiteAddressLine={jobsiteAddressLine}
       serviceAddressContext={serviceAddressContext}
-      visitRequests={salesIntake.visitRequests.map((vr) => ({
+      visitRequests={lead.visitRequests.map((vr) => ({
         id: vr.id,
         requestedDate: vr.requestedDate,
         requestedDateLabel: vr.requestedDate

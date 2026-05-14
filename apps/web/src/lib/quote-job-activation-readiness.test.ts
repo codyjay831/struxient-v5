@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  QuoteLineExecutionMergeMode,
-  QuoteLineExecutionReviewStatus,
   QuoteStatus,
 } from "@prisma/client";
 import {
@@ -14,16 +12,14 @@ const line = (
   overrides: Partial<{
     id: string;
     description: string;
-    executionReviewStatus: QuoteLineExecutionReviewStatus;
-    executionMergeMode: QuoteLineExecutionMergeMode;
-    taskCount: number;
+    tasks: { id: string; title: string; providesSignals: string[]; requiresSignals: string[]; hardSignal: boolean }[];
   }> = {},
 ) => ({
   id: "line-1",
   description: "Rough-in",
-  executionReviewStatus: QuoteLineExecutionReviewStatus.UNREVIEWED,
-  executionMergeMode: QuoteLineExecutionMergeMode.MERGE_INTO_JOB_STAGES,
-  taskCount: 1,
+  tasks: [
+    { id: "task-1", title: "Task 1", providesSignals: [], requiresSignals: [], hardSignal: false }
+  ],
   ...overrides,
 });
 
@@ -49,27 +45,35 @@ test("evaluateQuoteJobActivationReadiness blocks when quote is not approved", ()
   assert.equal(quoteActivationOnlyBlockedByApproval(readiness), true);
 });
 
-test("evaluateQuoteJobActivationReadiness blocks lines that need execution review", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.APPROVED,
-    lines: [line({ taskCount: 0 })],
-  });
-
-  assert.equal(readiness.ready, false);
-  assert.equal(readiness.blockReasons[0]?.code, "LINE_NEEDS_EXECUTION_REVIEW");
-});
-
-test("evaluateQuoteJobActivationReadiness blocks commercial-only lines that still have tasks", () => {
+test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provider", () => {
   const readiness = evaluateQuoteJobActivationReadiness({
     status: QuoteStatus.APPROVED,
     lines: [
       line({
-        executionReviewStatus: QuoteLineExecutionReviewStatus.NO_EXECUTION_NEEDED,
-        taskCount: 2,
-      }),
+        tasks: [
+          { id: "task-1", title: "Task 1", providesSignals: [], requiresSignals: ["hard-fact"], hardSignal: true }
+        ]
+      })
     ],
   });
 
   assert.equal(readiness.ready, false);
-  assert.equal(readiness.blockReasons[0]?.code, "LINE_COMMERCIAL_ONLY_HAS_TASKS");
+  assert.equal(readiness.blockReasons[0]?.code, "HARD_SIGNAL_NO_PROVIDER");
+});
+
+test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => {
+  const readiness = evaluateQuoteJobActivationReadiness({
+    status: QuoteStatus.APPROVED,
+    lines: [
+      line({
+        tasks: [
+          { id: "task-1", title: "Task 1", providesSignals: ["signal-a"], requiresSignals: ["signal-b"], hardSignal: false },
+          { id: "task-2", title: "Task 2", providesSignals: ["signal-b"], requiresSignals: ["signal-a"], hardSignal: false }
+        ]
+      })
+    ],
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.blockReasons[0]?.code, "CIRCULAR_SIGNAL_DEPENDENCY");
 });

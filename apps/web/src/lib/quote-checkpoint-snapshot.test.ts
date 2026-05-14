@@ -21,7 +21,7 @@ test("parseQuoteSendCheckpointSnapshot accepts a minimal valid payload", () => {
       quoteId: "quote-1",
       documentTitle: "Proposal",
       customer: null,
-      salesIntake: null,
+      lead: null,
       lineItems: [
         {
           id: "line-1",

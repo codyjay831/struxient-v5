@@ -12,7 +12,7 @@
  * destination page can detect the return context and surface a back link.
  *
  * @example
- *   buildWorkstationHref("/sales", "investigate")
+ *   buildWorkstationHref("/leads", "investigate")
  *   // → "/sales?from=workstation&section=investigate"
  */
 export function buildWorkstationHref(href: string, section: string): string {

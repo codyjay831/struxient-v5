@@ -30,7 +30,7 @@ export default async function WorkstationJobsLensPage({
     where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE },
     include: {
       customer: true,
-      salesIntake: true,
+      lead: true,
     }
   });
 
@@ -61,7 +61,7 @@ export default async function WorkstationJobsLensPage({
               id: `job-${selectedJob!.id}`,
               kind: "job",
               title: selectedJob!.title,
-              subtitle: selectedJob!.customer?.displayName || selectedJob!.salesIntake?.title || undefined,
+              subtitle: selectedJob!.customer?.displayName || selectedJob!.lead?.title || undefined,
               status: selectedJob!.status,
               priority: "medium",
               group: "active",
@@ -91,7 +91,7 @@ export default async function WorkstationJobsLensPage({
                   id: itemId,
                   kind: "job",
                   title: job.title,
-                  subtitle: job.customer?.displayName || job.salesIntake?.title || "No linked record",
+                  subtitle: job.customer?.displayName || job.lead?.title || "No linked record",
                   priority: attentionItem?.priority || "medium",
                   lens: attentionItem?.lens || "today",
                   filterCategory: "jobs",
@@ -130,7 +130,7 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
     include: {
       stages: true,
       tasks: {
-        where: { status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] } },
+        where: { status: JobTaskStatus.TODO },
         orderBy: { sortOrder: "asc" },
         take: 1,
       },
@@ -141,10 +141,10 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
   const stageCount = job.stages.length;
   const activeTaskCount = await db.jobTask.count({
-    where: { 
-      jobId: job.id, 
-      status: { in: [JobTaskStatus.TODO, JobTaskStatus.IN_PROGRESS] },
-      job: { organizationId: ctx.organizationId }
+    where: {
+      jobId: job.id,
+      status: JobTaskStatus.TODO,
+      job: { organizationId: ctx.organizationId },
     },
   });
 

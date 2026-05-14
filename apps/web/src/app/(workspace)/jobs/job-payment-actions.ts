@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { formatCents } from "@/lib/job-payment-display";
+import { publishSignal } from "@/lib/signal-bus";
 
 export type CreateJobPaymentRequirementInput = {
   jobId: string;
@@ -92,6 +93,12 @@ export async function markJobPaymentRequirementPaidAction(requirementId: string)
     },
   });
 
+  // Publish payment-cleared signal
+  await publishSignal({
+    jobId: requirement.jobId,
+    name: "payment-cleared",
+  });
+
   await recordJobActivity({
     organizationId,
     jobId: requirement.jobId,
@@ -127,6 +134,12 @@ export async function waiveJobPaymentRequirementAction(requirementId: string) {
       status: JobPaymentRequirementStatus.WAIVED,
       waivedAt: new Date(),
     },
+  });
+
+  // Publish payment-cleared signal
+  await publishSignal({
+    jobId: requirement.jobId,
+    name: "payment-cleared",
   });
 
   await recordJobActivity({

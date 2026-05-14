@@ -32,6 +32,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | v1 product locks: RBAC, states, money, portal, issues, Workstation, phasing |
 | [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | **Working quote vs hidden checkpoints**, job as execution, activity layer; UX/naming guardrails (current-state-first) |
 | [glossary.md](./glossary.md) | Ubiquitous language |
+| [signals.md](./signals.md) | **Signal-based readiness engine**: Provides, Requires, Signal Bus, and AI Secretary |
 
 ## Reading order (suggested)
 

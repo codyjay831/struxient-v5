@@ -9,12 +9,11 @@
  *
  *   - org-scoped via `getRequestContextOrThrow`
  *   - re-validated by `loadQuoteWorkSurface` (which also checks org scope on
- *     the customer/sales intake/job relations before exposing them)
+ *     the customer/lead/job relations before exposing them)
  *   - no `redirect`, no `revalidatePath`, no mutations
  *   - never trusts a client-supplied org id
  */
 
-import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   loadQuoteWorkSurface,
@@ -27,7 +26,7 @@ export type LoadQuoteWorkSurfaceResult =
 
 /**
  * Lazily fetches the QuoteWorkSurface payload for a single quote. Used by the
- * Quotes list popup so the sales intakes/quotes list queries do not have to preload
+ * Quotes list popup so the leads/quotes list queries do not have to preload
  * activation readiness + checkpoint data per row.
  */
 export async function loadQuoteWorkSurfaceAction(

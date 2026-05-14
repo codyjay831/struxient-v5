@@ -1,5 +1,5 @@
 import { JobActivityType, Prisma } from "@prisma/client";
-import { db } from "./db";
+import { db, type ExtendedTransactionClient } from "./db";
 
 export type RecordJobActivityInput = {
   organizationId: string;
@@ -21,7 +21,7 @@ export type RecordJobActivityInput = {
  */
 export async function recordJobActivity(
   input: RecordJobActivityInput,
-  tx: Prisma.TransactionClient = db,
+  tx: ExtendedTransactionClient = db,
 ) {
   return await tx.jobActivity.create({
     data: {
