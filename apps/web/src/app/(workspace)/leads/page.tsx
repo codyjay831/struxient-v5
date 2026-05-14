@@ -7,8 +7,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
   LeadsListClient,
-  type SerializedLeadRow,
 } from "@/components/leads/lead-list-client";
+import {
+  serializeLeadListRow,
+  type SerializedLeadRow,
+} from "@/lib/serialize-lead-list-row";
 import { LeadListSearchForm } from "@/components/leads/lead-list-search-form";
 import { LeadListFiltersClient } from "@/components/leads/lead-list-filters-client";
 import { LeadScaffoldingDialog } from "@/components/leads/lead-scaffolding-dialog";
@@ -20,22 +23,7 @@ import {
   LEAD_LIST_DEFAULT_SORT,
   type LeadListSortParam,
 } from "@/lib/lead-list-query";
-import {
-  readSignals,
-} from "@/lib/lead/lead-projection";
-import {
-  formatLeadStatus,
-  leadStatusBadgeTone,
-  formatLeadChannel,
-} from "@/lib/lead-display";
-import {
-  getLeadCommercialProgress,
-  serializeLeadProgressAction,
-} from "@/lib/lead-commercial-progress";
-import { jobsiteLineFromLead } from "@/lib/jobsite-address";
-import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
-import { formatCompactAge } from "@/lib/compact-age";
 import { Users, Search, Globe } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -102,80 +90,9 @@ export default async function LeadsPage({
     db.lead.count({ where: { organizationId: ctx.organizationId } }),
   ]);
 
-  const serializedLeads: SerializedLeadRow[] = leads.map((lead) => {
-    const progressQuoteInputs = lead.quotes.map((q) => ({
-      id: q.id,
-      title: q.title,
-      status: q.status,
-      totalCents: q.totalCents,
-      lineItemCount: q._count.lineItems,
-      updatedAt: q.updatedAt,
-      job:
-        q.job && q.job.organizationId === ctx.organizationId
-          ? { id: q.id, status: q.job.status }
-          : null,
-    }));
-
-    const progress = getLeadCommercialProgress({
-      lead: {
-        status: lead.status,
-        customerId: lead.customerId,
-        email: lead.email,
-        phone: lead.phone,
-      },
-      quotes: progressQuoteInputs,
-    });
-
-    const signals = readSignals(lead.signals);
-
-    return {
-      id: lead.id,
-      title: lead.title,
-      contactName: lead.contactName,
-      email: lead.email,
-      phone: lead.phone,
-      notes: typeof signals.notes === "string" ? signals.notes : null,
-      source: lead.channel,
-      sourceLabel: formatLeadChannel(lead.channel),
-      statusLabel: formatLeadStatus(lead.status),
-      statusTone: leadStatusBadgeTone(lead.status),
-      customerId: lead.customerId,
-      customerDisplayName: lead.customer?.displayName ?? null,
-      customerHref: lead.customer ? `/customers/${lead.customer.id}` : null,
-      createdAtLabel: lead.createdAt.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      }),
-      ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
-      progressLabel: progress.label,
-      progressDescription: progress.description,
-      progressTone: progress.badgeTone,
-      progressState: progress.state,
-      progressPrimaryAction: serializeLeadProgressAction(progress.primaryAction, {
-        leadId: lead.id,
-      }),
-      progressSecondaryAction: serializeLeadProgressAction(progress.secondaryAction, {
-        leadId: lead.id,
-      }),
-      activeJobId: progress.activeJob?.id ?? null,
-      activeJobStatus: progress.activeJob?.status ?? null,
-      quotes: lead.quotes
-        .filter((q) => q.status !== "ARCHIVED")
-        .map((q) => ({
-          id: q.id,
-          title: q.title,
-          statusLabel: formatQuoteStatus(q.status),
-          statusTone: quoteStatusBadgeTone(q.status),
-          totalCents: q.totalCents,
-          lineItemCount: q._count.lineItems,
-          href: `/quotes/${q.id}`,
-        })),
-      leadHref: `/leads/${lead.id}`,
-      newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(lead.id)}`,
-      jobsiteAddressLine: jobsiteLineFromLead(lead),
-    };
-  });
+  const serializedLeads: SerializedLeadRow[] = leads.map((lead) =>
+    serializeLeadListRow(lead, ctx.organizationId, now),
+  );
 
   const hasActiveListFilters = q.length > 0 || sort !== LEAD_LIST_DEFAULT_SORT;
 

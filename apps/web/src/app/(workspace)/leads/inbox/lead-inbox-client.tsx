@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import type { LeadChannel, LeadStatus } from "@prisma/client";
@@ -20,13 +20,23 @@ import {
   Filter,
   GitMerge,
   Loader2,
-  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   archiveLeadInboxAction,
   createQuoteFromLeadWorkspaceAction,
+  loadLeadActiveQuoteWorkSurfaceAction,
+  loadLeadServiceAddressContextAction,
 } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { useRouter } from "next/navigation";
+import {
+  LeadWorkSurface,
+  type LeadWorkSurfaceActiveQuotePayload,
+  type LeadWorkSurfaceHandle,
+} from "@/components/work-surfaces/lead-work-surface";
+import { adaptLeadRow } from "@/lib/lead-work-surface-adapters";
+import { patchSerializedLeadRowAfterQuoteStarted } from "@/lib/lead-graduation-lifecycle";
+import type { SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 
 export type InboxLeadRow = {
   id: string;
@@ -47,32 +57,54 @@ export type CandidateRow = {
 
 type LeadInboxClientProps = {
   initialLeads: InboxLeadRow[];
+  workspaceLeads: SerializedLeadRow[];
   candidates: CandidateRow[];
 };
 
-export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientProps) {
+export function LeadInboxClient({
+  initialLeads,
+  workspaceLeads: initialWorkspaceLeads,
+  candidates,
+}: LeadInboxClientProps) {
   const router = useRouter();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(initialLeads[0]?.id || null);
   const [leads, setLeads] = useState(initialLeads);
+  const [workspaceLeads, setWorkspaceLeads] = useState(initialWorkspaceLeads);
   const [searchQuery, setSearchQuery] = useState("");
   const [isPromoting, setIsPromoting] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const workSurfaceRef = useRef<LeadWorkSurfaceHandle>(null);
 
-  const selectedLead = leads.find(l => l.id === selectedLeadId);
+  const selectedLead = leads.find((l) => l.id === selectedLeadId);
+  const selectedWorkspaceLead = workspaceLeads.find((l) => l.id === selectedLeadId);
+
   const candidateIds = selectedLead?.signals.duplicateCandidateIds ?? [];
-  const leadCandidates = candidates.filter(c => candidateIds.includes(c.id));
+  const leadCandidates = candidates.filter((c) => candidateIds.includes(c.id));
+
+  const handleQuoteStarted = useCallback(
+    (args: {
+      quoteId: string;
+      activeQuotePayload: LeadWorkSurfaceActiveQuotePayload | null;
+    }) => {
+      setWorkspaceLeads((prev) => {
+        const base = prev.find((l) => l.id === selectedLeadId);
+        if (!base) return prev;
+        return prev.map((l) =>
+          l.id === selectedLeadId
+            ? patchSerializedLeadRowAfterQuoteStarted(base, args)
+            : l,
+        );
+      });
+    },
+    [selectedLeadId],
+  );
 
   const handlePromote = async () => {
     if (!selectedLeadId) return;
     setIsPromoting(true);
     try {
-      const result = await createQuoteFromLeadWorkspaceAction(selectedLeadId);
-      if (result.success) {
-        router.push(`/quotes/${result.quoteId}`);
-      } else {
-        alert(result.error);
-      }
+      await workSurfaceRef.current?.startQuote();
     } finally {
       setIsPromoting(false);
     }
@@ -84,8 +116,9 @@ export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientPro
     try {
       const result = await archiveLeadInboxAction(selectedLeadId);
       if (result.success) {
+        setLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
+        setWorkspaceLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
         const remaining = leads.filter((l) => l.id !== selectedLeadId);
-        setLeads(remaining);
         setSelectedLeadId(remaining[0]?.id ?? null);
         router.refresh();
       } else {
@@ -103,6 +136,11 @@ export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientPro
     const query = searchQuery.toLowerCase();
     return name.includes(query) || email.includes(query);
   });
+
+  const { data, linkedQuotes } = useMemo(() => {
+    if (!selectedWorkspaceLead) return { data: null, linkedQuotes: [] };
+    return adaptLeadRow(selectedWorkspaceLead);
+  }, [selectedWorkspaceLead]);
 
   return (
     <div className="flex-1 flex overflow-hidden bg-foreground/[0.02]">
@@ -171,15 +209,26 @@ export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientPro
 
       {/* Main Content / Side Panel */}
       <div className="flex-1 flex flex-col overflow-hidden bg-surface">
-        {selectedLead ? (
-          <div className="flex-1 overflow-y-auto">
+        {selectedLead && data ? (
+          <>
             <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-surface z-10 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="size-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
                   <User className="size-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-foreground tracking-tight">{selectedLead.contact.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-foreground tracking-tight">
+                      {selectedLead.contact.name}
+                    </h2>
+                    <Link
+                      href={`/leads/${selectedLead.id}`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-foreground-subtle hover:text-accent transition-colors"
+                      title="Open full lead workspace"
+                    >
+                      <ArrowUpRight className="size-3.5" />
+                    </Link>
+                  </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-xs text-foreground-muted flex items-center gap-1">
                       <Mail className="size-3" />
@@ -194,7 +243,7 @@ export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientPro
               </div>
               <div className="flex items-center gap-2">
                 {leadCandidates.length > 0 && (
-                  <button 
+                  <button
                     onClick={() => setShowMergeDialog(true)}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning hover:bg-warning/20 transition-colors text-xs font-bold"
                   >
@@ -209,30 +258,45 @@ export function LeadInboxClient({ initialLeads, candidates }: LeadInboxClientPro
                   className="p-2 rounded-lg hover:bg-foreground/5 text-foreground-subtle transition-colors disabled:opacity-50"
                   title="Archive"
                 >
-                  {isArchiving ? <Loader2 className="size-5 animate-spin" /> : <Archive className="size-5" />}
+                  {isArchiving ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <Archive className="size-5" />
+                  )}
                 </button>
                 <div className="w-px h-6 bg-border mx-1" />
-                <button 
+                <button
                   onClick={handlePromote}
                   disabled={isPromoting}
                   className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {isPromoting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <CheckCircle2 className="mr-2 size-4" />}
+                  {isPromoting ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-2 size-4" />
+                  )}
                   Promote to Quote
                 </button>
               </div>
             </div>
-            
-            <div className="p-6">
-              <Link
-                href={`/leads/${selectedLead.id}`}
-                className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"
-              >
-                Open full lead workspace
-                <ArrowRight className="size-4" />
-              </Link>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <LeadWorkSurface
+                key={selectedLeadId}
+                ref={workSurfaceRef}
+                mode="standard"
+                lead={data}
+                linkedQuotes={linkedQuotes}
+                loadActiveQuoteWorkSurface={() =>
+                  loadLeadActiveQuoteWorkSurfaceAction(selectedLeadId!)
+                }
+                loadServiceAddressContext={() =>
+                  loadLeadServiceAddressContextAction(selectedLeadId!)
+                }
+                onQuoteStarted={handleQuoteStarted}
+              />
             </div>
-          </div>
+          </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
             <div className="size-16 rounded-full bg-foreground/5 flex items-center justify-center text-foreground-subtle mb-6">

@@ -6,9 +6,11 @@ import { LeadStatus } from "@prisma/client";
 import Link from "next/link";
 import { Globe } from "lucide-react";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { serializeLeadListRow, type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 
 export default async function LeadInboxPage() {
   const ctx = await getRequestContextOrThrow();
+  const now = new Date();
 
   const leads = await db.lead.findMany({
     where: { 
@@ -17,9 +19,18 @@ export default async function LeadInboxPage() {
     },
     orderBy: { createdAt: "desc" },
     include: {
-      events: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
+      customer: { select: { id: true, displayName: true } },
+      quotes: {
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          totalCents: true,
+          updatedAt: true,
+          _count: { select: { lineItems: true } },
+          job: { select: { id: true, status: true, organizationId: true } },
+        },
       },
     },
   });
@@ -42,6 +53,10 @@ export default async function LeadInboxPage() {
     request: readRequest(lead.request),
     signals: readSignals(lead.signals),
   }));
+
+  const workspaceLeads: SerializedLeadRow[] = leads.map((lead) =>
+    serializeLeadListRow(lead, ctx.organizationId, now),
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -73,7 +88,11 @@ export default async function LeadInboxPage() {
           </Link>
         </div>
       </div>
-      <LeadInboxClient initialLeads={inboxLeads} candidates={candidates} />
+      <LeadInboxClient
+        initialLeads={inboxLeads}
+        workspaceLeads={workspaceLeads}
+        candidates={candidates}
+      />
     </div>
   );
 }

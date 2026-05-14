@@ -31,107 +31,13 @@ import {
   loadLeadServiceAddressContextAction,
 } from "@/app/(workspace)/leads/lead-workspace-actions";
 
-/* ─── Serialized types (computed server-side, passed as plain props) ─────── */
+import {
+  type SerializedLeadRow,
+  type SerializedQuoteSummary,
+  type SerializedProgressAction,
+} from "@/lib/serialize-lead-list-row";
 
-export type SerializedProgressAction = LeadWorkSurfaceProgressAction;
-
-export type SerializedQuoteSummary = {
-  id: string;
-  title: string;
-  statusLabel: string;
-  statusTone: StatusBadgeTone;
-  totalCents: number;
-  lineItemCount: number;
-  href: string;
-};
-
-import type { LeadChannel } from "@prisma/client";
-
-export type SerializedLeadRow = {
-  id: string;
-  title: string;
-  contactName: string | null;
-  email: string | null;
-  phone: string | null;
-  notes: string | null;
-  source: LeadChannel;
-  sourceLabel: string;
-  statusLabel: string;
-  statusTone: StatusBadgeTone;
-  customerId: string | null;
-  customerDisplayName: string | null;
-  customerHref: string | null;
-  createdAtLabel: string;
-  /** Server-rendered staleness hint, e.g. `Age 2D 3H`. */
-  ageLabel: string;
-  /** Optional value hint, e.g. `$1,200`. */
-  valueLabel?: string | null;
-  progressLabel: string;
-  progressDescription: string;
-  progressTone: StatusBadgeTone;
-  progressState: string;
-  progressPrimaryAction: SerializedProgressAction | null;
-  progressSecondaryAction: SerializedProgressAction | null;
-  activeJobId: string | null;
-  activeJobStatus: string | null;
-  /** Non-archived quotes, newest first. */
-  quotes: SerializedQuoteSummary[];
-  /** /leads/[id] */
-  leadHref: string;
-  /** /quotes/new?leadId=[id] */
-  newQuoteHref: string;
-  /** Jobsite / project address when known from this lead. */
-  jobsiteAddressLine: string | null;
-};
-
-/* ─── Adapter: SerializedLeadRow → LeadWorkSurface props ─────────────────── */
-
-function adaptLeadRow(lead: SerializedLeadRow): {
-  data: LeadWorkSurfaceData;
-  linkedQuotes: LeadWorkSurfaceQuote[];
-} {
-  const linkedQuotes: LeadWorkSurfaceQuote[] = lead.quotes.map((q) => ({
-    id: q.id,
-    title: q.title,
-    statusLabel: q.statusLabel,
-    statusTone: q.statusTone,
-    totalCents: q.totalCents,
-    lineItemCount: q.lineItemCount,
-    href: q.href,
-  }));
-
-  const data: LeadWorkSurfaceData = {
-    id: lead.id,
-    title: lead.title,
-    contactName: lead.contactName,
-    email: lead.email,
-    phone: lead.phone,
-    notes: lead.notes,
-    source: lead.source,
-    sourceLabel: lead.sourceLabel,
-    statusLabel: lead.statusLabel,
-    statusTone: lead.statusTone,
-    customerId: lead.customerId,
-    customerDisplayName: lead.customerDisplayName,
-    customerHref: lead.customerHref,
-    createdAtLabel: lead.createdAtLabel,
-    leadHref: lead.leadHref,
-    editHref: `${lead.leadHref}/edit`,
-    newQuoteHref: lead.newQuoteHref,
-    progressLabel: lead.progressLabel,
-    progressDescription: lead.progressDescription,
-    progressTone: lead.progressTone,
-    progressState: lead.progressState,
-    progressPrimaryAction: lead.progressPrimaryAction,
-    progressSecondaryAction: lead.progressSecondaryAction,
-    activeQuoteId: lead.quotes[0]?.id ?? null,
-    activeJobId: lead.activeJobId,
-    activeJobStatus: lead.activeJobStatus,
-    jobsiteAddressLine: lead.jobsiteAddressLine,
-  };
-
-  return { data, linkedQuotes };
-}
+import { adaptLeadRow } from "@/lib/lead-work-surface-adapters";
 
 /* ─── Compact lead row ───────────────────────────────────────────────────── */
 

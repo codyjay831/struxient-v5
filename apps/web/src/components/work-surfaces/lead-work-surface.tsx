@@ -14,7 +14,7 @@
  * The popup at `LeadsListClient` is the visual reference; this component is a
  * faithful extraction of that UX so all three containers share it.
  */
-import { forwardRef, useCallback, useEffect, useRef, useState, useActionState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -1268,163 +1268,176 @@ function QuoteTab({
 
 /* ─── Main export ──────────────────────────────────────────────────────── */
 
-export function LeadWorkSurface({
-  mode,
-  lead,
-  linkedQuotes,
-  customersForLink,
-  matchHints,
-  updateStatusAction,
-  linkLeadAction,
-  initialTab = "overview",
-  activeQuoteWorkSurface,
-  loadActiveQuoteWorkSurface,
-  serviceAddressContext,
-  loadServiceAddressContext,
-  onQuoteStarted,
-}: LeadWorkSurfaceProps) {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<LeadWorkSurfaceTab>(initialTab);
-  const serviceAddressBlockRef = useRef<LeadServiceAddressBlockHandle | null>(null);
+export type LeadWorkSurfaceHandle = {
+  /** Imperatively trigger the "Start Quote" flow (same as the next-step card). */
+  startQuote: () => Promise<void>;
+};
 
-  const requestRef = useRef<HTMLDivElement>(null);
-  const contactRef = useRef<HTMLDivElement>(null);
-  const quoteRef = useRef<HTMLDivElement>(null);
-  const activityRef = useRef<HTMLDivElement>(null);
-
-  const scrollToSection = useCallback(
-    (section: "request" | "contact" | "quote" | "activity") => {
-      const refs = {
-        request: requestRef,
-        contact: contactRef,
-        quote: quoteRef,
-        activity: activityRef,
-      };
-      refs[section].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurfaceProps>(
+  function LeadWorkSurface(
+    {
+      mode,
+      lead,
+      linkedQuotes,
+      customersForLink,
+      matchHints,
+      updateStatusAction,
+      linkLeadAction,
+      initialTab = "overview",
+      activeQuoteWorkSurface,
+      loadActiveQuoteWorkSurface,
+      serviceAddressContext,
+      loadServiceAddressContext,
+      onQuoteStarted,
     },
-    [],
-  );
+    ref,
+  ) {
+    const router = useRouter();
+    const [activeTab, setActiveTab] = useState<LeadWorkSurfaceTab>(initialTab);
+    const serviceAddressBlockRef = useRef<LeadServiceAddressBlockHandle | null>(null);
 
-  /* When the embedded Quote tab routes the user back to the Customer Info
-   * service-address block, we both switch tabs and ask the block to scroll
-   * itself into view + flash a brief emphasis. The flag is consumed by the
-   * post-tab-switch effect below so the focus call runs after the Contact
-   * tab has actually rendered. */
-  const [pendingServiceAddressFocus, setPendingServiceAddressFocus] = useState(false);
+    const requestRef = useRef<HTMLDivElement>(null);
+    const contactRef = useRef<HTMLDivElement>(null);
+    const quoteRef = useRef<HTMLDivElement>(null);
+    const activityRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!pendingServiceAddressFocus) return;
-    if (activeTab !== "contact") return;
-    /* Defer to the next tick so the ContactTab has mounted the block ref. */
-    const t = window.setTimeout(() => {
-      serviceAddressBlockRef.current?.focus();
-      setPendingServiceAddressFocus(false);
-    }, 30);
-    return () => window.clearTimeout(t);
-  }, [pendingServiceAddressFocus, activeTab]);
+    const scrollToSection = useCallback(
+      (section: "request" | "contact" | "quote" | "activity") => {
+        const refs = {
+          request: requestRef,
+          contact: contactRef,
+          quote: quoteRef,
+          activity: activityRef,
+        };
+        refs[section].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      [],
+    );
 
-  const handleRequestServiceAddressFromQuote = useCallback(() => {
-    if (mode === "compact") {
-      setActiveTab("contact");
-    } else {
-      scrollToSection("contact");
-    }
-    setPendingServiceAddressFocus(true);
-  }, [mode, scrollToSection]);
-  const [postCreateActiveQuote, setPostCreateActiveQuote] =
-    useState<LeadWorkSurfaceActiveQuotePayload | null>(null);
-  const [isStartQuotePending, setIsStartQuotePending] = useState(false);
-  const [startQuoteError, setStartQuoteError] = useState<string | null>(null);
-  const [showGraduationPopup, setShowGraduationPopup] = useState(false);
+    /* When the embedded Quote tab routes the user back to the Customer Info
+     * service-address block, we both switch tabs and ask the block to scroll
+     * itself into view + flash a brief emphasis. The flag is consumed by the
+     * post-tab-switch effect below so the focus call runs after the Contact
+     * tab has actually rendered. */
+    const [pendingServiceAddressFocus, setPendingServiceAddressFocus] = useState(false);
 
-  const isCompact = mode === "compact";
-  const isFull = mode === "full";
+    useEffect(() => {
+      if (!pendingServiceAddressFocus) return;
+      if (activeTab !== "contact") return;
+      /* Defer to the next tick so the ContactTab has mounted the block ref. */
+      const t = window.setTimeout(() => {
+        serviceAddressBlockRef.current?.focus();
+        setPendingServiceAddressFocus(false);
+      }, 30);
+      return () => window.clearTimeout(t);
+    }, [pendingServiceAddressFocus, activeTab]);
 
-  /* Lazy load active-quote payload when:
-   *   - parent did NOT preload it (activeQuoteWorkSurface === undefined)
-   *   - a loader was provided
-   *   - the lead has at least one linked quote
-   *   - the user has opened the Quote tab at least once in this surface
-   *
-   * The state is hoisted here so switching tabs back to Quote does not
-   * refetch. The whole surface remounts (via key={lead.id} on the popup
-   * container) when the user opens a different lead, which resets this state.
-   *
-   * Also re-callable after a workspace-safe quote mutation so the Lead
-   * Quote tab can refresh embedded quote scope/readiness without forcing
-   * the user to re-open the lead. Older responses are dropped via
-   * `loadIdRef` so they cannot overwrite newer state.
-   */
-  const [activeQuoteState, setActiveQuoteState] = useState<ActiveQuoteLazyState>({
-    kind: "idle",
-  });
-  const loadIdRef = useRef(0);
+    const handleRequestServiceAddressFromQuote = useCallback(() => {
+      if (mode === "compact") {
+        setActiveTab("contact");
+      } else {
+        scrollToSection("contact");
+      }
+      setPendingServiceAddressFocus(true);
+    }, [mode, scrollToSection]);
+    const [postCreateActiveQuote, setPostCreateActiveQuote] =
+      useState<LeadWorkSurfaceActiveQuotePayload | null>(null);
+    const [isStartQuotePending, setIsStartQuotePending] = useState(false);
+    const [startQuoteError, setStartQuoteError] = useState<string | null>(null);
+    const [showGraduationPopup, setShowGraduationPopup] = useState(false);
 
-  const parentProvidedActiveQuote = activeQuoteWorkSurface !== undefined;
-  const previousLeadIdRef = useRef<string | null>(null);
+    const isCompact = mode === "compact";
+    const isFull = mode === "full";
 
-  /* Intake→quote graduation: reset post-create state only when the open sales
-   * intake identity changes, not when the surface remounts after router.refresh(). */
-  useEffect(() => {
-    const previousId = previousLeadIdRef.current;
-    previousLeadIdRef.current = lead.id;
-    if (previousId === null || previousId === lead.id) return;
-    void Promise.resolve().then(() => {
-      setPostCreateActiveQuote(null);
-      setStartQuoteError(null);
+    /* Lazy load active-quote payload when:
+     *   - parent did NOT preload it (activeQuoteWorkSurface === undefined)
+     *   - a loader was provided
+     *   - the lead has at least one linked quote
+     *   - the user has opened the Quote tab at least once in this surface
+     *
+     * The state is hoisted here so switching tabs back to Quote does not
+     * refetch. The whole surface remounts (via key={lead.id} on the popup
+     * container) when the user opens a different lead, which resets this state.
+     *
+     * Also re-callable after a workspace-safe quote mutation so the Lead
+     * Quote tab can refresh embedded quote scope/readiness without forcing
+     * the user to re-open the lead. Older responses are dropped via
+     * `loadIdRef` so they cannot overwrite newer state.
+     */
+    const [activeQuoteState, setActiveQuoteState] = useState<ActiveQuoteLazyState>({
+      kind: "idle",
+    });
+    const loadIdRef = useRef(0);
+
+    const parentProvidedActiveQuote = activeQuoteWorkSurface !== undefined;
+    const previousLeadIdRef = useRef<string | null>(null);
+
+    /* Intake→quote graduation: reset post-create state only when the open sales
+     * intake identity changes, not when the surface remounts after router.refresh(). */
+    useEffect(() => {
+      const previousId = previousLeadIdRef.current;
+      previousLeadIdRef.current = lead.id;
+      if (previousId === null || previousId === lead.id) return;
+      void Promise.resolve().then(() => {
+        setPostCreateActiveQuote(null);
+        setStartQuoteError(null);
+        setShowGraduationPopup(false);
+      });
+    }, [lead.id]);
+
+    useEffect(() => {
+      if (!activeQuoteWorkSurface) return;
+      void Promise.resolve().then(() => {
+        setPostCreateActiveQuote(null);
+      });
+    }, [activeQuoteWorkSurface]);
+
+    const refreshAfterGraduation = useCallback(() => {
+      router.refresh();
+    }, [router]);
+
+    const handleDismissGraduation = useCallback(() => {
       setShowGraduationPopup(false);
-    });
-  }, [lead.id]);
+      refreshAfterGraduation();
+    }, [refreshAfterGraduation]);
 
-  useEffect(() => {
-    if (!activeQuoteWorkSurface) return;
-    void Promise.resolve().then(() => {
-      setPostCreateActiveQuote(null);
-    });
-  }, [activeQuoteWorkSurface]);
+    const handleStartQuote = useCallback(async () => {
+      setStartQuoteError(null);
+      setIsStartQuotePending(true);
+      try {
+        const res = await createQuoteFromLeadWorkspaceAction(lead.id);
+        if (!res.success) {
+          setStartQuoteError(res.error);
+          return;
+        }
+        const loaded = await loadLeadActiveQuoteWorkSurfaceAction(lead.id);
+        const activeQuotePayload = loaded.ok ? loaded.payload : null;
+        if (activeQuotePayload) {
+          setPostCreateActiveQuote(activeQuotePayload);
+        }
 
-  const refreshAfterGraduation = useCallback(() => {
-    router.refresh();
-  }, [router]);
+        setActiveTab("quote");
+        onQuoteStarted?.({ quoteId: res.quoteId, activeQuotePayload });
 
-  const handleDismissGraduation = useCallback(() => {
-    setShowGraduationPopup(false);
-    refreshAfterGraduation();
-  }, [refreshAfterGraduation]);
+        const suppressed =
+          typeof window !== "undefined" &&
+          localStorage.getItem("suppress-graduation-popup") === "true";
+        if (suppressed) {
+          refreshAfterGraduation();
+          return;
+        }
 
-  const handleStartQuote = useCallback(async () => {
-    setStartQuoteError(null);
-    setIsStartQuotePending(true);
-    try {
-      const res = await createQuoteFromLeadWorkspaceAction(lead.id);
-      if (!res.success) {
-        setStartQuoteError(res.error);
-        return;
+        setShowGraduationPopup(true);
+      } finally {
+        setIsStartQuotePending(false);
       }
-      const loaded = await loadLeadActiveQuoteWorkSurfaceAction(lead.id);
-      const activeQuotePayload = loaded.ok ? loaded.payload : null;
-      if (activeQuotePayload) {
-        setPostCreateActiveQuote(activeQuotePayload);
-      }
+    }, [lead.id, onQuoteStarted, refreshAfterGraduation]);
 
-      setActiveTab("quote");
-      onQuoteStarted?.({ quoteId: res.quoteId, activeQuotePayload });
+    useImperativeHandle(ref, () => ({
+      startQuote: handleStartQuote,
+    }));
 
-      const suppressed =
-        typeof window !== "undefined" &&
-        localStorage.getItem("suppress-graduation-popup") === "true";
-      if (suppressed) {
-        refreshAfterGraduation();
-        return;
-      }
-
-      setShowGraduationPopup(true);
-    } finally {
-      setIsStartQuotePending(false);
-    }
-  }, [lead.id, onQuoteStarted, refreshAfterGraduation]);
-
-  const runActiveQuoteLoad = useCallback(
+    const runActiveQuoteLoad = useCallback(
     (showSpinner: boolean) => {
       if (parentProvidedActiveQuote) return;
       if (!loadActiveQuoteWorkSurface) return;
@@ -1762,4 +1775,4 @@ export function LeadWorkSurface({
       )}
     </div>
   );
-}
+});
