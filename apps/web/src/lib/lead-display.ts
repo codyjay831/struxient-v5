@@ -20,6 +20,7 @@ export type LeadDetailPayload = {
   source: LeadChannel;
   sourceDetail: string | null;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;

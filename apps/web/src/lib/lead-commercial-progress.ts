@@ -1,5 +1,6 @@
 import { LeadStatus, type JobStatus, type QuoteStatus } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import { evaluateLeadReadiness } from "./lead-readiness-heuristics";
 
 /**
  * Derived commercial progress story for a Lead, computed from existing Lead +
@@ -17,6 +18,7 @@ export type LeadCommercialProgressState =
   | "SENT_AWAITING_CUSTOMER"
   | "APPROVED_READY_TO_ACTIVATE"
   | "JOB_ACTIVE"
+  | "CONFLICT_WITH_EXISTING_CUSTOMER"
   | "CLOSED_NOT_A_FIT"
   | "ARCHIVED";
 
@@ -27,6 +29,7 @@ export type LeadCommercialProgressState =
 export type LeadCommercialProgressActionKind =
   | "EDIT_CONTACT_INFO"
   | "ATTACH_OR_CREATE_CUSTOMER"
+  | "RESOLVE_CUSTOMER_CONFLICT"
   | "START_QUOTE"
   | "QUALIFY_INTAKE"
   | "OPEN_DRAFT_QUOTE"
@@ -57,13 +60,22 @@ export type LeadProgressQuoteInput = {
 export type LeadProgressInput = {
   status: LeadStatus;
   customerId: string | null;
+  contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
+  jobsiteAddressLine: string | null;
+  isAddressVerified?: boolean;
 };
 
 export type LeadCommercialProgressInput = {
   lead: LeadProgressInput;
   quotes: LeadProgressQuoteInput[];
+  /**
+   * Pre-computed by the route when a matching customer is found.
+   * Blocks auto-promotion to prevent duplicates.
+   */
+  hasExistingCustomerMatch?: boolean;
   /**
    * Pre-computed by the route when the active quote has been edited since the
    * last SEND/APPROVAL checkpoint proof. Optional because the list does
@@ -117,6 +129,10 @@ export type LeadCommercialProgress = {
   badgeTone: StatusBadgeTone;
   /** True when the active quote has been edited since its last commercial proof. */
   showsRevisionDrift: boolean;
+  /** Items that have met the "smart" validation criteria. */
+  satisfiedItems: string[];
+  /** Items required for promotion. */
+  requiredItems: string[];
 };
 
 /** Canonical visible step count in the indicator (Setup → Quote → Sent → Approved → Job). */
@@ -130,6 +146,7 @@ const STATE_STEP_INDEX: Record<LeadCommercialProgressState, number> = {
   SENT_AWAITING_CUSTOMER: 2,
   APPROVED_READY_TO_ACTIVATE: 3,
   JOB_ACTIVE: 4,
+  CONFLICT_WITH_EXISTING_CUSTOMER: 0,
   CLOSED_NOT_A_FIT: -1,
   ARCHIVED: -1,
 };
@@ -142,6 +159,7 @@ const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
   SENT_AWAITING_CUSTOMER: "sent",
   APPROVED_READY_TO_ACTIVATE: "approved",
   JOB_ACTIVE: "approved",
+  CONFLICT_WITH_EXISTING_CUSTOMER: "warning",
   CLOSED_NOT_A_FIT: "neutral",
   ARCHIVED: "neutral",
 };
@@ -154,6 +172,7 @@ const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
   APPROVED_READY_TO_ACTIVATE: "Approved — ready to activate",
   JOB_ACTIVE: "Job active",
+  CONFLICT_WITH_EXISTING_CUSTOMER: "Customer match found",
   CLOSED_NOT_A_FIT: "Closed — not a fit",
   ARCHIVED: "Archived",
 };
@@ -232,7 +251,7 @@ function describeQuote(q: LeadCommercialProgressActiveQuote, prefix: string): st
 export function getLeadCommercialProgress(
   input: LeadCommercialProgressInput,
 ): LeadCommercialProgress {
-  const { lead, quotes } = input;
+  const { lead, quotes, hasExistingCustomerMatch } = input;
 
   if (lead.status === ("ARCHIVED" as LeadStatus)) {
     return makeTerminal({
@@ -246,6 +265,25 @@ export function getLeadCommercialProgress(
       description: "This opportunity was marked lost. No further commercial action is expected.",
     });
   }
+
+  // Evaluate readiness using smart heuristics
+  const report = evaluateLeadReadiness({
+    contactName: lead.contactName,
+    companyName: lead.companyName,
+    email: lead.email,
+    phone: lead.phone,
+    address: lead.jobsiteAddressLine,
+    isAddressVerified: lead.isAddressVerified,
+  });
+
+  const satisfiedItems: string[] = [];
+  if (report.hasIdentity) satisfiedItems.push("Identity");
+  if (report.hasEmail) satisfiedItems.push("Email");
+  if (report.hasPhone) satisfiedItems.push("Phone");
+  if (report.hasAddress) satisfiedItems.push("Location");
+
+  const requiredItems = ["Identity", "Email", "Phone", "Location"];
+  const isReadyForPromotion = report.isReady;
 
   const jobOwner = findAnyActiveJobOwnerQuote(quotes);
   const mostRecentNonArchived = pickActiveQuote(quotes);
@@ -277,6 +315,8 @@ export function getLeadCommercialProgress(
       isTerminal: false,
       badgeTone: STATE_TONE.JOB_ACTIVE,
       showsRevisionDrift: false,
+      satisfiedItems,
+      requiredItems,
     };
   }
 
@@ -306,6 +346,8 @@ export function getLeadCommercialProgress(
         isTerminal: false,
         badgeTone: STATE_TONE.APPROVED_READY_TO_ACTIVATE,
         showsRevisionDrift: showsDrift,
+        satisfiedItems,
+        requiredItems,
       };
     }
 
@@ -327,6 +369,8 @@ export function getLeadCommercialProgress(
         isTerminal: false,
         badgeTone: STATE_TONE.SENT_AWAITING_CUSTOMER,
         showsRevisionDrift: showsDrift,
+        satisfiedItems,
+        requiredItems,
       };
     }
 
@@ -347,14 +391,40 @@ export function getLeadCommercialProgress(
       isTerminal: false,
       badgeTone: STATE_TONE.QUOTE_IN_PROGRESS,
       showsRevisionDrift: false,
+      satisfiedItems,
+      requiredItems,
     };
   }
 
-  if (lead.customerId != null) {
+  if (lead.customerId != null || isReadyForPromotion) {
+    if (!lead.customerId && hasExistingCustomerMatch) {
+      return {
+        state: "CONFLICT_WITH_EXISTING_CUSTOMER",
+        label: STATE_LABEL.CONFLICT_WITH_EXISTING_CUSTOMER,
+        description: "A customer with matching contact info already exists. Resolve the conflict before starting a quote.",
+        primaryAction: {
+          kind: "RESOLVE_CUSTOMER_CONFLICT",
+          label: "Resolve conflict",
+        },
+        secondaryAction: { kind: "START_QUOTE", label: "Start quote anyway" },
+        activeQuote: null,
+        activeJob: null,
+        stepIndex: STATE_STEP_INDEX.READY_FOR_QUOTE,
+        totalSteps: TOTAL_STEPS,
+        isTerminal: false,
+        badgeTone: STATE_TONE.CONFLICT_WITH_EXISTING_CUSTOMER,
+        showsRevisionDrift: false,
+        satisfiedItems,
+        requiredItems,
+      };
+    }
+
     return {
       state: "READY_FOR_QUOTE",
       label: STATE_LABEL.READY_FOR_QUOTE,
-      description: "Customer is linked. Start a quote when you have enough scope to price.",
+      description: lead.customerId
+        ? "Customer is linked. Start a quote when you have enough scope to price."
+        : "Lead is qualified. Start a quote to automatically create the customer and draft.",
       primaryAction: { kind: "START_QUOTE", label: "Start quote" },
       secondaryAction: null,
       activeQuote: null,
@@ -364,22 +434,18 @@ export function getLeadCommercialProgress(
       isTerminal: false,
       badgeTone: STATE_TONE.READY_FOR_QUOTE,
       showsRevisionDrift: false,
+      satisfiedItems,
+      requiredItems,
     };
   }
-
-  const hasContact = Boolean(lead.email) || Boolean(lead.phone);
 
   if (lead.status === LeadStatus.NEW) {
     return {
       state: "ADD_CONTACT_INFO",
       label: "New intake — review details",
-      description: hasContact
-        ? "Review the intake details, then qualify this record to move it forward."
-        : "Add an email or phone number and qualify this record to move it forward.",
+      description: "Review the intake details and complete the 4 requirements to start a quote.",
       primaryAction: { kind: "QUALIFY_INTAKE", label: "Qualify intake" },
-      secondaryAction: hasContact
-        ? { kind: "ATTACH_OR_CREATE_CUSTOMER", label: "Link customer" }
-        : { kind: "EDIT_CONTACT_INFO", label: "Add contact info" },
+      secondaryAction: { kind: "EDIT_CONTACT_INFO", label: "Complete details" },
       activeQuote: null,
       activeJob: null,
       stepIndex: 0,
@@ -387,34 +453,16 @@ export function getLeadCommercialProgress(
       isTerminal: false,
       badgeTone: "draft",
       showsRevisionDrift: false,
-    };
-  }
-
-  if (hasContact) {
-    return {
-      state: "NEEDS_CUSTOMER",
-      label: STATE_LABEL.NEEDS_CUSTOMER,
-      description: "Contact info is on file. Link an existing customer or create a new one to anchor the quote.",
-      primaryAction: {
-        kind: "ATTACH_OR_CREATE_CUSTOMER",
-        label: "Link or create customer",
-      },
-      secondaryAction: { kind: "START_QUOTE", label: "Start quote anyway" },
-      activeQuote: null,
-      activeJob: null,
-      stepIndex: STATE_STEP_INDEX.NEEDS_CUSTOMER,
-      totalSteps: TOTAL_STEPS,
-      isTerminal: false,
-      badgeTone: STATE_TONE.NEEDS_CUSTOMER,
-      showsRevisionDrift: false,
+      satisfiedItems,
+      requiredItems,
     };
   }
 
   return {
     state: "ADD_CONTACT_INFO",
     label: STATE_LABEL.ADD_CONTACT_INFO,
-    description: "Add an email or phone so this opportunity can move toward a quote.",
-    primaryAction: { kind: "EDIT_CONTACT_INFO", label: "Add contact info" },
+    description: "Complete the identity, contact, and location details to move toward a quote.",
+    primaryAction: { kind: "EDIT_CONTACT_INFO", label: "Add missing info" },
     secondaryAction: { kind: "START_QUOTE", label: "Start quote anyway" },
     activeQuote: null,
     activeJob: null,
@@ -423,6 +471,8 @@ export function getLeadCommercialProgress(
     isTerminal: false,
     badgeTone: STATE_TONE.ADD_CONTACT_INFO,
     showsRevisionDrift: false,
+    satisfiedItems,
+    requiredItems,
   };
 }
 
@@ -443,6 +493,8 @@ function makeTerminal(args: {
     isTerminal: true,
     badgeTone: STATE_TONE[args.state],
     showsRevisionDrift: false,
+    satisfiedItems: [],
+    requiredItems: [],
   };
 }
 
@@ -458,6 +510,8 @@ export function resolveLeadCommercialProgressActionHref(
     case "EDIT_CONTACT_INFO":
       return `/leads/${ctx.leadId}/edit`;
     case "ATTACH_OR_CREATE_CUSTOMER":
+      return `/leads/${ctx.leadId}#customer-link`;
+    case "RESOLVE_CUSTOMER_CONFLICT":
       return `/leads/${ctx.leadId}#customer-link`;
     case "QUALIFY_INTAKE":
       return `/leads/${ctx.leadId}`;

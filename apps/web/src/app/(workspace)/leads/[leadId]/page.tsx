@@ -17,7 +17,7 @@ import {
   type LeadProgressQuoteInput,
 } from "@/lib/lead-commercial-progress";
 import { db } from "@/lib/db";
-import { jobsiteLineFromLead } from "@/lib/jobsite-address";
+import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { intakeServiceLocationReflectedOnCustomerFromLead } from "@/lib/customer-service-location-from-lead";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -28,6 +28,10 @@ import {
   linkLeadToCustomerAction,
   updateLeadStatusAction,
 } from "../lead-form-actions";
+
+import { FEATURE_FLAGS } from "@/lib/feature-flags";
+import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
+import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +60,24 @@ export default async function LeadDetailPage({
   const returnSection = typeof sq["section"] === "string" ? sq["section"] : "investigate";
   const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
   const ctx = await getRequestContextOrThrow();
+
+  if (FEATURE_FLAGS.USE_LEAD_COMMERCIAL_SURFACE) {
+    const payload = await loadLeadCommercialSurface(leadId, ctx);
+    if (payload) {
+      return (
+        <div className="mx-auto max-w-5xl">
+          <WorkspaceBreadcrumb
+            items={[
+              { label: "Leads", href: "/leads" },
+              { label: payload.lead.title },
+            ]}
+          />
+          <LeadCommercialSurface payload={payload} />
+        </div>
+      );
+    }
+  }
+
   const row = await db.lead.findFirst({
     where: {
       id: leadId,
@@ -125,6 +147,11 @@ export default async function LeadDetailPage({
                   })
       : false;
 
+  const jobsiteAddressLine = jobsiteLineFromLead({
+    address: row.address,
+    signals: row.signals,
+  });
+
   const lead: LeadDetailPayload = {
     id: row.id,
     title: row.title,
@@ -132,6 +159,7 @@ export default async function LeadDetailPage({
     source: row.source,
     sourceDetail: row.sourceDetail,
     contactName: row.contactName,
+    companyName: row.companyName,
     email: row.email,
     phone: row.phone,
     notes: row.notes,
@@ -139,10 +167,7 @@ export default async function LeadDetailPage({
     neededByBucket: row.neededByBucket,
     neededByDate: row.neededByDate,
     scopeSummary: row.scopeSummary,
-    jobsiteAddressLine: jobsiteLineFromLead({
-      address: row.address,
-      signals: row.signals,
-    }),
+    jobsiteAddressLine,
     intakeServiceLocationLinkedToCustomer,
     customerId: row.customerId,
     convertedAt: row.convertedAt,
@@ -166,6 +191,30 @@ export default async function LeadDetailPage({
     | { id: string; displayName: string }[]
     | undefined;
   let matchHints: ReturnType<typeof findCustomerMatchHints> | undefined;
+  let hasExistingCustomerMatch = false;
+
+  if (showLinkForm) {
+    const customers = await db.customer.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { displayName: "asc" },
+      take: CUSTOMER_HINT_FETCH_CAP,
+      select: {
+        id: true,
+        displayName: true,
+        companyName: true,
+        email: true,
+        phone: true,
+      },
+    });
+    customersForLink = customers.map((c) => ({ id: c.id, displayName: c.displayName }));
+    matchHints = findCustomerMatchHints(
+      customers,
+      row.email,
+      row.phone,
+      CUSTOMER_HINT_FETCH_CAP,
+    );
+    hasExistingCustomerMatch = matchHints.kind === "checked" && matchHints.matches.length > 0;
+  }
 
   const linkedQuotes = await db.quote.findMany({
     where: {
@@ -201,10 +250,15 @@ export default async function LeadDetailPage({
     lead: {
       status: row.status,
       customerId: row.customerId,
+      contactName: row.contactName,
+      companyName: row.companyName,
       email: row.email,
       phone: row.phone,
+      jobsiteAddressLine,
+      isAddressVerified: isLeadAddressVerified(row),
     },
     quotes: progressQuoteInputs,
+    hasExistingCustomerMatch,
   });
 
   let revisionDriftSinceLastProof = false;
@@ -234,11 +288,16 @@ export default async function LeadDetailPage({
     lead: {
       status: row.status,
       customerId: row.customerId,
+      contactName: row.contactName,
+      companyName: row.companyName,
       email: row.email,
       phone: row.phone,
+      jobsiteAddressLine,
+      isAddressVerified: isLeadAddressVerified(row),
     },
     quotes: progressQuoteInputs,
     revisionDriftSinceLastProof,
+    hasExistingCustomerMatch,
   });
 
   const linkedQuotesForShell = linkedQuotes.map((q) => ({
@@ -350,6 +409,7 @@ export default async function LeadDetailPage({
       row.phone,
       CUSTOMER_HINT_FETCH_CAP,
     );
+    hasExistingCustomerMatch = matchHints.kind === "checked" && matchHints.matches.length > 0;
   }
 
   return (

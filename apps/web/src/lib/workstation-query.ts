@@ -9,11 +9,13 @@ import {
   JobVisitStatus,
   QuoteCheckpointKind,
   QuoteCheckpointSource,
+  StaffRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
+import { jobsiteLineFromLead, isLeadAddressVerified } from "./jobsite-address";
 import {
   buildLeadRecordActionState,
   buildQuoteRecordActionState,
@@ -22,6 +24,7 @@ import {
 } from "@/lib/record-workflow-surface";
 import { deriveTaskState, taskStateLabel } from "./task-readiness";
 import { getLiveSignals } from "./signal-bus";
+import { rank, WorkstationLane } from "./workstation/rank";
 
 export type WorkstationWorkItemKind =
   | "lead"
@@ -68,6 +71,8 @@ export type WorkstationWorkItem = {
   priority: WorkstationWorkItemPriority;
   group: WorkstationWorkItemGroup;
   lens: WorkstationLens;
+  lane: WorkstationLane;
+  withinLaneRank: number;
   filterCategory: WorkstationFilterCategory;
   reason: string;
   nextStep: string;
@@ -78,6 +83,7 @@ export type WorkstationWorkItem = {
   updatedAt: Date;
   isBlocked?: boolean;
   missingSignals?: string[];
+  signalId?: string;
   /** Shared readiness / checklist model for Workstation + full-record alignment. */
   workflow?: WorkItemEmbeddedWorkflow;
 };
@@ -91,72 +97,9 @@ export type WorkstationSummary = {
   dailyLogsToReviewCount: number;
 };
 
-function lanesForQuoteWorkflow(
-  readinessState: ReturnType<typeof getQuoteReadiness>["state"],
-  workflow: WorkItemEmbeddedWorkflow,
-  base: { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority },
-): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
-  if (readinessState === "SENT_AWAITING_CUSTOMER") {
-    return { group: "waiting", priority: "low", lens: "waiting" };
-  }
-  if (readinessState === "APPROVED_READY_TO_ACTIVATE") {
-    return { group: "ready", priority: "high", lens: "attention" };
-  }
-  if (readinessState === "APPROVED_NEEDS_EXECUTION_REVIEW") {
-    return { group: "investigate", priority: "high", lens: "attention" };
-  }
-  if (workflow.priority === "blocking") {
-    return { group: "investigate", priority: "high", lens: "attention" };
-  }
-  if (workflow.priority === "critical") {
-    return { group: "ready", priority: "high", lens: "attention" };
-  }
-  if (workflow.priority === "watching") {
-    return { group: "waiting", priority: "low", lens: "waiting" };
-  }
-  
-  const lens: WorkstationLens = base.priority === "high" || base.priority === "critical" ? "attention" : "today";
-  return { ...base, lens };
-}
-
-function lanesForLeadWorkflow(
-  workflow: WorkItemEmbeddedWorkflow,
-  isUnlinked: boolean,
-): { group: WorkstationWorkItemGroup; priority: WorkstationWorkItemPriority; lens: WorkstationLens } {
-  if (workflow.priority === "blocking") {
-    return { group: "investigate", priority: "high", lens: "attention" };
-  }
-  if (workflow.priority === "critical") {
-    return { group: "ready", priority: "high", lens: "attention" };
-  }
-  if (workflow.priority === "watching") {
-    return { group: "waiting", priority: "low", lens: "waiting" };
-  }
-  if (workflow.priority === "satisfied") {
-    return { group: "ready", priority: "low", lens: "today" };
-  }
-  if (isUnlinked) {
-    if (workflow.priority === "actionable" && workflow.canCompleteInWorkstation) {
-      return { group: "ready", priority: "medium", lens: "today" };
-    }
-    return { group: "investigate", priority: "high", lens: "attention" };
-  }
-  return { group: "ready", priority: "medium", lens: "today" };
-}
-
-export function compareWorkstationLeadOrder(
-  a: WorkstationWorkItem,
-  b: WorkstationWorkItem,
-): number {
-  const rank = (p: WorkstationWorkItemPriority) =>
-    p === "critical" ? 0 : p === "high" ? 1 : p === "medium" ? 2 : 3;
-  const pr = rank(a.priority) - rank(b.priority);
-  if (pr !== 0) return pr;
-  return b.updatedAt.getTime() - a.updatedAt.getTime();
-}
-
 export async function queryWorkstationWorkItems(
   organizationId: string,
+  role: StaffRole,
   urgentThresholdHours: number = 24
 ): Promise<WorkstationWorkItem[]> {
   const items: WorkstationWorkItem[] = [];
@@ -185,7 +128,6 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const lead of leads) {
-    const isUnlinked = lead.customerId === null;
     const hasActiveQuote = lead.quotes.length > 0;
 
     if (hasActiveQuote) continue;
@@ -194,8 +136,12 @@ export async function queryWorkstationWorkItems(
       lead: {
         status: lead.status,
         customerId: lead.customerId,
+        contactName: lead.contactName,
+        companyName: lead.companyName,
         email: lead.email,
         phone: lead.phone,
+        jobsiteAddressLine: jobsiteLineFromLead(lead),
+        isAddressVerified: isLeadAddressVerified(lead),
       },
       quotes: lead.quotes.map((q) => ({
         id: q.id,
@@ -216,22 +162,31 @@ export async function queryWorkstationWorkItems(
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority, lens } = lanesForLeadWorkflow(workflow, isUnlinked);
-
     // Prioritize leads with pending visit requests
     const pendingVisit = lead.visitRequests[0];
-    let effectivePriority = pendingVisit ? "critical" : priority;
     
-    // Senior logic: items updated within the threshold are also high priority
-    if (effectivePriority !== "critical" && lead.updatedAt > urgentThreshold) {
-      effectivePriority = "high";
+    let priority: WorkstationWorkItemPriority = "medium";
+    if (workflow.priority === "blocking" || pendingVisit) {
+      priority = "critical";
+    } else if (workflow.priority === "critical" || lead.updatedAt > urgentThreshold) {
+      priority = "high";
+    } else if (workflow.priority === "watching") {
+      priority = "low";
     }
 
-    const effectiveGroup = pendingVisit ? "investigate" : group;
-    const effectiveLens = pendingVisit ? "attention" : lens;
+    const group: WorkstationWorkItemGroup = pendingVisit ? "investigate" : 
+      (workflow.priority === "blocking" ? "investigate" : "ready");
+
+    const { lane, withinLaneRank, reason: rankReason } = rank({
+      kind: "lead",
+      priority,
+      group,
+      updatedAt: lead.updatedAt,
+    }, role, now);
+
     const effectiveReason = pendingVisit 
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
-      : workflow.reason;
+      : (rankReason || workflow.reason);
     const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Leads.");
 
     items.push({
@@ -240,9 +195,11 @@ export async function queryWorkstationWorkItems(
       title: lead.title,
       subtitle: lead.contactName || lead.email || lead.phone || undefined,
       status: lead.status,
-      priority: effectivePriority as WorkstationWorkItemPriority,
-      group: effectiveGroup,
-      lens: effectiveLens,
+      priority,
+      group,
+      lens: "attention",
+      lane,
+      withinLaneRank,
       filterCategory: "leads",
       reason: effectiveReason,
       nextStep: effectiveNextStep,
@@ -332,16 +289,24 @@ export async function queryWorkstationWorkItems(
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    const { group, priority, lens } = lanesForQuoteWorkflow(readiness.state, workflow, {
-      group: "ready",
-      priority: "medium",
-    });
-
-    let effectivePriority = priority;
-    // Senior logic: items updated within the threshold are also high priority
-    if (effectivePriority !== "critical" && quote.updatedAt > urgentThreshold) {
-      effectivePriority = "high";
+    let priority: WorkstationWorkItemPriority = "medium";
+    if (workflow.priority === "blocking" || readiness.state === "APPROVED_READY_TO_ACTIVATE") {
+      priority = "critical";
+    } else if (workflow.priority === "critical" || quote.updatedAt > urgentThreshold) {
+      priority = "high";
+    } else if (workflow.priority === "watching") {
+      priority = "low";
     }
+
+    const group: WorkstationWorkItemGroup = (workflow.priority === "blocking" || readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW") 
+      ? "investigate" : "ready";
+
+    const { lane, withinLaneRank, reason: rankReason } = rank({
+      kind: "quote",
+      priority,
+      group,
+      updatedAt: quote.updatedAt,
+    }, role, now);
 
     items.push({
       id: `quote-${quote.id}`,
@@ -349,11 +314,13 @@ export async function queryWorkstationWorkItems(
       title: primaryIdentity,
       subtitle,
       status: quote.status,
-      priority: effectivePriority as WorkstationWorkItemPriority,
+      priority,
       group,
-      lens,
+      lens: "attention",
+      lane,
+      withinLaneRank,
       filterCategory: "quotes",
-      reason: isCustomerAccepted ? "Accepted by customer via portal." : workflow.reason,
+      reason: isCustomerAccepted ? "Accepted by customer via portal." : (rankReason || workflow.reason),
       nextStep: workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
       parentRecordId: quote.customerId || quote.leadId || undefined,
@@ -428,6 +395,13 @@ export async function queryWorkstationWorkItems(
     const hasFutureVisit = upcomingVisits.length > 0;
 
     for (const visit of missedVisits) {
+      const { lane, withinLaneRank } = rank({
+        kind: "schedule",
+        priority: "high",
+        group: "investigate",
+        updatedAt: visit.updatedAt,
+      }, role, now);
+
       items.push({
         id: `visit-missed-${visit.id}`,
         kind: "schedule",
@@ -437,6 +411,8 @@ export async function queryWorkstationWorkItems(
         priority: "high",
         group: "investigate",
         lens: "attention",
+        lane,
+        withinLaneRank,
         filterCategory: "jobs",
         reason: "Scheduled visit time has passed without completion.",
         nextStep: "Complete, reschedule, or cancel visit.",
@@ -450,15 +426,27 @@ export async function queryWorkstationWorkItems(
 
     for (const visit of upcomingVisits) {
       const isToday = visit.scheduledStartAt.toDateString() === now.toDateString();
+      const priority: WorkstationWorkItemPriority = isToday ? "high" : "medium";
+      const group: WorkstationWorkItemGroup = isToday ? "active" : "scheduled";
+
+      const { lane, withinLaneRank } = rank({
+        kind: "schedule",
+        priority,
+        group,
+        updatedAt: visit.updatedAt,
+      }, role, now);
+
       items.push({
         id: `visit-upcoming-${visit.id}`,
         kind: "schedule",
         title: `Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
         subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
         status: isToday ? "Today" : "Upcoming",
-        priority: isToday ? "high" : "medium",
-        group: isToday ? "active" : "scheduled",
+        priority,
+        group,
         lens: isToday ? "today" : "upcoming",
+        lane,
+        withinLaneRank,
         filterCategory: "jobs",
         reason: isToday ? "Visit scheduled for today." : "Upcoming scheduled visit.",
         nextStep: "Prepare for visit.",
@@ -472,6 +460,13 @@ export async function queryWorkstationWorkItems(
 
     // 3b. Payment Signals (surfaced as attention items)
     for (const payment of unpaidRequirements) {
+      const { lane, withinLaneRank } = rank({
+        kind: "job",
+        priority: "high",
+        group: "investigate",
+        updatedAt: payment.updatedAt,
+      }, role, now);
+
       items.push({
         id: `payment-needed-${payment.id}`,
         kind: "job",
@@ -481,6 +476,8 @@ export async function queryWorkstationWorkItems(
         priority: "high",
         group: "investigate",
         lens: "attention",
+        lane,
+        withinLaneRank,
         filterCategory: "payments",
         reason: payment.requiredBeforeStageId ? "Payment required before next stage." : "Required payment is due.",
         nextStep: "Record payment or waive.",
@@ -496,6 +493,13 @@ export async function queryWorkstationWorkItems(
       // Only signal unscheduled if there are tasks to do
       const hasOpenTasks = job.tasks.length > 0;
       if (hasOpenTasks) {
+        const { lane, withinLaneRank } = rank({
+          kind: "schedule",
+          priority: "medium",
+          group: "ready",
+          updatedAt: job.updatedAt,
+        }, role, now);
+
         items.push({
           id: `job-unscheduled-${job.id}`,
           kind: "schedule",
@@ -505,6 +509,8 @@ export async function queryWorkstationWorkItems(
           priority: "medium",
           group: "ready",
           lens: "today",
+          lane,
+          withinLaneRank,
           filterCategory: "jobs",
           reason: "Active job with open tasks has no upcoming visits.",
           nextStep: "Schedule a job visit.",
@@ -554,8 +560,15 @@ export async function queryWorkstationWorkItems(
       }
 
       const isBlocked = derivedState === "BLOCKED_BY_ISSUE" || derivedState === "BLOCKED_BY_SIGNAL";
-      const lens: WorkstationLens = isBlocked ? "waiting" : priority === "high" ? "attention" : "today";
       const group: WorkstationWorkItemGroup = isBlocked ? "blocked" : "active";
+
+      const { lane, withinLaneRank } = rank({
+        kind: "task",
+        priority,
+        group,
+        updatedAt: task.updatedAt,
+        isBlocked,
+      }, role, now);
 
       const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s))
         .concat(task.jobStage.requiresSignals.filter(s => !liveSignals.includes(s)));
@@ -568,7 +581,9 @@ export async function queryWorkstationWorkItems(
         status: taskStateLabel(derivedState),
         priority,
         group,
-        lens,
+        lens: "attention",
+        lane,
+        withinLaneRank,
         filterCategory: "tasks",
         reason: derivedState === "BLOCKED_BY_ISSUE" ? "Blocked by an open issue." :
                 derivedState === "BLOCKED_BY_SIGNAL" ? `Waiting on signal: ${missingSignals.join(", ")}` :
@@ -589,6 +604,14 @@ export async function queryWorkstationWorkItems(
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
+      const { lane, withinLaneRank } = rank({
+        kind: "job",
+        priority: "medium",
+        group: "investigate",
+        updatedAt: job.updatedAt,
+        isBlocked: isJobBlocked,
+      }, role, now);
+
       items.push({
         id: `job-${job.id}`,
         kind: "job",
@@ -598,6 +621,8 @@ export async function queryWorkstationWorkItems(
         priority: "medium",
         group: "investigate",
         lens: "attention",
+        lane,
+        withinLaneRank,
         filterCategory: "jobs",
         reason: "Active job has no remaining TODO or IN_PROGRESS tasks.",
         nextStep: "Review job completion or add tasks.",
@@ -634,6 +659,13 @@ export async function queryWorkstationWorkItems(
     const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
     const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
 
+    const { lane, withinLaneRank } = rank({
+      kind: "investigate",
+      priority: "high",
+      group: "investigate",
+      updatedAt: issue.updatedAt,
+    }, role, now);
+
     items.push({
       id: `issue-${issue.id}`,
       kind: "investigate",
@@ -643,6 +675,8 @@ export async function queryWorkstationWorkItems(
       priority: "high",
       group: "investigate",
       lens: "attention",
+      lane,
+      withinLaneRank,
       filterCategory: "issues",
       reason: issue.description || "Blocking issue needs resolution.",
       nextStep: "Review and resolve issue.",
@@ -683,6 +717,13 @@ export async function queryWorkstationWorkItems(
         )
       : null;
 
+    const { lane, withinLaneRank } = rank({
+      kind: "investigate",
+      priority: "high",
+      group: "investigate",
+      updatedAt: payment.updatedAt,
+    }, role, now);
+
     items.push({
       id: `payment-${payment.id}`,
       kind: "investigate",
@@ -692,6 +733,8 @@ export async function queryWorkstationWorkItems(
       priority: "high",
       group: "investigate",
       lens: "attention",
+      lane,
+      withinLaneRank,
       filterCategory: "payments",
       reason: payment.requiredBeforeStage
         ? `Payment required before ${payment.requiredBeforeStage.title}.`
@@ -727,6 +770,13 @@ export async function queryWorkstationWorkItems(
     const primaryJobIdentity = log.job.lead?.title || log.job.customer?.displayName || log.job.title;
     const secondaryJobIdentity = log.job.title !== primaryJobIdentity ? log.job.title : null;
 
+    const { lane, withinLaneRank } = rank({
+      kind: "daily-log",
+      priority: "medium",
+      group: "investigate",
+      updatedAt: log.updatedAt,
+    }, role, now);
+
     items.push({
       id: `log-${log.id}`,
       kind: "daily-log",
@@ -736,6 +786,8 @@ export async function queryWorkstationWorkItems(
       priority: "medium",
       group: "investigate",
       lens: "attention",
+      lane,
+      withinLaneRank,
       filterCategory: "logs",
       reason: "Daily log needs review and approval.",
       nextStep: "Review and approve log.",

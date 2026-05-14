@@ -19,7 +19,7 @@ import type { LucideIcon } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
-/** Reserved operations / attention surface—not a quote dashboard or runtime orchestrator. */
+/** Primary unified work queue. */
 const workstationEntry: NavItem[] = [
   { href: "/workstation", label: "Workstation", icon: LayoutDashboard },
 ];

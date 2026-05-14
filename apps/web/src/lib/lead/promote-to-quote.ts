@@ -12,6 +12,7 @@ import {
   formatPrimaryServiceLocationLineForQuoteNotes,
 } from "../customer-service-location-from-lead";
 import { readContact, readRequest, readSignals } from "./lead-projection";
+import { jobsiteLineFromLead, isLeadAddressVerified } from "../jobsite-address";
 import {
   performApplyLineItemTemplateToQuoteTx,
 } from "../quote-line-item-template-apply-tx";
@@ -91,8 +92,12 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           lead: {
             status: lead.status,
             customerId: lead.customerId,
+            contactName: contact.name,
+            companyName: contact.companyName,
             email: contact.email,
             phone: contact.phone,
+            jobsiteAddressLine: jobsiteLineFromLead(lead),
+            isAddressVerified: isLeadAddressVerified(lead),
           },
           quotes: progressQuoteInputs,
         });
@@ -102,6 +107,13 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             ok: false,
             error:
               "This lead is archived or closed. Open the full lead record if you need to change its status before starting a quote.",
+          };
+        }
+
+        if (progress.state === "ADD_CONTACT_INFO") {
+          return {
+            ok: false,
+            error: "This lead is missing required contact or location info. Complete the intake before starting a quote.",
           };
         }
 
@@ -129,6 +141,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           const prep = prepareCustomerFromLead({
             title: request.type || "Lead",
             contactName: contact.name,
+            companyName: contact.companyName,
             email: contact.email,
             phone: contact.phone,
             notes: signals?.notes || "",
@@ -168,7 +181,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         }
 
         // 2. Create Draft Quote
-        const quoteTitle = `Quote — ${contact.name || "Customer"}`;
+        const quoteTitle = `Quote — ${contact.companyName || contact.name || "Customer"}`;
 
         const quote = await tx.quote.create({
           data: {

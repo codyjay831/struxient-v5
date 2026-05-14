@@ -15,6 +15,7 @@ export type LeadWorkspaceCustomerCreateLeadInput = {
   id: string;
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -57,6 +58,7 @@ export function LeadWorkspaceCustomerCreateInline({
   const prepared = prepareCustomerFromLead({
     title: lead.title,
     contactName: lead.contactName,
+    companyName: lead.companyName,
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,

@@ -4,6 +4,7 @@ import { CUSTOMER_FIELD_LIMITS } from "@/app/(workspace)/customers/customer-fiel
 export type LeadRowForCustomerPrep = {
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -21,7 +22,7 @@ export type PreparedCustomerFromLead =
       ok: true;
       data: {
         displayName: string;
-        companyName: null;
+        companyName: string | null;
         email: string | null;
         phone: string | null;
         notes: string;
@@ -119,9 +120,18 @@ function buildCustomerNotesFromLead(lead: LeadRowForCustomerPrep): string {
  */
 export function prepareCustomerFromLead(lead: LeadRowForCustomerPrep): PreparedCustomerFromLead {
   const contact = trimOrEmpty(lead.contactName);
-  const displayName = contact.length > 0 ? contact : trimOrEmpty(lead.title);
+  const company = trimOrEmpty(lead.companyName);
+
+  // Commercial path: Company Name is the primary identity
+  // Residential path: Contact Name is the primary identity
+  let displayName = company.length > 0 ? company : contact;
+
+  if (displayName.length === 0) {
+    displayName = trimOrEmpty(lead.title);
+  }
+
   if (!displayName) {
-    return { ok: false, error: "This lead needs a title to derive a customer display name." };
+    return { ok: false, error: "This lead needs a title, contact name, or company name to derive a customer display name." };
   }
   if (displayName.length > CUSTOMER_FIELD_LIMITS.displayName) {
     return {
@@ -153,7 +163,7 @@ export function prepareCustomerFromLead(lead: LeadRowForCustomerPrep): PreparedC
     ok: true,
     data: {
       displayName,
-      companyName: null,
+      companyName: company.length > 0 ? company : null,
       email,
       phone,
       notes,

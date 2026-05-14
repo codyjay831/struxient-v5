@@ -1,5 +1,5 @@
 import { formatCompactAge } from "@/lib/compact-age";
-import { jobsiteLineFromLead } from "@/lib/jobsite-address";
+import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
 import {
   getLeadCommercialProgress,
   serializeLeadProgressAction,
@@ -31,6 +31,7 @@ export type SerializedLeadRow = {
   id: string;
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -52,6 +53,8 @@ export type SerializedLeadRow = {
   progressState: string;
   progressPrimaryAction: SerializedProgressAction | null;
   progressSecondaryAction: SerializedProgressAction | null;
+  satisfiedItems: string[];
+  requiredItems: string[];
   activeJobId: string | null;
   activeJobStatus: string | null;
   /** Non-archived quotes, newest first. */
@@ -74,6 +77,7 @@ export type LeadWithRelations = {
   status: LeadStatus;
   channel: LeadChannel;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   signals: Prisma.JsonValue;
@@ -110,12 +114,18 @@ export function serializeLeadListRow(
         : null,
   }));
 
+  const jobsiteAddressLine = jobsiteLineFromLead(lead);
+
   const progress = getLeadCommercialProgress({
     lead: {
       status: lead.status,
       customerId: lead.customerId,
+      contactName: lead.contactName,
+      companyName: lead.companyName,
       email: lead.email,
       phone: lead.phone,
+      jobsiteAddressLine,
+      isAddressVerified: isLeadAddressVerified(lead),
     },
     quotes: progressQuoteInputs,
   });
@@ -126,6 +136,7 @@ export function serializeLeadListRow(
     id: lead.id,
     title: lead.title,
     contactName: lead.contactName,
+    companyName: lead.companyName,
     email: lead.email,
     phone: lead.phone,
     notes: typeof signals.notes === "string" ? signals.notes : null,
@@ -152,6 +163,8 @@ export function serializeLeadListRow(
     progressSecondaryAction: serializeLeadProgressAction(progress.secondaryAction, {
       leadId: lead.id,
     }),
+    satisfiedItems: progress.satisfiedItems,
+    requiredItems: progress.requiredItems,
     activeJobId: progress.activeJob?.id ?? null,
     activeJobStatus: progress.activeJob?.status ?? null,
     quotes: lead.quotes

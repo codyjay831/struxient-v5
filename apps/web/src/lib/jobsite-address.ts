@@ -43,6 +43,17 @@ export function jobsiteLineFromLead(row: {
 }
 
 /**
+ * Returns true if the lead address has a Google Place ID (verified).
+ */
+export function isLeadAddressVerified(row: {
+  address: Prisma.JsonValue | null;
+  signals: Prisma.JsonValue | null;
+}): boolean {
+  const snap = intakeSnapshotForCustomerFromLead(row);
+  return Boolean(snap?.googlePlaceId);
+}
+
+/**
  * Prefer customer profile locations; otherwise fall back to the linked lead's intake address.
  */
 export function resolveJobsiteLineForQuoteOrJob(params: {

@@ -21,6 +21,7 @@ import {
   type LeadCommercialProgressAction,
   resolveLeadCommercialProgressActionHref,
 } from "@/lib/lead-commercial-progress";
+import { LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 import type { LeadStatus, LeadChannel } from "@prisma/client";
 import type { LeadServiceAddressContext } from "@/app/(workspace)/leads/lead-workspace-actions";
@@ -39,6 +40,7 @@ export type WorkstationLeadPanelProps = {
   leadId: string;
   leadTitle: string;
   contactName?: string | null;
+  companyName?: string | null;
   email?: string | null;
   phone?: string | null;
   notes: string | null;
@@ -54,6 +56,8 @@ export type WorkstationLeadPanelProps = {
   customerHref?: string | null;
   /** Org-scoped customers for optional "link existing"; omitted when lead already has a customer. */
   customersForLink?: { id: string; displayName: string }[];
+  /** Customer match hints — only meaningful when no customer is linked yet. */
+  matchHints?: LeadCustomerMatchHints;
   /** Non-archived linked quotes, newest first. */
   linkedQuotes: WorkstationLeadPanelQuote[];
   progress: LeadCommercialProgress;
@@ -87,6 +91,7 @@ export function WorkstationLeadPanel({
   leadId,
   leadTitle,
   contactName,
+  companyName,
   email,
   phone,
   notes,
@@ -100,6 +105,7 @@ export function WorkstationLeadPanel({
   customerDisplayName,
   customerHref,
   customersForLink,
+  matchHints,
   linkedQuotes,
   progress,
   activeQuoteWorkSurface,
@@ -111,6 +117,7 @@ export function WorkstationLeadPanel({
     id: leadId,
     title: leadTitle,
     contactName: contactName ?? null,
+    companyName: companyName ?? null,
     email: email ?? null,
     phone: phone ?? null,
     notes,
@@ -137,6 +144,8 @@ export function WorkstationLeadPanel({
     progressSecondaryAction: serializeProgressAction(progress.secondaryAction, {
       leadId,
     }),
+    satisfiedItems: progress.satisfiedItems,
+    requiredItems: progress.requiredItems,
     activeQuoteId: progress.activeQuote?.id ?? null,
     activeJobId: progress.activeJob?.id ?? null,
     activeJobStatus: progress.activeJob?.status ?? null,
@@ -159,6 +168,7 @@ export function WorkstationLeadPanel({
       lead={data}
       linkedQuotes={surfaceQuotes}
       customersForLink={customersForLink}
+      matchHints={matchHints}
       activeQuoteWorkSurface={activeQuoteWorkSurface}
       serviceAddressContext={serviceAddressContext}
     />

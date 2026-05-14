@@ -27,6 +27,7 @@ export type LeadContactJson = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  companyName: string | null;
 };
 
 export type LeadRequestJson = {
@@ -69,9 +70,10 @@ export function readContact(value: Prisma.JsonValue | null | undefined): LeadCon
       name: typeof o.name === "string" ? o.name : null,
       email: typeof o.email === "string" ? o.email : null,
       phone: typeof o.phone === "string" ? o.phone : null,
+      companyName: typeof o.companyName === "string" ? o.companyName : null,
     };
   }
-  return { name: null, email: null, phone: null };
+  return { name: null, email: null, phone: null, companyName: null };
 }
 
 export function readRequest(value: Prisma.JsonValue | null | undefined): LeadRequestJson {
@@ -169,6 +171,7 @@ export type LeadProjection = {
   updatedAt: Date;
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -223,6 +226,7 @@ export function projectLead(row: ProjectableLeadRow): LeadProjection {
     updatedAt: row.updatedAt,
     title: deriveLeadTitle(row.contact, row.request),
     contactName: contact.name,
+    companyName: contact.companyName,
     email: contact.email,
     phone: contact.phone,
     notes: typeof signals.notes === "string" ? signals.notes : null,

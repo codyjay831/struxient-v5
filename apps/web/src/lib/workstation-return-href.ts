@@ -1,3 +1,6 @@
+import { WorkstationWorkItemKind } from "./workstation-query";
+import { parseWorkstationUrlState, serializeWorkstationUrlState } from "./workstation/url-state";
+
 /**
  * Helpers for preserving Workstation return context when navigating away from
  * a signal card. Appends `?from=workstation&section={section}` so destination
@@ -25,13 +28,14 @@ export function buildWorkstationHref(href: string, section: string): string {
  */
 export function buildWorkstationSelectHref(
   id: string,
-  kind: string,
-  currentParams?: URLSearchParams,
+  kind: WorkstationWorkItemKind,
+  currentParams?: URLSearchParams | Record<string, string | string[] | undefined>,
 ): string {
-  const params = new URLSearchParams(currentParams?.toString());
-  params.set("selectedId", id);
-  params.set("selectedKind", kind);
-  return `?${params.toString()}`;
+  const urlState = parseWorkstationUrlState(currentParams || {});
+  return serializeWorkstationUrlState({
+    ...urlState,
+    selected: { id, kind }
+  });
 }
 
 /**

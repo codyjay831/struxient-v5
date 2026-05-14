@@ -207,24 +207,23 @@ export function buildLeadRecordActionState(input: {
     case "ADD_CONTACT_INFO":
       if (progress.primaryAction?.kind === "QUALIFY_INTAKE") {
         requiredItems.push(
-          "Review intake, then mark the lead as qualifying when it is real work.",
+          "Complete the 4 requirements (Identity, Email, Phone, Address) to start a quote.",
         );
-        if (progress.secondaryAction?.kind !== "EDIT_CONTACT_INFO") {
-          satisfiedItems.push("Basic contact details are on file.");
-        }
       } else {
-        requiredItems.push("Add at least one email or phone number.");
+        requiredItems.push("Missing required details (Identity, Email, Phone, or Address).");
       }
       break;
     case "NEEDS_CUSTOMER":
-      requiredItems.push("Link an existing customer or create a new one from this lead.");
+      // This state is now mostly bypassed by the single-click promotion, 
+      // but kept for back-compat with existing derived states.
+      requiredItems.push("Link an existing customer or start a quote to auto-create one.");
       break;
     case "READY_FOR_QUOTE":
-      satisfiedItems.push("Customer is linked and ready.");
-      requiredItems.push("Start a draft quote to begin pricing the work.");
+      satisfiedItems.push("All 4 requirements met — ready for promotion.");
+      requiredItems.push("Start a quote to automatically create the customer and draft.");
       break;
     case "QUOTE_IN_PROGRESS":
-      satisfiedItems.push("Customer is linked.");
+      satisfiedItems.push("Customer and draft quote created.");
       requiredItems.push("Finish the draft quote — add lines, totals, and terms.");
       break;
     case "SENT_AWAITING_CUSTOMER":
@@ -244,7 +243,7 @@ export function buildLeadRecordActionState(input: {
   const secondary = progress.secondaryAction;
 
   let canCompleteInWorkstation = false;
-  if (progress.state === "NEEDS_CUSTOMER") {
+  if (progress.state === "READY_FOR_QUOTE") {
     canCompleteInWorkstation = true;
   }
   if (primary?.kind === "QUALIFY_INTAKE") {
@@ -256,12 +255,12 @@ export function buildLeadRecordActionState(input: {
         label: primary.label,
         description: progress.description,
         surface:
-          primary.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
+          primary.kind === "START_QUOTE" ||
           primary.kind === "QUALIFY_INTAKE"
             ? "workstation-inline"
             : "full-record",
         href:
-          primary.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
+          primary.kind === "START_QUOTE" ||
           primary.kind === "QUALIFY_INTAKE"
             ? undefined
             : resolveLeadCommercialProgressActionHref(primary, { leadId }),
@@ -280,11 +279,10 @@ export function buildLeadRecordActionState(input: {
   }
 
   let priority: RecordActionPriority = "actionable";
-  if (progress.state === "NEEDS_CUSTOMER") {
-    priority = "blocking";
+  if (progress.state === "READY_FOR_QUOTE") {
+    priority = "critical";
   } else if (progress.state === "ADD_CONTACT_INFO") {
-    priority =
-      progress.primaryAction?.kind === "QUALIFY_INTAKE" ? "actionable" : "blocking";
+    priority = "blocking";
   } else if (progress.state === "APPROVED_READY_TO_ACTIVATE") {
     priority = "critical";
   } else if (progress.state === "SENT_AWAITING_CUSTOMER") {

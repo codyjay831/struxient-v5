@@ -121,6 +121,7 @@ export type LeadWorkSurfaceData = {
   id: string;
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -173,6 +174,10 @@ export type LeadWorkSurfaceData = {
   activeJobStatus?: string | null;
   /** Active quote edited since last commercial proof. */
   showsRevisionDrift?: boolean;
+  /** Items that have met the "smart" validation criteria. */
+  satisfiedItems: string[];
+  /** Items required for promotion. */
+  requiredItems: string[];
   /** Site visit requests (Phase C). */
   visitRequests?: LeadWorkSurfaceVisitRequest[];
 };
@@ -187,6 +192,8 @@ export type LeadWorkSurfaceProps = {
   customersForLink?: { id: string; displayName: string }[];
   /** Customer match hints — only meaningful when no customer is linked yet. Full mode renders them. */
   matchHints?: LeadCustomerMatchHints;
+  /** Lazy loader for match hints — used by the Leads list popup. */
+  loadMatchHints?: () => Promise<{ ok: true; hints: LeadCustomerMatchHints } | { ok: false; error: string }>;
   /** Bound `updateLeadStatusAction.bind(null, leadId)` — full-mode status form (redirects on success). */
   updateStatusAction?: (
     prevState: LeadFormState,
@@ -296,7 +303,7 @@ function EditContactForm({
 
   return (
     <form action={dispatch} className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <label
             htmlFor={`${fieldIdPrefix}-contactName`}
@@ -311,6 +318,22 @@ function EditContactForm({
             defaultValue={lead.contactName ?? ""}
             className={inputClass}
             placeholder="Name"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor={`${fieldIdPrefix}-companyName`}
+            className={`mb-1 block ${sectionLabelClass}`}
+          >
+            Company name
+          </label>
+          <input
+            id={`${fieldIdPrefix}-companyName`}
+            name="companyName"
+            type="text"
+            defaultValue={lead.companyName ?? ""}
+            className={inputClass}
+            placeholder="Company"
           />
         </div>
         <div>
@@ -467,16 +490,35 @@ function OverviewTab({
   linkedQuotes,
   updateStatusAction,
   onSwitchToSection,
+  onStartQuote,
+  isStartQuotePending,
+  isConflict,
 }: {
   mode: LeadWorkSurfaceMode;
   lead: LeadWorkSurfaceData;
   linkedQuotes: LeadWorkSurfaceQuote[];
   updateStatusAction?: LeadWorkSurfaceProps["updateStatusAction"];
   onSwitchToSection: (section: "quote" | "contact") => void;
+  onStartQuote: () => void;
+  isStartQuotePending: boolean;
+  isConflict: boolean;
 }) {
   const isFull = mode === "full";
   const quoteLabel =
     linkedQuotes.length > 0 ? linkedQuotes[0].statusLabel : "Not started";
+
+  const hasIdentity = lead.satisfiedItems.includes("Identity");
+  const hasEmail = lead.satisfiedItems.includes("Email");
+  const hasPhone = lead.satisfiedItems.includes("Phone");
+  const hasAddress = lead.satisfiedItems.includes("Location");
+  const isReadyForQuote = lead.progressState === "READY_FOR_QUOTE" && !isConflict;
+
+  const checkmarkClass = (met: boolean) =>
+    `flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+      met
+        ? "bg-success/5 border-success/20 text-success-strong"
+        : "bg-surface border-border text-foreground-subtle"
+    }`;
 
   /* Full mode shows a "Received" tile (matches today's full page); other modes
      show the manual lead status badge (matches the popup). */
@@ -487,6 +529,61 @@ function OverviewTab({
           lead={lead}
           onSwitchToSection={onSwitchToSection}
         />
+      )}
+
+      {/* 4-requirement checkmarks */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={checkmarkClass(hasIdentity)}>
+          <Check className={`size-3.5 ${hasIdentity ? "opacity-100" : "opacity-20"}`} strokeWidth={3} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Identity</span>
+        </div>
+        <div className={checkmarkClass(hasEmail)}>
+          <Check className={`size-3.5 ${hasEmail ? "opacity-100" : "opacity-20"}`} strokeWidth={3} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Email</span>
+        </div>
+        <div className={checkmarkClass(hasPhone)}>
+          <Check className={`size-3.5 ${hasPhone ? "opacity-100" : "opacity-20"}`} strokeWidth={3} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Phone</span>
+        </div>
+        <div className={checkmarkClass(hasAddress)}>
+          <Check className={`size-3.5 ${hasAddress ? "opacity-100" : "opacity-20"}`} strokeWidth={3} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Address</span>
+        </div>
+      </div>
+
+      {isConflict && (
+        <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="text-center sm:text-left">
+            <p className="text-sm font-semibold text-warning-strong">Customer match found</p>
+            <p className="text-xs text-warning-strong/70">A customer with this email or phone already exists.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSwitchToSection("contact")}
+            className="w-full sm:w-auto rounded-lg bg-warning text-warning-contrast px-6 py-2.5 text-sm font-bold shadow-lg shadow-warning/20 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            Resolve Conflict
+            <ArrowRight className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {isReadyForQuote && linkedQuotes.length === 0 && (
+        <div className="rounded-xl border border-success/30 bg-success/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="text-center sm:text-left">
+            <p className="text-sm font-semibold text-success-strong">Ready for quote</p>
+            <p className="text-xs text-success-strong/70">All requirements met. Promote this lead now.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onStartQuote}
+            disabled={isStartQuotePending}
+            className="w-full sm:w-auto rounded-lg bg-success text-success-contrast px-6 py-2.5 text-sm font-bold shadow-lg shadow-success/20 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            {isStartQuotePending ? "Starting..." : "Start Quote"}
+            <ArrowRight className="size-4" />
+          </button>
+        </div>
       )}
 
       {/* 4-field summary — same shape in all modes. */}
@@ -907,6 +1004,7 @@ const ContactTab = forwardRef<
               id: lead.id,
               title: lead.title,
               contactName: lead.contactName,
+              companyName: lead.companyName,
               email: lead.email,
               phone: lead.phone,
               notes: lead.notes,
@@ -1289,11 +1387,28 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
       serviceAddressContext,
       loadServiceAddressContext,
       onQuoteStarted,
+      loadMatchHints,
     },
     ref,
   ) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<LeadWorkSurfaceTab>(initialTab);
+    const [lazyMatchHints, setLazyMatchHints] = useState<LeadCustomerMatchHints | undefined>(undefined);
+
+    useEffect(() => {
+      if (matchHints) return;
+      if (!loadMatchHints) return;
+      if (lead.customerId) return;
+
+      void loadMatchHints().then((res) => {
+        if (res.ok) setLazyMatchHints(res.hints);
+      });
+    }, [matchHints, loadMatchHints, lead.customerId]);
+
+    const effectiveMatchHints = matchHints ?? lazyMatchHints;
+    const isConflict = lead.progressState === "CONFLICT_WITH_EXISTING_CUSTOMER" || 
+      (!lead.customerId && effectiveMatchHints?.kind === "checked" && effectiveMatchHints.matches.length > 0);
+
     const serviceAddressBlockRef = useRef<LeadServiceAddressBlockHandle | null>(null);
 
     const requestRef = useRef<HTMLDivElement>(null);
@@ -1419,15 +1534,8 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
         setActiveTab("quote");
         onQuoteStarted?.({ quoteId: res.quoteId, activeQuotePayload });
 
-        const suppressed =
-          typeof window !== "undefined" &&
-          localStorage.getItem("suppress-graduation-popup") === "true";
-        if (suppressed) {
-          refreshAfterGraduation();
-          return;
-        }
-
-        setShowGraduationPopup(true);
+        // Instant redirection/refresh - remove graduation popup as per plan
+        refreshAfterGraduation();
       } finally {
         setIsStartQuotePending(false);
       }
@@ -1552,6 +1660,9 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
             linkedQuotes={linkedQuotes}
             updateStatusAction={updateStatusAction}
             onSwitchToSection={(section) => setActiveTab(section === "quote" ? "quote" : "contact")}
+            onStartQuote={() => void handleStartQuote()}
+            isStartQuotePending={isStartQuotePending}
+            isConflict={isConflict}
           />
         )}
         {activeTab === "contact" && (
@@ -1560,7 +1671,7 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
             mode={mode}
             lead={lead}
             customersForLink={customersForLink}
-            matchHints={matchHints}
+            matchHints={effectiveMatchHints}
             linkLeadAction={linkLeadAction}
             onRefresh={() => router.refresh()}
             serviceAddressContext={serviceAddressContext}
@@ -1638,6 +1749,9 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
             linkedQuotes={linkedQuotes}
             updateStatusAction={updateStatusAction}
             onSwitchToSection={scrollToSection}
+            onStartQuote={() => void handleStartQuote()}
+            isStartQuotePending={isStartQuotePending}
+            isConflict={isConflict}
           />
         </section>
 
@@ -1654,7 +1768,7 @@ export const LeadWorkSurface = forwardRef<LeadWorkSurfaceHandle, LeadWorkSurface
             mode={mode}
             lead={lead}
             customersForLink={customersForLink}
-            matchHints={matchHints}
+            matchHints={effectiveMatchHints}
             linkLeadAction={linkLeadAction}
             onRefresh={() => router.refresh()}
             serviceAddressContext={serviceAddressContext}

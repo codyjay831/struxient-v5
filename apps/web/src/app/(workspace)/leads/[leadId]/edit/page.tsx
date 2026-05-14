@@ -131,6 +131,7 @@ export default async function EditLeadPage({
           initial={{
             title: lead.title,
             contactName: lead.contactName,
+            companyName: lead.companyName,
             email: lead.email,
             phone: lead.phone,
             requestType: lead.requestType,

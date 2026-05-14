@@ -3,7 +3,10 @@ import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
-import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import { JobTaskStatus, JobStatus } from "@prisma/client";
@@ -21,9 +24,10 @@ export default async function WorkstationJobsLensPage({
 }) {
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
-  const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
+  const urlState = parseWorkstationUrlState(sp);
+  const selectedId = urlState.selected?.id;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
   const jobItems = allItems.filter((i) => i.kind === "job");
   
   const activeJobs = await db.job.findMany({
@@ -65,6 +69,8 @@ export default async function WorkstationJobsLensPage({
               status: selectedJob!.status,
               priority: "medium",
               group: "active",
+              lane: "due",
+              withinLaneRank: 0,
               lens: "today",
               filterCategory: "jobs",
               reason: "Active job in progress.",
@@ -93,11 +99,15 @@ export default async function WorkstationJobsLensPage({
                   title: job.title,
                   subtitle: job.customer?.displayName || job.lead?.title || "No linked record",
                   priority: attentionItem?.priority || "medium",
+                  lane: attentionItem?.lane || "due",
+                  withinLaneRank: attentionItem?.withinLaneRank || 0,
                   lens: attentionItem?.lens || "today",
                   filterCategory: "jobs",
                   reason: attentionItem?.reason || "Job is active and in progress.",
                   nextStep: attentionItem?.nextStep || "Review job progress.",
-                  href: buildWorkstationSelectHref(itemId, "job"),
+                  href: buildWorkstationUrl(urlState, {
+                    selected: { id: itemId, kind: "job" }
+                  }),
                   group: attentionItem?.group || "active",
                   recordId: job.id,
                   updatedAt: job.updatedAt,

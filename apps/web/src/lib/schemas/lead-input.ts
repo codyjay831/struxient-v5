@@ -5,9 +5,10 @@ export const LeadInputSchema = z.object({
   title: z.string().min(1).max(120),
   contact: z.object({
     name: z.string().min(1).max(120).nullable(),
+    companyName: z.string().max(120).nullable().optional(),
     email: z.string().email().max(255).nullable().or(z.literal("")),
     phone: z.string().max(40).nullable().or(z.literal("")),
-  }).refine(c => c.name || c.email || c.phone, "Need at least one contact detail"),
+  }).refine(c => c.name || c.companyName || c.email || c.phone, "Need at least one contact detail"),
   request: z.object({
     type: z.string().max(80).nullable().optional(),
     neededByBucket: z.nativeEnum(NeededByBucket).nullable().optional(),

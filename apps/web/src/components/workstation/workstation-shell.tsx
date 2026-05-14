@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-const LENSES: { href: string; label: string; icon: LucideIcon; lens: string }[] = [
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
+import { WorkstationLens } from "@/lib/workstation-query";
+
+const LENSES: { href: string; label: string; icon: LucideIcon; lens: WorkstationLens }[] = [
   { href: "/workstation", label: "Needs Attention", icon: LayoutDashboard, lens: "attention" },
   { href: "/workstation?lens=today", label: "Today", icon: ClipboardList, lens: "today" },
   { href: "/workstation?lens=waiting", label: "Waiting", icon: FolderKanban, lens: "waiting" },
@@ -18,16 +24,16 @@ const LENSES: { href: string; label: string; icon: LucideIcon; lens: string }[] 
   { href: "/workstation?lens=all", label: "All", icon: LayoutDashboard, lens: "all" },
 ];
 
-function lensActive(pathname: string, searchParams: URLSearchParams, lens: string) {
-  const currentLens = searchParams.get("lens") || "attention";
+function lensActive(pathname: string, currentLens: string, targetLens: string) {
   if (pathname !== "/workstation") return false;
-  return currentLens === lens;
+  return currentLens === targetLens;
 }
 
 export function WorkstationShell() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeLens = LENSES.find(l => lensActive(pathname, searchParams, l.lens)) || LENSES[0];
+  const urlState = parseWorkstationUrlState(searchParams);
+  const activeLens = LENSES.find(l => lensActive(pathname, urlState.lens, l.lens)) || LENSES[0];
 
   return (
     <div className="mb-8 space-y-6">
@@ -44,16 +50,9 @@ export function WorkstationShell() {
           <nav aria-label="Workstation lenses">
             <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
               {LENSES.map(({ label, icon: Icon, lens }) => {
-                const active = lensActive(pathname, searchParams, lens);
+                const active = lensActive(pathname, urlState.lens, lens);
                 
-                // Preserve selectedId and selectedKind if they exist
-                const params = new URLSearchParams(searchParams.toString());
-                if (lens === "attention") {
-                  params.delete("lens");
-                } else {
-                  params.set("lens", lens);
-                }
-                const finalHref = `/workstation?${params.toString()}`;
+                const finalHref = buildWorkstationUrl(urlState, { lens });
 
                 return (
                   <li key={lens}>

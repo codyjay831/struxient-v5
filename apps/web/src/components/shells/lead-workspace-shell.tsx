@@ -118,6 +118,7 @@ export function LeadWorkspaceShell({
     id: lead.id,
     title: lead.title,
     contactName: lead.contactName,
+    companyName: lead.companyName,
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
@@ -165,6 +166,8 @@ export function LeadWorkspaceShell({
     activeJobId: commercialProgress.activeJob?.id ?? null,
     activeJobStatus: commercialProgress.activeJob?.status ?? null,
     showsRevisionDrift: commercialProgress.showsRevisionDrift,
+    satisfiedItems: commercialProgress.satisfiedItems,
+    requiredItems: commercialProgress.requiredItems,
     source: lead.source,
     visitRequests: lead.visitRequests.map((vr) => ({
       id: vr.id,

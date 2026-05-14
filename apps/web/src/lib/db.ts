@@ -46,6 +46,12 @@ function buildExtendedClient(client: PrismaClient) {
             return readContact(lead.contact).name;
           },
         },
+        companyName: {
+          needs: { contact: true },
+          compute(lead) {
+            return readContact(lead.contact).companyName;
+          },
+        },
         email: {
           needs: { contact: true },
           compute(lead) {

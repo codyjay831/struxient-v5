@@ -2,7 +2,10 @@ import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
-import { buildWorkstationSelectHref } from "@/lib/workstation-return-href";
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
@@ -20,9 +23,10 @@ export default async function WorkstationTasksLensPage({
 }) {
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
-  const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
+  const urlState = parseWorkstationUrlState(sp);
+  const selectedId = urlState.selected?.id;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
   const taskItems = allItems.filter((i) => i.kind === "task");
 
   const selectedItem = selectedId ? taskItems.find((i) => i.id === selectedId) : null;
@@ -53,7 +57,9 @@ export default async function WorkstationTasksLensPage({
               key={item.id}
               item={{
                 ...item,
-                href: buildWorkstationSelectHref(item.id, item.kind)
+                href: buildWorkstationUrl(urlState, {
+                  selected: { id: item.id, kind: item.kind }
+                })
               }}
               isSelected={selectedId === item.id}
             />

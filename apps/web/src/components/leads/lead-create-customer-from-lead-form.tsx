@@ -34,6 +34,7 @@ export function LeadCreateCustomerFromLeadForm({
   const prepared = prepareCustomerFromLead({
     title: lead.title,
     contactName: lead.contactName,
+    companyName: lead.companyName,
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
@@ -76,7 +77,7 @@ export function LeadCreateCustomerFromLeadForm({
             </div>
             <div>
               <dt className={fieldLabelClass}>Company</dt>
-              <dd className="mt-0.5 text-foreground-muted">—</dd>
+              <dd className="mt-0.5 text-foreground-muted">{prepared.data.companyName ?? "—"}</dd>
             </div>
             <div>
               <dt className={fieldLabelClass}>Email</dt>

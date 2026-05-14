@@ -29,6 +29,7 @@ import {
 import {
   loadLeadActiveQuoteWorkSurfaceAction,
   loadLeadServiceAddressContextAction,
+  loadLeadMatchHintsAction,
 } from "@/app/(workspace)/leads/lead-workspace-actions";
 
 import {
@@ -131,6 +132,11 @@ function WorkspaceContent({
     [lead.id],
   );
 
+  const loadMatchHints = useCallback(
+    () => loadLeadMatchHintsAction(lead.id),
+    [lead.id],
+  );
+
   return (
     <div className="flex max-h-[88vh] flex-col">
       {/* ── Header (popup chrome — status badge, source, close, identity) ── */}
@@ -182,6 +188,7 @@ function WorkspaceContent({
           linkedQuotes={linkedQuotes}
           loadActiveQuoteWorkSurface={loadActiveQuoteWorkSurface}
           loadServiceAddressContext={loadServiceAddressContext}
+          loadMatchHints={loadMatchHints}
           onQuoteStarted={onQuoteStarted}
         />
       </div>

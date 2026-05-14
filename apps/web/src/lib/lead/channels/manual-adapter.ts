@@ -6,6 +6,7 @@ import { PublicIntakeServiceLocationV1 } from "../../public-lead-service-locatio
 export interface ManualPayload {
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   requestType: string | null;
@@ -34,6 +35,7 @@ export class ManualAdapter implements LeadIntakeAdapter<ManualPayload> {
         name: payload.contactName,
         email: payload.email,
         phone: payload.phone,
+        companyName: payload.companyName,
       },
       request: {
         type: payload.requestType,

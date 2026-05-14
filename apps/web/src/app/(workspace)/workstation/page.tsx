@@ -9,33 +9,24 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
+import { db } from "@/lib/db";
+import { JobTaskStatus } from "@prisma/client";
 import {
   queryWorkstationWorkItems,
-  compareWorkstationLeadOrder,
   type WorkstationWorkItem,
-  type WorkstationLens,
-  type WorkstationFilterCategory,
 } from "@/lib/workstation-query";
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
-import { WorkstationLeadPanel } from "@/components/workstation/workstation-lead-panel";
+import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
+import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
-import { db } from "@/lib/db";
-import { JobTaskStatus } from "@prisma/client";
-import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
-import {
-  formatLeadChannel,
-  formatLeadStatus,
-  leadStatusBadgeTone,
-} from "@/lib/lead-display";
-import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
-import { jobsiteLineFromLead } from "@/lib/jobsite-address";
-import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
-import { projectLead, deriveLeadTitle } from "@/lib/lead/lead-projection";
-import type { LeadServiceAddressContext } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { 
   WorkstationFocusCard, 
   WorkstationQueueItem, 
@@ -60,9 +51,9 @@ export default async function WorkstationTodayLensPage({
 }) {
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
-  const selectedId = typeof sp.selectedId === "string" ? sp.selectedId : undefined;
-  const lens = (typeof sp.lens === "string" ? sp.lens : "attention") as WorkstationLens;
-  const filter = (typeof sp.filter === "string" ? sp.filter : "all") as WorkstationFilterCategory;
+  const urlState = parseWorkstationUrlState(sp);
+  const { lens, filter, selected } = urlState;
+  const selectedId = selected?.id;
 
   const settings = await db.workstationSettings.findUnique({
     where: { organizationId: ctx.organizationId },
@@ -74,7 +65,7 @@ export default async function WorkstationTodayLensPage({
     : ["new-intake", "new-quote", "browse-jobs"];
   const urgentThresholdHours = settings?.urgentThresholdHours ?? 24;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId, urgentThresholdHours);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role, urgentThresholdHours);
 
   // Fetch recent activity for Priority 3 Notifications/Activity
   const recentActivity = await db.jobActivity.findMany({
@@ -104,21 +95,20 @@ export default async function WorkstationTodayLensPage({
 
   const selectedItem = selectedId ? allItems.find((i) => i.id === selectedId) : null;
 
+  // Group by lane
+  const criticalItems = filteredItems.filter((i) => i.lane === "critical").sort((a, b) => a.withinLaneRank - b.withinLaneRank);
+  const dueItems = filteredItems.filter((i) => i.lane === "due").sort((a, b) => a.withinLaneRank - b.withinLaneRank);
+  const upcomingItems = filteredItems.filter((i) => i.lane === "upcoming").sort((a, b) => a.withinLaneRank - b.withinLaneRank);
+  const watchItems = filteredItems.filter((i) => i.lane === "watch").sort((a, b) => a.withinLaneRank - b.withinLaneRank);
+
   // Helper to build hrefs that preserve lens/filter
   const buildItemHref = (item: WorkstationWorkItem) => {
-    const p = new URLSearchParams();
-    if (lens !== "attention") p.set("lens", lens);
-    if (filter !== "all") p.set("filter", filter);
-    p.set("selectedId", item.id);
-    p.set("selectedKind", item.kind);
-    return `?${p.toString()}`;
+    return buildWorkstationUrl(urlState, {
+      selected: { id: item.id, kind: item.kind }
+    });
   };
 
-  // Prioritize for the selected view
-  const prioritizedItems = [...filteredItems].sort(compareWorkstationLeadOrder);
-
-  const focusItem = prioritizedItems[0];
-  const queueItems = prioritizedItems.slice(1);
+  const LANE_CAP = 10;
 
   return (
     <div className="space-y-8">
@@ -167,36 +157,105 @@ export default async function WorkstationTodayLensPage({
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-12">
-          {prioritizedItems.length > 0 ? (
+          {filteredItems.length > 0 ? (
             <div className="space-y-12">
-              {/* Primary Focus */}
-              {focusItem && (
-                <section className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Primary Focus
-                    </h3>
+              {/* Critical Lane */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-danger">
+                    Critical / Blocking
+                  </h3>
+                </div>
+                {criticalItems.length > 0 ? (
+                  <div className="space-y-4">
+                    {criticalItems.slice(0, 3).map((item) => (
+                      <WorkstationFocusCard 
+                        key={item.id}
+                        item={{
+                          ...item,
+                          href: buildItemHref(item)
+                        }} 
+                        isSelected={selectedId === item.id} 
+                      />
+                    ))}
+                    {criticalItems.length > 3 && (
+                      <div className="grid gap-2">
+                        {criticalItems.slice(3, LANE_CAP).map((item) => (
+                          <WorkstationQueueItem 
+                            key={item.id} 
+                            item={{
+                              ...item,
+                              href: buildItemHref(item)
+                            }} 
+                            isSelected={selectedId === item.id} 
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <WorkstationFocusCard 
-                    item={{
-                      ...focusItem,
-                      href: buildItemHref(focusItem)
-                    }} 
-                    isSelected={selectedId === focusItem.id} 
-                  />
-                </section>
-              )}
+                ) : (
+                  <p className="text-xs text-foreground-muted italic">
+                    Nothing critical. Pick from due today below.
+                  </p>
+                )}
+              </section>
 
-              {/* Secondary Queue */}
-              {queueItems.length > 0 && (
+              {/* Due Today Lane */}
+              {dueItems.length > 0 && (
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Queue
+                      Due Today
                     </h3>
                   </div>
                   <div className="grid gap-2">
-                    {queueItems.map((item) => (
+                    {dueItems.slice(0, LANE_CAP).map((item) => (
+                      <WorkstationQueueItem 
+                        key={item.id} 
+                        item={{
+                          ...item,
+                          href: buildItemHref(item)
+                        }} 
+                        isSelected={selectedId === item.id} 
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Upcoming Lane */}
+              {upcomingItems.length > 0 && (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                      Upcoming / Prepare
+                    </h3>
+                  </div>
+                  <div className="grid gap-2">
+                    {upcomingItems.slice(0, 5).map((item) => (
+                      <WorkstationQueueItem 
+                        key={item.id} 
+                        item={{
+                          ...item,
+                          href: buildItemHref(item)
+                        }} 
+                        isSelected={selectedId === item.id} 
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Watch Lane */}
+              {watchItems.length > 0 && (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                      Watch / Aging
+                    </h3>
+                  </div>
+                  <div className="grid gap-2">
+                    {watchItems.slice(0, 5).map((item) => (
                       <WorkstationQueueItem 
                         key={item.id} 
                         item={{
@@ -227,7 +286,7 @@ export default async function WorkstationTodayLensPage({
             
             {recentActivity.length > 0 ? (
               <div className="space-y-4">
-                {recentActivity.map((activity) => (
+                {recentActivity.map((activity: any) => (
                   <div key={activity.id} className={activityItemClass}>
                     <div className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/5">
                       <Zap className="size-3 text-foreground-subtle" />
@@ -391,235 +450,13 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
   );
 }
 
-const WORKSTATION_CUSTOMER_LINK_FETCH_CAP = 500;
-
 async function LeadDetailWrapper({ leadId }: { leadId: string }) {
   const ctx = await getRequestContextOrThrow();
+  const payload = await loadLeadCommercialSurface(leadId, ctx);
 
-  const lead = await db.lead.findFirst({
-    where: { id: leadId, organizationId: ctx.organizationId },
+  if (!payload) return null;
 
-    select: {
-      id: true,
-      status: true,
-      contact: true,
-      request: true,
-      address: true,
-      signals: true,
-      channel: true,
-      customerId: true,
-      createdAt: true,
-      customer: { select: { id: true, displayName: true } },
-      visitRequests: {
-        where: { status: "PENDING" },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
-
-  if (!lead) return null;
-
-  const projected = projectLead({
-    id: lead.id,
-    status: lead.status,
-    channel: lead.channel,
-    customerId: lead.customerId,
-    convertedAt: null,
-    createdAt: lead.createdAt,
-    updatedAt: lead.createdAt,
-    contact: lead.contact,
-    request: lead.request,
-    address: lead.address,
-    signals: lead.signals,
-  });
-
-  const jobsiteAddressLine = jobsiteLineFromLead({
-    address: lead.address,
-    signals: lead.signals,
-  });
-
-  const linkedQuotes = await db.quote.findMany({
-    where: { leadId: lead.id, organizationId: ctx.organizationId },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      totalCents: true,
-      updatedAt: true,
-      _count: { select: { lineItems: true } },
-      job: { select: { id: true, status: true, organizationId: true } },
-    },
-  });
-
-  const progress = getLeadCommercialProgress({
-    lead: {
-      status: lead.status,
-      customerId: lead.customerId,
-      email: projected.email,
-      phone: projected.phone,
-    },
-    quotes: linkedQuotes.map((q) => ({
-      id: q.id,
-      title: q.title,
-      status: q.status,
-      totalCents: q.totalCents,
-      lineItemCount: q._count.lineItems,
-      updatedAt: q.updatedAt,
-      job: q.job && q.job.organizationId === ctx.organizationId ? { id: q.job.id, status: q.job.status } : null,
-    })),
-  });
-
-  const hasCustomer = lead.customerId !== null;
-  let customersForLink: { id: string; displayName: string }[] | undefined;
-  if (!hasCustomer) {
-    const rows = await db.customer.findMany({
-      where: { organizationId: ctx.organizationId },
-      orderBy: { displayName: "asc" },
-      take: WORKSTATION_CUSTOMER_LINK_FETCH_CAP,
-      select: { id: true, displayName: true },
-    });
-    customersForLink = rows.map((c) => ({ id: c.id, displayName: c.displayName }));
-  }
-
-
-  const surfaceQuotes = linkedQuotes
-    .filter((q) => q.status !== "ARCHIVED")
-    .map((q) => ({
-      id: q.id,
-      title: q.title,
-      statusLabel: formatQuoteStatus(q.status),
-      statusTone: quoteStatusBadgeTone(q.status),
-      totalCents: q.totalCents,
-      lineItemCount: q._count.lineItems,
-      href: `/quotes/${q.id}`,
-    }));
-
-  /* Embed QuoteWorkSurface(standard) inside the Lead Quote tab when an active
-   * quote exists. Same loader used by the Workstation quote drawer + full
-   * Quote page so all containers see identical readiness state. */
-  const activeQuoteId = progress.activeQuote?.id ?? null;
-  const activeQuoteWorkSurface = activeQuoteId
-    ? await loadQuoteWorkSurface(activeQuoteId, ctx.organizationId)
-    : null;
-
-  /* Pre-load Service address context for the Lead workspace Customer Info
-   * block (same shape the Lead full page passes). */
-  const intakeSnapshot = intakeSnapshotForCustomerFromLead({
-    address: lead.address,
-    signals: lead.signals,
-  });
-  const intakeForBlock = intakeSnapshot
-    ? {
-        defaultDisplayAddress:
-          intakeSnapshot.formattedAddress.trim() ||
-          intakeSnapshot.addressLine1.trim(),
-        structuredJson: JSON.stringify(intakeSnapshot),
-      }
-    : { defaultDisplayAddress: "", structuredJson: "" };
-
-  let serviceAddressContext: LeadServiceAddressContext;
-  if (lead.customerId) {
-    const customerLocations = await db.customerServiceLocation.findMany({
-      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
-      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        formattedAddress: true,
-        addressLine1: true,
-        addressLine2: true,
-        city: true,
-        state: true,
-        postalCode: true,
-        country: true,
-        googlePlaceId: true,
-        latitude: true,
-        longitude: true,
-        source: true,
-        isPrimary: true,
-        createdFromLead: { select: { id: true, contact: true, request: true, channel: true } },
-      },
-    });
-    serviceAddressContext = {
-      customer: {
-        customerId: lead.customerId,
-        customerHref: `/customers/${lead.customerId}`,
-        serviceLocations: customerLocations.map((loc) => ({
-          id: loc.id,
-          formattedAddress: loc.formattedAddress,
-          addressLine1: loc.addressLine1,
-          addressLine2: loc.addressLine2,
-          city: loc.city,
-          state: loc.state,
-          postalCode: loc.postalCode,
-          country: loc.country,
-          googlePlaceId: loc.googlePlaceId,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          source: loc.source,
-          isPrimary: loc.isPrimary,
-          createdFromLead: loc.createdFromLead
-            ? {
-                id: loc.createdFromLead.id,
-                title: deriveLeadTitle(loc.createdFromLead.contact, loc.createdFromLead.request),
-                channel: loc.createdFromLead.channel,
-                source: loc.createdFromLead.channel,
-              }
-            : null,
-        })),
-      },
-      intake: intakeForBlock,
-    };
-  } else {
-    serviceAddressContext = { customer: null, intake: intakeForBlock };
-  }
-
-
-  return (
-    <WorkstationLeadPanel
-      leadId={lead.id}
-      leadTitle={projected.title}
-      contactName={projected.contactName}
-      email={projected.email}
-      phone={projected.phone}
-      notes={projected.notes}
-      statusValue={lead.status}
-      statusLabel={formatLeadStatus(lead.status)}
-      statusTone={leadStatusBadgeTone(lead.status)}
-      sourceLabel={formatLeadChannel(lead.channel)}
-      source={lead.channel}
-      createdAtLabel={lead.createdAt.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })}
-      customerId={lead.customerId}
-      customerDisplayName={lead.customer?.displayName ?? null}
-      customerHref={lead.customer ? `/customers/${lead.customer.id}` : null}
-      customersForLink={customersForLink}
-      linkedQuotes={surfaceQuotes}
-      progress={progress}
-      activeQuoteWorkSurface={activeQuoteWorkSurface}
-      jobsiteAddressLine={jobsiteAddressLine}
-      serviceAddressContext={serviceAddressContext}
-      visitRequests={lead.visitRequests.map((vr) => ({
-        id: vr.id,
-        requestedDate: vr.requestedDate,
-        requestedDateLabel: vr.requestedDate
-          ? vr.requestedDate.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })
-          : null,
-        requestedWindow: vr.requestedWindow,
-        confirmedDate: vr.confirmedDate,
-        status: vr.status,
-        notes: vr.notes,
-        createdAt: vr.createdAt,
-      }))}
-    />
-  );
+  return <LeadCommercialSurface payload={payload} entryPoint="workstation" />;
 }
 
 async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {

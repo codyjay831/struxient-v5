@@ -53,6 +53,7 @@ export type LeadRecordFormProps =
       initial: {
         title: string;
         contactName: string | null;
+        companyName: string | null;
         email: string | null;
         phone: string | null;
         requestType: string | null;
@@ -88,9 +89,10 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
     props.mode === "edit"
       ? props.initial
       : {
-          title: "",
-          contactName: null as string | null,
-          email: null as string | null,
+        title: "",
+        contactName: null as string | null,
+        companyName: null as string | null,
+        email: null as string | null,
           phone: null as string | null,
           requestType: null as string | null,
           neededByBucket: null as NeededByBucket | null,
@@ -109,6 +111,8 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
   const [suggestedTemplateIds, setSuggestedTemplateIds] = useState<string[]>(
     defaults.suggestedTemplateIds,
   );
+
+  const [isCommercial, setIsCommercial] = useState(Boolean(defaults.companyName));
 
   const [requestVisit, setRequestVisit] = useState(
     Boolean(props.mode === "edit" && props.initialVisitRequest)
@@ -185,11 +189,54 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
         </label>
       </div>
 
+      <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1 w-fit">
+        <button
+          type="button"
+          onClick={() => setIsCommercial(false)}
+          className={`px-3 py-1.5 text-[0.65rem] font-bold uppercase tracking-wider rounded-md transition-all ${
+            !isCommercial
+              ? "bg-accent text-accent-contrast shadow-sm"
+              : "text-foreground-subtle hover:text-foreground hover:bg-foreground/5"
+          }`}
+        >
+          Residential
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsCommercial(true)}
+          className={`px-3 py-1.5 text-[0.65rem] font-bold uppercase tracking-wider rounded-md transition-all ${
+            isCommercial
+              ? "bg-accent text-accent-contrast shadow-sm"
+              : "text-foreground-subtle hover:text-foreground hover:bg-foreground/5"
+          }`}
+        >
+          Commercial
+        </button>
+      </div>
+
       <div className="rounded-xl border border-border bg-foreground/[0.01] p-4 space-y-4">
-        <p className={fieldLabelClass}>Contact</p>
+        <p className={fieldLabelClass}>{isCommercial ? "Company & Contact" : "Contact"}</p>
+        
+        {isCommercial && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+            <label className="block">
+              <span className={fieldLabelClass}>Company name</span>
+              <input
+                name="companyName"
+                type="text"
+                required={isCommercial}
+                maxLength={LEAD_FIELD_LIMITS.contactName}
+                autoComplete="organization"
+                defaultValue={defaults.companyName ?? ""}
+                className={controlClass}
+              />
+            </label>
+          </div>
+        )}
+
         <div>
           <label className="block">
-            <span className={fieldLabelClass}>Contact name</span>
+            <span className={fieldLabelClass}>{isCommercial ? "Primary contact name" : "Contact name"}</span>
             <input
               name="contactName"
               type="text"

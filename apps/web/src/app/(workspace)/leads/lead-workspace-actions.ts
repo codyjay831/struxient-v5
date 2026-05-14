@@ -26,6 +26,7 @@ import {
   attachIntakeServiceLocationToCustomerFromLead,
   intakeSnapshotForCustomerFromLead,
 } from "@/lib/customer-service-location-from-lead";
+import { findCustomerMatchHints, type LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import {
   getLeadCommercialProgress,
   type LeadProgressQuoteInput,
@@ -39,6 +40,7 @@ import {
   readRequest,
   readSignals,
 } from "@/lib/lead/lead-projection";
+import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import {
   parseStoredPublicIntakeServiceLocation,
@@ -166,6 +168,7 @@ export async function createCustomerFromLeadWorkspaceAction(
       const prep = prepareCustomerFromLead({
         title: request.type || "Lead",
         contactName: contact.name,
+        companyName: contact.companyName,
         email: contact.email,
         phone: contact.phone,
         notes: signals?.notes || "",
@@ -421,12 +424,18 @@ export async function updateLeadContactWorkspaceAction(
   if (!exists) return { error: "Lead not found in your organization." };
 
   const contactName = trimOrNull(formData.get("contactName"));
+  const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
 
   if (contactName && contactName.length > LEAD_FIELD_LIMITS.contactName) {
     return {
       error: `Contact name is too long (max ${LEAD_FIELD_LIMITS.contactName} characters).`,
+    };
+  }
+  if (companyName && companyName.length > LEAD_FIELD_LIMITS.contactName) {
+    return {
+      error: `Company name is too long (max ${LEAD_FIELD_LIMITS.contactName} characters).`,
     };
   }
   if (email && !isReasonableEmail(email)) {
@@ -443,6 +452,7 @@ export async function updateLeadContactWorkspaceAction(
     data: {
       contact: {
         name: contactName,
+        companyName,
         email,
         phone,
       } as Prisma.InputJsonValue,
@@ -544,6 +554,8 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       status: true,
       customerId: true,
       contact: true,
+      address: true,
+      signals: true,
       quotes: {
         orderBy: { updatedAt: "desc" },
         select: {
@@ -582,8 +594,12 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     lead: {
       status: lead.status,
       customerId: lead.customerId,
-      email: contact?.email,
-      phone: contact?.phone,
+      contactName: contact.name,
+      companyName: contact.companyName,
+      email: contact.email,
+      phone: contact.phone,
+      jobsiteAddressLine: jobsiteLineFromLead(lead),
+      isAddressVerified: isLeadAddressVerified(lead),
     },
     quotes: progressQuoteInputs,
   });
@@ -594,6 +610,47 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
 
   const result = await loadQuoteWorkSurface(progress.activeQuote.id, ctx.organizationId);
   return { ok: true, payload: result };
+}
+
+/**
+ * Read-only loader for match hints. Used by the Leads list popup.
+ */
+export async function loadLeadMatchHintsAction(
+  leadId: string,
+): Promise<{ ok: true; hints: LeadCustomerMatchHints } | { ok: false; error: string }> {
+  const id = leadId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+
+  const ctx = await getRequestContextOrThrow();
+
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { email: true, phone: true },
+  });
+
+  if (!lead) return { ok: false, error: "Lead not found." };
+
+  const customers = await db.customer.findMany({
+    where: { organizationId: ctx.organizationId },
+    orderBy: { displayName: "asc" },
+    take: 500,
+    select: {
+      id: true,
+      displayName: true,
+      companyName: true,
+      email: true,
+      phone: true,
+    },
+  });
+
+  const hints = findCustomerMatchHints(
+    customers,
+    lead.email,
+    lead.phone,
+    500,
+  );
+
+  return { ok: true, hints };
 }
 
 /* ─── Service address ownership (Phase 2) ──────────────────────────────── */

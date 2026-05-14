@@ -48,6 +48,7 @@ export type SerializedLeadFull = {
   id: string;
   title: string;
   contactName: string | null;
+  companyName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -91,6 +92,8 @@ export type SerializedLeadFull = {
   activeJobId: string | null;
   activeJobStatus: string | null;
   showsRevisionDrift: boolean;
+  satisfiedItems: string[];
+  requiredItems: string[];
   /** Canonical lead source — used for customer-from-lead note shaping in workspace UI. */
   source: LeadChannel;
   /** Site visit requests (Phase C). */
@@ -122,6 +125,7 @@ function adaptLeadFull(
     id: lead.id,
     title: lead.title,
     contactName: lead.contactName,
+    companyName: lead.companyName,
     email: lead.email,
     phone: lead.phone,
     notes: lead.notes,
@@ -161,6 +165,8 @@ function adaptLeadFull(
     activeJobId: lead.activeJobId,
     activeJobStatus: lead.activeJobStatus,
     showsRevisionDrift: lead.showsRevisionDrift,
+    satisfiedItems: lead.satisfiedItems,
+    requiredItems: lead.requiredItems,
     source: lead.source,
     visitRequests: lead.visitRequests,
   };

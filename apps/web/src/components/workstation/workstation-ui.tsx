@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ChevronRight, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
-import { type WorkstationWorkItem, type WorkstationFilterCategory, type WorkstationLens } from "@/lib/workstation-query";
+import { workstationTelemetry } from "@/lib/workstation/telemetry";
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
+import {
+  type WorkstationWorkItem,
+  type WorkstationFilterCategory,
+  type WorkstationLens,
+} from "@/lib/workstation-query";
 
 export function WorkstationFilterBar({ 
   currentFilter, 
@@ -13,6 +22,8 @@ export function WorkstationFilterBar({
   currentLens: WorkstationLens;
 }) {
   const searchParams = useSearchParams();
+  const urlState = parseWorkstationUrlState(searchParams);
+
   const filters: { id: WorkstationFilterCategory; label: string }[] = [
     { id: "all", label: "All" },
     { id: "leads", label: "Intakes" },
@@ -29,14 +40,12 @@ export function WorkstationFilterBar({
       <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
         {(["attention", "today", "waiting", "upcoming", "all"] as WorkstationLens[]).map((l) => {
           const active = currentLens === l;
-          const params = new URLSearchParams(searchParams.toString());
-          if (l === "attention") params.delete("lens");
-          else params.set("lens", l);
+          const href = buildWorkstationUrl(urlState, { lens: l });
 
           return (
             <Link
               key={l}
-              href={`?${params.toString()}`}
+              href={href}
               className={[
                 "rounded-md px-2 py-1 text-[0.6rem] font-bold uppercase tracking-wider transition-colors",
                 active
@@ -51,24 +60,12 @@ export function WorkstationFilterBar({
       </div>
       {filters.map((f) => {
         const active = currentFilter === f.id;
-        
-        const params = new URLSearchParams(searchParams.toString());
-        if (currentLens !== "attention") {
-          params.set("lens", currentLens);
-        } else {
-          params.delete("lens");
-        }
-        
-        if (f.id === "all") {
-          params.delete("filter");
-        } else {
-          params.set("filter", f.id);
-        }
+        const href = buildWorkstationUrl(urlState, { filter: f.id });
 
         return (
           <Link
             key={f.id}
-            href={`?${params.toString()}`}
+            href={href}
             className={[
               "whitespace-nowrap rounded-full px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider transition-colors sm:px-3 sm:py-1",
               active
@@ -112,6 +109,7 @@ export function WorkstationFocusCard({
       className={cardClass}
       aria-label={`Open ${item.kind}: ${item.title}`}
       scroll={false}
+      onClick={() => workstationTelemetry.trackLaneClick(item.lane, item.id, item.kind)}
     >
       <div className="p-6 sm:p-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
@@ -204,6 +202,7 @@ export function WorkstationQueueItem({
       href={item.href || "#"}
       className={itemClass}
       scroll={false}
+      onClick={() => workstationTelemetry.trackLaneClick(item.lane, item.id, item.kind)}
     >
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
@@ -255,6 +254,8 @@ export function WorkstationClearedState({
   lens?: WorkstationLens; 
   filter?: WorkstationFilterCategory;
 }) {
+  const searchParams = useSearchParams();
+  const urlState = parseWorkstationUrlState(searchParams);
   const isFiltered = filter && filter !== "all";
   
   let title = "Today is clear";
@@ -283,7 +284,7 @@ export function WorkstationClearedState({
       <div className="mt-8 flex gap-4">
         {isFiltered ? (
           <Link 
-            href={`?${new URLSearchParams({ ...(lens !== "attention" ? { lens } : {}) }).toString()}`}
+            href={buildWorkstationUrl(urlState, { filter: "all" })}
             className="text-xs font-semibold uppercase tracking-wider text-foreground hover:underline"
           >
             Clear Filters

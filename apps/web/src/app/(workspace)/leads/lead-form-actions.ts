@@ -110,6 +110,7 @@ export async function createLeadAction(
 
   const title = trimRequired(formData.get("title"));
   const contactName = trimOrNull(formData.get("contactName"));
+  const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
   const requestType = trimOrNull(formData.get("requestType"));
@@ -143,6 +144,7 @@ export async function createLeadAction(
   const input = adapter.parse({
     title,
     contactName,
+    companyName,
     email,
     phone,
     requestType,
@@ -279,6 +281,7 @@ export async function updateLeadAction(
   }
 
   const contactName = trimOrNull(formData.get("contactName"));
+  const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
   const requestType = trimOrNull(formData.get("requestType"));
@@ -305,6 +308,12 @@ export async function updateLeadAction(
 
   if (contactName) {
     const err = enforceMaxLength("Contact name", contactName, LEAD_FIELD_LIMITS.contactName);
+    if (err) {
+      return err;
+    }
+  }
+  if (companyName) {
+    const err = enforceMaxLength("Company name", companyName, LEAD_FIELD_LIMITS.contactName);
     if (err) {
       return err;
     }
@@ -394,6 +403,7 @@ export async function updateLeadAction(
       data: {
         contact: {
           name: contactName,
+          companyName,
           email,
           phone,
         } as Prisma.InputJsonValue,
@@ -480,20 +490,21 @@ export async function updateLeadAction(
       }
     }
 
-    await tx.leadEvent.create({
-      data: {
-        leadId: id,
-        type: "UPDATED",
-        payload: {
-          contactName,
-          email,
-          phone,
-          requestType,
-          channel,
-        } as Prisma.InputJsonValue,
-        actorUserId: ctx.userId,
-      },
-    });
+      await tx.leadEvent.create({
+        data: {
+          leadId: id,
+          type: "UPDATED",
+          payload: {
+            contactName,
+            companyName,
+            email,
+            phone,
+            requestType,
+            channel,
+          } as Prisma.InputJsonValue,
+          actorUserId: ctx.userId,
+        },
+      });
 
     return res;
   });
@@ -672,6 +683,7 @@ export async function createCustomerFromLeadAction(
       const prep = prepareCustomerFromLead({
         title: request.type || "Lead",
         contactName: contact.name,
+        companyName: contact.companyName,
         email: contact.email,
         phone: contact.phone,
         notes: signals?.notes || "",
