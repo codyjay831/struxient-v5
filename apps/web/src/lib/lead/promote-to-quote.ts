@@ -146,16 +146,6 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             snapshot: intakeSnapshotForCustomerFromLead(lead),
           });
 
-          // Mark lead as CONVERTED
-          await tx.lead.update({
-            where: { id: lead.id },
-            data: {
-              customerId: customer.id,
-              status: "CONVERTED",
-              convertedAt: new Date(),
-            },
-          });
-
           // Log event
           await tx.leadEvent.create({
             data: {
@@ -169,7 +159,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
 
         // 2. Create Draft Quote
         const quoteTitle = `Quote — ${contact.name || "Customer"}`;
-        
+
         const quote = await tx.quote.create({
           data: {
             organizationId: ctx.organizationId,
@@ -182,7 +172,17 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           },
         });
 
-        // 3. Apply Suggested Templates
+        // 3. Mark lead as CONVERTED (always graduate on quote creation)
+        await tx.lead.update({
+          where: { id: lead.id },
+          data: {
+            customerId: resolvedCustomerId,
+            status: "CONVERTED",
+            convertedAt: new Date(),
+          },
+        });
+
+        // 4. Apply Suggested Templates
         const suggestedTemplateIds = signals?.suggestedTemplateIds || [];
         if (suggestedTemplateIds.length > 0) {
           for (const tid of suggestedTemplateIds) {

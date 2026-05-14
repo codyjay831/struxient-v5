@@ -12,49 +12,82 @@ export default async function LeadInboxPage() {
   const ctx = await getRequestContextOrThrow();
   const now = new Date();
 
-  const leads = await db.lead.findMany({
-    where: { 
-      organizationId: ctx.organizationId,
-      status: { in: [LeadStatus.NEW, LeadStatus.TRIAGING] },
-    },
-    orderBy: { createdAt: "desc" },
-    include: {
-      customer: { select: { id: true, displayName: true } },
-      quotes: {
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          totalCents: true,
-          updatedAt: true,
-          _count: { select: { lineItems: true } },
-          job: { select: { id: true, status: true, organizationId: true } },
+  const [openLeads, recentLeads] = await Promise.all([
+    db.lead.findMany({
+      where: {
+        organizationId: ctx.organizationId,
+        status: { in: [LeadStatus.NEW, LeadStatus.TRIAGING] },
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: { select: { id: true, displayName: true } },
+        quotes: {
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            totalCents: true,
+            updatedAt: true,
+            _count: { select: { lineItems: true } },
+            job: { select: { id: true, status: true, organizationId: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    db.lead.findMany({
+      where: {
+        organizationId: ctx.organizationId,
+        status: { in: [LeadStatus.CONVERTED, LeadStatus.ARCHIVED] },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+      include: {
+        customer: { select: { id: true, displayName: true } },
+        quotes: {
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            totalCents: true,
+            updatedAt: true,
+            _count: { select: { lineItems: true } },
+            job: { select: { id: true, status: true, organizationId: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const allLeads = [...openLeads, ...recentLeads];
 
   // Fetch candidate customers for all leads in the inbox
   const allCandidateIds = Array.from(
-    new Set(leads.flatMap((l) => readSignals(l.signals).duplicateCandidateIds ?? [])),
+    new Set(allLeads.flatMap((l) => readSignals(l.signals).duplicateCandidateIds ?? [])),
   );
   const candidates = await db.customer.findMany({
     where: { id: { in: allCandidateIds }, organizationId: ctx.organizationId },
     select: { id: true, displayName: true, email: true, phone: true },
   });
 
-  const inboxLeads: InboxLeadRow[] = leads.map((lead) => ({
-    id: lead.id,
-    channel: lead.channel,
-    status: lead.status,
-    createdAt: lead.createdAt,
-    contact: readContact(lead.contact),
-    request: readRequest(lead.request),
-    signals: readSignals(lead.signals),
-  }));
+  const serializeInbox = (l: (typeof allLeads)[0]): InboxLeadRow => ({
+    id: l.id,
+    channel: l.channel,
+    status: l.status,
+    createdAt: l.createdAt,
+    contact: readContact(l.contact),
+    request: readRequest(l.request),
+    signals: readSignals(l.signals),
+  });
 
-  const workspaceLeads: SerializedLeadRow[] = leads.map((lead) =>
+  const initialOpenLeads = openLeads.map(serializeInbox);
+  const initialRecentLeads = recentLeads.map(serializeInbox);
+
+  const workspaceOpenLeads: SerializedLeadRow[] = openLeads.map((lead) =>
+    serializeLeadListRow(lead, ctx.organizationId, now),
+  );
+  const workspaceRecentLeads: SerializedLeadRow[] = recentLeads.map((lead) =>
     serializeLeadListRow(lead, ctx.organizationId, now),
   );
 
@@ -89,8 +122,10 @@ export default async function LeadInboxPage() {
         </div>
       </div>
       <LeadInboxClient
-        initialLeads={inboxLeads}
-        workspaceLeads={workspaceLeads}
+        initialOpenLeads={initialOpenLeads}
+        initialRecentLeads={initialRecentLeads}
+        workspaceOpenLeads={workspaceOpenLeads}
+        workspaceRecentLeads={workspaceRecentLeads}
         candidates={candidates}
       />
     </div>

@@ -56,28 +56,45 @@ export type CandidateRow = {
 };
 
 type LeadInboxClientProps = {
-  initialLeads: InboxLeadRow[];
-  workspaceLeads: SerializedLeadRow[];
+  initialOpenLeads: InboxLeadRow[];
+  initialRecentLeads: InboxLeadRow[];
+  workspaceOpenLeads: SerializedLeadRow[];
+  workspaceRecentLeads: SerializedLeadRow[];
   candidates: CandidateRow[];
 };
 
 export function LeadInboxClient({
-  initialLeads,
-  workspaceLeads: initialWorkspaceLeads,
+  initialOpenLeads,
+  initialRecentLeads,
+  workspaceOpenLeads: initialWorkspaceOpenLeads,
+  workspaceRecentLeads: initialWorkspaceRecentLeads,
   candidates,
 }: LeadInboxClientProps) {
   const router = useRouter();
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(initialLeads[0]?.id || null);
-  const [leads, setLeads] = useState(initialLeads);
-  const [workspaceLeads, setWorkspaceLeads] = useState(initialWorkspaceLeads);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(
+    initialOpenLeads[0]?.id || null,
+  );
+  const [openLeads, setOpenLeads] = useState(initialOpenLeads);
+  const [recentLeads, setRecentLeads] = useState(initialRecentLeads);
+  const [workspaceOpenLeads, setWorkspaceOpenLeads] = useState(initialWorkspaceOpenLeads);
+  const [workspaceRecentLeads, setWorkspaceRecentLeads] = useState(initialWorkspaceRecentLeads);
+
+  const [sessionGraduatedIds, setSessionGraduatedIds] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<"inbox" | "recent">("inbox");
   const [searchQuery, setSearchQuery] = useState("");
   const [isPromoting, setIsPromoting] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const workSurfaceRef = useRef<LeadWorkSurfaceHandle>(null);
 
-  const selectedLead = leads.find((l) => l.id === selectedLeadId);
-  const selectedWorkspaceLead = workspaceLeads.find((l) => l.id === selectedLeadId);
+  const allInboxLeads = useMemo(() => [...openLeads, ...recentLeads], [openLeads, recentLeads]);
+  const allWorkspaceLeads = useMemo(
+    () => [...workspaceOpenLeads, ...workspaceRecentLeads],
+    [workspaceOpenLeads, workspaceRecentLeads],
+  );
+
+  const selectedLead = allInboxLeads.find((l) => l.id === selectedLeadId);
+  const selectedWorkspaceLead = allWorkspaceLeads.find((l) => l.id === selectedLeadId);
 
   const candidateIds = selectedLead?.signals.duplicateCandidateIds ?? [];
   const leadCandidates = candidates.filter((c) => candidateIds.includes(c.id));
@@ -87,13 +104,21 @@ export function LeadInboxClient({
       quoteId: string;
       activeQuotePayload: LeadWorkSurfaceActiveQuotePayload | null;
     }) => {
-      setWorkspaceLeads((prev) => {
+      if (selectedLeadId) {
+        setSessionGraduatedIds((prev) => new Set(prev).add(selectedLeadId));
+      }
+      setWorkspaceOpenLeads((prev) => {
         const base = prev.find((l) => l.id === selectedLeadId);
         if (!base) return prev;
         return prev.map((l) =>
-          l.id === selectedLeadId
-            ? patchSerializedLeadRowAfterQuoteStarted(base, args)
-            : l,
+          l.id === selectedLeadId ? patchSerializedLeadRowAfterQuoteStarted(base, args) : l,
+        );
+      });
+      setWorkspaceRecentLeads((prev) => {
+        const base = prev.find((l) => l.id === selectedLeadId);
+        if (!base) return prev;
+        return prev.map((l) =>
+          l.id === selectedLeadId ? patchSerializedLeadRowAfterQuoteStarted(base, args) : l,
         );
       });
     },
@@ -116,9 +141,12 @@ export function LeadInboxClient({
     try {
       const result = await archiveLeadInboxAction(selectedLeadId);
       if (result.success) {
-        setLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
-        setWorkspaceLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
-        const remaining = leads.filter((l) => l.id !== selectedLeadId);
+        setOpenLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
+        setRecentLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
+        setWorkspaceOpenLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
+        setWorkspaceRecentLeads((prev) => prev.filter((l) => l.id !== selectedLeadId));
+
+        const remaining = allInboxLeads.filter((l) => l.id !== selectedLeadId);
         setSelectedLeadId(remaining[0]?.id ?? null);
         router.refresh();
       } else {
@@ -129,13 +157,33 @@ export function LeadInboxClient({
     }
   };
 
-  const filteredLeads = leads.filter(l => {
-    const contact = l.contact;
-    const name = contact.name?.toLowerCase() || "";
-    const email = contact.email?.toLowerCase() || "";
+  const filteredLeads = useMemo(() => {
+    const baseList = view === "inbox" ? openLeads : recentLeads;
+
+    // Sticky logic: if we are in inbox view but the selected lead was graduated in this session,
+    // keep it in the list so the user doesn't lose their place.
+    const list = [...baseList];
+    if (
+      view === "inbox" &&
+      selectedLeadId &&
+      sessionGraduatedIds.has(selectedLeadId) &&
+      !openLeads.find((l) => l.id === selectedLeadId)
+    ) {
+      const graduatedLead = allInboxLeads.find((l) => l.id === selectedLeadId);
+      if (graduatedLead) {
+        list.push(graduatedLead);
+      }
+    }
+
     const query = searchQuery.toLowerCase();
-    return name.includes(query) || email.includes(query);
-  });
+    return list
+      .filter((l) => {
+        const name = l.contact.name?.toLowerCase() || "";
+        const email = l.contact.email?.toLowerCase() || "";
+        return name.includes(query) || email.includes(query);
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [view, openLeads, recentLeads, selectedLead, searchQuery]);
 
   const { data, linkedQuotes } = useMemo(() => {
     if (!selectedWorkspaceLead) return { data: null, linkedQuotes: [] };
@@ -158,10 +206,28 @@ export function LeadInboxClient({
             />
           </div>
           <div className="flex items-center justify-between">
-            <button className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground transition-colors">
-              <Filter className="mr-1.5 size-3" />
-              All Leads
-            </button>
+            <div className="flex bg-foreground/[0.03] p-0.5 rounded-lg">
+              <button
+                onClick={() => setView("inbox")}
+                className={`px-3 py-1 rounded-md text-[0.65rem] font-bold transition-all ${
+                  view === "inbox"
+                    ? "bg-surface text-foreground shadow-sm"
+                    : "text-foreground-subtle hover:text-foreground"
+                }`}
+              >
+                Inbox ({openLeads.length})
+              </button>
+              <button
+                onClick={() => setView("recent")}
+                className={`px-3 py-1 rounded-md text-[0.65rem] font-bold transition-all ${
+                  view === "recent"
+                    ? "bg-surface text-foreground shadow-sm"
+                    : "text-foreground-subtle hover:text-foreground"
+                }`}
+              >
+                Recent
+              </button>
+            </div>
             <span className="text-[0.6rem] font-bold text-foreground-subtle uppercase tracking-widest">
               {filteredLeads.length} Leads
             </span>
@@ -194,9 +260,21 @@ export function LeadInboxClient({
                   {request.scope || "No details provided"}
                 </p>
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[0.6rem] font-bold text-foreground-subtle uppercase">
-                    {lead.channel}
-                  </span>
+                  {lead.status === "CONVERTED" ? (
+                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[0.6rem] font-bold text-success uppercase">
+                      <CheckCircle2 className="mr-1 size-2.5" />
+                      Graduated
+                    </span>
+                  ) : lead.status === "ARCHIVED" ? (
+                    <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[0.6rem] font-bold text-foreground-subtle uppercase">
+                      <Archive className="mr-1 size-2.5" />
+                      Archived
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[0.6rem] font-bold text-foreground-subtle uppercase">
+                      {lead.channel}
+                    </span>
+                  )}
                   {lead.status === "NEW" && (
                     <span className="size-1.5 rounded-full bg-accent animate-pulse" />
                   )}
