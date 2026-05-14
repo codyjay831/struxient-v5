@@ -1,14 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useActionState } from "react";
+import { useEffect, useState, useActionState } from "react";
 import { 
   Plus, 
   Trash2, 
-  GripVertical, 
-  ChevronDown, 
-  ChevronUp,
   AlertCircle,
-  CheckCircle2,
   DollarSign,
   Percent
 } from "lucide-react";
@@ -17,7 +13,6 @@ import {
   addPaymentScheduleItemWorkspaceAction,
   deletePaymentScheduleItemWorkspaceAction,
   updatePaymentScheduleItemWorkspaceAction,
-  reorderPaymentScheduleItemsWorkspaceAction,
   type QuoteWorkspaceActionState
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import { 
@@ -60,7 +55,6 @@ export function QuotePaymentScheduleEditor({
   quoteTotalCents,
   items,
   stages,
-  mode = "standard",
 }: PaymentScheduleEditorProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -99,13 +93,12 @@ export function QuotePaymentScheduleEditor({
                 quoteId={quoteId}
                 item={item}
                 stages={stages}
-                quoteTotalCents={quoteTotalCents}
                 onSuccess={() => setEditingItemId(null)}
                 onCancel={() => setEditingItemId(null)}
               />
             ) : (
               <div 
-                className="group flex items-center justify-between p-3 rounded-xl border border-border bg-surface hover:border-border-strong transition-all"
+                className="group flex items-center justify-between p-3 rounded-xl border border-border bg-surface hover:border-border-strong transition-all cursor-pointer"
                 onClick={() => setEditingItemId(item.id)}
               >
                 <div className="flex items-center gap-3">
@@ -140,7 +133,6 @@ export function QuotePaymentScheduleEditor({
           <AddItemForm
             quoteId={quoteId}
             stages={stages}
-            quoteTotalCents={quoteTotalCents}
             onSuccess={() => setIsAdding(false)}
             onCancel={() => setIsAdding(false)}
           />
@@ -183,13 +175,11 @@ export function QuotePaymentScheduleEditor({
 function AddItemForm({
   quoteId,
   stages,
-  quoteTotalCents,
   onSuccess,
   onCancel,
 }: {
   quoteId: string;
   stages: StageOption[];
-  quoteTotalCents: number;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -204,7 +194,7 @@ function AddItemForm({
 
   return (
     <form action={formAction} className="p-4 rounded-xl border border-accent/30 bg-accent/[0.01] space-y-4">
-      <ItemFormFields stages={stages} quoteTotalCents={quoteTotalCents} />
+      <ItemFormFields stages={stages} />
       {state.error && <FormError message={state.error} />}
       <div className="flex items-center justify-end gap-2">
         <button
@@ -231,14 +221,12 @@ function EditItemForm({
   quoteId,
   item,
   stages,
-  quoteTotalCents,
   onSuccess,
   onCancel,
 }: {
   quoteId: string;
   item: PaymentScheduleItemPayload;
   stages: StageOption[];
-  quoteTotalCents: number;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -263,7 +251,7 @@ function EditItemForm({
   return (
     <div className="p-4 rounded-xl border border-border-strong bg-surface shadow-sm space-y-4">
       <form action={formAction} className="space-y-4">
-        <ItemFormFields item={item} stages={stages} quoteTotalCents={quoteTotalCents} />
+        <ItemFormFields item={item} stages={stages} />
         {state.error && <FormError message={state.error} />}
         <div className="flex items-center justify-between">
           <button
@@ -306,11 +294,9 @@ function EditItemForm({
 function ItemFormFields({
   item,
   stages,
-  quoteTotalCents,
 }: {
   item?: PaymentScheduleItemPayload;
   stages: StageOption[];
-  quoteTotalCents: number;
 }) {
   const [anchorType, setAnchorType] = useState<PaymentScheduleAnchorType>(item?.anchorType ?? "UPON_APPROVAL");
   const [amountMode, setAmountMode] = useState<"dollars" | "percent" | "remainder">(

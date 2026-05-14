@@ -267,6 +267,7 @@ async function performActivateQuoteJob(
                 ? activationRemainderCents
                 : item.amountCents,
             requiredBeforeStageId: item.anchorType === "BEFORE_STAGE" ? jobStageId : null,
+            sourcePaymentScheduleItemId: item.id,
             status: "PENDING",
           },
         });

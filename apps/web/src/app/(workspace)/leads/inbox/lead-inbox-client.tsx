@@ -206,10 +206,9 @@ export function LeadInboxClient({
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [view, openLeads, recentLeads, selectedLead, searchQuery]);
 
-  const { data, linkedQuotes } = useMemo(() => {
-    if (!selectedWorkspaceLead) return { data: null, linkedQuotes: [] };
-    return adaptLeadRow(selectedWorkspaceLead);
-  }, [selectedWorkspaceLead]);
+  const { data, linkedQuotes } = selectedWorkspaceLead
+    ? adaptLeadRow(selectedWorkspaceLead)
+    : { data: null, linkedQuotes: [] };
 
   return (
     <div className="flex-1 flex overflow-hidden bg-foreground/[0.02]">

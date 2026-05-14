@@ -61,7 +61,6 @@ import {
   Briefcase,
   CheckCircle2,
   ChevronRight,
-  DollarSign,
   Eye,
   FileText,
   Layers,
@@ -1466,12 +1465,10 @@ function PaymentsTab({
   quote,
   workspaceTabs,
   mode,
-  onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   mode: QuoteWorkSurfaceMode;
-  onMutated: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -2412,7 +2409,6 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           mode={mode}
-          onMutated={handleSurfaceMutated}
         />
       )}
       {activeTab === "context" && (

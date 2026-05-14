@@ -23,6 +23,10 @@ export function QuotePublicPreview({
   document: QuoteCustomerPreviewDocument;
   isApproved: boolean;
 }) {
+  const totalScheduledCents = document.paymentSchedule.reduce(
+    (sum, m) => sum + m.amountCents,
+    0,
+  );
   const [showChangeRequest, setShowChangeRequest] = useState(false);
   const handlePrint = () => {
     window.print();
@@ -192,6 +196,28 @@ export function QuotePublicPreview({
                 </li>
               ))}
             </ul>
+            <div className="bg-foreground/[0.02] px-6 py-4 border-t border-border flex justify-between items-center">
+              <span className="text-[10px] font-bold text-foreground-subtle uppercase tracking-wider">
+                Total Scheduled
+              </span>
+              <div className="text-right">
+                <span
+                  className={`text-sm font-bold ${
+                    totalScheduledCents !== document.totalCents
+                      ? "text-warning"
+                      : "text-foreground"
+                  }`}
+                >
+                  {formatMoneyCents(totalScheduledCents)}
+                </span>
+                {totalScheduledCents !== document.totalCents && (
+                  <p className="text-[9px] text-warning font-medium mt-0.5">
+                    Does not match proposal total (
+                    {formatMoneyCents(document.totalCents)})
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

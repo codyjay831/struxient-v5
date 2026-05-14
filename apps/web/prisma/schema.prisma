@@ -790,27 +790,29 @@ model DailyJobLog {
 }
 
 model JobPaymentRequirement {
-  id                    String                      @id @default(cuid())
-  organizationId        String
-  jobId                 String
-  title                 String
-  amountCents           Int?
-  status                JobPaymentRequirementStatus @default(PENDING)
-  requiredBeforeStageId String?
-  paidAt                DateTime?
-  waivedAt              DateTime?
-  canceledAt            DateTime?
-  notes                 String?
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
-  job                   Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  requiredBeforeStage   JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id])
+  id                           String                      @id @default(cuid())
+  organizationId               String
+  jobId                        String
+  title                        String
+  amountCents                  Int?
+  status                       JobPaymentRequirementStatus @default(PENDING)
+  requiredBeforeStageId        String?
+  sourcePaymentScheduleItemId String?
+  paidAt                       DateTime?
+  waivedAt                     DateTime?
+  canceledAt                   DateTime?
+  notes                        String?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  job                          Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization                 Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requiredBeforeStage          JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id])
 
   @@index([organizationId])
   @@index([jobId])
   @@index([organizationId, status])
   @@index([requiredBeforeStageId])
+  @@index([sourcePaymentScheduleItemId])
 }
 
 model LeadVisitRequest {
