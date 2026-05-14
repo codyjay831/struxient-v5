@@ -36,6 +36,10 @@ import {
   type QuoteWorkSurfaceLoaderResult,
 } from "@/lib/quote-work-surface-loader";
 import {
+  loadLeadCommercialSurface,
+  type LeadCommercialSurfacePayload,
+} from "@/lib/lead-commercial-surface/loader";
+import {
   readContact,
   readRequest,
   readSignals,
@@ -610,6 +614,26 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
 
   const result = await loadQuoteWorkSurface(progress.activeQuote.id, ctx.organizationId);
   return { ok: true, payload: result };
+}
+
+/**
+ * Authorized server action to load the full LeadCommercialSurface payload.
+ * Used by client-side triage views (Inbox, Leads list popup).
+ */
+export async function loadLeadCommercialSurfaceAction(
+  leadId: string,
+): Promise<{ ok: true; payload: LeadCommercialSurfacePayload } | { ok: false; error: string }> {
+  const id = leadId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+
+  const ctx = await getRequestContextOrThrow();
+
+  const payload = await loadLeadCommercialSurface(id, ctx);
+  if (!payload) {
+    return { ok: false, error: "Lead not found in your organization." };
+  }
+
+  return { ok: true, payload };
 }
 
 /**

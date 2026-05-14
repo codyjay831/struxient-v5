@@ -2,7 +2,7 @@
 
 import { LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
 import { formatLeadChannel, formatLeadStatus, leadStatusBadgeTone } from "@/lib/lead-display";
-import { QuoteStatus } from "@prisma/client";
+import { LeadStatus, QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { resolveLeadCommercialProgressActionHref } from "@/lib/lead-commercial-progress";
 import { StatusBadge, StatusBadgeTone } from "@/components/ui/status-badge";
@@ -14,12 +14,20 @@ import {
   FileText, 
   ArrowRight, 
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Archive,
+  GitMerge,
+  Pencil,
+  X,
+  ChevronRight,
+  Loader2
 } from "lucide-react";
 import Link from "next/link";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { archiveLeadInboxAction, linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
+import { useRouter } from "next/navigation";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
@@ -32,11 +40,43 @@ export interface LeadCommercialSurfaceProps {
  * No mode/variant props. Adapts to container width.
  */
 export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCommercialSurfaceProps) {
-  const { lead, customer, linkedQuotes, progress } = payload;
+  const { lead, customer, linkedQuotes, progress, matchHints } = payload;
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
   }, [lead.id, entryPoint]);
+
+  const handleArchive = async () => {
+    if (!confirm("Are you sure you want to archive this lead?")) return;
+    
+    startTransition(async () => {
+      const result = await archiveLeadInboxAction(lead.id);
+      if (result.success) {
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  const handleMerge = async (customerId: string) => {
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("customerId", customerId);
+      const result = await linkLeadToCustomerWorkspaceAction(lead.id, {}, formData);
+      if (result.success) {
+        setShowMergeDialog(false);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  const matches = matchHints?.kind === "checked" ? matchHints.matches : [];
 
   return (
     <div className="@container h-full">
@@ -46,12 +86,20 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
           {/* Job Party Block */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                Job Party
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                  Job Party
+                </h3>
+                <Link 
+                  href={`/leads/${lead.id}/edit`}
+                  className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
+                >
+                  <Pencil className="size-2.5" /> Edit
+                </Link>
+              </div>
               <StatusBadge 
-                label={formatLeadStatus(lead.status as any)} 
-                tone={leadStatusBadgeTone(lead.status as any) as StatusBadgeTone} 
+                label={formatLeadStatus(lead.status as LeadStatus)} 
+                tone={leadStatusBadgeTone(lead.status as LeadStatus) as StatusBadgeTone} 
               />
             </div>
 
@@ -111,7 +159,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
             <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <FileText className="size-4 text-foreground-subtle" />
-                Source: {formatLeadChannel(lead.channel as any)}
+                Source: {formatLeadChannel(lead.channel)}
               </div>
               {lead.notes && (
                 <div className="rounded-lg bg-foreground/[0.02] p-3 text-sm italic text-foreground-muted">
@@ -142,13 +190,33 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
               )}
               
               {!customer && (
-                <Link 
-                  href={`/leads/${lead.id}#customer-link`}
-                  className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-bold transition-colors hover:bg-foreground/[0.02]"
-                >
-                  Link to Customer
-                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link 
+                    href={`/leads/${lead.id}#customer-link`}
+                    className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-bold transition-colors hover:bg-foreground/[0.02]"
+                  >
+                    Link to Customer
+                  </Link>
+                  {matches.length > 0 && (
+                    <button
+                      onClick={() => setShowMergeDialog(true)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-foreground/[0.02]"
+                    >
+                      <GitMerge className="size-4" />
+                      Merge ({matches.length})
+                    </button>
+                  )}
+                </div>
               )}
+
+              <button
+                onClick={handleArchive}
+                disabled={isPending}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
+              >
+                {isPending ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
+                Archive Lead
+              </button>
             </div>
           </section>
 
@@ -163,8 +231,8 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold truncate pr-2">{quote.title}</span>
                       <StatusBadge 
-                        label={formatQuoteStatus(quote.status as any)} 
-                        tone={quoteStatusBadgeTone(quote.status as any) as StatusBadgeTone}
+                        label={formatQuoteStatus(quote.status as QuoteStatus)} 
+                        tone={quoteStatusBadgeTone(quote.status as QuoteStatus) as StatusBadgeTone}
                         className="text-[10px] px-1.5 py-0"
                       />
                     </div>
@@ -181,6 +249,55 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
           )}
         </div>
       </div>
+
+      {/* Merge Dialog */}
+      {showMergeDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/20 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-surface rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Merge Lead</h3>
+                <p className="text-sm text-foreground-muted mt-1">
+                  Existing customers match this lead&apos;s contact info.
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowMergeDialog(false)}
+                className="p-2 rounded-full hover:bg-foreground/5 text-foreground-subtle transition-colors"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
+              {matches.map(candidate => (
+                <button
+                  key={candidate.id}
+                  onClick={() => handleMerge(candidate.id)}
+                  disabled={isPending}
+                  className="w-full text-left p-4 rounded-xl border border-border hover:border-accent/40 hover:bg-accent/[0.02] transition-all group disabled:opacity-50"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-bold text-foreground group-hover:text-accent transition-colors">{candidate.displayName}</h4>
+                    {isPending ? <Loader2 className="size-4 animate-spin text-accent" /> : <ChevronRight className="size-4 text-foreground-subtle" />}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {candidate.email && <p className="text-xs text-foreground-muted">{candidate.email}</p>}
+                    {candidate.phone && <p className="text-xs text-foreground-muted">{candidate.phone}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 bg-foreground/[0.02] border-t border-border flex justify-end gap-3">
+              <button 
+                onClick={() => setShowMergeDialog(false)}
+                className="px-4 py-2 text-sm font-bold text-foreground-subtle hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

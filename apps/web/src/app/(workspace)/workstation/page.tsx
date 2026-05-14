@@ -1,9 +1,4 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -286,7 +281,7 @@ export default async function WorkstationTodayLensPage({
             
             {recentActivity.length > 0 ? (
               <div className="space-y-4">
-                {recentActivity.map((activity: any) => (
+                {recentActivity.map((activity) => (
                   <div key={activity.id} className={activityItemClass}>
                     <div className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/5">
                       <Zap className="size-3 text-foreground-subtle" />
@@ -366,8 +361,8 @@ export default async function WorkstationTodayLensPage({
       )}
 
       {/* Footer Navigation */}
-      <div className="grid gap-6 border-t border-border pt-12 lg:grid-cols-2">
-        <WorkspacePanel id="reserved-areas" padding="compact" className="bg-foreground/[0.01]">
+      <div className="border-t border-border pt-12">
+        <WorkspacePanel id="reserved-areas" padding="compact" className="bg-foreground/[0.01] max-w-2xl">
           <SectionHeading title={WORKSTATION_COPY.reservedAreas.title} description={WORKSTATION_COPY.reservedAreas.description} />
           <div className="flex flex-wrap gap-2">
             <Link href="/workstation/tasks" className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground">
@@ -381,24 +376,6 @@ export default async function WorkstationTodayLensPage({
             </Link>
           </div>
         </WorkspacePanel>
-
-        <HandoffPanel
-          title="Authoritative record routes"
-          description="Quotes and leads sit under Sales; customer rows under Relationships; job and schedule placeholders under Work."
-        >
-          <Link href="/quotes" className={handoffMutedLinkClass}>
-            Quotes
-          </Link>
-          <Link href="/customers" className={handoffMutedLinkClass}>
-            Customers
-          </Link>
-          <Link href="/jobs" className={handoffPrimaryLinkClass}>
-            Job records
-          </Link>
-          <Link href="/schedule" className={handoffMutedLinkClass}>
-            Schedule
-          </Link>
-        </HandoffPanel>
       </div>
     </div>
   );

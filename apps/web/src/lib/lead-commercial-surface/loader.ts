@@ -43,7 +43,7 @@ export interface LeadCommercialSurfacePayload {
   }[];
   progress: LeadCommercialProgress;
   serviceAddressContext: LeadServiceAddressContext;
-  visitRequests: any[];
+  visitRequests: unknown[];
 }
 
 const CUSTOMER_LINK_FETCH_CAP = 500;

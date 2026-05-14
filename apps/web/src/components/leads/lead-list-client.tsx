@@ -13,32 +13,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Inbox, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  LeadWorkSurface,
-  type LeadWorkSurfaceActiveQuotePayload,
-  type LeadWorkSurfaceData,
-  type LeadWorkSurfaceQuote,
-} from "@/components/work-surfaces/lead-work-surface";
-import {
-  patchSerializedLeadRowAfterQuoteStarted,
-} from "@/lib/lead-graduation-lifecycle";
-import {
-  type LeadWorkSurfaceProgressAction,
-} from "@/lib/lead-commercial-progress";
-import {
-  loadLeadActiveQuoteWorkSurfaceAction,
-  loadLeadServiceAddressContextAction,
-  loadLeadMatchHintsAction,
+  loadLeadCommercialSurfaceAction,
 } from "@/app/(workspace)/leads/lead-workspace-actions";
-
-import {
-  type SerializedLeadRow,
-  type SerializedQuoteSummary,
-  type SerializedProgressAction,
-} from "@/lib/serialize-lead-list-row";
-
-import { adaptLeadRow } from "@/lib/lead-work-surface-adapters";
+import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
+import { type LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
+import { Loader2 } from "lucide-react";
+import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 
 /* ─── Compact lead row ───────────────────────────────────────────────────── */
 
@@ -101,97 +83,61 @@ function LeadRow({
 /* ─── Workspace content (popup chrome + LeadWorkSurface body) ───────────── */
 
 function WorkspaceContent({
-  lead,
+  leadId,
   onClose,
-  onQuoteStarted,
 }: {
-  lead: SerializedLeadRow;
+  leadId: string;
   onClose: () => void;
-  onQuoteStarted: (args: {
-    quoteId: string;
-    activeQuotePayload: LeadWorkSurfaceActiveQuotePayload | null;
-  }) => void;
 }) {
-  const { data, linkedQuotes } = adaptLeadRow(lead);
+  const [payload, setPayload] = useState<LeadCommercialSurfacePayload | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  /* Lazy loader for the active-quote QuoteWorkSurface payload — keeps the
-   * leads-list query slim (no per-row readiness fetches) while still letting
-   * the popup show the same QuoteWorkSurface that Workstation + the Lead
-   * full page show. The server action derives the active quote id itself, so
-   * we never trust a client-provided quote id here. */
-  const loadActiveQuoteWorkSurface = useCallback(
-    () => loadLeadActiveQuoteWorkSurfaceAction(lead.id),
-    [lead.id],
-  );
-
-  /* Same pattern for the Service address context — fetched on first paint of
-   * the Contact tab so the leads-list query stays slim (no per-row service-
-   * location join). The action is org-scoped server-side. */
-  const loadServiceAddressContext = useCallback(
-    () => loadLeadServiceAddressContextAction(lead.id),
-    [lead.id],
-  );
-
-  const loadMatchHints = useCallback(
-    () => loadLeadMatchHintsAction(lead.id),
-    [lead.id],
-  );
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) setIsLoading(true);
+    });
+    loadLeadCommercialSurfaceAction(leadId).then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setPayload(result.payload);
+      } else {
+        console.error(result.error);
+      }
+      setIsLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [leadId]);
 
   return (
-    <div className="flex max-h-[88vh] flex-col">
-      {/* ── Header (popup chrome — status badge, source, close, identity) ── */}
-      <div className="shrink-0 border-b border-border px-6 py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
-            <span className="text-xs text-foreground-subtle">
-              {lead.sourceLabel} · {lead.ageLabel}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {lead.valueLabel && (
-              <div className="rounded-lg border border-border bg-background px-4 py-2 text-right">
-                <p className="text-[10px] font-medium text-foreground-subtle uppercase tracking-wide leading-none mb-0.5">
-                  Value
-                </p>
-                <p className="text-lg font-semibold text-foreground tabular-nums leading-tight">
-                  {lead.valueLabel}
-                </p>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close workspace"
-              className="rounded-lg border border-border bg-surface p-2 text-foreground-subtle hover:text-foreground hover:bg-background transition-colors"
-            >
-              <X className="w-5 h-5" strokeWidth={1.5} />
-            </button>
-          </div>
-        </div>
+    <div className="flex max-h-[88vh] flex-col relative min-h-[400px]">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close workspace"
+        className="absolute right-4 top-4 z-20 rounded-lg border border-border bg-surface p-2 text-foreground-subtle hover:text-foreground hover:bg-background transition-colors"
+      >
+        <X className="w-5 h-5" strokeWidth={1.5} />
+      </button>
 
-        <div className="mt-4">
-          <h2 className="text-2xl font-semibold text-foreground tracking-tight leading-tight">
-            {lead.customerDisplayName ?? lead.title}
-          </h2>
-          {lead.customerDisplayName && lead.title !== lead.customerDisplayName && (
-            <p className="text-sm text-foreground-muted mt-0.5">{lead.title}</p>
-          )}
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-accent/20" />
         </div>
-      </div>
-
-      {/* ── Body — Lead Work Surface (standard mode) ─────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <LeadWorkSurface
-          mode="standard"
-          lead={data}
-          linkedQuotes={linkedQuotes}
-          loadActiveQuoteWorkSurface={loadActiveQuoteWorkSurface}
-          loadServiceAddressContext={loadServiceAddressContext}
-          loadMatchHints={loadMatchHints}
-          onQuoteStarted={onQuoteStarted}
-        />
-      </div>
+      ) : payload ? (
+        <div className="flex-1 overflow-y-auto">
+          <LeadCommercialSurface
+            payload={payload}
+            entryPoint="record"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center p-12 text-center">
+          <p className="text-sm text-foreground-muted">Failed to load lead details.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -213,24 +159,6 @@ export function LeadsListClient({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
-  const [pinnedLead, setPinnedLead] = useState<SerializedLeadRow | null>(null);
-
-  const listLead = openLeadId ? (leads.find((l) => l.id === openLeadId) ?? null) : null;
-  const openLead = openLeadId ? (listLead ?? pinnedLead) : null;
-
-  const handleQuoteStarted = useCallback(
-    (args: {
-      quoteId: string;
-      activeQuotePayload: LeadWorkSurfaceActiveQuotePayload | null;
-    }) => {
-      setPinnedLead((prev) => {
-        const base = leads.find((l) => l.id === openLeadId) ?? prev;
-        if (!base || base.id !== openLeadId) return prev;
-        return patchSerializedLeadRowAfterQuoteStarted(base, args);
-      });
-    },
-    [openLeadId, leads],
-  );
 
   /* Sync native dialog open/close state */
   useEffect(() => {
@@ -255,14 +183,12 @@ export function LeadsListClient({
   }, []);
 
   function openWorkspace(id: string) {
-    setPinnedLead(leads.find((l) => l.id === id) ?? null);
     setOpenLeadId(id);
   }
 
   function closeWorkspace() {
     dialogRef.current?.close();
     setOpenLeadId(null);
-    setPinnedLead(null);
   }
 
   return (
@@ -312,14 +238,13 @@ export function LeadsListClient({
           if (e.target === e.currentTarget) closeWorkspace();
         }}
       >
-        {openLead && (
-          /* Key by lead.id so internal state (active tab, edit form) resets
-             cleanly when the user opens a different lead. */
+        {openLeadId && (
+          /* Key by lead.id so internal state resets cleanly when the user 
+             opens a different lead. */
           <WorkspaceContent
-            key={openLead.id}
-            lead={openLead}
+            key={openLeadId}
+            leadId={openLeadId}
             onClose={closeWorkspace}
-            onQuoteStarted={handleQuoteStarted}
           />
         )}
       </dialog>

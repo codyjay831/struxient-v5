@@ -6,11 +6,9 @@ import { LeadStatus } from "@prisma/client";
 import Link from "next/link";
 import { Globe } from "lucide-react";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { serializeLeadListRow, type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 
 export default async function LeadInboxPage() {
   const ctx = await getRequestContextOrThrow();
-  const now = new Date();
 
   const [openLeads, recentLeads] = await Promise.all([
     db.lead.findMany({
@@ -60,18 +58,7 @@ export default async function LeadInboxPage() {
     }),
   ]);
 
-  const allLeads = [...openLeads, ...recentLeads];
-
-  // Fetch candidate customers for all leads in the inbox
-  const allCandidateIds = Array.from(
-    new Set(allLeads.flatMap((l) => readSignals(l.signals).duplicateCandidateIds ?? [])),
-  );
-  const candidates = await db.customer.findMany({
-    where: { id: { in: allCandidateIds }, organizationId: ctx.organizationId },
-    select: { id: true, displayName: true, email: true, phone: true },
-  });
-
-  const serializeInbox = (l: (typeof allLeads)[0]): InboxLeadRow => ({
+  const serializeInbox = (l: (typeof openLeads)[0]): InboxLeadRow => ({
     id: l.id,
     channel: l.channel,
     status: l.status,
@@ -83,13 +70,6 @@ export default async function LeadInboxPage() {
 
   const initialOpenLeads = openLeads.map(serializeInbox);
   const initialRecentLeads = recentLeads.map(serializeInbox);
-
-  const workspaceOpenLeads: SerializedLeadRow[] = openLeads.map((lead) =>
-    serializeLeadListRow(lead, ctx.organizationId, now),
-  );
-  const workspaceRecentLeads: SerializedLeadRow[] = recentLeads.map((lead) =>
-    serializeLeadListRow(lead, ctx.organizationId, now),
-  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -124,9 +104,6 @@ export default async function LeadInboxPage() {
       <LeadInboxClient
         initialOpenLeads={initialOpenLeads}
         initialRecentLeads={initialRecentLeads}
-        workspaceOpenLeads={workspaceOpenLeads}
-        workspaceRecentLeads={workspaceRecentLeads}
-        candidates={candidates}
       />
     </div>
   );
