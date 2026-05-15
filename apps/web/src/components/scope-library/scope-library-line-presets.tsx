@@ -134,6 +134,7 @@ function ScopeLibraryCreatePresetForm({ availableTags }: { availableTags: TagDis
             availableTags={availableTags}
             selectedTags={selectedTags}
             onChange={setSelectedTags}
+            proactive={true}
             onSuggest={async () => {
               if (!description) return [];
               const res = await fetch("/api/ai/suggest-tags", {
@@ -243,6 +244,7 @@ function ScopeLibraryTemplateEditForm({
             availableTags={availableTags}
             selectedTags={selectedTags}
             onChange={setSelectedTags}
+            proactive={true}
             onSuggest={async () => {
               const res = await fetch("/api/ai/suggest-tags", {
                 method: "POST",

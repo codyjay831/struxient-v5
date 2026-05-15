@@ -7,6 +7,7 @@ import {
   deriveTaskState,
   taskStateLabel,
   taskStateTone,
+  type TaskReadinessInput,
 } from "@/lib/task-readiness";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
@@ -38,13 +39,23 @@ export function JobTaskCard({
   const router = useRouter();
   const [surfaceOpen, setSurfaceOpen] = useState(false);
 
-  const derivedState = deriveTaskState(task as any, liveSignals, {
+  const derivedState = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
     recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
   });
   const isCompleted = derivedState === "COMPLETED";
   const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
   const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";
   const isBlocked = isBlockedByIssue || isBlockedBySignal;
+
+  const issuesWithRecovery = task.issues.filter(
+    (i) => i.recoveryFlow && i.recoveryFlow.status === "ACTIVE"
+  );
+  const hasActiveRecovery = issuesWithRecovery.length > 0;
+  const primaryRecoveryIssue = issuesWithRecovery[0];
+  const recoveryTasks = primaryRecoveryIssue?.recoveryFlow?.tasks || [];
+  const totalRecoveryTasks = recoveryTasks.length;
+  const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
+  const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
   
   const paymentBlocker = task.paymentBlockers.find((p) => p.status === "DUE");
   const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
@@ -101,10 +112,18 @@ export function JobTaskCard({
                   </p>
                 )}
                 {isBlockedByIssue && !paymentBlocker && (
-                  <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
-                    <Lock className="size-3 shrink-0" />
-                    Blocked by issue
-                  </p>
+                  <div className="space-y-1">
+                    <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
+                      <Lock className="size-3 shrink-0" />
+                      Blocked by issue
+                    </p>
+                    {hasActiveRecovery && (
+                      <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-success">
+                        <Zap className="size-3 shrink-0" />
+                        Active follow-up: {recoveryProgress}
+                      </p>
+                    )}
+                  </div>
                 )}
                 {isBlockedBySignal && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-accent">

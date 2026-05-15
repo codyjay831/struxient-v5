@@ -153,7 +153,7 @@ export async function createFollowUpTaskFromIssueAction(input: CreateFollowUpTas
   // Verify issue belongs to organization and is OPEN
   const issue = await db.jobIssue.findFirst({
     where: { id: input.issueId, organizationId },
-    include: { followUpTask: true },
+    include: { followUpTasks: true },
   });
 
   if (!issue) {
@@ -164,7 +164,7 @@ export async function createFollowUpTaskFromIssueAction(input: CreateFollowUpTas
     throw new Error("Cannot create follow-up for a resolved or cancelled issue.");
   }
 
-  if (issue.followUpTask) {
+  if (issue.followUpTasks.length > 0) {
     throw new Error("A follow-up task already exists for this issue.");
   }
 

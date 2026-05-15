@@ -1,9 +1,10 @@
 "use server";
 
-import { TagStatus, TagSource } from "@prisma/client";
+import { TagStatus, TagSource, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { AIService } from "@/lib/ai/ai-service";
 
 export type TagActionState = {
   error?: string;
@@ -137,7 +138,7 @@ export async function mergeTagsAction(
       const newAliases = Array.from(new Set([...targetTag.aliases, sourceTag.name, ...sourceTag.aliases]));
       
       // Update target tag
-      const existingHistory = (targetTag.mergeHistory as any[]) || [];
+      const existingHistory = (targetTag.mergeHistory as { from: string; at: string }[]) || [];
       const newHistory = [
         ...existingHistory,
         {
@@ -150,7 +151,7 @@ export async function mergeTagsAction(
         where: { id: targetTagId },
         data: {
           aliases: newAliases,
-          mergeHistory: newHistory as any,
+          mergeHistory: newHistory as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -167,4 +168,20 @@ export async function mergeTagsAction(
     console.error(e);
     return { error: "Failed to merge tags" };
   }
+}
+
+export async function suggestTagMergesAction() {
+  const ctx = await getRequestContextOrThrow();
+  
+  const tags = await db.tag.findMany({
+    where: { organizationId: ctx.organizationId, status: "ACTIVE" },
+    select: { id: true, name: true, aliases: true },
+  });
+
+  if (tags.length < 2) return { suggestions: [] };
+
+  const ai = new AIService();
+  const suggestions = await ai.suggestTagMerges({ existingTags: tags });
+
+  return { suggestions };
 }

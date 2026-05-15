@@ -7,6 +7,7 @@ import { z } from "zod";
  */
 export const AILibraryProposedTaskSchema = z.object({
   tempId: z.string(), // Used for transient UI state and duplicate prevention
+  sourceTaskTemplateId: z.string().optional().nullable(),
   title: z.string().min(1).max(255),
   category: z.nativeEnum(TaskTemplateCategory),
   instructions: z.string().optional().nullable(),

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
-import { deriveTaskState, type TaskCompletionRequirements } from "@/lib/task-readiness";
+import { deriveTaskState, type TaskCompletionRequirements, type TaskReadinessInput } from "@/lib/task-readiness";
 import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
 
 export type JobTaskActionState = {
@@ -56,7 +56,7 @@ export async function completeJobTaskAction(
 
     // 1. Check readiness using Signal Bus
     const liveSignals = await getLiveSignals(task.jobId);
-    const state = deriveTaskState(task as any, liveSignals, {
+    const state = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
       recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
     });
 

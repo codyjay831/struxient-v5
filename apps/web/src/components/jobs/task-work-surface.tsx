@@ -10,6 +10,7 @@ import {
   taskStateLabel,
   taskStateTone,
   type TaskCompletionRequirements,
+  type TaskReadinessInput,
 } from "@/lib/task-readiness";
 import {
   completeJobTaskAction,
@@ -28,6 +29,12 @@ import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-ed
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { RecoveryFlowBuilder } from "./recovery-flow-builder";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertCircle,
   Camera,
   Check,
@@ -39,6 +46,7 @@ import {
   Paperclip,
   ShieldAlert,
   X,
+  Zap,
 } from "lucide-react";
 
 export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
@@ -106,6 +114,7 @@ export function TaskWorkSurface({
 
   const [showReportForm, setShowReportForm] = useState(false);
   const [showRecoveryBuilder, setShowRecoveryBuilder] = useState(false);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [reportTitle, setReportTitle] = useState("");
   const [reportDescription, setReportDescription] = useState("");
   const [reportType, setReportType] = useState<JobIssueType>(JobIssueType.OTHER);
@@ -125,7 +134,7 @@ export function TaskWorkSurface({
     router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
   }, [clearWorkstationSelectionOnComplete, pathname, router, searchParams]);
 
-  const derivedState = deriveTaskState(task as any, liveSignals, {
+  const derivedState = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
     recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
   });
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
@@ -266,6 +275,7 @@ export function TaskWorkSurface({
       setReportTitle("");
       setReportDescription("");
       setShowReportForm(false);
+      setSelectedIssueId(result.issueId || null);
       setActionMessage({ 
         tone: "success", 
         text: "Issue recorded for this task.",
@@ -440,18 +450,94 @@ export function TaskWorkSurface({
       )}
 
       {isBlocked && (
-        <div className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
-          <div className="flex gap-3">
-            <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
-            <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-bold text-foreground">Task is blocked</h4>
-              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                {paymentBlocker ? `Requires payment: ${paymentBlocker.title}` : isBlockedByIssue ? "Blocked by an open issue." : `Waiting on signals: ${missingSignals.join(", ")}`}
-              </p>
+        <div className="space-y-4">
+          {task.issues.filter(i => i.status === "OPEN").map((issue) => {
+            const recoveryTasks = issue.recoveryFlow?.tasks || [];
+            const totalRecoveryTasks = recoveryTasks.length;
+            const completedRecoveryTasks = recoveryTasks.filter(t => t.status === "DONE").length;
+            const hasActiveRecovery = issue.recoveryFlow?.status === "ACTIVE";
+            
+            return (
+              <div key={issue.id} className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
+                <div className="flex gap-3">
+                  <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-bold text-foreground">{issue.title}</h4>
+                      <StatusBadge 
+                        label={formatJobIssueSeverity(issue.severity)} 
+                        tone={issue.severity === "BLOCKS_WORK" ? "danger" : "warning"}
+                        className="text-[10px]"
+                      />
+                    </div>
+                    {issue.description && (
+                      <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                        {issue.description}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-foreground-subtle">
+                      <span>{formatJobIssueType(issue.type)}</span>
+                      <span>•</span>
+                      <span>Reported {new Date(issue.createdAt).toLocaleDateString()}</span>
+                      {issue.createdByUser?.name && (
+                        <>
+                          <span>•</span>
+                          <span>By {issue.createdByUser.name}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {hasActiveRecovery && (
+                      <div className="mt-3 rounded-lg bg-success/10 px-3 py-2">
+                        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success">
+                          <Zap className="size-3" />
+                          Active follow-up: {completedRecoveryTasks}/{totalRecoveryTasks} steps done
+                        </p>
+                      </div>
+                    )}
+
+                    {!hasActiveRecovery && !showRecoveryBuilder && (
+                      <button
+                        onClick={() => {
+                          setSelectedIssueId(issue.id);
+                          setShowRecoveryBuilder(true);
+                        }}
+                        className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-contrast hover:opacity-90"
+                      >
+                        Start Recovery Flow
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {paymentBlocker && (
+            <div className="flex gap-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
+              <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-bold text-foreground">Payment Required</h4>
+                <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                  Requires payment: {paymentBlocker.title}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
           
-          <div className="border-t border-danger/10 pt-3">
+          {missingSignals.length > 0 && !isBlockedByIssue && !paymentBlocker && (
+             <div className="flex gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
+              <Zap className="mt-0.5 size-5 shrink-0 text-accent" />
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-bold text-foreground">Waiting on Signals</h4>
+                <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                  Waiting on: {missingSignals.join(", ")}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-danger/10 bg-danger/[0.02] p-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-danger-subtle mb-2">Manager Override</p>
             <p className="mb-3 text-[10px] leading-relaxed text-foreground-muted">
               If this work is actually ready despite the blockers above, a manager can override the engine. 
@@ -673,20 +759,40 @@ export function TaskWorkSurface({
         </div>
       )}
 
-      {showRecoveryBuilder && actionMessage?.issueId && (
-        <WorkspacePanel className="border-dashed border-border-strong bg-foreground/[0.01]">
-          <RecoveryFlowBuilder
-            issueId={actionMessage.issueId}
-            jobId={jobId}
-            onSuccess={() => {
-              setShowRecoveryBuilder(false);
-              setActionMessage({ tone: "success", text: "Recovery flow activated." });
-              refreshAfterMutation();
-            }}
-            onCancel={() => setShowRecoveryBuilder(false)}
-          />
-        </WorkspacePanel>
-      )}
+      <Dialog 
+        open={showRecoveryBuilder && !!selectedIssueId} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowRecoveryBuilder(false);
+            setSelectedIssueId(null);
+          }
+        }}
+        className="max-w-4xl"
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Build Recovery Path</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[80vh] overflow-y-auto pr-2">
+            {selectedIssueId && (
+              <RecoveryFlowBuilder
+                issueId={selectedIssueId}
+                jobId={jobId}
+                onSuccess={() => {
+                  setShowRecoveryBuilder(false);
+                  setSelectedIssueId(null);
+                  setActionMessage({ tone: "success", text: "Recovery flow activated." });
+                  refreshAfterMutation();
+                }}
+                onCancel={() => {
+                  setShowRecoveryBuilder(false);
+                  setSelectedIssueId(null);
+                }}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
     {customerId ? (
       <AddOrEditServiceLocationDialog

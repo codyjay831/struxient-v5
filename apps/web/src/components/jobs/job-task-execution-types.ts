@@ -1,6 +1,7 @@
 import type {
   JobIssueSeverity,
   JobIssueStatus,
+  JobIssueType,
   JobPaymentRequirementStatus,
   JobTaskStatus,
 } from "@prisma/client";
@@ -21,8 +22,23 @@ export type JobTaskExecutionTask = {
   }[];
   issues: {
     id: string;
+    title: string;
+    description: string | null;
     status: JobIssueStatus;
     severity: JobIssueSeverity;
+    type: JobIssueType;
+    createdAt: Date;
+    createdByUser?: {
+      name: string | null;
+    } | null;
+    recoveryFlow?: {
+      id: string;
+      status: string;
+      tasks: {
+        id: string;
+        status: JobTaskStatus;
+      }[];
+    } | null;
   }[];
   providesSignals: string[];
   requiresSignals: string[];

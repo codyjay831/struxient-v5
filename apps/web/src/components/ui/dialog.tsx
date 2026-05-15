@@ -7,13 +7,14 @@ interface DialogProps {
   children: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  className?: string;
 }
 
-export function Dialog({ children, open, onOpenChange }: DialogProps) {
+export function Dialog({ children, open, onOpenChange, className }: DialogProps) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg rounded-lg border border-border bg-surface p-6 shadow-lg animate-in fade-in zoom-in duration-200">
+      <div className={`relative w-full rounded-lg border border-border bg-surface p-6 shadow-lg animate-in fade-in zoom-in duration-200 ${className || "max-w-lg"}`}>
         {children}
         <button
           onClick={() => onOpenChange?.(false)}
@@ -27,8 +28,8 @@ export function Dialog({ children, open, onOpenChange }: DialogProps) {
   );
 }
 
-export function DialogTrigger({ children, asChild, ...props }: any) {
-  return React.cloneElement(children, props);
+export function DialogTrigger({ children, asChild, ...props }: React.HTMLAttributes<HTMLElement> & { asChild?: boolean }) {
+  return React.cloneElement(children as React.ReactElement, props);
 }
 
 export function DialogContent({ children }: { children: React.ReactNode }) {

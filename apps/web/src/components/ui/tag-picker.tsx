@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { X, Check, ChevronsUpDown, AlertCircle, Plus, Sparkles } from "lucide-react";
+import { X, ChevronsUpDown, AlertCircle, Plus, Sparkles } from "lucide-react";
 import { Badge } from "./badge";
 import { TagDisplay } from "@/lib/line-item-template-display";
 
@@ -12,6 +12,7 @@ interface TagPickerProps {
   onChange: (tags: TagDisplay[]) => void;
   onSuggest?: () => Promise<string[]>;
   placeholder?: string;
+  proactive?: boolean;
 }
 
 export function TagPicker({
@@ -20,6 +21,7 @@ export function TagPicker({
   onChange,
   onSuggest,
   placeholder = "Select tags...",
+  proactive = false,
 }: TagPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -156,7 +158,7 @@ export function TagPicker({
                 handleSuggest();
               }}
               disabled={isSuggesting}
-              className="p-1 text-foreground-muted hover:text-primary disabled:opacity-50 transition-colors"
+              className={`p-1 transition-colors ${isSuggesting ? 'text-primary' : 'text-foreground-muted hover:text-primary'}`}
               title="Suggest tags with AI"
             >
               <Sparkles className={`h-4 w-4 ${isSuggesting ? 'animate-spin' : ''}`} />
@@ -165,6 +167,19 @@ export function TagPicker({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </div>
       </div>
+
+      {proactive && selectedTags.length === 0 && onSuggest && !isSuggesting && !inputValue && (
+        <div className="mt-1.5 flex items-center gap-2 px-1">
+          <Sparkles className="h-3 w-3 text-primary" />
+          <button
+            type="button"
+            onClick={handleSuggest}
+            className="text-[10px] font-semibold text-primary hover:underline uppercase tracking-wider"
+          >
+            Suggest tags with AI
+          </button>
+        </div>
+      )}
 
       {isOpen && (
         <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-surface shadow-md animate-in fade-in slide-in-from-top-1">
@@ -197,14 +212,14 @@ export function TagPicker({
                 onClick={handleCreateNew}
               >
                 <Plus className="h-4 w-4" />
-                Create "{inputValue}"
+                Create &quot;{inputValue}&quot;
               </button>
             )}
 
             {similarTag && (
               <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-warning-strong bg-warning/5 border-t border-border mt-1">
                 <AlertCircle className="h-3.5 w-3.5" />
-                Similar tag "{similarTag.name}" already exists.
+                Similar tag &quot;{similarTag.name}&quot; already exists.
               </div>
             )}
           </div>

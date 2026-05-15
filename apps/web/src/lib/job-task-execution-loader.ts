@@ -75,7 +75,28 @@ export async function loadJobTaskExecutionPayload(
       },
       issues: {
         where: { status: JobIssueStatus.OPEN },
-        select: { status: true, severity: true },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          severity: true,
+          type: true,
+          createdAt: true,
+          createdByUser: { select: { name: true } },
+          recoveryFlow: {
+            select: {
+              id: true,
+              status: true,
+              tasks: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
       },
     },
   });

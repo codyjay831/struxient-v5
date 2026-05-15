@@ -616,14 +616,22 @@ export async function generateQuoteLineExecutionPlanAction(
         quoteId: qid,
         quote: { organizationId: ctx.organizationId },
       },
-      select: { description: true },
+      include: {
+        quote: { select: { organizationId: true } },
+        sourceLineItemTemplate: { include: { tags: { select: { name: true } } } },
+      },
     });
 
     if (!line) {
       return { error: "Line item not found." };
     }
 
-    const plan = await AIService.generateExecutionPlan(line.description);
+    const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
+    const plan = await AIService.generateExecutionPlan(
+      line.description,
+      line.quote.organizationId,
+      tags,
+    );
 
     await db.$transaction(async (tx) => {
       for (let i = 0; i < plan.tasks.length; i++) {

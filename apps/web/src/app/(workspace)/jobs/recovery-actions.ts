@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { AIService } from "@/lib/ai/ai-service";
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
 
@@ -82,6 +83,10 @@ export type AddRecoveryTaskInput = {
   category: TaskTemplateCategory;
   instructions?: string;
   sortOrder?: number;
+  completionRequirementsJson?: unknown;
+  providesSignals?: string[];
+  requiresSignals?: string[];
+  hardSignal?: boolean;
 };
 
 /**
@@ -158,6 +163,10 @@ export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
       instructions: input.instructions,
       status: JobTaskStatus.TODO,
       sortOrder: input.sortOrder ?? 0,
+      completionRequirementsJson: input.completionRequirementsJson || {},
+      providesSignals: input.providesSignals || [],
+      requiresSignals: input.requiresSignals || [],
+      hardSignal: input.hardSignal || false,
     },
   });
 
@@ -255,4 +264,64 @@ export async function resolveIssueAndResumeAction(jobIssueId: string, resolution
   revalidatePath(`/jobs/${issue.jobId}`);
   revalidatePath("/workstation");
   return { success: true };
+}
+
+export async function suggestRecoveryPathAction(jobIssueId: string) {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  const issue = await db.jobIssue.findFirst({
+    where: { id: jobIssueId, organizationId },
+    include: {
+      job: {
+        select: {
+          title: true,
+          organization: { select: { name: true } },
+          stages: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              title: true,
+              tasks: {
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  title: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      jobTask: {
+        select: {
+          title: true,
+          category: true,
+          instructions: true,
+        },
+      },
+    },
+  });
+
+  if (!issue) {
+    throw new Error("Job issue not found or access denied.");
+  }
+
+  const ai = new AIService();
+  const proposal = await ai.suggestRecoveryPath({
+    issue: {
+      id: issue.id,
+      title: issue.title,
+      type: issue.type,
+      severity: issue.severity,
+      description: issue.description,
+    },
+    blockedTask: issue.jobTask,
+    jobContext: {
+      title: issue.job.title,
+      organizationName: issue.job.organization.name,
+      stages: issue.job.stages,
+    },
+  });
+
+  return { proposal };
 }

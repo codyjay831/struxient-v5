@@ -5,20 +5,17 @@ import { TagStatus, TagSource } from "@prisma/client";
 import {
   createTagAction,
   updateTagAction,
-  archiveTagAction,
   mergeTagsAction,
-  type TagActionState,
+  suggestTagMergesAction,
 } from "@/app/(workspace)/settings/scope-library/tag-actions";
 import {
   workspaceFormControlClass,
-  workspaceFormDangerButtonClass,
   workspaceFormFieldLabelClass,
   workspaceFormPrimaryButtonClass,
   workspaceFormSecondaryButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Tag as TagIcon, Merge, Archive, Edit2, Plus, Info } from "lucide-react";
+import { Plus, Info, Sparkles, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -27,14 +24,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
-const dangerButtonClass = workspaceFormDangerButtonClass;
 
 type TagWithCounts = {
   id: string;
@@ -53,10 +48,22 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
   const [editingTag, setEditingId] = useState<TagWithCounts | null>(null);
   const [mergingTag, setMergingTag] = useState<TagWithCounts | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ sourceTagId: string; targetTagId: string; reason: string }[]>([]);
 
   const activeTags = initialTags.filter((t) => t.status === "ACTIVE");
-  const archivedTags = initialTags.filter((t) => t.status === "ARCHIVED");
-  const mergedTags = initialTags.filter((t) => t.status === "MERGED");
+
+  const handleSuggestMerges = async () => {
+    setIsSuggesting(true);
+    try {
+      const res = await suggestTagMergesAction();
+      setSuggestions(res.suggestions || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -65,11 +72,65 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
           title="Organization Tags"
           description="Manage tags used across your scope and task libraries."
         />
-        <button onClick={() => setIsCreating(true)} className={primaryButtonClass}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Tag
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSuggestMerges}
+            disabled={isSuggesting || activeTags.length < 2}
+            className={secondaryButtonClass}
+          >
+            {isSuggesting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            Suggest Merges
+          </button>
+          <button onClick={() => setIsCreating(true)} className={primaryButtonClass}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Tag
+          </button>
+        </div>
       </div>
+
+      {suggestions.length > 0 && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-primary">AI Cleanup Suggestions</h3>
+            </div>
+            <button 
+              onClick={() => setSuggestions([])}
+              className="text-xs text-foreground-muted hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="space-y-2">
+            {suggestions.map((s, idx) => {
+              const source = activeTags.find(t => t.id === s.sourceTagId);
+              const target = activeTags.find(t => t.id === s.targetTagId);
+              if (!source || !target) return null;
+              return (
+                <div key={idx} className="flex items-center justify-between gap-4 bg-surface p-3 rounded-md border border-border">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">
+                      Merge <Badge variant="outline">{source.name}</Badge> into <Badge variant="default">{target.name}</Badge>
+                    </p>
+                    <p className="text-[10px] text-foreground-muted mt-1">{s.reason}</p>
+                  </div>
+                  <button
+                    onClick={() => setMergingTag(source)}
+                    className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+                  >
+                    Review Merge
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* ... table content ... */}
@@ -112,11 +173,13 @@ function CreateTagForm({ onDone }: { onDone: () => void }) {
   if (state.success) {
     onDone();
   }
+
+  return (
     <form action={formAction} className="space-y-4">
       <DialogHeader>
         <DialogTitle>Create New Tag</DialogTitle>
         <DialogDescription>
-          Add a new canonical tag to your organization's library.
+          Add a new canonical tag to your organization&apos;s library.
         </DialogDescription>
       </DialogHeader>
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
@@ -234,10 +297,10 @@ function MergeTagsForm({
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>Merge Tag: "{sourceTag.name}"</DialogTitle>
+        <DialogTitle>Merge Tag: &quot;{sourceTag.name}&quot;</DialogTitle>
         <DialogDescription>
           Consolidate this tag into another canonical tag. All associated line items and tasks
-          will be updated. "{sourceTag.name}" will become an alias of the target tag.
+          will be updated. &quot;{sourceTag.name}&quot; will become an alias of the target tag.
         </DialogDescription>
       </DialogHeader>
       {error && <p className="text-sm text-danger">{error}</p>}

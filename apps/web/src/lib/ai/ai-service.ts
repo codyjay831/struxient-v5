@@ -1,7 +1,9 @@
-import { TaskTemplateCategory } from "@prisma/client";
+import { TaskTemplateCategory, JobIssueType, JobIssueSeverity } from "@prisma/client";
 import { AILibraryProposal, AILibraryProposalSchema } from "./library-proposal-schema";
+import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { db } from "@/lib/db";
 
 /**
  * AI Service for Execution Planning
@@ -189,7 +191,7 @@ export class AIService {
       // Normalize categories and track which ones we had to coerce.
       const normalizationWarnings: string[] = [];
       const normalizedTasks = (Array.isArray(rawProposal.tasks) ? rawProposal.tasks : []).map(
-        (t: any, idx: number) => {
+        (t: Record<string, unknown>, idx: number) => {
           const originalCategory = t?.category;
           const matched = this.normalizeCategory(originalCategory);
           const finalCategory = matched ?? TaskTemplateCategory.GENERAL;
@@ -207,7 +209,7 @@ export class AIService {
             tempId: crypto.randomUUID(),
             stageId:
               context.existingStages.find(
-                (s) => s.name.toLowerCase() === t?.stageName?.toLowerCase(),
+                (s) => s.name.toLowerCase() === (t?.stageName as string | undefined)?.toLowerCase(),
               )?.id ?? null,
           };
         },
@@ -236,14 +238,14 @@ export class AIService {
 
   private static buildContractorRealismPrompt(
     context: AIExecutionPlanContext,
-    reusableTasks: any[] = []
+    reusableTasks: { id: string; title: string; category: string; stage?: { name: string } | null; tags: { name: string }[] }[] = []
   ): string {
     const stageNames = context.existingStages.map(s => s.name).join(", ");
     const signalNames = context.existingSignals.join(", ");
     const allowedCategories = Object.values(TaskTemplateCategory).join(", ");
 
     const reusableTaskList = reusableTasks.map(t => 
-      `- [ID: ${t.id}] "${t.title}" (Category: ${t.category}, Stage: ${t.stage?.name || 'None'}, Tags: ${t.tags.map((tg: any) => tg.name).join(", ")})`
+      `- [ID: ${t.id}] "${t.title}" (Category: ${t.category}, Stage: ${t.stage?.name || 'None'}, Tags: ${t.tags.map((tg) => tg.name).join(", ")})`
     ).join("\n");
 
     return `
@@ -313,10 +315,12 @@ Return ONLY a valid JSON object matching this structure:
   }
 
   /** Compatibility layer for existing Quote Mode */
-  static async generateExecutionPlan(description: string) {
+  static async generateExecutionPlan(description: string, organizationId: string, tags: string[] = []) {
     const proposal = await this.generateLibraryExecutionPlan({
       templateId: "compat",
       description,
+      organizationId,
+      tags,
       existingStages: [],
       existingSignals: [],
     });
@@ -377,7 +381,184 @@ Return ONLY a comma-separated list of tag names.
     }
   }
 
+  /**
+   * Analyzes existing tags and suggests potential merges for cleanup.
+   */
+  async suggestTagMerges(params: {
+    existingTags: { id: string; name: string; aliases: string[] }[];
+  }): Promise<{ sourceTagId: string; targetTagId: string; reason: string }[]> {
+    const gemini = AIService.getGeminiClient();
+    if (!gemini || params.existingTags.length < 2) return [];
+
+    const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
+    const model = gemini.getGenerativeModel({ model: modelName });
+
+    const tagList = params.existingTags.map(t => 
+      `- [ID: ${t.id}] "${t.name}" (Aliases: ${t.aliases.join(", ") || 'None'})`
+    ).join("\n");
+
+    const prompt = `
+You are an expert data cleanup assistant. Your goal is to identify duplicate or highly similar tags in a contractor's library that should be merged.
+
+EXISTING TAGS:
+${tagList}
+
+RULES:
+1. Identify tags that represent the same concept (e.g., "roofing" and "roof-work").
+2. Identify tags that are misspellings or minor variations.
+3. For each pair, suggest which one should be the "source" (to be removed) and which should be the "target" (the canonical one).
+4. Provide a brief "reason" for the merge.
+5. Only suggest high-confidence merges. If tags are distinct, do not suggest a merge.
+
+OUTPUT:
+Return ONLY a valid JSON array of objects:
+[
+  { "sourceTagId": "string", "targetTagId": "string", "reason": "string" }
+]
+`;
+
+    try {
+      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("AI Tag Merge Suggestion failed", e);
+      return [];
+    }
+  }
+
+  /**
+   * Suggests a recovery path for a job issue.
+   */
+  async suggestRecoveryPath(params: {
+    issue: {
+      id: string;
+      title: string;
+      type: JobIssueType;
+      severity: JobIssueSeverity;
+      description?: string | null;
+    };
+    blockedTask?: { title: string; category: string; instructions?: string | null } | null;
+    jobContext: {
+      title: string;
+      trade?: string;
+      organizationName?: string;
+      stages: { title: string; tasks: { title: string; status: string }[] }[];
+    };
+  }): Promise<AIRecoveryProposal> {
+    const gemini = AIService.getGeminiClient();
+
+    if (!gemini) {
+      throw new Error("GEMINI_API_KEY missing.");
+    }
+
+    const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
+    const model = gemini.getGenerativeModel({ model: modelName });
+
+    const jobStagesContext = params.jobContext.stages
+      .map(
+        (s) =>
+          `- Stage: "${s.title}"\n  Tasks: ${s.tasks
+            .map((t) => `"${t.title}" (${t.status})`)
+            .join(", ")}`,
+      )
+      .join("\n");
+
+    const prompt = `
+You are a contractor operations expert. A job is blocked by an issue, and you need to suggest a "Recovery Path" (a sequence of tasks) to resolve the issue and resume work.
+
+JOB: "${params.jobContext.title}" (${params.jobContext.trade || "General"})
+ISSUE: "${params.issue.title}" (Type: ${params.issue.type}, Severity: ${params.issue.severity})
+ISSUE DESCRIPTION: "${params.issue.description || "None"}"
+BLOCKED TASK: ${
+      params.blockedTask
+        ? `"${params.blockedTask.title}" (${params.blockedTask.category})`
+        : "None specified"
+    }
+
+JOB CONTEXT (STAGES & TASKS):
+${jobStagesContext}
+
+GOAL:
+Suggest 1-4 specific tasks to resolve this issue. 
+Think about:
+- Field corrections (re-work)
+- Office/Admin (permits, scheduling, ordering)
+- Customer communication
+- Inspections/Sign-offs
+
+RULES:
+1. Suggest tasks in a logical order.
+2. Assign a category to each task (GENERAL, PERMIT, INSPECTION, MATERIAL, PAYMENT, CUSTOMER_COMMUNICATION, PHOTO_EVIDENCE, SCHEDULING).
+3. Provide clear instructions for each task.
+4. Suggest if a task is a "hardSignal" (meaning the original job path cannot resume until this is done).
+5. Include a checklist for completion.
+6. Specify proof requirements (noteRequired, photoRequired, attachmentRequired).
+7. Assign a classification (FIELD, OFFICE, CUSTOMER, MATERIAL, PERMIT, INSPECTION).
+8. Provide "reasoning" for why this recovery step is necessary.
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "summary": "string",
+  "assumptions": ["string"],
+  "warnings": ["string"],
+  "tasks": [
+    {
+      "title": "string",
+      "category": "string",
+      "classification": "FIELD | OFFICE | CUSTOMER | MATERIAL | PERMIT | INSPECTION",
+      "instructions": "string",
+      "proofRequirements": {
+        "noteRequired": boolean,
+        "photoRequired": boolean,
+        "attachmentRequired": boolean
+      },
+      "providesSignals": ["string"],
+      "requiresSignals": ["string"],
+      "hardSignal": boolean,
+      "checklist": [{"label": "string"}],
+      "reasoning": "string",
+      "confidence": number
+    }
+  ]
+}
+`;
+
+    try {
+      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
+      const response = await result.response;
+      const text = response.text();
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      const raw = JSON.parse(jsonStr);
+
+      // Normalize categories
+      const normalizedTasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: Record<string, unknown>) => ({
+        ...t,
+        tempId: crypto.randomUUID(),
+        category: AIService.normalizeCategory(t.category) || TaskTemplateCategory.GENERAL,
+      }));
+
+      const proposal = {
+        ...raw,
+        issueId: params.issue.id,
+        tasks: normalizedTasks,
+      };
+
+      return AIRecoveryProposalSchema.parse(proposal);
+    } catch (e) {
+      console.error("AI Recovery Path Suggestion failed", e);
+      throw e;
+    }
+  }
+
   /** Simulated fallback for local dev */
+
   private static async simulateLibraryExecutionPlan(
     context: AIExecutionPlanContext,
     options: { reason?: string } = {}
