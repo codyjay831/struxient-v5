@@ -12,16 +12,24 @@ export const dynamic = "force-dynamic";
 export default async function ScopeLibraryTasksPage() {
   const ctx = await getRequestContextOrThrow();
 
-  const [rows, stages] = await Promise.all([
+  const [rows, stages, allTags] = await Promise.all([
     db.taskTemplate.findMany({
       where: { organizationId: ctx.organizationId, archivedAt: null },
-      include: { stage: { select: { name: true } } },
+      include: {
+        stage: { select: { name: true } },
+        tags: { select: { id: true, name: true, color: true } },
+      },
       orderBy: { updatedAt: "desc" },
     }),
     db.stage.findMany({
       where: { organizationId: ctx.organizationId, archivedAt: null },
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
+    }),
+    db.tag.findMany({
+      where: { organizationId: ctx.organizationId, status: "ACTIVE" },
+      select: { id: true, name: true, color: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -34,6 +42,7 @@ export default async function ScopeLibraryTasksPage() {
     instructions: t.instructions,
     providesSignals: t.providesSignals,
     requiresSignals: t.requiresSignals,
+    tags: t.tags,
     hardSignal: t.hardSignal,
     requirementsJson: t.requirementsJson,
     partsRequiredJson: t.partsRequiredJson,
@@ -50,7 +59,7 @@ export default async function ScopeLibraryTasksPage() {
       />
       <ScopeLibrarySectionNav active="tasks" />
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-        <ScopeLibraryTaskTemplatesPanel templates={templates} stages={stages} />
+        <ScopeLibraryTaskTemplatesPanel templates={templates} stages={stages} availableTags={allTags} />
       </WorkspacePanel>
     </div>
   );

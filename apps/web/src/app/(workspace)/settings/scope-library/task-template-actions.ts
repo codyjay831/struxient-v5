@@ -62,6 +62,7 @@ function parseTaskTemplateUpsertForm(
     hardSignal: boolean;
     requirementsJson: TaskCompletionRequirements | null;
     partsRequiredJson: TaskResourceRequirement | null;
+    tags: string[];
   };
 } {
   const title = trimRequired(formData.get("title"));
@@ -121,6 +122,9 @@ function parseTaskTemplateUpsertForm(
     }
   }
 
+  const tagsRaw = trimRequired(formData.get("tags"));
+  const tags = tagsRaw ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
   return {
     data: {
       title,
@@ -132,6 +136,7 @@ function parseTaskTemplateUpsertForm(
       hardSignal,
       requirementsJson,
       partsRequiredJson,
+      tags,
     },
   };
 }
@@ -159,6 +164,22 @@ export async function createTaskTemplateFromScopeLibraryAction(
       hardSignal: parsed.data.hardSignal,
       requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      tags: {
+        connectOrCreate: parsed.data.tags.map((name) => ({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: name.toLowerCase(),
+            },
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: name.toLowerCase(),
+            source: "USER_CREATED",
+            status: "ACTIVE",
+          },
+        })),
+      },
     },
   });
 
@@ -182,7 +203,7 @@ export async function updateTaskTemplateFromScopeLibraryAction(
 
   const ctx = await getRequestContextOrThrow();
 
-  const result = await db.taskTemplate.updateMany({
+  const result = await db.taskTemplate.update({
     where: {
       id: tid,
       organizationId: ctx.organizationId,
@@ -198,10 +219,27 @@ export async function updateTaskTemplateFromScopeLibraryAction(
       hardSignal: parsed.data.hardSignal,
       requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      tags: {
+        set: [],
+        connectOrCreate: parsed.data.tags.map((name) => ({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: name.toLowerCase(),
+            },
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: name.toLowerCase(),
+            source: "USER_CREATED",
+            status: "ACTIVE",
+          },
+        })),
+      },
     },
   });
 
-  if (result.count === 0) {
+  if (!result) {
     return {
       error:
         "This reusable task could not be updated. It may be hidden, missing, or outside your organization.",

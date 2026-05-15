@@ -1,3 +1,9 @@
+export type TagDisplay = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
 /** Serializable row for quote draft template picker (org-scoped, non-archived). */
 export type LineItemTemplatePickerRow = {
   id: string;
@@ -8,7 +14,7 @@ export type LineItemTemplatePickerRow = {
   defaultLineTotalCents: number;
   hasCustomerProposalDefaults: boolean;
   priceBufferPercentage: number;
-  tags: string[];
+  tags: TagDisplay[];
 };
 
 /** Staff-only Scope Library row for editing presets (org-scoped, non-archived). */
@@ -26,7 +32,7 @@ export type LineItemTemplateLibraryRow = {
   defaultCustomerPresentationGroup: string | null;
   hasCustomerProposalDefaults: boolean;
   priceBufferPercentage: number;
-  tags: string[];
+  tags: TagDisplay[];
   /** Optional default execution — summary only on list cards. */
   executionSummary: {
     taskCount: number;

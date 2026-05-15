@@ -536,7 +536,10 @@ export async function generateLineItemTemplateAIProposalAction(
   try {
     const preset = await db.lineItemTemplate.findFirst({
       where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
-      select: { description: true },
+      select: {
+        description: true,
+        tags: { select: { name: true } },
+      },
     });
 
     if (!preset) {
@@ -553,8 +556,10 @@ export async function generateLineItemTemplateAIProposalAction(
     const existingSignals: string[] = [];
 
     const proposal = await AIService.generateLibraryExecutionPlan({
+      organizationId: ctx.organizationId,
       templateId: tid,
       description: preset.description,
+      tags: preset.tags.map(t => t.name),
       organizationName: ctx.organizationName,
       existingStages: stages,
       existingSignals,
@@ -597,7 +602,10 @@ export async function applyLineItemTemplateAIProposalAction(
         await tx.lineItemTemplateTask.create({
           data: {
             lineItemTemplateId: tid,
-            sourceType: LineItemTemplateTaskSource.CUSTOM,
+            sourceType: pTask.sourceTaskTemplateId
+              ? LineItemTemplateTaskSource.TASK_TEMPLATE
+              : LineItemTemplateTaskSource.CUSTOM,
+            sourceTaskTemplateId: pTask.sourceTaskTemplateId ?? null,
             title: pTask.title,
             category: pTask.category,
             instructions: pTask.instructions,

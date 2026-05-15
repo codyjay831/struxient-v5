@@ -26,6 +26,9 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { ListChecks } from "lucide-react";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
 
+import { TagPicker } from "@/components/ui/tag-picker";
+import type { TagDisplay } from "@/lib/line-item-template-display";
+
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
@@ -49,7 +52,13 @@ function FormError({ message }: { message: string }) {
   );
 }
 
-function ScopeLibraryCreateTaskTemplateForm({ stages }: { stages: { id: string, name: string }[] }) {
+function ScopeLibraryCreateTaskTemplateForm({
+  stages,
+  availableTags,
+}: {
+  stages: { id: string; name: string }[];
+  availableTags: TagDisplay[];
+}) {
   const [state, formAction, isPending] = useActionState(
     createTaskTemplateFromScopeLibraryAction,
     initialActionState,
@@ -57,6 +66,7 @@ function ScopeLibraryCreateTaskTemplateForm({ stages }: { stages: { id: string, 
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
+  const [selectedTags, setSelectedTags] = useState<TagDisplay[]>([]);
 
   const categoryOptions = taskTemplateCategorySelectOptions();
 
@@ -121,6 +131,25 @@ function ScopeLibraryCreateTaskTemplateForm({ stages }: { stages: { id: string, 
       </div>
       <div>
         <label className="block">
+          <span className={fieldLabelClass}>Tags</span>
+          <TagPicker
+            availableTags={availableTags}
+            selectedTags={selectedTags}
+            onChange={setSelectedTags}
+            onSuggest={async () => {
+              if (!title) return [];
+              const res = await fetch("/api/ai/suggest-tags", {
+                method: "POST",
+                body: JSON.stringify({ title, context: category }),
+              });
+              const data = await res.json();
+              return data.suggestions || [];
+            }}
+          />
+        </label>
+      </div>
+      <div>
+        <label className="block">
           <span className={fieldLabelClass}>Instructions (optional)</span>
           <textarea
             name="instructions"
@@ -144,10 +173,12 @@ function ScopeLibraryCreateTaskTemplateForm({ stages }: { stages: { id: string, 
 function ScopeLibraryTaskTemplateEditForm({
   template,
   stages,
+  availableTags,
   onDone,
 }: {
   template: TaskTemplateLibraryRow;
-  stages: { id: string, name: string }[];
+  stages: { id: string; name: string }[];
+  availableTags: TagDisplay[];
   onDone: () => void;
 }) {
   const [state, formAction, isPending] = useActionState(
@@ -157,6 +188,7 @@ function ScopeLibraryTaskTemplateEditForm({
 
   const [title, setTitle] = useState(template.title);
   const [category, setCategory] = useState(template.category);
+  const [selectedTags, setSelectedTags] = useState<TagDisplay[]>(template.tags);
 
   const categoryOptions = taskTemplateCategorySelectOptions();
 
@@ -209,6 +241,24 @@ function ScopeLibraryTaskTemplateEditForm({
               </option>
             ))}
           </select>
+        </label>
+      </div>
+      <div>
+        <label className="block">
+          <span className={fieldLabelClass}>Tags</span>
+          <TagPicker
+            availableTags={availableTags}
+            selectedTags={selectedTags}
+            onChange={setSelectedTags}
+            onSuggest={async () => {
+              const res = await fetch("/api/ai/suggest-tags", {
+                method: "POST",
+                body: JSON.stringify({ title: title, context: category }),
+              });
+              const data = await res.json();
+              return data.suggestions || [];
+            }}
+          />
         </label>
       </div>
       <div>
@@ -274,9 +324,11 @@ function ScopeLibraryTaskArchiveForm({ templateId }: { templateId: string }) {
 export function ScopeLibraryTaskTemplatesPanel({
   templates,
   stages,
+  availableTags,
 }: {
   templates: TaskTemplateLibraryRow[];
-  stages: { id: string, name: string }[];
+  stages: { id: string; name: string }[];
+  availableTags: TagDisplay[];
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -286,7 +338,7 @@ export function ScopeLibraryTaskTemplatesPanel({
         title="Reusable tasks"
         description="Preset titles and instructions grouped by execution stage. Newest updated first."
       />
-      <ScopeLibraryCreateTaskTemplateForm stages={stages} />
+      <ScopeLibraryCreateTaskTemplateForm stages={stages} availableTags={availableTags} />
       {templates.length === 0 ? (
         <EmptyState
           icon={ListChecks}
@@ -307,6 +359,18 @@ export function ScopeLibraryTaskTemplatesPanel({
                   <p className="mt-1 text-xs text-foreground-muted">
                     {t.stageName ?? "No stage"} · {getTaskTemplateCategoryLabel(t.category)}
                   </p>
+                  {t.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {t.tags.map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center rounded bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {t.instructions ? (
                     <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-foreground-subtle">
                       {t.instructions}
@@ -346,6 +410,7 @@ export function ScopeLibraryTaskTemplatesPanel({
                 <ScopeLibraryTaskTemplateEditForm 
                   template={t} 
                   stages={stages}
+                  availableTags={availableTags}
                   onDone={() => setEditingId(null)} 
                 />
               ) : null}

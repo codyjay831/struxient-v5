@@ -24,6 +24,9 @@ import type { LineItemTemplateLibraryRow } from "@/lib/line-item-template-displa
 import { formatMoneyCents } from "@/lib/quote-display";
 import { Library } from "lucide-react";
 
+import { TagPicker } from "@/components/ui/tag-picker";
+import type { TagDisplay } from "@/lib/line-item-template-display";
+
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
@@ -47,11 +50,14 @@ function FormError({ message }: { message: string }) {
   );
 }
 
-function ScopeLibraryCreatePresetForm() {
+function ScopeLibraryCreatePresetForm({ availableTags }: { availableTags: TagDisplay[] }) {
   const [state, formAction, isPending] = useActionState(
     createLineItemTemplateFromScopeLibraryAction,
     initialActionState,
   );
+
+  const [selectedTags, setSelectedTags] = useState<TagDisplay[]>([]);
+  const [description, setDescription] = useState("");
 
   return (
     <form
@@ -62,7 +68,7 @@ function ScopeLibraryCreatePresetForm() {
       <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
         New saved line item
       </p>
-        <p className="text-xs leading-relaxed text-foreground-muted">
+      <p className="text-xs leading-relaxed text-foreground-muted">
         Saves commercial defaults for your organization. Applying a saved line item on a draft quote inserts a{" "}
         <span className="font-medium text-foreground">new copied line</span>—lines are never
         live-linked back to the library.
@@ -78,6 +84,8 @@ function ScopeLibraryCreatePresetForm() {
             maxLength={QUOTE_LINE_FIELD_LIMITS.description}
             className={controlClass}
             autoComplete="off"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
           />
         </label>
       </div>
@@ -121,12 +129,20 @@ function ScopeLibraryCreatePresetForm() {
           />
         </label>
         <label className="block">
-          <span className={fieldLabelClass}>Tags (comma separated)</span>
-          <input
-            name="tags"
-            type="text"
-            className={controlClass}
-            placeholder="e.g. Premium, Service, Material"
+          <span className={fieldLabelClass}>Tags</span>
+          <TagPicker
+            availableTags={availableTags}
+            selectedTags={selectedTags}
+            onChange={setSelectedTags}
+            onSuggest={async () => {
+              if (!description) return [];
+              const res = await fetch("/api/ai/suggest-tags", {
+                method: "POST",
+                body: JSON.stringify({ title: description }),
+              });
+              const data = await res.json();
+              return data.suggestions || [];
+            }}
           />
         </label>
       </div>
@@ -152,15 +168,19 @@ function ScopeLibraryCreatePresetForm() {
 
 function ScopeLibraryTemplateEditForm({
   template,
+  availableTags,
   onDone,
 }: {
   template: LineItemTemplateLibraryRow;
+  availableTags: TagDisplay[];
   onDone: () => void;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateLineItemTemplateFromScopeLibraryAction.bind(null, template.id),
     initialActionState,
   );
+
+  const [selectedTags, setSelectedTags] = useState<TagDisplay[]>(template.tags);
 
   return (
     <form action={formAction} className="mt-3 space-y-3 border-t border-border pt-3">
@@ -218,12 +238,19 @@ function ScopeLibraryTemplateEditForm({
           />
         </label>
         <label className="block">
-          <span className={fieldLabelClass}>Tags (comma separated)</span>
-          <input
-            name="tags"
-            type="text"
-            defaultValue={template.tags.join(", ")}
-            className={controlClass}
+          <span className={fieldLabelClass}>Tags</span>
+          <TagPicker
+            availableTags={availableTags}
+            selectedTags={selectedTags}
+            onChange={setSelectedTags}
+            onSuggest={async () => {
+              const res = await fetch("/api/ai/suggest-tags", {
+                method: "POST",
+                body: JSON.stringify({ title: template.description }),
+              });
+              const data = await res.json();
+              return data.suggestions || [];
+            }}
           />
         </label>
       </div>
@@ -290,8 +317,10 @@ function ScopeLibraryArchiveForm({ templateId }: { templateId: string }) {
 
 export function ScopeLibraryLinePresetsPanel({
   templates,
+  availableTags,
 }: {
   templates: LineItemTemplateLibraryRow[];
+  availableTags: TagDisplay[];
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -301,7 +330,7 @@ export function ScopeLibraryLinePresetsPanel({
         title="Saved line items"
         description="Commercial defaults and optional proposal wording—plus optional default execution you can copy into quotes later. Newest updated first."
       />
-      <ScopeLibraryCreatePresetForm />
+      <ScopeLibraryCreatePresetForm availableTags={availableTags} />
       {templates.length === 0 ? (
         <EmptyState
           icon={Library}
@@ -323,10 +352,10 @@ export function ScopeLibraryLinePresetsPanel({
                     <div className="flex flex-wrap gap-1 mt-1">
                       {t.tags.map((tag) => (
                         <span
-                          key={tag}
+                          key={tag.id}
                           className="inline-flex items-center rounded bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
                         >
-                          {tag}
+                          {tag.name}
                         </span>
                       ))}
                     </div>
@@ -373,7 +402,11 @@ export function ScopeLibraryLinePresetsPanel({
                 </div>
               </div>
               {editingId === t.id ? (
-                <ScopeLibraryTemplateEditForm template={t} onDone={() => setEditingId(null)} />
+                <ScopeLibraryTemplateEditForm 
+                  template={t} 
+                  availableTags={availableTags}
+                  onDone={() => setEditingId(null)} 
+                />
               ) : null}
             </li>
           ))}

@@ -9,7 +9,7 @@ const activeClass = `${baseClass} border-border-strong bg-foreground/5 text-fore
 export function ScopeLibrarySectionNav({
   active,
 }: {
-  active: "presets" | "tasks" | "stages" | "signals";
+  active: "presets" | "tasks" | "stages" | "signals" | "tags";
 }) {
   return (
     <WorkspacePanel padding="compact" className="mb-6">
@@ -45,6 +45,13 @@ export function ScopeLibrarySectionNav({
           aria-current={active === "signals" ? "page" : undefined}
         >
           Signals
+        </Link>
+        <Link
+          href="/settings/scope-library/tags"
+          className={active === "tags" ? activeClass : inactiveClass}
+          aria-current={active === "tags" ? "page" : undefined}
+        >
+          Tags
         </Link>
       </div>
     </WorkspacePanel>

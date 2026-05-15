@@ -36,6 +36,7 @@ model Organization {
   quoteShareTokens         QuoteShareToken[]
   stages                   Stage[]
   taskTemplates            TaskTemplate[]
+  tags                     Tag[]
   workstationSettings      WorkstationSettings?
 }
 
@@ -371,7 +372,7 @@ model LineItemTemplate {
   defaultCustomerScopeDescription  String?
   defaultCustomerScopeTitle        String?
   priceBufferPercentage            Int                    @default(0)
-  tags                             String[]               @default([])
+  tags                             Tag[]                  @relation("LineItemTemplateToTag")
   organization                     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   defaultExecutionTasks            LineItemTemplateTask[]
   quoteLineItems                   QuoteLineItem[]
@@ -402,6 +403,7 @@ model TaskTemplate {
   partsRequiredJson       Json?
   providesSignals         String[]                 @default([])
   requiresSignals         String[]                 @default([])
+  tags                    Tag[]                    @relation("TaskTemplateToTag")
   stageId                 String?
   jobTaskCopies           JobTask[]
   lineItemTemplateTasks   LineItemTemplateTask[]
@@ -1088,4 +1090,47 @@ enum JobActivityType {
   JOB_ACTIVATED
   EVENT_CREATED
   EVENT_RESOLVED
+}
+
+model Tag {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String // Canonical display name
+  color          String? // Optional hex code
+  source         TagSource    @default(USER_CREATED)
+  status         TagStatus    @default(ACTIVE)
+
+  /// Alternative names that map to this canonical tag.
+  aliases String[] @default([])
+
+  /// Cached usage counts for UI display.
+  usageCountLineItems Int @default(0)
+  usageCountTasks     Int @default(0)
+
+  /// Audit log of merge events: [{ from: "visit site", at: "2024-05-15" }]
+  mergeHistory Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Many-to-Many relations
+  lineItemTemplates LineItemTemplate[] @relation("LineItemTemplateToTag")
+  taskTemplates     TaskTemplate[]     @relation("TaskTemplateToTag")
+
+  @@unique([organizationId, name])
+}
+
+enum TagSource {
+  USER_CREATED
+  AI_SUGGESTED
+  SYSTEM_DEFAULT
+  IMPORTED
+}
+
+enum TagStatus {
+  ACTIVE
+  ARCHIVED
+  MERGED
 }

@@ -923,6 +923,7 @@ export async function createLineItemTemplateAction(
   }
 
   const ctx = await getRequestContextOrThrow();
+  const { tags: tagNames, ...rest } = parsed.data;
 
   const quoteExists = await db.quote.findFirst({
     where: { id: rid, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
@@ -938,7 +939,23 @@ export async function createLineItemTemplateAction(
   await db.lineItemTemplate.create({
     data: {
       organizationId: ctx.organizationId,
-      ...parsed.data,
+      ...rest,
+      tags: {
+        connectOrCreate: tagNames.map((name) => ({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: name.toLowerCase(),
+            },
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: name.toLowerCase(),
+            source: "USER_CREATED",
+            status: "ACTIVE",
+          },
+        })),
+      },
     },
   });
 
@@ -959,11 +976,28 @@ export async function createLineItemTemplateFromScopeLibraryAction(
   }
 
   const ctx = await getRequestContextOrThrow();
+  const { tags: tagNames, ...rest } = parsed.data;
 
   await db.lineItemTemplate.create({
     data: {
       organizationId: ctx.organizationId,
-      ...parsed.data,
+      ...rest,
+      tags: {
+        connectOrCreate: tagNames.map((name) => ({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: name.toLowerCase(),
+            },
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: name.toLowerCase(),
+            source: "USER_CREATED",
+            status: "ACTIVE",
+          },
+        })),
+      },
     },
   });
 
@@ -989,17 +1023,37 @@ export async function updateLineItemTemplateFromScopeLibraryAction(
   }
 
   const ctx = await getRequestContextOrThrow();
+  const { tags: tagNames, ...rest } = parsed.data;
 
-  const result = await db.lineItemTemplate.updateMany({
+  const result = await db.lineItemTemplate.update({
     where: {
       id: tid,
       organizationId: ctx.organizationId,
       archivedAt: null,
     },
-    data: parsed.data,
+    data: {
+      ...rest,
+      tags: {
+        set: [], // Clear existing relations
+        connectOrCreate: tagNames.map((name) => ({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: name.toLowerCase(),
+            },
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: name.toLowerCase(),
+            source: "USER_CREATED",
+            status: "ACTIVE",
+          },
+        })),
+      },
+    },
   });
 
-  if (result.count === 0) {
+  if (!result) {
     return {
       error:
         "This preset could not be updated. It may be hidden, missing, or outside your organization.",

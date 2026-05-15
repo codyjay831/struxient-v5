@@ -390,7 +390,13 @@ export async function loadQuoteWorkSurface(
             defaultCustomerExcludedNotes: true,
             defaultCustomerPresentationGroup: true,
             priceBufferPercentage: true,
-            tags: true,
+            tags: {
+              select: {
+                id: true,
+                name: true,
+                color: true,
+              },
+            },
           },
         })
       ).map((t) => {

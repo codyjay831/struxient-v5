@@ -21,7 +21,13 @@ export async function loadAvailableLineItemTemplates(
       defaultCustomerExcludedNotes: true,
       defaultCustomerPresentationGroup: true,
       priceBufferPercentage: true,
-      tags: true,
+      tags: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+        },
+      },
     },
   });
 

@@ -11,8 +11,10 @@ import { z } from "zod";
  */
 
 export type AIExecutionPlanContext = {
+  organizationId: string;
   templateId: string;
   description: string;
+  tags: string[];
   organizationName?: string;
   trade?: string;
   existingStages: { id: string; name: string }[];
@@ -158,11 +160,21 @@ export class AIService {
       });
     }
 
+    // Fetch reusable tasks that match the line item tags
+    const reusableTasks = await db.taskTemplate.findMany({
+      where: {
+        organizationId: context.organizationId,
+        tags: { some: { name: { in: context.tags.map(t => t.toLowerCase()) } } },
+        archivedAt: null,
+      },
+      include: { stage: { select: { name: true } }, tags: { select: { name: true } } },
+    });
+
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
       const model = gemini.getGenerativeModel({ model: modelName });
       
-      const prompt = this.buildContractorRealismPrompt(context);
+      const prompt = this.buildContractorRealismPrompt(context, reusableTasks);
 
       const result = await this.retryWithBackoff(() => model.generateContent(prompt));
       const response = await result.response;
@@ -222,19 +234,30 @@ export class AIService {
     }
   }
 
-  private static buildContractorRealismPrompt(context: AIExecutionPlanContext): string {
+  private static buildContractorRealismPrompt(
+    context: AIExecutionPlanContext,
+    reusableTasks: any[] = []
+  ): string {
     const stageNames = context.existingStages.map(s => s.name).join(", ");
     const signalNames = context.existingSignals.join(", ");
     const allowedCategories = Object.values(TaskTemplateCategory).join(", ");
+
+    const reusableTaskList = reusableTasks.map(t => 
+      `- [ID: ${t.id}] "${t.title}" (Category: ${t.category}, Stage: ${t.stage?.name || 'None'}, Tags: ${t.tags.map((tg: any) => tg.name).join(", ")})`
+    ).join("\n");
 
     return `
 You are a realistic contractor execution planner. Your job is to draft a structured execution plan for a commercial line item.
 
 LINE ITEM DESCRIPTION: "${context.description}"
+LINE ITEM TAGS: [${context.tags.join(", ")}]
 ORGANIZATION CONTEXT: "${context.organizationName || 'General Contractor'}"
 EXISTING STAGES: [${stageNames}]
 EXISTING SIGNALS: [${signalNames}]
 USER INSTRUCTIONS: "${context.userInstructions || 'None'}"
+
+AVAILABLE REUSABLE TASKS FROM LIBRARY (PRIORITIZE THESE):
+${reusableTaskList || 'None matching current tags.'}
 
 ALLOWED TASK CATEGORIES (use EXACTLY one of these, uppercase, no other values permitted):
 ${allowedCategories}
@@ -254,13 +277,15 @@ Propose a set of tasks that a real contractor would perform to execute this scop
 Avoid generic task lists. Think about permits, material orders, site prep, rough-in, inspections, and finish work.
 
 RULES:
-1. Group tasks by STAGE. Use the existing stages provided if they fit, or suggest a logical stage name.
-2. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
-3. Mark critical blockers as "hardSignal: true".
-4. Include a checklist for each task.
-5. List required resources/equipment.
-6. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
-7. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
+1. SELECT FROM REUSABLE TASKS FIRST. If an available reusable task fits the need, use its ID and title exactly.
+2. ONLY GENERATE NEW TASKS for gaps not covered by the library.
+3. Group tasks by STAGE. Use the existing stages provided if they fit, or suggest a logical stage name.
+4. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
+5. Mark critical blockers as "hardSignal: true".
+6. Include a checklist for each task.
+7. List required resources/equipment.
+8. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
+9. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this structure:
@@ -269,6 +294,7 @@ Return ONLY a valid JSON object matching this structure:
   "warnings": ["string"],
   "tasks": [
     {
+      "sourceTaskTemplateId": "string (ID from reusable tasks if selected, otherwise null)",
       "title": "string",
       "category": "one of: ${allowedCategories}",
       "instructions": "string",
@@ -295,6 +321,60 @@ Return ONLY a valid JSON object matching this structure:
       existingSignals: [],
     });
     return proposal;
+  }
+
+  /**
+   * Suggests tags for a given title and description.
+   */
+  async suggestTags(params: {
+    title: string;
+    description?: string;
+    context?: string;
+    existingTags: { name: string; aliases: string[] }[];
+  }): Promise<string[]> {
+    const gemini = AIService.getGeminiClient();
+    if (!gemini) return [];
+
+    const { title, description, context, existingTags } = params;
+    const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
+    const model = gemini.getGenerativeModel({ model: modelName });
+
+    const tagList = existingTags.map(t => t.name).join(", ");
+    const aliasMap = existingTags.flatMap(t => t.aliases.map(a => `${a} -> ${t.name}`)).join("\n");
+
+    const prompt = `
+You are an expert contractor metadata assistant. Your goal is to suggest relevant tags for a line item or task.
+
+TITLE: "${title}"
+DESCRIPTION: "${description || 'None'}"
+CONTEXT: "${context || 'None'}"
+
+EXISTING TAGS IN LIBRARY:
+${tagList || 'None'}
+
+KNOWN ALIASES (map these to the canonical name):
+${aliasMap || 'None'}
+
+RULES:
+1. Suggest 2-5 relevant tags.
+2. Prioritize EXISTING TAGS from the library if they fit.
+3. If you suggest something that matches a KNOWN ALIAS, use the canonical name instead.
+4. Only suggest NEW tags if the library doesn't cover the scope.
+5. Keep tags short, lowercase, and hyphenated if multiple words (e.g. "roof-mounted").
+
+OUTPUT:
+Return ONLY a comma-separated list of tag names.
+`;
+
+    try {
+      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
+      const response = await result.response;
+      const text = response.text();
+      return text.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+    } catch (e) {
+      console.error("AI Tag Suggestion failed", e);
+      return [];
+    }
   }
 
   /** Simulated fallback for local dev */
