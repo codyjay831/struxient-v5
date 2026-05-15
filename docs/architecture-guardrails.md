@@ -51,7 +51,7 @@ There is no `packages/` monorepo layer—keep domain logic in `lib/`, not scatte
 9. **UI / theme** — Semantic tokens from `globals.css`; avoid raw palette classes. See I23.
 10. **Schema** — No schema changes without explicit approval. Prefer existing fields and derived helpers first.
 
-## Automated guardrails (v1)
+## Automated guardrails
 
 Run from `apps/web/`:
 
@@ -59,11 +59,19 @@ Run from `apps/web/`:
 npm run guardrails
 ```
 
-| Script | Behavior |
-|--------|----------|
-| `scripts/guardrails/detect-schema-changes.mjs` | **Fails** if `apps/web/prisma/schema.prisma` has uncommitted changes unless `ALLOW_SCHEMA=1` |
+`GUARDRAILS_STRICT=1` — drift detectors that normally **warn** will **fail** the run (use when tightening CI).
 
-Pass 2 (later) will add drift detectors for payment status strings, task readiness bypass, and theme tokens.
+| Script | Default | Behavior |
+|--------|---------|----------|
+| `detect-schema-changes.mjs` | **Fail** | Uncommitted `apps/web/prisma/schema.prisma` unless `ALLOW_SCHEMA=1` |
+| `detect-deprecated-tag-count-fields.mjs` | **Fail** | References to deprecated `Tag.usageCount*` fields in `apps/web/src` (non-comment lines) |
+| `detect-payment-status-drift.mjs` | **Warn** | Raw `"DUE"` / `"PENDING"` / etc. payment status string compares outside allowlist |
+| `detect-task-readiness-drift.mjs` | **Warn** | `deriveTaskState` / `toTaskReadinessInput` used without a `task-readiness` import |
+| `detect-raw-palette.mjs` | **Warn** | Raw `zinc-*` / `gray-*` / `slate-*` Tailwind utilities in `src` |
+| `detect-corrections-constant-drift.mjs` | **Warn** | Literal `"Corrections"` instead of `CORRECTIONS_STAGE_NAME` |
+| `detect-client-db-import.mjs` | **Warn** | `"use client"` files importing `@/lib/db` |
+
+Orchestrator: `scripts/guardrails/run-all.mjs`.
 
 ## Cursor rules
 
@@ -82,4 +90,4 @@ Project rules live in `.cursor/rules/`:
 
 ---
 
-*Created 2026-05-16 — Guardrails v1 Pass 1.*
+*Created 2026-05-16 — Guardrails v1 Pass 1. Updated Pass 2 — drift detectors + `resolve-job-issue-core` tests.*

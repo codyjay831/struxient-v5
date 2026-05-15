@@ -34,6 +34,8 @@ Run when feasible:
 npm test
 npm run lint
 npm run guardrails
+# Optional: fail on drift warnings (CI tightening)
+GUARDRAILS_STRICT=1 npm run guardrails
 ```
 
 Report any guardrail failures or intentional `ALLOW_SCHEMA=1` usage in the task summary.
