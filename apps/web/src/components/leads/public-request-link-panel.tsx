@@ -32,7 +32,7 @@ export function PublicRequestLinkPanel({
       </p>
       <p className="mt-2 text-sm font-medium text-foreground">Request Settings</p>
       <p className="mt-3">
-        <Link href="/leads/public-request-settings" className={handoffMutedLinkClass}>
+        <Link href="/settings/public-request-settings" className={handoffMutedLinkClass}>
           Manage Public Request Settings
         </Link>
       </p>

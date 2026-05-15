@@ -179,8 +179,7 @@ export default async function QuoteExecutionReviewPreviewPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Proposals", href: "/quotes" },
+          { label: "Sales", href: "/leads" },
           { label: row.title, href: `/quotes/${qid}` },
           { label: "Execution preview" },
         ]}

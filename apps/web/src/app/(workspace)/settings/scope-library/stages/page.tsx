@@ -20,7 +20,7 @@ export default async function ScopeLibraryStagesPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
-        items={[{ label: "Sales" }, { label: "Scope Library", href: "/scope-library" }, { label: "Stages" }]}
+        items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library", href: "/settings/scope-library" }, { label: "Stages" }]}
       />
       <PageHeader
         title="Execution stages"

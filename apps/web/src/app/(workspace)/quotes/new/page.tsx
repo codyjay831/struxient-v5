@@ -51,7 +51,7 @@ export default async function NewQuotePage({
     : null;
   if (rawLead && !lead) {
     paramWarning =
-      "The lead id in the link was not found in your organization—it was ignored. You can still create a title-only draft or return to Leads.";
+      "The opportunity id in the link was not found in your organization—it was ignored. You can still create a title-only draft or return to Sales.";
   }
 
   const customer = rawCustomer
@@ -69,17 +69,17 @@ export default async function NewQuotePage({
   if (lead && customer) {
     if (lead.customerId != null && lead.customerId !== customer.id) {
       paramWarning =
-        "This lead is linked to a different customer than the one in the URL. Lead and customer context were cleared—open Create quote from the lead or customer record that should anchor the quote.";
+        "This opportunity is linked to a different customer than the one in the URL. Context was cleared—open Create quote from the record that should anchor the quote.";
     } else {
       validatedLeadId = lead.id;
       validatedCustomerId = customer.id;
-      contextLines.push({ label: "Lead", value: lead.title });
+      contextLines.push({ label: "Opportunity", value: lead.title });
       contextLines.push({ label: "Customer", value: customer.displayName });
       defaultTitle = customer.displayName;
     }
   } else if (lead && !rawCustomer) {
     validatedLeadId = lead.id;
-    contextLines.push({ label: "Lead", value: lead.title });
+    contextLines.push({ label: "Opportunity", value: lead.title });
     if (lead.customerId) {
       const linked = await db.customer.findFirst({
         where: { id: lead.customerId, organizationId: ctx.organizationId },
@@ -88,8 +88,8 @@ export default async function NewQuotePage({
       if (linked) {
         validatedCustomerId = linked.id;
         contextLines.push({
-          label: "Customer (from lead)",
-          value: `${linked.displayName} — this quote will attach to both the lead and that customer because the lead already references them.`,
+          label: "Customer (from opportunity)",
+          value: `${linked.displayName} — this quote will attach to both the opportunity and that customer because the opportunity already references them.`,
         });
         defaultTitle = linked.displayName;
       } else {
@@ -108,17 +108,16 @@ export default async function NewQuotePage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
-          { label: "New" },
+          { label: "Sales", href: "/leads" },
+          { label: "New quote" },
         ]}
       />
       <PageHeader
         title="New quote"
-        description="Create a draft working quote in your development organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, live proposal preview from the saved record, and staff-only recorded send checkpoints when you want proof—not delivery or approval."
+        description="Create a draft working quote in your organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, and guided send flow."
         actions={
-          <Link href="/quotes" className={listLinkClass}>
-            ← Quotes list
+          <Link href="/leads" className={listLinkClass}>
+            ← Sales pipeline
           </Link>
         }
       />
@@ -126,10 +125,10 @@ export default async function NewQuotePage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Draft quote"
-          description="Organization scope is applied on the server from your session context—never from hidden fields alone. Lead and customer ids from the URL are validated here; create re-validates before insert."
+          description="Organization scope is applied on the server from your session context. Lead and customer ids from the URL are validated here; create re-validates before insert."
         />
         <QuoteDraftForm
-          cancelHref="/quotes"
+          cancelHref="/leads"
           defaultTitle={defaultTitle}
           validatedLeadId={validatedLeadId}
           validatedCustomerId={validatedCustomerId}

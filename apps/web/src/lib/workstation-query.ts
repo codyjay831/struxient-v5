@@ -108,7 +108,7 @@ export async function queryWorkstationWorkItems(
 
   const pipelineStatuses = [LeadStatus.NEW, LeadStatus.TRIAGING];
 
-  // 1. Leads
+  // 1. Opportunities
   const leads = await db.lead.findMany({
     where: { organizationId, status: { in: pipelineStatuses } },
     include: {
@@ -162,7 +162,7 @@ export async function queryWorkstationWorkItems(
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    // Prioritize leads with pending visit requests
+    // Prioritize opportunities with pending visit requests
     const pendingVisit = lead.visitRequests[0];
     
     let priority: WorkstationWorkItemPriority = "medium";
@@ -187,7 +187,7 @@ export async function queryWorkstationWorkItems(
     const effectiveReason = pendingVisit 
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
       : (rankReason || workflow.reason);
-    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Leads.");
+    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Sales.");
 
     items.push({
       id: `lead-${lead.id}`,

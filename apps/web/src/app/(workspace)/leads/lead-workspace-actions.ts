@@ -73,14 +73,9 @@ export type CreateQuoteFromLeadWorkspaceResult =
 
 function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string | null) {
   const lid = leadId.trim();
-  const qid = quoteId ? quoteId.trim() : "";
   revalidatePath("/leads");
   if (lid) {
     revalidatePath(`/leads/${lid}`);
-  }
-  revalidatePath("/quotes");
-  if (qid) {
-    revalidatePath(`/quotes/${qid}`);
   }
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
@@ -159,10 +154,10 @@ export async function createCustomerFromLeadWorkspaceAction(
       });
 
       if (!lead) {
-        throw new WorkspaceTxError("This lead was not found in your organization.");
+        throw new WorkspaceTxError("This opportunity was not found in your organization.");
       }
       if (lead.customerId != null) {
-        throw new WorkspaceTxError("This lead is already linked to a customer.");
+        throw new WorkspaceTxError("This opportunity is already linked to a customer.");
       }
 
       const contact = readContact(lead.contact);
@@ -197,7 +192,7 @@ export async function createCustomerFromLeadWorkspaceAction(
 
       if (result.count === 0) {
         throw new WorkspaceTxError(
-          "Could not link this lead—it may have been linked already. Refresh and try again.",
+          "Could not link this opportunity—it may have been linked already. Refresh and try again.",
         );
       }
 
@@ -220,7 +215,6 @@ export async function createCustomerFromLeadWorkspaceAction(
   }
   revalidatePath(`/leads/${id}`);
   revalidatePath("/leads");
-  revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/workstation");
 
@@ -269,11 +263,11 @@ export async function linkLeadToCustomerWorkspaceAction(
   if (!leadPeek) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
   if (leadPeek.customerId != null) {
-    return { error: "This lead is already linked to a customer. Unlinking is not available yet." };
+    return { error: "This opportunity is already linked to a customer. Unlinking is not available yet." };
   }
 
   const convertedAt = new Date();
@@ -285,7 +279,7 @@ export async function linkLeadToCustomerWorkspaceAction(
       });
       if (!lead) {
         throw new WorkspaceTxError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
       const result = await tx.lead.updateMany({
@@ -294,7 +288,7 @@ export async function linkLeadToCustomerWorkspaceAction(
       });
       if (result.count === 0) {
         throw new WorkspaceTxError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
       await attachIntakeServiceLocationToCustomerFromLead(tx, {
@@ -314,7 +308,6 @@ export async function linkLeadToCustomerWorkspaceAction(
   revalidatePath("/customers");
   revalidatePath(`/leads/${id}`);
   revalidatePath("/leads");
-  revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/workstation");
 
@@ -358,7 +351,7 @@ export async function updateLeadStatusWorkspaceAction(
   if (!exists) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -373,7 +366,7 @@ export async function updateLeadStatusWorkspaceAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -399,7 +392,7 @@ export async function archiveLeadInboxAction(
   if (result.count === 0) {
     return {
       success: false,
-      error: "This lead could not be archived in your organization.",
+      error: "This opportunity could not be archived in your organization.",
     };
   }
   revalidateLeadAndQuoteSurfaces(id, null);
@@ -425,7 +418,7 @@ export async function updateLeadContactWorkspaceAction(
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
   });
-  if (!exists) return { error: "Lead not found in your organization." };
+  if (!exists) return { error: "Opportunity not found in your organization." };
 
   const contactName = trimOrNull(formData.get("contactName"));
   const companyName = trimOrNull(formData.get("companyName"));
@@ -464,7 +457,7 @@ export async function updateLeadContactWorkspaceAction(
   });
 
   if (result.count === 0) {
-    return { error: "Lead not found or could not be updated." };
+    return { error: "Opportunity not found or could not be updated." };
   }
 
   return { success: true };
@@ -576,7 +569,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
   });
 
   if (!lead) {
-    return { ok: false, error: "Lead not found in your organization." };
+    return { ok: false, error: "Opportunity not found in your organization." };
   }
 
   const contact = readContact(lead.contact);
@@ -630,7 +623,7 @@ export async function loadLeadCommercialSurfaceAction(
 
   const payload = await loadLeadCommercialSurface(id, ctx);
   if (!payload) {
-    return { ok: false, error: "Lead not found in your organization." };
+    return { ok: false, error: "Opportunity not found in your organization." };
   }
 
   return { ok: true, payload };
@@ -652,7 +645,7 @@ export async function loadLeadMatchHintsAction(
     select: { email: true, phone: true },
   });
 
-  if (!lead) return { ok: false, error: "Lead not found." };
+  if (!lead) return { ok: false, error: "Opportunity not found." };
 
   const customers = await db.customer.findMany({
     where: { organizationId: ctx.organizationId },
@@ -785,7 +778,7 @@ export async function loadLeadServiceAddressContextAction(
     },
   });
 
-  if (!lead) return { ok: false, error: "Lead not found in your organization." };
+  if (!lead) return { ok: false, error: "Opportunity not found in your organization." };
 
   const intake = intakePayloadFromLeadRow({
     address: lead.address,
@@ -867,7 +860,7 @@ export async function updateLeadServiceAddressWorkspaceAction(
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, address: true },
   });
-  if (!existing) return { error: "Lead not found in your organization." };
+  if (!existing) return { error: "Opportunity not found in your organization." };
 
   const rawLocationJson = trimOrEmpty(formData.get("publicIntakeServiceLocation"));
   const { snapshot, serviceAddressText } =
@@ -913,7 +906,7 @@ export async function updateLeadServiceAddressWorkspaceAction(
   });
 
   if (result.count === 0) {
-    return { error: "Lead not found or could not be updated." };
+    return { error: "Opportunity not found or could not be updated." };
   }
 
   /* If the lead is already linked to a customer, propagate the new intake
@@ -946,7 +939,6 @@ export async function updateLeadServiceAddressWorkspaceAction(
 
   revalidatePath(`/leads/${id}`);
   revalidatePath("/leads");
-  revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/workstation");
 

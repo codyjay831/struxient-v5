@@ -107,10 +107,10 @@ export default async function LeadsPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Leads" }]} />
+      <WorkspaceBreadcrumb items={[{ label: "Sales" }]} />
       <PageHeader
-        title="Leads"
-        description="Capture and move new sales opportunities toward quotes. Open a lead to review intake details, verify the customer, and track its progress."
+        title="Sales"
+        description="Manage your commercial pipeline from intake to approved quote. Track every opportunity and its associated quotes in one unified view."
         actions={
           <>
             {fromWorkstation ? (
@@ -121,15 +121,8 @@ export default async function LeadsPage({
                 ← Workstation
               </Link>
             ) : null}
-            <Link href="/leads/inbox" className={mutedLinkClass}>
-              ← Inbox
-            </Link>
-            <Link href="/leads/public-request-settings" className={mutedLinkClass}>
-              <Globe className="size-3.5 mr-1.5" />
-              Public Link
-            </Link>
             <Link href="/leads/new" className={primaryLinkClass}>
-              New lead
+              New intake
             </Link>
             <LeadScaffoldingDialog />
           </>
@@ -161,11 +154,11 @@ export default async function LeadsPage({
             <div className="p-6">
               <EmptyState
                 icon={Users}
-                title="No leads yet"
-                description="There are no lead records for this organization. Add one manually or share your Public Request Link."
+                title="No sales opportunities yet"
+                description="There are no intake records for this organization. Add one manually or share your Public Request Link."
               >
                 <Link href="/leads/new" className={primaryLinkClass}>
-                  New lead
+                  New intake
                 </Link>
               </EmptyState>
             </div>
@@ -173,14 +166,14 @@ export default async function LeadsPage({
             <div className="p-6">
               <EmptyState
                 icon={Search}
-                title="No leads match this view"
-                description="Try a different search term or change sort. Leads still exist in your organization—they are just filtered out here."
+                title="No opportunities match this view"
+                description="Try a different search term or change sort. Records still exist in your organization—they are just filtered out here."
               >
                 <Link href="/leads" scroll={false} className={primaryLinkClass}>
                   Clear filters
                 </Link>
                 <Link href="/leads/new" className={mutedLinkClass}>
-                  New lead
+                  New intake
                 </Link>
               </EmptyState>
             </div>

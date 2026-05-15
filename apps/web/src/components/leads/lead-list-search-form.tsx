@@ -52,7 +52,7 @@ export function LeadListSearchForm({
         role="status"
         aria-live="polite"
       >
-        Leads{" "}
+        Opportunities{" "}
         <span className="text-foreground">{matchingCount}</span>
         <span className="text-foreground-subtle">/{totalInOrg}</span>
       </p>
@@ -65,7 +65,7 @@ export function LeadListSearchForm({
       >
         <div className="min-w-0 flex-1 sm:max-w-sm">
           <label className="sr-only" htmlFor="intake-list-search">
-            Search leads
+            Search opportunities
           </label>
           <input
             id="intake-list-search"

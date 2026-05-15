@@ -70,8 +70,8 @@ export default async function WorkstationTasksLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <Link href="/quotes" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
-          {WORKSTATION_COPY.continuation.openQuotes}
+        <Link href="/leads" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+          Browse Sales
         </Link>
         <Link href="/jobs" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
           {WORKSTATION_COPY.continuation.openJobs}

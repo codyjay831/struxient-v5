@@ -19,28 +19,28 @@ export function ScopeLibrarySectionNav({
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
-          href="/scope-library"
+          href="/settings/scope-library"
           className={active === "presets" ? activeClass : inactiveClass}
           aria-current={active === "presets" ? "page" : undefined}
         >
           Saved line items
         </Link>
         <Link
-          href="/scope-library/tasks"
+          href="/settings/scope-library/tasks"
           className={active === "tasks" ? activeClass : inactiveClass}
           aria-current={active === "tasks" ? "page" : undefined}
         >
           Reusable tasks
         </Link>
         <Link
-          href="/scope-library/stages"
+          href="/settings/scope-library/stages"
           className={active === "stages" ? activeClass : inactiveClass}
           aria-current={active === "stages" ? "page" : undefined}
         >
           Stages
         </Link>
         <Link
-          href="/scope-library/signals"
+          href="/settings/scope-library/signals"
           className={active === "signals" ? activeClass : inactiveClass}
           aria-current={active === "signals" ? "page" : undefined}
         >

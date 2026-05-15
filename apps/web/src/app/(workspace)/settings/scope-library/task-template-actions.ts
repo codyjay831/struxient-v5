@@ -162,7 +162,7 @@ export async function createTaskTemplateFromScopeLibraryAction(
     },
   });
 
-  redirect("/scope-library/tasks");
+  redirect("/settings/scope-library/tasks");
 }
 
 export async function updateTaskTemplateFromScopeLibraryAction(
@@ -208,7 +208,7 @@ export async function updateTaskTemplateFromScopeLibraryAction(
     };
   }
 
-  redirect("/scope-library/tasks");
+  redirect("/settings/scope-library/tasks");
 }
 
 export async function archiveTaskTemplateFromScopeLibraryAction(
@@ -240,5 +240,5 @@ export async function archiveTaskTemplateFromScopeLibraryAction(
     };
   }
 
-  redirect("/scope-library/tasks");
+  redirect("/settings/scope-library/tasks");
 }

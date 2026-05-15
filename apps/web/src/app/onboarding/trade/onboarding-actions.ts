@@ -25,6 +25,6 @@ export async function seedTradeStartersAction(tradeSlug: string) {
     },
   });
 
-  revalidatePath("/leads/intake-forms");
-  redirect("/leads/intake-forms");
+  revalidatePath("/settings/intake-forms");
+  redirect("/settings/intake-forms");
 }

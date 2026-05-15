@@ -61,7 +61,7 @@ export default async function CustomersPage({
       />
       <PageHeader
         title="Customers"
-        description="Relationship records for this organization—identity and contact live here; linked lead appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
+        description="Relationship records for this organization—identity and contact live here; linked opportunity appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
         actions={
           <>
             {fromWorkstation ? (
@@ -82,13 +82,13 @@ export default async function CustomersPage({
 
       <HandoffPanel
         title="Relationship context"
-        description="Customer rows are the anchor for durable identity; linked leads are real today. Quotes are live under Sales; job, schedule, and payment routes are reserved shells—not auto-wired from this page."
+        description="Customer rows are the anchor for durable identity; linked opportunities are real today. Sales and jobs remain authoritative record surfaces; Workstation is the attention lens."
       >
         <Link href="/leads" className={handoffMutedLinkClass}>
-          Sales: Leads
+          Sales
         </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
-          Sales: Quotes
+        <Link href="/jobs" className={handoffMutedLinkClass}>
+          Jobs
         </Link>
         <Link href="/payments" className={handoffMutedLinkClass}>
           Payments (reserved)
@@ -98,27 +98,27 @@ export default async function CustomersPage({
       <section className="mb-10">
         <SectionHeading
           title="Organization snapshot"
-          description="Real Lead + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
+          description="Real Opportunity + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
         />
         <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li>
             <SignalCard label="Customers" value={String(customers.length)} hint="Rows in this org." />
           </li>
           <li>
-            <SignalCard label="Leads (all)" value={String(totalLeads)} hint="Intake records in this org." />
+            <SignalCard label="Opportunities (all)" value={String(totalLeads)} hint="Intake records in this org." />
           </li>
           <li>
             <SignalCard
-              label="Open pipeline leads"
+              label="Open opportunities"
               value={String(openPipelineLeads)}
               hint="Status Open or Qualifying—manual lifecycle."
             />
           </li>
           <li>
             <SignalCard
-              label="Unlinked leads"
+              label="Unlinked opportunities"
               value={String(unlinkedLeads)}
-              hint="No customerId yet; link or create from each lead’s page."
+              hint="No customerId yet; link or create from each record’s page."
             />
           </li>
         </ul>
@@ -154,7 +154,7 @@ export default async function CustomersPage({
 
       <SectionHeading
         title="Customer records"
-        description="Each row opens the customer detail page. Linked leads counts come from the Lead → Customer link in this org only."
+        description="Each row opens the customer detail page. Linked opportunities counts come from the Opportunity → Customer link in this org only."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -164,7 +164,7 @@ export default async function CustomersPage({
               <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                 <th className="pb-3 pr-4 font-medium">Customer</th>
                 <th className="pb-3 pr-4 font-medium">Contact</th>
-                <th className="pb-3 pr-4 font-medium">Linked leads</th>
+                <th className="pb-3 pr-4 font-medium">Linked opportunities</th>
                 <th className="pb-3 font-medium">Created</th>
               </tr>
             </thead>
@@ -210,7 +210,7 @@ export default async function CustomersPage({
             <EmptyState
               icon={UserCircle}
               title="No customer rows yet"
-              description="Create a customer to anchor identity and contact; link intake from each lead’s detail page when you are ready—no sample rows."
+              description="Create a customer to anchor identity and contact; link intake from each record’s detail page when you are ready—no sample rows."
             >
               <Link href="/customers/new" className={handoffPrimaryLinkClass}>
                 New customer

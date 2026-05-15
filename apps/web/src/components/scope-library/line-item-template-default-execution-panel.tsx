@@ -9,8 +9,8 @@ import {
   moveLineItemTemplateTaskAction,
   updateLineItemTemplateTaskAction,
   type LineItemTemplateExecutionFormState,
-} from "@/app/(workspace)/scope-library/line-item-template-execution-actions";
-import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
+} from "@/app/(workspace)/settings/scope-library/line-item-template-execution-actions";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import {
   workspaceFormControlClass,
   workspaceFormDangerButtonClass,

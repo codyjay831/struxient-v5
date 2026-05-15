@@ -26,11 +26,7 @@ const workstationEntry: NavItem[] = [
 
 /** Commercial pipeline: intake and working quotes (record routes). */
 const salesNav: NavItem[] = [
-  { href: "/leads/inbox", label: "Inbox", icon: Inbox },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/leads/intake-forms", label: "Intake Forms", icon: ClipboardList },
-  { href: "/scope-library", label: "Scope Library", icon: Library },
+  { href: "/leads", label: "Sales", icon: Users },
 ];
 
 /** Durable people/company records; Customers is the first surface—more types later. */
@@ -57,25 +53,11 @@ function itemActive(pathname: string, href: string) {
   if (href === "/workstation") {
     return pathname === "/workstation" || pathname.startsWith("/workstation/");
   }
-  if (href === "/leads/inbox") {
-    return pathname === "/leads/inbox" || pathname.startsWith("/leads/inbox/");
-  }
   if (href === "/leads") {
     /**
      * Active for /leads (list), /leads/new, /leads/[id], /leads/[id]/edit.
-     * NOT active for inbox, intake-forms, or public-request-settings.
      */
-    const isLeadsRoot = pathname === "/leads" || pathname.startsWith("/leads/");
-    const isInbox =
-      pathname === "/leads/inbox" || pathname.startsWith("/leads/inbox/");
-    const isIntakeForms =
-      pathname === "/leads/intake-forms" ||
-      pathname.startsWith("/leads/intake-forms/");
-    const isPublicSettings =
-      pathname === "/leads/public-request-settings" ||
-      pathname.startsWith("/leads/public-request-settings/");
-
-    return isLeadsRoot && !isInbox && !isIntakeForms && !isPublicSettings;
+    return pathname === "/leads" || pathname.startsWith("/leads/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

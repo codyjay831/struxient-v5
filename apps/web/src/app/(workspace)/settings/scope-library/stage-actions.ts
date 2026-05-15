@@ -30,7 +30,7 @@ export async function createStageAction(
     },
   });
 
-  revalidatePath("/scope-library/stages");
+  revalidatePath("/settings/scope-library/stages");
   return {};
 }
 
@@ -49,7 +49,7 @@ export async function updateStageAction(
     data: { name },
   });
 
-  revalidatePath("/scope-library/stages");
+  revalidatePath("/settings/scope-library/stages");
   return {};
 }
 
@@ -72,7 +72,7 @@ export async function archiveStageAction(
     data: { archivedAt: new Date() },
   });
 
-  revalidatePath("/scope-library/stages");
+  revalidatePath("/settings/scope-library/stages");
   return {};
 }
 
@@ -107,6 +107,6 @@ export async function moveStageAction(
     });
   });
 
-  revalidatePath("/scope-library/stages");
+  revalidatePath("/settings/scope-library/stages");
   return {};
 }

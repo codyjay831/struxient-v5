@@ -125,14 +125,14 @@ export default async function LineItemTemplateDefaultExecutionPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Scope Library", href: "/scope-library" },
+          { label: "Settings", href: "/settings" },
+          { label: "Scope Library", href: "/settings/scope-library" },
           { label: "Saved line item" },
           { label: "Default execution" },
         ]}
       />
       <PageHeader
-        eyebrow="Sales · Scope Library"
+        eyebrow="Settings · Scope Library"
         title="Default execution"
         description={
           <>
@@ -146,7 +146,7 @@ export default async function LineItemTemplateDefaultExecutionPage({
         }
         actions={
           <Link
-            href="/scope-library"
+            href="/settings/scope-library"
             className="text-sm font-medium text-foreground-muted underline decoration-border underline-offset-4 hover:text-foreground hover:decoration-foreground"
           >
             ← Saved line items

@@ -17,27 +17,37 @@ const controlClass =
 const primaryButtonClass =
   "inline-flex w-full items-center justify-center rounded-lg border border-border bg-accent px-4 py-2.5 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto";
 
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
+
 export default function NewIntakeFormPage() {
   const [state, formAction, isPending] = useActionState(createIntakeFormAction, {});
   const [selectedTemplate, setSelectedTemplate] = useState<TradeStarter | null>(null);
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-8">
-        <Link
-          href="/leads/intake-forms"
-          className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground mb-4 transition-colors"
-        >
-          <ChevronLeft className="mr-1 size-3" />
-          Back to Forms
-        </Link>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Create Intake Form</h1>
-        <p className="text-sm text-foreground-muted mt-1">
-          Start from a trade template or build your own from scratch.
-        </p>
-      </div>
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Settings", href: "/settings" },
+          { label: "Intake Forms", href: "/settings/intake-forms" },
+          { label: "New" },
+        ]}
+      />
+      <PageHeader
+        title="Create Intake Form"
+        description="Start from a trade template or build your own from scratch."
+        actions={
+          <Link
+            href="/settings/intake-forms"
+            className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="mr-1 size-3" />
+            Back to Forms
+          </Link>
+        }
+      />
 
-      <form action={formAction} className="space-y-8">
+      <form action={formAction} className="space-y-8 max-w-3xl">
         {state.error && (
           <p className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger" role="alert">
             {state.error}

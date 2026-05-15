@@ -78,8 +78,8 @@ export default async function JobsPage() {
             title="No jobs yet"
             description="Jobs are created by activating an approved quote from its execution preview. Approve a quote and review its draft execution to enable activation."
           >
-            <Link href="/quotes" className={listLinkClass}>
-              Open quotes
+            <Link href="/leads" className={listLinkClass}>
+              Open sales pipeline
             </Link>
           </EmptyState>
         </WorkspacePanel>
@@ -103,7 +103,7 @@ export default async function JobsPage() {
               contextBits.push(`Customer: ${safeCustomer.displayName}`);
             }
             if (safeLead) {
-              contextBits.push(`Lead: ${safeLead.title}`);
+              contextBits.push(`Opportunity: ${safeLead.title}`);
             }
             if (contextBits.length === 0) {
               contextBits.push("No customer or lead linked");

@@ -16,6 +16,20 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: resolvedRoot,
   },
+  async redirects() {
+    return [
+      {
+        source: "/leads/inbox",
+        destination: "/workstation",
+        permanent: true,
+      },
+      {
+        source: "/quotes",
+        destination: "/leads",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

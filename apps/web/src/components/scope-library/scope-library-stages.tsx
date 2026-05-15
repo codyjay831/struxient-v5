@@ -7,7 +7,7 @@ import {
   archiveStageAction,
   moveStageAction,
   type StageFormState,
-} from "@/app/(workspace)/scope-library/stage-actions";
+} from "@/app/(workspace)/settings/scope-library/stage-actions";
 import {
   workspaceFormControlClass,
   workspaceFormDangerButtonClass,

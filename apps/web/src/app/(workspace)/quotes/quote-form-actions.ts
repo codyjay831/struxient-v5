@@ -272,7 +272,7 @@ async function resolveCreateQuoteDraftFromFormFields(
     return {
       ok: false,
       error:
-        "That lead was not found in your organization. Remove stale context or start from Quotes without a lead link.",
+        "That opportunity was not found in your organization. Remove stale context or start from Sales without a link.",
     };
   }
 
@@ -296,7 +296,7 @@ async function resolveCreateQuoteDraftFromFormFields(
       return {
         ok: false,
         error:
-          "This lead is linked to a different customer than the one submitted. Refresh the page and try again from the lead or customer record.",
+          "This opportunity is linked to a different customer than the one submitted. Refresh the page and try again from the record.",
       };
     }
   }
@@ -340,7 +340,7 @@ async function resolveCreateQuoteDraftFromFormFields(
   if (!title) {
     return {
       ok: false,
-      error: "Title is required when no lead or customer context is attached.",
+      error: "Title is required when no opportunity or customer context is attached.",
     };
   }
 
@@ -362,7 +362,7 @@ export type PerformCreateQuoteDraftFromLeadResult =
   | { ok: false; error: string };
 
 /**
- * Org-scoped draft quote creation anchored to a lead.
+ * Org-scoped draft quote creation anchored to an opportunity.
  * Now a thin wrapper around the promoteLeadToQuote use case.
  */
 export async function performCreateQuoteDraftFromLead(
@@ -422,7 +422,7 @@ export async function createQuoteDraftAction(
     return { error: result.error };
   }
 
-  revalidatePath("/quotes");
+  revalidatePath("/leads");
   redirect(`/quotes/${result.quoteId}`);
 }
 
@@ -535,9 +535,7 @@ export async function updateDraftQuoteDetailsAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }
 
@@ -571,7 +569,7 @@ export async function performCopyLeadToQuoteNotes(
 
       const leadNotes = quote.lead.notes;
       const existingNotes = quote.internalNotes ?? "";
-      const separator = existingNotes ? "\n\nCopied from lead:\n" : "Copied from lead:\n";
+      const separator = existingNotes ? "\n\nCopied from intake:\n" : "Copied from intake:\n";
       const newNotes = `${existingNotes}${separator}${leadNotes}`;
 
       if (newNotes.length > QUOTE_FIELD_LIMITS.internalNotes) {
@@ -590,7 +588,7 @@ export async function performCopyLeadToQuoteNotes(
         return { ok: false, error: "Quote not found or not a draft." };
       }
       if (e.message === "NO_LEAD_NOTES") {
-        return { ok: false, error: "No intake notes found on the linked lead." };
+        return { ok: false, error: "No intake notes found on the linked opportunity." };
       }
       if (e.message === "NOTES_TOO_LONG") {
         return {
@@ -623,7 +621,7 @@ export async function copyLeadToQuoteNotesAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${id}`);
+  revalidatePath(`/leads`);
   return {};
 }
 
@@ -636,7 +634,7 @@ type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
 /**
  * Org-scoped add of a quote line item. No redirect, no revalidate — composable
  * by both the redirecting full-page action and workspace-safe wrappers used
- * inside QuoteWorkSurface popup/drawer/lead-tab containers.
+ * inside QuoteWorkSurface popup/drawer/opportunity-tab containers.
  */
 export async function performAddQuoteLineItem(
   quoteId: string,
@@ -726,9 +724,7 @@ export async function addQuoteLineItemAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }
 
@@ -824,9 +820,7 @@ export async function updateQuoteLineItemAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${qid}`);
-  revalidatePath(`/quotes/${qid}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${qid}`);
 }
 
@@ -905,9 +899,7 @@ export async function deleteQuoteLineItemAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${qid}`);
-  revalidatePath(`/quotes/${qid}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${qid}`);
 }
 
@@ -949,11 +941,12 @@ export async function createLineItemTemplateAction(
     },
   });
 
+  revalidatePath(`/leads`);
   redirect(`/quotes/${rid}`);
 }
 
 /**
- * Org-scoped preset create from Sales → Scope Library (no draft quote context).
+ * Org-scoped preset create from Settings → Scope Library (no draft quote context).
  */
 export async function createLineItemTemplateFromScopeLibraryAction(
   _prevState: QuoteFormState,
@@ -973,7 +966,7 @@ export async function createLineItemTemplateFromScopeLibraryAction(
     },
   });
 
-  redirect("/scope-library");
+  redirect("/settings/scope-library");
 }
 
 /**
@@ -1012,7 +1005,7 @@ export async function updateLineItemTemplateFromScopeLibraryAction(
     };
   }
 
-  redirect("/scope-library");
+  redirect("/settings/scope-library");
 }
 
 /**
@@ -1047,7 +1040,7 @@ export async function archiveLineItemTemplateFromScopeLibraryAction(
     };
   }
 
-  redirect("/scope-library");
+  redirect("/settings/scope-library");
 }
 
 /**
@@ -1095,13 +1088,14 @@ export async function archiveLineItemTemplateAction(
     };
   }
 
+  revalidatePath(`/leads`);
   redirect(`/quotes/${rid}`);
 }
 
 /**
  * Org-scoped apply of a Scope Library template to a draft quote. No redirect,
  * no revalidate — composed by both the redirecting full-page action and the
- * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/lead-tab.
+ * workspace-safe wrapper used inside QuoteWorkSurface popup/drawer/opportunity-tab.
  *
  * Copies the template's commercial fields onto a new quote line item, copies
  * any default execution tasks onto the new line, and recalculates quote
@@ -1161,9 +1155,7 @@ export async function applyLineItemTemplateToQuoteAction(
     return { error: result.error };
   }
 
-  revalidatePath(`/quotes/${qid}`);
-  revalidatePath(`/quotes/${qid}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${qid}`);
 }
 
@@ -1198,9 +1190,7 @@ export async function restoreQuoteToDraftAction(
     };
   }
 
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }
 
@@ -1261,9 +1251,7 @@ export async function recordQuoteSendCheckpointAction(
   }
 
   const id = quoteId.trim();
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }
 
@@ -1282,9 +1270,7 @@ export async function markQuoteApprovedAction(
   }
 
   const id = quoteId.trim();
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }
 
@@ -1319,8 +1305,6 @@ export async function archiveQuoteAction(
     };
   }
 
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath(`/leads`);
   redirect(`/quotes/${id}`);
 }

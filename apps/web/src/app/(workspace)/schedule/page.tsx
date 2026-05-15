@@ -104,9 +104,9 @@ export default function ScheduleRecordPage() {
             />
           </div>
           <p className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            Commercial terms and totals stay on{" "}
-            <span className="font-medium text-foreground">Quotes</span> as the working record;
-            relationship context stays on{" "}
+            Commercial terms and totals stay on the{" "}
+            <span className="font-medium text-foreground">quote record (under Sales)</span> as
+            the working record; relationship context stays on{" "}
             <span className="font-medium text-foreground">Customers</span>. This schedule shell
             only reserves how timing questions would be answered later.
           </p>
@@ -202,8 +202,8 @@ export default function ScheduleRecordPage() {
           <Link href="/jobs" className={handoffMutedLinkClass}>
             Jobs
           </Link>
-          <Link href="/quotes" className={handoffMutedLinkClass}>
-            Quotes
+          <Link href="/leads" className={handoffMutedLinkClass}>
+            Sales
           </Link>
           <Link href="/customers" className={handoffMutedLinkClass}>
             Customers

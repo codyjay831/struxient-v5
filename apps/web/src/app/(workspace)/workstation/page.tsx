@@ -57,7 +57,7 @@ export default async function WorkstationTodayLensPage({
   const showQuickActions = settings?.showQuickActions ?? true;
   const quickActions = Array.isArray(settings?.quickActionsJson)
     ? (settings.quickActionsJson as string[])
-    : ["new-intake", "new-quote", "browse-jobs"];
+    : ["new-intake", "browse-jobs"];
   const urgentThresholdHours = settings?.urgentThresholdHours ?? 24;
 
   const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role, urgentThresholdHours);
@@ -133,12 +133,6 @@ export default async function WorkstationTodayLensPage({
                 )}
               </div>
               New Intake
-            </Link>
-          )}
-          {quickActions.includes("new-quote") && (
-            <Link href="/quotes/new" className={quickActionClass}>
-              <Plus className="size-3.5" />
-              New Quote
             </Link>
           )}
           {quickActions.includes("browse-jobs") && (

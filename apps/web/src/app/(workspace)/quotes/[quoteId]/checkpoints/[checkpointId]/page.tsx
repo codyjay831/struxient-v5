@@ -78,8 +78,7 @@ export default async function QuoteCheckpointViewPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Sales" },
-            { label: "Quotes", href: "/quotes" },
+            { label: "Sales", href: "/leads" },
             { label: "Quote", href: `/quotes/${quoteId}` },
             { label: "Not found" },
           ]}
@@ -116,8 +115,7 @@ export default async function QuoteCheckpointViewPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Sales", href: "/leads" },
           { label: "Quote", href: `/quotes/${quoteId}` },
           { label: `${labels.breadcrumbTail}${checkpoint.sequence}` },
         ]}
@@ -132,8 +130,8 @@ export default async function QuoteCheckpointViewPage({
             <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
               ← Back to quote
             </Link>
-            <Link href="/quotes" className={listLinkClass}>
-              Quotes list
+            <Link href="/leads" className={listLinkClass}>
+              Sales pipeline
             </Link>
           </>
         }

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import type { IntakeFormSchema } from "@/lib/intake/default-intake-form";
 import { IntakeFormEditor } from "./intake-form-editor";
 
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+
 export default async function EditIntakeFormPage({
   params,
 }: {
@@ -27,20 +29,29 @@ export default async function EditIntakeFormPage({
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <IntakeFormEditor
-        formDefinition={{
-          id: form.id,
-          name: form.name,
-          organizationId: form.organizationId,
-          slug: form.slug,
-          isPublic: form.isPublic,
-          isDefault: form.isDefault,
-          schema: form.schema as IntakeFormSchema,
-        }}
-        organizationSlug={organization?.slug ?? null}
-        baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Settings", href: "/settings" },
+          { label: "Intake Forms", href: "/settings/intake-forms" },
+          { label: form.name },
+        ]}
       />
+      <div className="mt-8">
+        <IntakeFormEditor
+          formDefinition={{
+            id: form.id,
+            name: form.name,
+            organizationId: form.organizationId,
+            slug: form.slug,
+            isPublic: form.isPublic,
+            isDefault: form.isDefault,
+            schema: form.schema as IntakeFormSchema,
+          }}
+          organizationSlug={organization?.slug ?? null}
+          baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        />
+      </div>
     </div>
   );
 }

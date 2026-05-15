@@ -301,7 +301,7 @@ export default async function JobDetailPage({
             <dd className="mt-0.5 text-foreground">
               {safeLead ? (
                 <Link href={`/leads/${safeLead.id}`} className="underline-offset-4 hover:underline">
-                  {safeLeadTitle ?? "Lead"}
+                  {safeLeadTitle ?? "Opportunity"}
                 </Link>
               ) : (
                 "—"

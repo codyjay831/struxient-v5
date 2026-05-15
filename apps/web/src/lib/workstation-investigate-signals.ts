@@ -84,8 +84,8 @@ export const WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS: readonly WorkstationInvest
       "A quote may be missing pricing, scope, or terms before send. Cross-quote readiness scanning is not wired yet.",
     suggestedAction: "Open the quote and resolve the readiness gap.",
     severity: "medium",
-    href: "/quotes",
-    primaryActionLabel: "Review quotes",
+    href: "/leads",
+    primaryActionLabel: "Review Sales",
     origin: "preview",
   },
   {
@@ -108,10 +108,10 @@ export const WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS: readonly WorkstationInvest
     recordLabel: "Activity — recent message",
     reason:
       "A customer message may mention rescheduling, access, or a question. Activity parsing is not wired yet.",
-    suggestedAction: "Open the related lead or job and confirm a follow-up step.",
+    suggestedAction: "Open the related opportunity or job and confirm a follow-up step.",
     severity: "low",
     href: "/leads",
-    primaryActionLabel: "Open leads",
+    primaryActionLabel: "Open Sales",
     secondaryHref: "/jobs",
     secondaryActionLabel: "Open jobs",
     origin: "preview",
@@ -119,13 +119,13 @@ export const WORKSTATION_INVESTIGATE_PREVIEW_SIGNALS: readonly WorkstationInvest
 ];
 
 export type WorkstationInvestigateDerivedInputs = {
-  /** Org-scoped count of leads with `customerId === null`. */
+  /** Org-scoped count of opportunities with `customerId === null`. */
   unlinkedLeads: number;
 };
 
 /**
  * Builds the live Investigate signals from the small slice of real data
- * Workstation already reads. Today only lead-customer linkage is available;
+ * Workstation already reads. Today only opportunity-customer linkage is available;
  * extend this as more derivation is added.
  */
 export function buildWorkstationInvestigateDerivedSignals(
@@ -139,17 +139,17 @@ export function buildWorkstationInvestigateDerivedSignals(
       id: "derived-unlinked-leads",
       recordType: "lead",
       title: isOne
-        ? "Lead needs customer match"
-        : `${inputs.unlinkedLeads} leads need customer match`,
-      recordLabel: isOne ? "Lead — no linked customer" : "Leads — no linked customer",
+        ? "Opportunity needs customer match"
+        : `${inputs.unlinkedLeads} opportunities need customer match`,
+      recordLabel: isOne ? "Opportunity — no linked customer" : "Opportunities — no linked customer",
       reason: isOne
-        ? "A lead has no linked customer. The contact may already exist."
-        : `${inputs.unlinkedLeads} leads have no linked customer. The contacts may already exist.`,
+        ? "An opportunity has no linked customer. The contact may already exist."
+        : `${inputs.unlinkedLeads} opportunities have no linked customer. The contacts may already exist.`,
       suggestedAction:
-        "Open the lead and link, create, or confirm the customer before acting on it.",
+        "Open the opportunity and link, create, or confirm the customer before acting on it.",
       severity: "medium",
       href: "/leads",
-      primaryActionLabel: isOne ? "Review unlinked lead" : "Review unlinked leads",
+      primaryActionLabel: isOne ? "Review unlinked opportunity" : "Review unlinked opportunities",
       secondaryHref: "/customers",
       secondaryActionLabel: "Open customers",
       origin: "derived",

@@ -43,7 +43,7 @@ export default async function ScopeLibrarySignalsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
-        items={[{ label: "Sales" }, { label: "Scope Library", href: "/scope-library" }, { label: "Signals" }]}
+        items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library", href: "/settings/scope-library" }, { label: "Signals" }]}
       />
       <PageHeader
         title="Signal catalog"

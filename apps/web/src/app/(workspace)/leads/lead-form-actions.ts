@@ -188,7 +188,7 @@ export async function updateLeadStatusAction(
 ): Promise<LeadFormState> {
   const id = leadId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales record id." };
   }
 
   const rawStatus = formData.get("status");
@@ -213,7 +213,7 @@ export async function updateLeadStatusAction(
   if (!exists) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -238,7 +238,7 @@ export async function updateLeadStatusAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -256,7 +256,7 @@ export async function updateLeadAction(
 ): Promise<LeadFormState> {
   const id = leadId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales record id." };
   }
 
   const title = trimRequired(formData.get("title"));
@@ -276,7 +276,7 @@ export async function updateLeadAction(
   if (!existing) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -513,7 +513,7 @@ export async function updateLeadAction(
   if (result.count === 0) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
 
@@ -531,7 +531,7 @@ export async function linkLeadToCustomerAction(
 ): Promise<LeadFormState> {
   const id = leadId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales record id." };
   }
 
   const customerIdRaw = trimRequired(formData.get("customerId"));
@@ -564,12 +564,12 @@ export async function linkLeadToCustomerAction(
   if (!leadPeek) {
     return {
       error:
-        "This lead was not updated. It may not exist in your organization or may belong to another tenant.",
+        "This opportunity was not updated. It may not exist in your organization or may belong to another tenant.",
     };
   }
   if (leadPeek.customerId != null) {
     return {
-      error: "This lead is already linked to a customer. Unlinking is not available yet.",
+      error: "This opportunity is already linked to a customer. Unlinking is not available yet.",
     };
   }
 
@@ -586,7 +586,7 @@ export async function linkLeadToCustomerAction(
       });
       if (!lead) {
         throw new CreateFromLeadTransactionError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
       const result = await tx.lead.updateMany({
@@ -603,7 +603,7 @@ export async function linkLeadToCustomerAction(
       });
       if (result.count === 0) {
         throw new CreateFromLeadTransactionError(
-          "This lead could not be linked. It may have been linked already—refresh the page and try again.",
+          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
       await attachIntakeServiceLocationToCustomerFromLead(tx, {
@@ -646,7 +646,7 @@ export async function createCustomerFromLeadAction(
   void _formData;
   const id = leadId.trim();
   if (!id) {
-    return { error: "Missing lead record id." };
+    return { error: "Missing sales record id." };
   }
 
   const ctx = await getRequestContextOrThrow();
@@ -667,12 +667,12 @@ export async function createCustomerFromLeadAction(
 
       if (!lead) {
         throw new CreateFromLeadTransactionError(
-          "This lead was not found in your organization.",
+          "This opportunity was not found in your organization.",
         );
       }
       if (lead.customerId != null) {
         throw new CreateFromLeadTransactionError(
-          "This lead is already linked to a customer.",
+          "This opportunity is already linked to a customer.",
         );
       }
 
@@ -717,7 +717,7 @@ export async function createCustomerFromLeadAction(
 
       if (result.count === 0) {
         throw new CreateFromLeadTransactionError(
-          "Could not link this lead—it may have been linked elsewhere. Refresh and try again.",
+          "Could not link this opportunity—it may have been linked elsewhere. Refresh and try again.",
         );
       }
 

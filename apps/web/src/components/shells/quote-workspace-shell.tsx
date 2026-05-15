@@ -33,8 +33,7 @@ export function QuoteWorkspaceShell({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Sales", href: "/leads" },
           { label: quote.primaryTitle },
         ]}
       />
@@ -69,11 +68,11 @@ export function QuoteWorkspaceShell({
           ) : null}
           {quote.leadHref ? (
             <Link href={quote.leadHref} className={listLinkClass}>
-              ← Lead
+              ← Opportunity
             </Link>
           ) : null}
-          <Link href="/quotes" className={listLinkClass}>
-            ← Quotes
+          <Link href="/leads" className={listLinkClass}>
+            ← Sales pipeline
           </Link>
         </div>
       </div>

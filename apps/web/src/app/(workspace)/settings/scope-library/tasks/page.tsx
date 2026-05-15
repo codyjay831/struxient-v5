@@ -42,7 +42,7 @@ export default async function ScopeLibraryTasksPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
-        items={[{ label: "Sales" }, { label: "Scope Library", href: "/scope-library" }, { label: "Reusable tasks" }]}
+        items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library", href: "/settings/scope-library" }, { label: "Reusable tasks" }]}
       />
       <PageHeader
         title="Reusable tasks"

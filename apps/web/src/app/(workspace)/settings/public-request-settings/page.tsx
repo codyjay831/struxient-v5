@@ -53,7 +53,7 @@ export default async function PublicRequestSettingsPage() {
     <div className="mx-auto max-w-3xl">
       <WorkspaceBreadcrumb
           items={[
-            { label: "Leads", href: "/leads" },
+            { label: "Settings", href: "/settings" },
             { label: "Public Request Settings" },
           ]}
       />
@@ -61,8 +61,8 @@ export default async function PublicRequestSettingsPage() {
         title="Public Request Settings"
         description="Configure your Public Request Link and Public Intake Form copy. These settings apply to the public-facing intake surface for this organization."
         actions={
-          <Link href="/leads" className={listLinkClass}>
-            ← Back to Leads
+          <Link href="/settings" className={listLinkClass}>
+            ← Back to Settings
           </Link>
         }
       />

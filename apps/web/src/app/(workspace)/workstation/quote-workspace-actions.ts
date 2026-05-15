@@ -44,7 +44,7 @@ function revalidateQuoteCommercialSurfaces(quoteId: string) {
   const id = quoteId.trim();
   revalidatePath(`/quotes/${id}`);
   revalidatePath(`/quotes/${id}/execution-review`);
-  revalidatePath("/quotes");
+  revalidatePath("/leads");
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
   revalidatePath("/workstation/jobs");

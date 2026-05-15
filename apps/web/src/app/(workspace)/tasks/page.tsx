@@ -94,7 +94,7 @@ export default function TasksDeferredPage() {
 
       <HandoffPanel
         title="Where to look meanwhile"
-        description="Follow quotes under Sales, customers under Relationships, and reserved job/schedule shells under Work. Workstation remains a static attention layout until real signals exist."
+        description="Follow sales opportunities under Sales, customers under Relationships, and reserved job/schedule shells under Work. Workstation remains a static attention layout until real signals exist."
       >
         <Link href="/workstation/tasks" className={handoffPrimaryLinkClass}>
           Workstation Tasks lens
@@ -102,8 +102,8 @@ export default function TasksDeferredPage() {
         <Link href="/jobs" className={handoffMutedLinkClass}>
           Jobs
         </Link>
-        <Link href="/quotes" className={handoffMutedLinkClass}>
-          Quotes
+        <Link href="/leads" className={handoffMutedLinkClass}>
+          Sales
         </Link>
       </HandoffPanel>
     </div>

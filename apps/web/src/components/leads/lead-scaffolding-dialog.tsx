@@ -49,7 +49,7 @@ export function LeadScaffoldingDialog() {
           </div>
           <div className="overflow-y-auto px-5 py-4">
             <p className="text-sm leading-relaxed text-foreground-muted">
-              Development-only notes for the lead area. These are not
+              Development-only notes for the Sales area. These are not
               customer-facing UI.
             </p>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-foreground-muted">
@@ -58,12 +58,12 @@ export function LeadScaffoldingDialog() {
                 context is connected.
               </li>
               <li>
-                Public Request Link (`/request/[companySlug]`) creates leads with source{" "}
+                Public Request Link (`/request/[companySlug]`) creates opportunities with source{" "}
                 <span className="font-mono text-[0.7rem]">PUBLIC_REQUEST_LINK</span>. Other
                 channels (email, phone, SMS, imports) are still planned.
               </li>
               <li>
-                Channel integrations are not connected; the Lead Sources modal&apos;s
+                Channel integrations are not connected; the Sales Sources modal&apos;s
                 &quot;CSV import (soon)&quot; and future integrations intentionally do nothing in this
                 build.
               </li>

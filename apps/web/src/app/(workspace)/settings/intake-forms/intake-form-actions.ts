@@ -61,8 +61,8 @@ export async function createIntakeFormAction(
       },
     });
 
-    revalidatePath("/leads/intake-forms");
-    redirect(`/leads/intake-forms/${form.id}`);
+    revalidatePath("/settings/intake-forms");
+    redirect(`/settings/intake-forms/${form.id}`);
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "A form with this slug already exists." };
@@ -116,8 +116,8 @@ export async function updateIntakeFormAction(
       });
     }
 
-    revalidatePath("/leads/intake-forms");
-    revalidatePath(`/leads/intake-forms/${formId}`);
+    revalidatePath("/settings/intake-forms");
+    revalidatePath(`/settings/intake-forms/${formId}`);
     return {};
   } catch (e) {
     console.error("Failed to update intake form", e);

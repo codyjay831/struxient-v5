@@ -64,7 +64,7 @@ export function QuoteListSearchForm({
       <form
         key={serializeQuotesListHref({ q, status, sort })}
         method="get"
-        action="/quotes"
+        action="/leads"
         onSubmit={handleSubmit}
         className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
       >
@@ -92,7 +92,7 @@ export function QuoteListSearchForm({
           Search
         </button>
         {hasActiveListFilters ? (
-          <Link href="/quotes" scroll={false} className={mutedLinkClass}>
+          <Link href="/leads" scroll={false} className={mutedLinkClass}>
             Clear filters
           </Link>
         ) : null}

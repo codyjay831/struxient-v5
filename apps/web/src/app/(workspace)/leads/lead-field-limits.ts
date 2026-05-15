@@ -1,4 +1,4 @@
-/** Shared caps for lead form fields (server + client maxLength). */
+/** Shared caps for opportunity form fields (server + client maxLength). */
 export const LEAD_FIELD_LIMITS = {
   title: 120,
   contactName: 120,

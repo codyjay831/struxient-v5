@@ -26,7 +26,7 @@ export function WorkstationFilterBar({
 
   const filters: { id: WorkstationFilterCategory; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "leads", label: "Intakes" },
+    { id: "leads", label: "Opportunities" },
     { id: "quotes", label: "Quotes" },
     { id: "jobs", label: "Jobs" },
     { id: "tasks", label: "Tasks" },
@@ -259,7 +259,7 @@ export function WorkstationClearedState({
   const isFiltered = filter && filter !== "all";
   
   let title = "Today is clear";
-  let description = "No urgent lead, quote, payment, job, task, or activity reviews need action right now.";
+  let description = "No urgent sales, quote, payment, job, task, or activity reviews need action right now.";
 
   if (lens === "waiting") {
     title = "Nothing waiting";
@@ -295,7 +295,7 @@ export function WorkstationClearedState({
               href="/leads" 
               className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
             >
-              Browse Leads
+              Browse Sales
             </Link>
             <Link 
               href="/jobs" 

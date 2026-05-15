@@ -51,8 +51,7 @@ export default async function QuoteLiveProposalPreviewPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Sales" },
-            { label: "Quotes", href: "/quotes" },
+            { label: "Sales", href: "/leads" },
             { label: "Not found" },
           ]}
         />
@@ -61,8 +60,8 @@ export default async function QuoteLiveProposalPreviewPage({
           title="Live proposal preview"
           description="No quote exists for this id in the current development organization."
           actions={
-            <Link href="/quotes" className={listLinkClass}>
-              ← Quotes list
+            <Link href="/leads" className={listLinkClass}>
+              ← Sales pipeline
             </Link>
           }
         />
@@ -77,8 +76,8 @@ export default async function QuoteLiveProposalPreviewPage({
           title="Quote not found"
           description="This id is not a quote record in the development organization, or it belongs to another tenant."
         >
-          <Link href="/quotes" className={listLinkClass}>
-            Back to quotes
+          <Link href="/leads" className={listLinkClass}>
+            Back to Sales pipeline
           </Link>
         </EmptyState>
       </div>
@@ -110,8 +109,7 @@ export default async function QuoteLiveProposalPreviewPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Sales" },
-          { label: "Quotes", href: "/quotes" },
+          { label: "Sales", href: "/leads" },
           { label: row.title, href: `/quotes/${preview.quoteId}` },
           { label: "Live proposal preview" },
         ]}
@@ -126,8 +124,8 @@ export default async function QuoteLiveProposalPreviewPage({
             <Link href={`/quotes/${preview.quoteId}`} className={listLinkClass}>
               ← Back to quote
             </Link>
-            <Link href="/quotes" className={listLinkClass}>
-              Quotes list
+            <Link href="/leads" className={listLinkClass}>
+              Sales pipeline
             </Link>
           </>
         }

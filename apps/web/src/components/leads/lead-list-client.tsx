@@ -11,7 +11,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Inbox, X } from "lucide-react";
+import { ArrowUpRight, Users, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -135,7 +135,7 @@ function WorkspaceContent({
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center p-12 text-center">
-          <p className="text-sm text-foreground-muted">Failed to load lead details.</p>
+          <p className="text-sm text-foreground-muted">Failed to load opportunity details.</p>
         </div>
       )}
     </div>
@@ -197,22 +197,17 @@ export function LeadsListClient({
       {leads.length === 0 && !openLeadId ? (
         <div className="p-6">
           <EmptyState
-            icon={Inbox}
+            icon={Users}
             title="Queue is empty"
             description={
               orgHasLeads
-                ? "All active leads have progressed to proposals."
-                : "No leads yet. Add one when a call, walk-in, or message comes in."
+                ? "All active opportunities have progressed to jobs or are archived."
+                : "No opportunities yet. Add one when a call, walk-in, or message comes in."
             }
           >
             <div className="flex flex-col items-center gap-4">
-              {orgHasLeads ? (
-                <Link href="/quotes" className={mutedLinkClass}>
-                  View Proposals
-                </Link>
-              ) : null}
               <Link href="/leads/new" className={primaryLinkClass}>
-                New lead
+                New intake
               </Link>
             </div>
           </EmptyState>
@@ -230,7 +225,7 @@ export function LeadsListClient({
         </div>
       )}
 
-      {/* ── Lead Workspace dialog ──────────────────────────────────────── */}
+      {/* ── Opportunity Workspace dialog ──────────────────────────────────────── */}
       <dialog
         ref={dialogRef}
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-3xl overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-xl outline-none [&::backdrop]:bg-foreground/25"
@@ -240,7 +235,7 @@ export function LeadsListClient({
       >
         {openLeadId && (
           /* Key by lead.id so internal state resets cleanly when the user 
-             opens a different lead. */
+             opens a different record. */
           <WorkspaceContent
             key={openLeadId}
             leadId={openLeadId}

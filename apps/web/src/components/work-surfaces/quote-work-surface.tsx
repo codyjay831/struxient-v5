@@ -15,7 +15,7 @@
  * separately:
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
- *   - Customer & Lead — customer card + lead intake context
+ *   - Customer & Opportunity — customer card + intake context
  *   - Send & Accept   — inline Send/Approve + checkpoint history + preview link
  *   - Record          — archive/restore + internal notes + record details
  *
@@ -1323,7 +1323,7 @@ function PaymentsTab({
   );
 }
 
-/* ─── Tab: Customer & Lead ─────────────────────────────────────────────── */
+/* ─── Tab: Customer & Opportunity ─────────────────────────────────────────────── */
 
 function ContextTab({
   quote,
@@ -1428,20 +1428,20 @@ function ContextTab({
         )}
       </div>
 
-      {/* Lead */}
+      {/* Opportunity */}
       <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-2`}>Intake</p>
+        <p className={`${sectionLabelClass} mb-2`}>Opportunity</p>
         {lead ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
               <div className="min-w-0">
-                <p className={sectionLabelClass}>Linked request</p>
+                <p className={sectionLabelClass}>Linked opportunity</p>
                 <p className="mt-1 truncate text-sm font-medium text-foreground">
                   {lead.title}
                 </p>
               </div>
               <Link href={lead.href} className={listLinkClass}>
-                Intake record
+                Opportunity record
                 <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
               </Link>
             </div>
@@ -1504,14 +1504,14 @@ function ContextTab({
         ) : (
           <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-4 py-5 text-center">
             <p className="text-sm text-foreground-muted">
-              No lead linked to this quote.
+              No opportunity linked to this quote.
             </p>
             <p className="mt-1 text-xs text-foreground-subtle">
               Linking is optional. Use it when this quote comes from a tracked
-              lead.
+              opportunity.
             </p>
             <Link href="/leads" className={`mt-3 ${listLinkClass}`}>
-              Intakes
+              Sales pipeline
             </Link>
           </div>
         )}

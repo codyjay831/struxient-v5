@@ -21,7 +21,7 @@ export const WORKSTATION_COPY = {
       "These cards show the categories the Investigate lane will surface once duplicate detection, quote readiness scans, payment review, and activity feeds are wired. Not derived from live records.",
     emptyTitle: "No investigation signals right now.",
     emptyDescription:
-      "Struxient will surface unclear, risky, or missing-context items here before they become tasks. Only org-scoped lead linkage is wired today.",
+      "Struxient will surface unclear, risky, or missing-context items here before they become tasks. Only org-scoped opportunity linkage is wired today.",
   },
 
   /** Severity wording used in AttentionCard pills and elsewhere. */
@@ -55,9 +55,9 @@ export const WORKSTATION_COPY = {
   continuation: {
     backToToday: "Back to Workstation Today",
     backToWorkstation: "← Workstation",
-    openLeads: "Open leads",
+    openLeads: "Open Sales",
     openCustomers: "Open customers",
-    openQuotes: "Open quotes",
+    openQuotes: "Browse Sales",
     openJobs: "Open jobs",
     openSchedule: "Open schedule",
     openPayments: "Open payments (reserved)",

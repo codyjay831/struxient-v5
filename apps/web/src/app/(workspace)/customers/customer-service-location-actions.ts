@@ -22,7 +22,6 @@ function revalidateCustomerSurfaces(customerId: string) {
   revalidatePath("/customers");
   revalidatePath(`/customers/${cid}`);
   revalidatePath("/leads");
-  revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");

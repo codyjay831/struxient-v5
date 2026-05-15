@@ -355,7 +355,7 @@ export function ScopeLibraryLinePresetsPanel({
                   {editingId === t.id ? null : (
                     <>
                       <Link
-                        href={`/scope-library/line-presets/${t.id}/default-execution`}
+                        href={`/settings/scope-library/line-presets/${t.id}/default-execution`}
                         className={secondaryButtonClass}
                       >
                         {t.executionSummary.taskCount === 0 ? "Add default execution" : "Edit default execution"}

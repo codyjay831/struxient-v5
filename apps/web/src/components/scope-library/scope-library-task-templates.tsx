@@ -7,8 +7,8 @@ import {
   createTaskTemplateFromScopeLibraryAction,
   updateTaskTemplateFromScopeLibraryAction,
   type TaskTemplateFormState,
-} from "@/app/(workspace)/scope-library/task-template-actions";
-import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
+} from "@/app/(workspace)/settings/scope-library/task-template-actions";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import {
   workspaceFormControlClass,
   workspaceFormDangerButtonClass,

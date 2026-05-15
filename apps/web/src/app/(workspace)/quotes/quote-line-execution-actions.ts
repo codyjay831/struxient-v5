@@ -9,7 +9,7 @@ import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
-import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 
 export type QuoteLineExecutionFormState = {
   error?: string;

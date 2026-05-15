@@ -147,7 +147,7 @@ export async function updatePublicRequestSettingsAction(
   }
 
   revalidatePath("/leads");
-  revalidatePath("/leads/public-request-settings");
+  revalidatePath("/settings/public-request-settings");
 
   return { success: true };
 }

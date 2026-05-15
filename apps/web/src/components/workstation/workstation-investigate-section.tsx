@@ -4,7 +4,7 @@ import {
   CircleAlert,
   CreditCard,
   FileText,
-  Inbox,
+  Users,
   ListTodo,
   UserRound,
   type LucideIcon,
@@ -20,7 +20,7 @@ import {
 } from "@/lib/workstation-investigate-signals";
 
 const RECORD_ICONS: Record<WorkstationInvestigateRecordType, LucideIcon> = {
-  "lead": Inbox,
+  "lead": Users,
   quote: FileText,
   job: Briefcase,
   customer: UserRound,
@@ -29,7 +29,7 @@ const RECORD_ICONS: Record<WorkstationInvestigateRecordType, LucideIcon> = {
 };
 
 const RECORD_LABELS: Record<WorkstationInvestigateRecordType, string> = {
-  "lead": "Lead",
+  "lead": "Opportunity",
   quote: "Quote",
   job: "Job",
   customer: "Customer",

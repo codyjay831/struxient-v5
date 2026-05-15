@@ -24,24 +24,24 @@ export default async function NewLeadPage() {
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Leads", href: "/leads" },
-          { label: "New" },
+          { label: "Sales", href: "/leads" },
+          { label: "New intake" },
         ]}
       />
       <PageHeader
-        title="New lead"
-        description="Create an intake record in your development organization. Required: title. Status defaults to Open. After save you go to the lead detail page, where you can link an existing customer or create one from the lead, then start a draft quote from that lead when you are ready."
+        title="New intake"
+        description="Create an intake record in your organization. After save you go to the opportunity detail page, where you can link a customer and start a quote."
         actions={
           <Link href="/leads" className={listLinkClass}>
-            ← Leads list
+            ← Sales pipeline
           </Link>
         }
       />
 
       <WorkspacePanel className="mb-6">
         <SectionHeading
-          title="Lead record"
-          description="Source and contact fields are optional; empty optional values are normalized to null on the server. Organization scope is applied on the server—never from the form."
+          title="Intake record"
+          description="Source and contact fields are optional. Organization scope is applied on the server."
         />
         <LeadRecordForm
           mode="create"

@@ -5,6 +5,9 @@ import { Plus, Settings2, Globe, Lock, ExternalLink } from "lucide-react";
 import { buildPublicIntakeUrl } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
 
+import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageHeader } from "@/components/ui/page-header";
+
 export default async function IntakeFormsPage() {
   const ctx = await getRequestContextOrThrow();
 
@@ -22,22 +25,34 @@ export default async function IntakeFormsPage() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Intake Forms</h1>
-          <p className="text-sm text-foreground-muted mt-1">
-            Configure how you capture leads from your website and internal staff.
-          </p>
-        </div>
-        <Link
-          href="/leads/intake-forms/new"
-          className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
-        >
-          <Plus className="mr-2 size-4" />
-          Create Form
-        </Link>
-      </div>
+    <div className="mx-auto max-w-5xl">
+      <WorkspaceBreadcrumb
+        items={[
+          { label: "Settings", href: "/settings" },
+          { label: "Intake Forms" },
+        ]}
+      />
+      <PageHeader
+        title="Intake Forms"
+        description="Configure how you capture leads from your website and internal staff."
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link
+              href="/settings/public-request-settings"
+              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+            >
+              Public request settings
+            </Link>
+            <Link
+              href="/settings/intake-forms/new"
+              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
+            >
+              <Plus className="mr-2 size-4" />
+              Create Form
+            </Link>
+          </div>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {forms.map((form) => (
@@ -90,7 +105,7 @@ export default async function IntakeFormsPage() {
                 {form.channel}
               </span>
               <Link
-                href={`/leads/intake-forms/${form.id}`}
+                href={`/settings/intake-forms/${form.id}`}
                 className="inline-flex items-center text-xs font-bold text-accent hover:underline"
               >
                 <Settings2 className="mr-1.5 size-3" />
@@ -110,7 +125,7 @@ export default async function IntakeFormsPage() {
               Create your first form to start capturing leads from your website.
             </p>
             <Link
-              href="/leads/intake-forms/new"
+              href="/settings/intake-forms/new"
               className="mt-6 inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
             >
               Get Started

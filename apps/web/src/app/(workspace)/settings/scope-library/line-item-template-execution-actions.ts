@@ -7,7 +7,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
-import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import { lineItemTemplateDefaultExecutionPath } from "@/lib/line-item-template-execution-path";
 
 export type LineItemTemplateExecutionFormState = {

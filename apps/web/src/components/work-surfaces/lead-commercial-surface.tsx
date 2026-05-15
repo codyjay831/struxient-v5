@@ -50,7 +50,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
   }, [lead.id, entryPoint]);
 
   const handleArchive = async () => {
-    if (!confirm("Are you sure you want to archive this lead?")) return;
+    if (!confirm("Are you sure you want to archive this opportunity?")) return;
     
     startTransition(async () => {
       const result = await archiveLeadInboxAction(lead.id);
@@ -215,7 +215,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
               >
                 {isPending ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
-                Archive Lead
+                Archive Opportunity
               </button>
             </div>
           </section>
@@ -256,9 +256,9 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
           <div className="w-full max-w-md bg-surface rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-foreground">Merge Lead</h3>
+                <h3 className="text-lg font-bold text-foreground">Merge Opportunity</h3>
                 <p className="text-sm text-foreground-muted mt-1">
-                  Existing customers match this lead&apos;s contact info.
+                  Existing customers match this record&apos;s contact info.
                 </p>
               </div>
               <button 

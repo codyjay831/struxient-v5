@@ -519,11 +519,11 @@ export function resolveLeadCommercialProgressActionHref(
       return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
     case "OPEN_DRAFT_QUOTE":
     case "OPEN_QUOTE":
-      return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/quotes";
+      return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/leads";
     case "OPEN_EXECUTION_REVIEW":
       return action.targetQuoteId
         ? `/quotes/${action.targetQuoteId}/execution-review`
-        : "/quotes";
+        : "/leads";
     case "OPEN_JOB":
       return action.targetJobId ? `/jobs/${action.targetJobId}` : "/jobs";
   }

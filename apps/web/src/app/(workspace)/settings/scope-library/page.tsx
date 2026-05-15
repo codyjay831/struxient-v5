@@ -68,7 +68,7 @@ export default async function ScopeLibraryPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Sales" }, { label: "Scope Library" }]} />
+      <WorkspaceBreadcrumb items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library" }]} />
       <PageHeader
         title="Scope Library"
         description="Saved line items (commercial presets) and reusable internal tasks. Applying a preset on a quote copies values; default execution on a saved line item is copied later the same way—never live-linked."

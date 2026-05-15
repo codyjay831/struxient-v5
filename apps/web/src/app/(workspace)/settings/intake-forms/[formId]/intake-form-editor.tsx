@@ -93,7 +93,7 @@ export function IntakeFormEditor({
       <div className="flex items-center justify-between">
         <div>
           <Link
-            href="/leads/intake-forms"
+            href="/settings/intake-forms"
             className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground mb-4 transition-colors"
           >
             <ChevronLeft className="mr-1 size-3" />
@@ -269,7 +269,7 @@ export function IntakeFormEditor({
               </div>
             ) : !organizationSlug ? (
               <p className="text-xs text-foreground-muted leading-relaxed">
-                Configure a <Link href="/leads/public-request-settings" className="text-accent hover:underline">company slug</Link> to enable public links for your forms.
+                Configure a <Link href="/settings/organization" className="text-accent hover:underline">company slug</Link> to enable public links for your forms.
               </p>
             ) : (
               <div className="space-y-3">

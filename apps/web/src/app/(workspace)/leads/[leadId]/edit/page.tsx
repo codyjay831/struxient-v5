@@ -6,7 +6,7 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { Inbox } from "lucide-react";
+import { Users } from "lucide-react";
 import { updateLeadAction } from "../../lead-form-actions";
 import { LeadRecordForm } from "../../lead-record-form";
 import { parseStoredPublicIntakeServiceLocation } from "@/lib/public-lead-service-location";
@@ -49,16 +49,16 @@ export default async function EditLeadPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Leads", href: "/leads" },
+            { label: "Sales", href: "/leads" },
             { label: "Not found" },
           ]}
         />
         <PageHeader
-          title="Edit lead"
-          description="No lead exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          title="Edit opportunity"
+          description="No record exists for this id in your organization. Links only resolve within your tenant scope—not across organizations."
           actions={
             <Link href="/leads" className={listLinkClass}>
-              ← Leads list
+              ← Sales pipeline
             </Link>
           }
         />
@@ -69,12 +69,12 @@ export default async function EditLeadPage({
           <p className="mt-1 break-all font-mono text-sm text-foreground">{leadId}</p>
         </WorkspacePanel>
         <EmptyState
-          icon={Inbox}
-          title="Lead not found"
-          description="This id is not a lead record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          icon={Users}
+          title="Opportunity not found"
+          description="This id is not a valid sales record in your organization, or it belongs to another tenant."
         >
           <Link href="/leads" className={listLinkClass}>
-            Back to leads
+            Back to Sales pipeline
           </Link>
         </EmptyState>
       </div>
@@ -96,21 +96,21 @@ export default async function EditLeadPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
           items={[
-            { label: "Leads", href: "/leads" },
+            { label: "Sales", href: "/leads" },
             { label: lead.title, href: `/leads/${lead.id}` },
             { label: "Edit" },
           ]}
       />
       <PageHeader
         title={`Edit ${lead.title}`}
-        description="Update intake fields for your development organization only. Status and customer link are not editable here yet. Organization cannot be changed from this form."
+        description="Update intake fields for your organization. Status and customer link are not editable here yet."
         actions={
           <>
             <Link href={`/leads/${lead.id}`} className={listLinkClass}>
-              ← Lead detail
+              ← Opportunity detail
             </Link>
             <Link href="/leads" className={listLinkClass}>
-              All leads
+              Sales pipeline
             </Link>
           </>
         }
@@ -118,7 +118,7 @@ export default async function EditLeadPage({
 
       <WorkspacePanel className="mb-6">
         <SectionHeading
-          title="Lead record"
+          title="Intake record"
           description="Title is required. Leave optional fields blank to clear stored values. Empty optional values normalize to null on the server."
         />
         <LeadRecordForm

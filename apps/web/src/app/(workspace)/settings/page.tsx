@@ -41,6 +41,37 @@ export default function SettingsPage() {
 
       <section className="mb-10">
         <SectionHeading
+          title="Commercial Configuration"
+          description="Manage intake forms and reusable line item templates for your organization."
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link href="/settings/intake-forms" className={cardLinkClass}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              Intake Forms
+            </p>
+            <p className="mt-2 text-sm font-medium text-foreground group-hover:underline">
+              Configure public and internal intake forms
+            </p>
+            <p className="mt-2 text-xs text-foreground-muted">
+              Manage form fields, request types, and public link settings →
+            </p>
+          </Link>
+          <Link href="/settings/scope-library" className={cardLinkClass}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              Scope Library
+            </p>
+            <p className="mt-2 text-sm font-medium text-foreground group-hover:underline">
+              Manage reusable quote line items
+            </p>
+            <p className="mt-2 text-xs text-foreground-muted">
+              Create and edit templates for common services and pricing →
+            </p>
+          </Link>
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionHeading
           title="Settings areas"
           description="Company-wide shells vs your own preference shells—both are honest placeholders today."
         />

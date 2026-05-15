@@ -72,7 +72,7 @@ export async function getLeadAttachmentUploadUrlAction(
       storageProvider: provider instanceof LocalStorageProvider ? "local" : "gcs",
     };
   } catch (e) {
-    console.error("Failed to generate lead upload URL", e);
+    console.error("Failed to generate opportunity upload URL", e);
     return { error: "Failed to prepare upload. Please try again." };
   }
 }

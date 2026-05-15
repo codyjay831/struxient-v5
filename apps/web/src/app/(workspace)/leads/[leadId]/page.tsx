@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
-import { Inbox } from "lucide-react";
+import { Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +27,17 @@ export default async function LeadDetailPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Leads", href: "/leads" },
+            { label: "Sales", href: "/leads" },
             { label: "Not found" },
           ]}
         />
         <PageHeader
-          eyebrow="Lead"
-          title="Lead"
-          description="No lead exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          eyebrow="Sales"
+          title="Opportunity"
+          description="No record exists for this id in the current organization. Links only resolve within your tenant scope—not across organizations."
           actions={
             <Link href="/leads" className={listLinkClass}>
-              ← Leads list
+              ← Sales pipeline
             </Link>
           }
         />
@@ -48,12 +48,12 @@ export default async function LeadDetailPage({
           <p className="mt-1 break-all font-mono text-sm text-foreground">{leadId}</p>
         </WorkspacePanel>
         <EmptyState
-          icon={Inbox}
-          title="Lead not found"
-          description="This id is not a lead record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          icon={Users}
+          title="Opportunity not found"
+          description="This id is not a valid sales record in your organization, or it belongs to another tenant."
         >
           <Link href="/leads" className={listLinkClass}>
-            Back to leads
+            Back to sales pipeline
           </Link>
         </EmptyState>
       </div>
@@ -64,7 +64,7 @@ export default async function LeadDetailPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Leads", href: "/leads" },
+          { label: "Sales", href: "/leads" },
           { label: payload.lead.title },
         ]}
       />

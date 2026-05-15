@@ -1,3 +1,3 @@
 export function lineItemTemplateDefaultExecutionPath(lineItemTemplateId: string): string {
-  return `/scope-library/line-presets/${lineItemTemplateId}/default-execution`;
+  return `/settings/scope-library/line-presets/${lineItemTemplateId}/default-execution`;
 }

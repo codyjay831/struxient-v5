@@ -181,10 +181,10 @@ export default async function CustomerDetailPage({
 
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
-  /* Steer users back to the Lead workspace for active sales work. The Lead
+  /* Steer users back to the Sales workspace for active sales work. The Sales
      workspace is the primary place to build/send quotes, capture address, and
      activate jobs — the customer profile is the saved history view. If there
-     is an in-progress lead, primary CTA is "Open lead", not "Create quote". */
+     is an in-progress opportunity, primary CTA is "Open opportunity", not "Create quote". */
   const activeLead = linkedLeads.find(
     (l) => l.status === "NEW" || l.status === "TRIAGING",
   ) ?? null;
@@ -240,7 +240,7 @@ export default async function CustomerDetailPage({
               href={`/leads/${activeLead.id}`}
               className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90"
             >
-              Open active lead
+              Open active opportunity
               <ArrowUpRight className="ml-1.5 size-3.5" />
             </Link>
           )}
@@ -248,7 +248,7 @@ export default async function CustomerDetailPage({
             Edit profile
           </Link>
           <Link
-            href={`/quotes/new?customerId=${encodeURIComponent(customer.id)}`}
+            href={`/leads/new?customerId=${encodeURIComponent(customer.id)}`}
             className={listLinkClass}
           >
             Create quote
@@ -459,13 +459,13 @@ export default async function CustomerDetailPage({
                 </span>
               </summary>
               <div className="mt-6 space-y-8 border-t border-border pt-6">
-                {/* Leads History */}
+                {/* Opportunities History */}
                 <div>
                   <h3 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle mb-3 px-1">
-                    Leads
+                    Opportunities
                   </h3>
                   {linkedLeads.length === 0 ? (
-                    <p className="text-xs text-foreground-subtle px-1">No leads on file.</p>
+                    <p className="text-xs text-foreground-subtle px-1">No opportunities on file.</p>
                   ) : (
                     <ul className="divide-y divide-border rounded-lg border border-border">
                       {linkedLeads.map((l) => (

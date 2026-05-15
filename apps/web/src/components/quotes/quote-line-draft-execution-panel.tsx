@@ -10,7 +10,7 @@ import {
   type QuoteLineExecutionFormState,
   type QuoteLineExecutionRevalidateScope,
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
-import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/scope-library/task-template-field-limits";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import {
   workspaceFormControlClass,
   workspaceFormDangerButtonClass,

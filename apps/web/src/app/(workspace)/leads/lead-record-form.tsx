@@ -532,7 +532,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
           disabled={isPending || isUploading}
           className={primaryButtonClass}
         >
-          {isPending ? "Saving…" : isUploading ? "Uploading..." : props.mode === "create" ? "Create Lead record" : "Save changes"}
+          {isPending ? "Saving…" : isUploading ? "Uploading..." : props.mode === "create" ? "Create Opportunity" : "Save changes"}
         </button>
         <Link href={props.cancelHref} className={mutedLinkClass}>
           Cancel

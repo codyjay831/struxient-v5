@@ -318,9 +318,6 @@ async function performActivateQuoteJob(
 }
 
 function revalidateActivationSurfaces(quoteId: string, jobId: string, leadId: string | null) {
-  revalidatePath(`/quotes/${quoteId}`);
-  revalidatePath(`/quotes/${quoteId}/execution-review`);
-  revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath(jobDetailPath(jobId));
   if (leadId) {
