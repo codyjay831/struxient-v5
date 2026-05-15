@@ -4,6 +4,8 @@ import {
   QuoteStatus,
   JobIssueSeverity,
   JobIssueStatus,
+  JobRecoveryFlowStatus,
+  JobTaskStatus,
   JobPaymentRequirementStatus,
   DailyJobLogStatus,
   JobVisitStatus,
@@ -354,7 +356,10 @@ export async function queryWorkstationWorkItems(
           },
           issues: {
             where: { status: JobIssueStatus.OPEN },
-            select: { status: true, severity: true },
+            select: { id: true, status: true, severity: true },
+          },
+          recoveryFlow: {
+            select: { jobIssueId: true }
           },
         },
       },
@@ -549,7 +554,9 @@ export async function queryWorkstationWorkItems(
           requiresSignals: task.jobStage.requiresSignals,
           issues: [], // Job-level issues already check muted state
         },
-      }, liveSignals);
+      }, liveSignals, {
+        recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+      });
 
       let priority: WorkstationWorkItemPriority = derivedState === "READY" ? "high" : "medium";
 
@@ -650,6 +657,18 @@ export async function queryWorkstationWorkItems(
           lead: true,
         },
       },
+      recoveryFlow: {
+        include: {
+          tasks: {
+            orderBy: { recoveryFlowOrder: "asc" },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            }
+          }
+        }
+      }
     },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -659,9 +678,31 @@ export async function queryWorkstationWorkItems(
     const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
     const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
 
+    let nextStep = "Review and resolve issue.";
+    let priority: WorkstationWorkItemPriority = "high";
+
+    if (issue.recoveryFlow) {
+      const flow = issue.recoveryFlow;
+      if (flow.status === JobRecoveryFlowStatus.DRAFT) {
+        nextStep = "Draft recovery plan needs review/activation.";
+        priority = "critical";
+      } else if (flow.status === JobRecoveryFlowStatus.ACTIVE) {
+        const totalTasks = flow.tasks.length;
+        const completedTasks = flow.tasks.filter(t => t.status === JobTaskStatus.DONE).length;
+        const nextTask = flow.tasks.find(t => t.status !== JobTaskStatus.DONE);
+
+        if (nextTask) {
+          nextStep = `Recovery Step ${completedTasks + 1}/${totalTasks}: ${nextTask.title}`;
+        } else if (totalTasks > 0) {
+          nextStep = "Recovery complete. Resume original path.";
+          priority = "critical";
+        }
+      }
+    }
+
     const { lane, withinLaneRank } = rank({
       kind: "investigate",
-      priority: "high",
+      priority,
       group: "investigate",
       updatedAt: issue.updatedAt,
     }, role, now);
@@ -672,14 +713,14 @@ export async function queryWorkstationWorkItems(
       title: issue.title,
       subtitle: `Issue: ${issue.type.replace(/_/g, " ")} · ${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
       status: issue.status,
-      priority: "high",
+      priority,
       group: "investigate",
       lens: "attention",
       lane,
       withinLaneRank,
       filterCategory: "issues",
       reason: issue.description || "Blocking issue needs resolution.",
-      nextStep: "Review and resolve issue.",
+      nextStep,
       recordId: issue.id,
       parentRecordId: issue.jobId,
       parentLabel: primaryJobIdentity,

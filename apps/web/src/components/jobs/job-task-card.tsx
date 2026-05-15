@@ -38,7 +38,9 @@ export function JobTaskCard({
   const router = useRouter();
   const [surfaceOpen, setSurfaceOpen] = useState(false);
 
-  const derivedState = deriveTaskState(task, liveSignals);
+  const derivedState = deriveTaskState(task as any, liveSignals, {
+    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+  });
   const isCompleted = derivedState === "COMPLETED";
   const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
   const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";

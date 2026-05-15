@@ -28,13 +28,16 @@ export type TaskReadinessInput = {
   completionRequirementsJson: unknown;
   attachments: { id: string }[];
   requiresSignals: string[];
+  recoveryFlowId?: string | null;
   issues: {
+    id: string;
     status: JobIssueStatus;
     severity: JobIssueSeverity;
   }[];
   stage?: {
     requiresSignals: string[];
     issues: {
+      id: string;
       status: JobIssueStatus;
       severity: JobIssueSeverity;
     }[];
@@ -46,25 +49,44 @@ export type TaskReadinessInput = {
  */
 export function deriveTaskState(
   task: TaskReadinessInput,
-  liveSignals: string[]
+  liveSignals: string[],
+  options?: {
+    recoveryFlowIssueId?: string | null;
+  }
 ): TaskDerivedState {
   if (task.status === JobTaskStatus.DONE || task.completedAt) {
     return "COMPLETED";
   }
 
   // 1. Check for blocking issues (Task level)
-  const hasTaskBlockingIssue = task.issues.some(
-    (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
-  );
+  const hasTaskBlockingIssue = task.issues.some((i) => {
+    if (i.status !== JobIssueStatus.OPEN || i.severity !== JobIssueSeverity.BLOCKS_WORK) {
+      return false;
+    }
+    // Bypass if this task is part of a recovery flow meant to fix this specific issue
+    if (options?.recoveryFlowIssueId === i.id) {
+      return false;
+    }
+    return true;
+  });
+
   if (hasTaskBlockingIssue) {
     return "BLOCKED_BY_ISSUE";
   }
 
   // 2. Check for blocking issues (Stage level)
   if (task.stage) {
-    const hasStageBlockingIssue = task.stage.issues.some(
-      (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
-    );
+    const hasStageBlockingIssue = task.stage.issues.some((i) => {
+      if (i.status !== JobIssueStatus.OPEN || i.severity !== JobIssueSeverity.BLOCKS_WORK) {
+        return false;
+      }
+      // Bypass if this task is part of a recovery flow meant to fix this specific issue
+      if (options?.recoveryFlowIssueId === i.id) {
+        return false;
+      }
+      return true;
+    });
+
     if (hasStageBlockingIssue) {
       return "BLOCKED_BY_ISSUE";
     }
@@ -120,6 +142,7 @@ export type StageDerivedState =
 export type StageReadinessInput = {
   requiresSignals: string[];
   issues: {
+    id: string;
     status: JobIssueStatus;
     severity: JobIssueSeverity;
   }[];
@@ -131,7 +154,10 @@ export type StageReadinessInput = {
  */
 export function deriveStageState(
   stage: StageReadinessInput,
-  liveSignals: string[]
+  liveSignals: string[],
+  options?: {
+    recoveryFlowIssueId?: string | null;
+  }
 ): StageDerivedState {
   // 1. Check if all tasks are completed
   const allTasksCompleted = stage.tasks.length > 0 && stage.tasks.every(
@@ -142,9 +168,15 @@ export function deriveStageState(
   }
 
   // 2. Check for blocking issues
-  const hasBlockingIssue = stage.issues.some(
-    (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK
-  );
+  const hasBlockingIssue = stage.issues.some((i) => {
+    if (i.status !== JobIssueStatus.OPEN || i.severity !== JobIssueSeverity.BLOCKS_WORK) {
+      return false;
+    }
+    if (options?.recoveryFlowIssueId === i.id) {
+      return false;
+    }
+    return true;
+  });
   if (hasBlockingIssue) {
     return "BLOCKED_BY_ISSUE";
   }

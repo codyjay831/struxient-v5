@@ -20,12 +20,16 @@ export type JobTaskExecutionTask = {
     contentType: string;
   }[];
   issues: {
+    id: string;
     status: JobIssueStatus;
     severity: JobIssueSeverity;
   }[];
   providesSignals: string[];
   requiresSignals: string[];
   hardSignal: boolean;
+  recoveryFlow?: {
+    jobIssueId: string;
+  } | null;
   paymentBlockers: {
     status: JobPaymentRequirementStatus;
     title: string;

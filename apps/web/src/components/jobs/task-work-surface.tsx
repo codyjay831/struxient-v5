@@ -25,6 +25,8 @@ import { createJobIssueAction } from "@/app/(workspace)/jobs/job-issue-actions";
 import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-display";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
+import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { RecoveryFlowBuilder } from "./recovery-flow-builder";
 import {
   AlertCircle,
   Camera,
@@ -97,12 +99,13 @@ export function TaskWorkSurface({
     issuesSyncKey,
     paymentSyncKey,
   ]);
-  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string; issueId?: string } | null>(null);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const hasJobsite = Boolean(jobsiteAddressLine?.trim());
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
   const [showReportForm, setShowReportForm] = useState(false);
+  const [showRecoveryBuilder, setShowRecoveryBuilder] = useState(false);
   const [reportTitle, setReportTitle] = useState("");
   const [reportDescription, setReportDescription] = useState("");
   const [reportType, setReportType] = useState<JobIssueType>(JobIssueType.OTHER);
@@ -122,7 +125,9 @@ export function TaskWorkSurface({
     router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
   }, [clearWorkstationSelectionOnComplete, pathname, router, searchParams]);
 
-  const derivedState = deriveTaskState(task, liveSignals);
+  const derivedState = deriveTaskState(task as any, liveSignals, {
+    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+  });
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
 
   const isCompleted = derivedState === "COMPLETED";
@@ -249,7 +254,7 @@ export function TaskWorkSurface({
     setActionMessage(null);
 
     try {
-      await createJobIssueAction({
+      const result = await createJobIssueAction({
         jobId,
         jobStageId,
         jobTaskId: task.id,
@@ -261,7 +266,11 @@ export function TaskWorkSurface({
       setReportTitle("");
       setReportDescription("");
       setShowReportForm(false);
-      setActionMessage({ tone: "success", text: "Issue recorded for this task." });
+      setActionMessage({ 
+        tone: "success", 
+        text: "Issue recorded for this task.",
+        issueId: result.issueId 
+      });
       refreshAfterMutation();
     } catch (err) {
       setActionMessage({
@@ -555,6 +564,7 @@ export function TaskWorkSurface({
             type="button"
             onClick={() => {
               setShowReportForm((v) => !v);
+              setShowRecoveryBuilder(false);
               setActionMessage(null);
             }}
             className={`${actionBtnBaseClass} border border-border bg-surface text-foreground-muted hover:border-border-strong hover:text-foreground`}
@@ -634,15 +644,48 @@ export function TaskWorkSurface({
       )}
 
       {actionMessage && (
-        <p
-          className={
-            actionMessage.tone === "success"
-              ? "rounded-lg bg-success/10 px-3 py-2 text-xs font-semibold text-success"
-              : "rounded-lg bg-danger/10 px-3 py-2 text-xs font-semibold text-danger"
-          }
-        >
-          {actionMessage.text}
-        </p>
+        <div className="space-y-3">
+          <p
+            className={
+              actionMessage.tone === "success"
+                ? "rounded-lg bg-success/10 px-3 py-2 text-xs font-semibold text-success"
+                : "rounded-lg bg-danger/10 px-3 py-2 text-xs font-semibold text-danger"
+            }
+          >
+            {actionMessage.text}
+          </p>
+          {actionMessage.tone === "success" && actionMessage.issueId && !showRecoveryBuilder && (
+            <WorkspacePanel className="border-accent/30 bg-accent/[0.02]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-foreground">Issue Recorded</p>
+                  <p className="text-[10px] text-foreground-muted">Would you like to build a recovery path now?</p>
+                </div>
+                <button
+                  onClick={() => setShowRecoveryBuilder(true)}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-contrast hover:opacity-90"
+                >
+                  Start Recovery Flow
+                </button>
+              </div>
+            </WorkspacePanel>
+          )}
+        </div>
+      )}
+
+      {showRecoveryBuilder && actionMessage?.issueId && (
+        <WorkspacePanel className="border-dashed border-border-strong bg-foreground/[0.01]">
+          <RecoveryFlowBuilder
+            issueId={actionMessage.issueId}
+            jobId={jobId}
+            onSuccess={() => {
+              setShowRecoveryBuilder(false);
+              setActionMessage({ tone: "success", text: "Recovery flow activated." });
+              refreshAfterMutation();
+            }}
+            onCancel={() => setShowRecoveryBuilder(false)}
+          />
+        </WorkspacePanel>
       )}
     </div>
     {customerId ? (

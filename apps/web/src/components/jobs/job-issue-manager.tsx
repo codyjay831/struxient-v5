@@ -16,10 +16,10 @@ import {
   X,
 } from "lucide-react";
 import {
-  createFollowUpTaskFromIssueAction,
   createJobIssueAction,
   resolveJobIssueAction,
 } from "@/app/(workspace)/jobs/job-issue-actions";
+import { resolveIssueAndResumeAction } from "@/app/(workspace)/jobs/recovery-actions";
 import {
   formatJobIssueSeverity,
   formatJobIssueStatus,
@@ -31,6 +31,7 @@ import { formatJobTaskStatus, jobTaskStatusBadgeTone } from "@/lib/job-display";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { RecoveryFlowBuilder } from "./recovery-flow-builder";
 
 type Issue = {
   id: string;
@@ -44,10 +45,19 @@ type Issue = {
   createdAt: Date;
   jobStage?: { title: string } | null;
   jobTask?: { title: string } | null;
-  followUpTask?: {
+  followUpTasks: {
     id: string;
     title: string;
     status: string;
+  }[];
+  recoveryFlow?: {
+    id: string;
+    status: string;
+    tasks: {
+      id: string;
+      title: string;
+      status: string;
+    }[];
   } | null;
 };
 
@@ -124,6 +134,7 @@ export function JobIssueManager({
             issue={issue}
             onResolve={(note) => handleResolve(issue.id, note)}
             isPending={isPending}
+            jobId={jobId}
           />
         ))}
 
@@ -140,11 +151,11 @@ export function JobIssueManager({
               )}
               {showResolved ? "Hide" : "Show"} {resolvedIssues.length} resolved issues
             </button>
-
+            
             {showResolved && (
               <div className="mt-4 space-y-3 opacity-70 transition-opacity hover:opacity-100">
                 {resolvedIssues.map((issue) => (
-                  <IssueCard key={issue.id} issue={issue} isResolved />
+                  <IssueCard key={issue.id} issue={issue} isResolved jobId={jobId} />
                 ))}
               </div>
             )}
@@ -160,15 +171,33 @@ function IssueCard({
   onResolve,
   isPending,
   isResolved,
+  jobId,
 }: {
   issue: Issue;
   onResolve?: (note?: string) => void;
   isPending?: boolean;
   isResolved?: boolean;
+  jobId: string;
 }) {
   const [isResolving, setIsResolving] = useState(false);
-  const [isCreatingFollowUp, setIsCreatingFollowUp] = useState(false);
+  const [isBuildingFlow, setIsBuildingFlow] = useState(false);
   const [note, setNote] = useState("");
+  const [isResuming, setIsResuming] = useState(false);
+
+  const hasRecoveryFlow = !!issue.recoveryFlow;
+  const recoveryTasks = issue.recoveryFlow?.tasks || [];
+  const allRecoveryTasksDone = recoveryTasks.length > 0 && recoveryTasks.every(t => t.status === JobTaskStatus.DONE);
+
+  const handleResume = async () => {
+    setIsResuming(true);
+    try {
+      await resolveIssueAndResumeAction(issue.id);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to resume path");
+    } finally {
+      setIsResuming(false);
+    }
+  };
 
   return (
     <div
@@ -232,34 +261,42 @@ function IssueCard({
             </div>
           </div>
 
-          {issue.followUpTask && (
-            <div className="mt-3 border-t border-border pt-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-[0.65rem] font-medium text-foreground-subtle">
-                  <CheckCircle2 className="size-3.5 text-success" />
-                  <span>Follow-up Task:</span>
-                  <span className="text-foreground">{issue.followUpTask.title}</span>
-                </div>
-                <StatusBadge
-                  label={formatJobTaskStatus(issue.followUpTask.status as JobTaskStatus)}
-                  tone={jobTaskStatusBadgeTone(issue.followUpTask.status as JobTaskStatus)}
-                  className="text-[0.6rem]"
-                />
+          {recoveryTasks.length > 0 && (
+            <div className="mt-4 space-y-2 border-t border-border pt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                Recovery Path
+              </p>
+              <div className="space-y-1.5">
+                {recoveryTasks.map((t, idx) => (
+                  <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border border-border bg-foreground/[0.01] px-2 py-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-bold text-foreground-subtle">{idx + 1}</span>
+                      <span className={`truncate text-xs ${t.status === JobTaskStatus.DONE ? "text-foreground-subtle line-through" : "text-foreground font-medium"}`}>
+                        {t.title}
+                      </span>
+                    </div>
+                    <StatusBadge
+                      label={formatJobTaskStatus(t.status as JobTaskStatus)}
+                      tone={jobTaskStatusBadgeTone(t.status as JobTaskStatus)}
+                      className="text-[0.55rem] px-1.5 py-0"
+                    />
+                  </div>
+                ))}
               </div>
 
               {issue.status === JobIssueStatus.OPEN &&
-                issue.followUpTask.status === JobTaskStatus.DONE &&
-                !isCreatingFollowUp &&
+                allRecoveryTasksDone &&
                 !isResolving && (
                   <div className="mt-3 flex items-center justify-between rounded-md border border-success/20 bg-success/[0.02] px-3 py-2">
                     <p className="text-[0.65rem] font-medium text-success">
-                      Follow-up task is complete. Resolve this issue?
+                      Recovery flow complete. Resume original path?
                     </p>
                     <button
-                      onClick={() => setIsResolving(true)}
-                      className="rounded bg-success/20 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-success hover:bg-success/30"
+                      onClick={handleResume}
+                      disabled={isResuming}
+                      className="rounded bg-success/20 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-success hover:bg-success/30 disabled:opacity-50"
                     >
-                      Resolve Now
+                      {isResuming ? "Resuming..." : "Resume Now"}
                     </button>
                   </div>
                 )}
@@ -282,27 +319,28 @@ function IssueCard({
             </div>
           )}
 
-          {isCreatingFollowUp && (
+          {isBuildingFlow && (
             <div className="mt-4 border-t border-border pt-4">
-              <CreateFollowUpForm
-                issue={issue}
-                onSuccess={() => setIsCreatingFollowUp(false)}
-                onCancel={() => setIsCreatingFollowUp(false)}
+              <RecoveryFlowBuilder
+                issueId={issue.id}
+                jobId={jobId}
+                onSuccess={() => setIsBuildingFlow(false)}
+                onCancel={() => setIsBuildingFlow(false)}
               />
             </div>
           )}
         </div>
 
-        {!isResolved && !isCreatingFollowUp && (
+        {!isResolved && !isBuildingFlow && (
           <div className="flex shrink-0 flex-col items-end gap-2">
             <div className="flex gap-2">
-              {!issue.followUpTask && (
+              {!hasRecoveryFlow && (
                 <button
-                  onClick={() => setIsCreatingFollowUp(true)}
+                  onClick={() => setIsBuildingFlow(true)}
                   disabled={isPending}
                   className="rounded-md border border-border px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
                 >
-                  Create Follow-up
+                  Create Recovery Path
                 </button>
               )}
               {!isResolving ? (
@@ -344,83 +382,6 @@ function IssueCard({
         )}
       </div>
     </div>
-  );
-}
-
-function CreateFollowUpForm({
-  issue,
-  onSuccess,
-  onCancel,
-}: {
-  issue: Issue;
-  onSuccess: () => void;
-  onCancel: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [formData, setFormData] = useState({
-    title: `Follow-up: ${issue.title}`,
-    instructions: "",
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.title) return;
-
-    startTransition(async () => {
-      try {
-        await createFollowUpTaskFromIssueAction({
-          issueId: issue.id,
-          title: formData.title,
-          instructions: formData.instructions || undefined,
-        });
-        onSuccess();
-      } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to create follow-up task");
-      }
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-        Create Follow-up Task
-      </p>
-      <div className="space-y-1.5">
-        <label className="text-[0.6rem] font-medium text-foreground-muted">Task Title</label>
-        <input
-          required
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-[0.6rem] font-medium text-foreground-muted">Instructions (Optional)</label>
-        <textarea
-          value={formData.instructions}
-          onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-          placeholder="What needs to be done?"
-          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
-          rows={2}
-        />
-      </div>
-      <div className="flex justify-end gap-3 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-[0.65rem] font-medium text-foreground-muted hover:text-foreground"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isPending || !formData.title}
-          className="rounded bg-foreground px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-background hover:bg-foreground/90 disabled:opacity-50"
-        >
-          {isPending ? "Creating..." : "Create Task"}
-        </button>
-      </div>
-    </form>
   );
 }
 

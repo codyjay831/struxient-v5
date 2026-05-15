@@ -67,10 +67,24 @@ test("deriveTaskState: BLOCKED_BY_ISSUE when task has blocking issue", () => {
     completionRequirementsJson: {},
     attachments: [],
     requiresSignals: [],
-    issues: [{ status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }],
+    issues: [{ id: "issue-1", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }],
     stage: { requiresSignals: [], issues: [] }
   }, []);
   assert.equal(state, "BLOCKED_BY_ISSUE");
+});
+
+test("deriveTaskState: READY when task is part of recovery flow for the blocking issue", () => {
+  const state = deriveTaskState({
+    status: JobTaskStatus.TODO,
+    completedAt: null,
+    completionNote: null,
+    completionRequirementsJson: {},
+    attachments: [],
+    requiresSignals: [],
+    issues: [{ id: "issue-1", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }],
+    stage: { requiresSignals: [], issues: [] }
+  }, [], { recoveryFlowIssueId: "issue-1" });
+  assert.equal(state, "READY");
 });
 
 test("deriveTaskState: BLOCKED_BY_ISSUE when stage has blocking issue", () => {
@@ -82,9 +96,23 @@ test("deriveTaskState: BLOCKED_BY_ISSUE when stage has blocking issue", () => {
     attachments: [],
     requiresSignals: [],
     issues: [],
-    stage: { requiresSignals: [], issues: [{ status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }] }
+    stage: { requiresSignals: [], issues: [{ id: "issue-2", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }] }
   }, []);
   assert.equal(state, "BLOCKED_BY_ISSUE");
+});
+
+test("deriveTaskState: READY when stage issue is bypassed by recovery flow", () => {
+  const state = deriveTaskState({
+    status: JobTaskStatus.TODO,
+    completedAt: null,
+    completionNote: null,
+    completionRequirementsJson: {},
+    attachments: [],
+    requiresSignals: [],
+    issues: [],
+    stage: { requiresSignals: [], issues: [{ id: "issue-2", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }] }
+  }, [], { recoveryFlowIssueId: "issue-2" });
+  assert.equal(state, "READY");
 });
 
 test("deriveTaskState: READY when issue is resolved", () => {
@@ -95,7 +123,7 @@ test("deriveTaskState: READY when issue is resolved", () => {
     completionRequirementsJson: {},
     attachments: [],
     requiresSignals: [],
-    issues: [{ status: JobIssueStatus.RESOLVED, severity: JobIssueSeverity.BLOCKS_WORK }],
+    issues: [{ id: "issue-1", status: JobIssueStatus.RESOLVED, severity: JobIssueSeverity.BLOCKS_WORK }],
     stage: { requiresSignals: [], issues: [] }
   }, []);
   assert.equal(state, "READY");

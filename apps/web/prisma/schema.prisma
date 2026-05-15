@@ -22,6 +22,7 @@ model Organization {
   jobs                     Job[]
   jobActivities            JobActivity[]
   jobIssues                JobIssue[]
+  jobRecoveryFlows         JobRecoveryFlow[]
   jobPaymentRequirements   JobPaymentRequirement[]
   jobVisits                JobVisit[]
   leads                    Lead[]
@@ -553,6 +554,7 @@ model Job {
   quote               Quote                   @relation(fields: [quoteId], references: [id])
   activities          JobActivity[]
   issues              JobIssue[]
+  recoveryFlows       JobRecoveryFlow[]
   paymentRequirements JobPaymentRequirement[]
   signals             JobSignal[]
   stages              JobStage[]
@@ -624,7 +626,9 @@ model JobTask {
   sortOrder                      Int                        @default(0)
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt
-  sourceJobIssueId               String?                    @unique
+  sourceJobIssueId               String?
+  recoveryFlowId                 String?
+  recoveryFlowOrder              Int                        @default(0)
   completedAt                    DateTime?
   completedByUserId              String?
   completionNote                 String?
@@ -647,6 +651,7 @@ model JobTask {
   completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
   job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
+  recoveryFlow                   JobRecoveryFlow?           @relation(fields: [recoveryFlowId], references: [id])
   sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id])
   sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id])
   sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id])
@@ -655,6 +660,7 @@ model JobTask {
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
+  @@index([recoveryFlowId])
 }
 
 model JobIssue {
@@ -678,7 +684,8 @@ model JobIssue {
   jobStage        JobStage?        @relation(fields: [jobStageId], references: [id])
   jobTask         JobTask?         @relation(fields: [jobTaskId], references: [id])
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  followUpTask    JobTask?         @relation("IssueFollowUpTask")
+  followUpTasks   JobTask[]        @relation("IssueFollowUpTask")
+  recoveryFlow    JobRecoveryFlow?
 
   @@index([organizationId])
   @@index([jobId])
@@ -686,6 +693,31 @@ model JobIssue {
   @@index([organizationId, severity])
   @@index([jobTaskId])
   @@index([jobStageId])
+}
+
+model JobRecoveryFlow {
+  id                      String                 @id @default(cuid())
+  organizationId          String
+  jobId                   String
+  jobIssueId              String                 @unique
+  status                  JobRecoveryFlowStatus  @default(DRAFT)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  
+  // Context fields for failure lineage
+  sourceFailedTaskId      String?
+  sourceChecklistItemId   String?
+  sourcePermitEventId     String?
+  sourceInspectionEventId String?
+
+  organization            Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job                     Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobIssue                JobIssue               @relation(fields: [jobIssueId], references: [id], onDelete: Cascade)
+  tasks                   JobTask[]
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([jobIssueId])
 }
 
 model JobVisit {
@@ -1041,6 +1073,13 @@ enum StaffRole {
   SUBCONTRACTOR
 }
 
+enum JobRecoveryFlowStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 enum JobIssueType {
   INSPECTION_FAIL
   MATERIAL_DELAY
@@ -1090,6 +1129,9 @@ enum JobActivityType {
   JOB_ACTIVATED
   EVENT_CREATED
   EVENT_RESOLVED
+  RECOVERY_FLOW_CREATED
+  RECOVERY_FLOW_ACTIVATED
+  RECOVERY_FLOW_COMPLETED
 }
 
 model Tag {

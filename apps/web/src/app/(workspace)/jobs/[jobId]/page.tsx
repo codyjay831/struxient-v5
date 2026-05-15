@@ -104,13 +104,27 @@ export default async function JobDetailPage({
             createdAt: true,
             jobStage: { select: { title: true } },
             jobTask: { select: { title: true } },
-            followUpTask: {
+            followUpTasks: {
               select: {
                 id: true,
                 title: true,
                 status: true,
               },
             },
+            recoveryFlow: {
+              select: {
+                id: true,
+                status: true,
+                tasks: {
+                  orderBy: { recoveryFlowOrder: "asc" },
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                  }
+                }
+              }
+            }
           },
         },
         stages: {
@@ -135,6 +149,9 @@ export default async function JobDetailPage({
                 providesSignals: true,
                 requiresSignals: true,
                 hardSignal: true,
+                recoveryFlow: {
+                  select: { jobIssueId: true }
+                },
                 attachments: {
                   where: { status: "READY" },
                   select: {
@@ -146,7 +163,7 @@ export default async function JobDetailPage({
                 },
                 issues: {
                   where: { status: JobIssueStatus.OPEN },
-                  select: { status: true, severity: true, jobTaskId: true, jobStageId: true },
+                  select: { id: true, status: true, severity: true, jobTaskId: true, jobStageId: true },
                 },
               },
             },

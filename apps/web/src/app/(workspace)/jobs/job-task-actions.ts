@@ -28,6 +28,7 @@ export async function completeJobTaskAction(
           include: {
             issues: {
               where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+              select: { id: true, status: true, severity: true },
             },
           },
         },
@@ -37,7 +38,11 @@ export async function completeJobTaskAction(
         },
         issues: {
           where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+          select: { id: true, status: true, severity: true },
         },
+        recoveryFlow: {
+          select: { jobIssueId: true }
+        }
       },
     });
 
@@ -51,7 +56,9 @@ export async function completeJobTaskAction(
 
     // 1. Check readiness using Signal Bus
     const liveSignals = await getLiveSignals(task.jobId);
-    const state = deriveTaskState(task, liveSignals);
+    const state = deriveTaskState(task as any, liveSignals, {
+      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+    });
 
     if (state === "BLOCKED_BY_ISSUE") {
       return { error: "Task is blocked by an open issue." };
