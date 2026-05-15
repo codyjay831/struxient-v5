@@ -104,3 +104,68 @@ export function leadStatusBadgeTone(status: LeadStatus): StatusBadgeTone {
       return "neutral";
   }
 }
+
+/**
+ * Parses raw intake notes from the public form into structured fields.
+ */
+export function parseIntakeNotes(notes: string | null) {
+  if (!notes || !notes.includes("[Public Intake Form]")) {
+    return {
+      isPublicIntake: false,
+      parsedFields: [] as { label: string; value: string }[],
+      cleanNotes: notes,
+    };
+  }
+
+  const fields: { label: string; value: string }[] = [];
+  let cleanNotes = notes;
+
+  // Remove the [System] part if it exists (usually contains matches which are handled elsewhere)
+  const systemIndex = cleanNotes.indexOf("[System]");
+  if (systemIndex !== -1) {
+    cleanNotes = cleanNotes.substring(0, systemIndex).trim();
+  }
+
+  // Define the markers we want to extract
+  const markers = [
+    { label: "Service Location Address", marker: "Service / project location:" },
+    { label: "Preferred timing", marker: "Preferred timing:" },
+    { label: "Request Type", marker: "Request type:" },
+    { label: "What you need help with", marker: "What you need help with:" },
+  ];
+
+  // Extract fields based on markers
+  for (let i = 0; i < markers.length; i++) {
+    const current = markers[i];
+    
+    const startIndex = cleanNotes.indexOf(current.marker);
+    if (startIndex !== -1) {
+      const valueStart = startIndex + current.marker.length;
+      
+      // Find the start of the next marker to know where this value ends
+      let valueEnd = cleanNotes.length;
+      for (let j = i + 1; j < markers.length; j++) {
+        const nextMarkerIndex = cleanNotes.indexOf(markers[j].marker);
+        if (nextMarkerIndex !== -1 && nextMarkerIndex > startIndex) {
+          valueEnd = nextMarkerIndex;
+          break;
+        }
+      }
+      
+      const value = cleanNotes.substring(valueStart, valueEnd).trim();
+      if (value) {
+        fields.push({ label: current.label, value });
+      }
+    }
+  }
+
+  // The "clean" notes for display should be the original notes minus the [System] part
+  // and maybe the [Public Intake Form] tag if we want it really clean.
+  const displayNotes = cleanNotes.replace("[Public Intake Form]", "").trim();
+
+  return {
+    isPublicIntake: true,
+    parsedFields: fields,
+    cleanNotes: displayNotes,
+  };
+}

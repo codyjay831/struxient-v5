@@ -69,10 +69,6 @@ export function QuoteDraftForm({
           <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
             Quote context
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            These links were validated for your organization. Customer id may be attached
-            automatically when the lead already has a customer—both ids are re-checked on save.
-          </p>
           <dl className="mt-3 space-y-2 text-sm">
             {contextLines.map((row) => (
               <div key={row.label}>
@@ -102,22 +98,9 @@ export function QuoteDraftForm({
         </label>
         <p className="mt-1.5 text-xs text-foreground-muted">
           {validatedLeadId || validatedCustomerId
-            ? "Prefilled from context—you can edit before saving. If you clear the title, the server will derive a short default from the lead or customer."
-            : "Required for a title-only draft (no lead or customer on this quote yet)."}
+            ? "Prefilled from context."
+            : "Required for a title-only draft."}
         </p>
-      </div>
-
-      <div>
-        <label className="block">
-          <span className={fieldLabelClass}>Internal notes (optional)</span>
-          <textarea
-            name="internalNotes"
-            rows={4}
-            maxLength={QUOTE_FIELD_LIMITS.internalNotes}
-            placeholder="Staff-only—omitted from live proposal preview."
-            className={controlClass}
-          />
-        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

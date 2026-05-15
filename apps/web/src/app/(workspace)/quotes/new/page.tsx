@@ -6,6 +6,7 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { QuoteDraftForm } from "../quote-draft-form";
+import { parseIntakeNotes } from "@/lib/lead-display";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function NewQuotePage({
   const lead = rawLead
     ? await db.lead.findFirst({
         where: { id: rawLead, organizationId: ctx.organizationId },
-        select: { id: true, title: true, customerId: true },
+        select: { id: true, title: true, customerId: true, notes: true },
       })
     : null;
   if (rawLead && !lead) {
@@ -75,11 +76,28 @@ export default async function NewQuotePage({
       validatedCustomerId = customer.id;
       contextLines.push({ label: "Opportunity", value: lead.title });
       contextLines.push({ label: "Customer", value: customer.displayName });
-      defaultTitle = customer.displayName;
+      
+      const { parsedFields } = parseIntakeNotes(lead.notes);
+      const requestType = parsedFields.find(f => f.label === "Request Type")?.value;
+      
+      if (requestType) {
+        contextLines.push({ label: "Request Type", value: requestType });
+        defaultTitle = `${requestType} — ${customer.displayName}`;
+      } else {
+        defaultTitle = customer.displayName;
+      }
+
+      parsedFields.filter(f => f.label !== "Request Type").forEach(field => {
+        contextLines.push({ label: field.label, value: field.value });
+      });
     }
   } else if (lead && !rawCustomer) {
     validatedLeadId = lead.id;
     contextLines.push({ label: "Opportunity", value: lead.title });
+    
+    const { parsedFields } = parseIntakeNotes(lead.notes);
+    const requestType = parsedFields.find(f => f.label === "Request Type")?.value;
+
     if (lead.customerId) {
       const linked = await db.customer.findFirst({
         where: { id: lead.customerId, organizationId: ctx.organizationId },
@@ -89,15 +107,31 @@ export default async function NewQuotePage({
         validatedCustomerId = linked.id;
         contextLines.push({
           label: "Customer (from opportunity)",
-          value: `${linked.displayName} — this quote will attach to both the opportunity and that customer because the opportunity already references them.`,
+          value: linked.displayName,
         });
-        defaultTitle = linked.displayName;
+        
+        if (requestType) {
+          contextLines.push({ label: "Request Type", value: requestType });
+          defaultTitle = `${requestType} — ${linked.displayName}`;
+        } else {
+          defaultTitle = linked.displayName;
+        }
       } else {
         defaultTitle = lead.title;
       }
     } else {
-      defaultTitle = lead.title;
+      if (requestType) {
+        contextLines.push({ label: "Request Type", value: requestType });
+        // If no customer yet, use lead title (which might be contact name)
+        defaultTitle = `${requestType} — ${lead.title}`;
+      } else {
+        defaultTitle = lead.title;
+      }
     }
+
+    parsedFields.filter(f => f.label !== "Request Type").forEach(field => {
+      contextLines.push({ label: field.label, value: field.value });
+    });
   } else if (customer && !rawLead) {
     validatedCustomerId = customer.id;
     contextLines.push({ label: "Customer", value: customer.displayName });
@@ -114,7 +148,7 @@ export default async function NewQuotePage({
       />
       <PageHeader
         title="New quote"
-        description="Create a draft working quote in your organization. It saves as Draft with zero totals; open the quote to add line items, optional proposal wording, and guided send flow."
+        description="Create a draft quote to begin building your proposal."
         actions={
           <Link href="/leads" className={listLinkClass}>
             ← Sales pipeline
@@ -125,7 +159,6 @@ export default async function NewQuotePage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Draft quote"
-          description="Organization scope is applied on the server from your session context. Lead and customer ids from the URL are validated here; create re-validates before insert."
         />
         <QuoteDraftForm
           cancelHref="/leads"

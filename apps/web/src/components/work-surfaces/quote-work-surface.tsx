@@ -1200,7 +1200,7 @@ function ScopeTab({
         initialTitle={quote.title}
         initialInternalNotes={internalNotes}
         initialCustomerDocumentTitle={customerDocumentTitle}
-        hasLeadNotes={hasLeadNotes}
+        lead={workspaceTabs.lead}
         lineItems={lineItems}
         subtotalCents={subtotalCents}
         totalCents={totalCents}

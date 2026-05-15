@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, useActionState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ListOrdered, Sparkles, Loader2 } from "lucide-react";
+import { ArrowUpRight, ListOrdered, Sparkles, Loader2, X, ChevronDown } from "lucide-react";
 import {
   addQuoteLineItemWorkspaceAction,
   deleteQuoteLineItemWorkspaceAction,
@@ -49,11 +49,13 @@ import {
 } from "@/components/quotes/quote-line-item-display";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import type { QuoteWorkspaceLead } from "@/lib/quote-workspace-payload";
 import { toast } from "sonner";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { parseIntakeNotes } from "@/lib/lead-display";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -95,16 +97,12 @@ function FormError({ message }: { message: string }) {
 function QuoteDraftDetailsForm({
   quoteId,
   initialTitle,
-  initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasLeadNotes,
   onMutated,
 }: {
   quoteId: string;
   initialTitle: string;
-  initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasLeadNotes: boolean;
   onMutated: () => void;
 }) {
   const [state, formAction, isPending] = useActionState(
@@ -112,13 +110,7 @@ function QuoteDraftDetailsForm({
     initialState,
   );
 
-  const [copyState, copyAction, isCopyPending] = useActionState(
-    copyLeadToQuoteNotesWorkspaceAction.bind(null, quoteId),
-    initialState,
-  );
-
   const handledKeyRef = useRef<unknown>(null);
-  const copyHandledKeyRef = useRef<unknown>(null);
 
   useEffect(() => {
     if (state.success && handledKeyRef.current !== state) {
@@ -128,85 +120,165 @@ function QuoteDraftDetailsForm({
     }
   }, [state, onMutated]);
 
-  useEffect(() => {
-    if (copyState.success && copyHandledKeyRef.current !== copyState) {
-      copyHandledKeyRef.current = copyState;
-      toast.success("Intake notes copied.");
-      onMutated();
-    }
-  }, [copyState, onMutated]);
-
   return (
-    <WorkspacePanel className="mb-6">
+    <div className="space-y-4">
       <SectionHeading
         title="Draft details"
-        description="Staff workspace fields: title and internal notes stay here. Optional proposal document title shapes the customer-facing document."
+        description="Staff workspace fields. Optional proposal document title shapes the customer-facing document."
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
-        <div>
-          <label className="block">
-            <span className={fieldLabelClass}>Quote workspace title</span>
-            <input
-              name="title"
-              type="text"
-              required
-              maxLength={QUOTE_FIELD_LIMITS.title}
-              defaultValue={initialTitle}
-              className={controlClass}
-              autoComplete="off"
-            />
-          </label>
-        </div>
-        <div>
-          <label className="block">
-            <div className="flex items-center justify-between">
-              <span className={fieldLabelClass}>Internal quote notes (staff-only)</span>
-              {hasLeadNotes && (
-                <div className="flex items-center gap-2">
-                  <button
-                    formAction={copyAction}
-                    disabled={isCopyPending}
-                    className="text-[10px] font-medium text-foreground-subtle underline decoration-border underline-offset-2 hover:decoration-foreground disabled:opacity-50"
-                    title="Append lead notes to this field. Does not overwrite existing text."
-                  >
-                    {isCopyPending ? "Copying..." : "Copy intake into quote notes"}
-                  </button>
-                  {copyState.error && (
-                    <span className="text-[10px] text-danger">{copyState.error}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <textarea
-              name="internalNotes"
-              rows={4}
-              maxLength={QUOTE_FIELD_LIMITS.internalNotes}
-              defaultValue={initialInternalNotes ?? ""}
-              placeholder="Staff-only—omitted from live proposal preview."
-              className={controlClass}
-            />
-          </label>
-        </div>
-        <div>
-          <label className="block">
-            <span className={fieldLabelClass}>Proposal document title (customer-facing)</span>
-            <input
-              name="customerDocumentTitle"
-              type="text"
-              maxLength={QUOTE_FIELD_LIMITS.customerDocumentTitle}
-              defaultValue={initialCustomerDocumentTitle ?? ""}
-              placeholder="Shown on live proposal preview instead of workspace title when set"
-              className={controlClass}
-              autoComplete="off"
-            />
-          </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block">
+              <span className={fieldLabelClass}>Quote workspace title</span>
+              <input
+                name="title"
+                type="text"
+                required
+                maxLength={QUOTE_FIELD_LIMITS.title}
+                defaultValue={initialTitle}
+                className={controlClass}
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <div>
+            <label className="block">
+              <span className={fieldLabelClass}>Proposal document title (customer-facing)</span>
+              <input
+                name="customerDocumentTitle"
+                type="text"
+                maxLength={QUOTE_FIELD_LIMITS.customerDocumentTitle}
+                defaultValue={initialCustomerDocumentTitle ?? ""}
+                placeholder="Defaults to workspace title"
+                className={controlClass}
+                autoComplete="off"
+              />
+            </label>
+          </div>
         </div>
         <button type="submit" className={primaryButtonClass} disabled={isPending}>
           {isPending ? "Saving…" : "Save quote details"}
         </button>
       </form>
-    </WorkspacePanel>
+    </div>
+  );
+}
+
+function QuoteInternalNotesSidebarForm({
+  quoteId,
+  initialTitle,
+  initialInternalNotes,
+  onMutated,
+}: {
+  quoteId: string;
+  initialTitle: string;
+  initialInternalNotes: string | null;
+  onMutated: () => void;
+}) {
+  const [state, formAction, isPending] = useActionState(
+    updateDraftQuoteDetailsWorkspaceAction.bind(null, quoteId),
+    initialState,
+  );
+
+  const handledKeyRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (state.success && handledKeyRef.current !== state) {
+      handledKeyRef.current = state;
+      toast.success("Internal notes saved.");
+      onMutated();
+    }
+  }, [state, onMutated]);
+
+  return (
+    <section className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+          Internal Quote Notes
+        </h3>
+      </div>
+      <form action={formAction} className="space-y-3">
+        {/* Hidden field to preserve current title */}
+        <input type="hidden" name="title" defaultValue={initialTitle} />
+        
+        <textarea
+          name="internalNotes"
+          rows={6}
+          maxLength={QUOTE_FIELD_LIMITS.internalNotes}
+          defaultValue={initialInternalNotes ?? ""}
+          placeholder="Add internal context for the team... (staff-only)"
+          className={`${controlClass} text-xs`}
+        />
+        <button type="submit" className={`${secondaryButtonClass} w-full justify-center`} disabled={isPending}>
+          {isPending ? "Saving…" : "Save Notes"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function IntakeReferencePopover({ notes }: { notes: string | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(notes);
+
+  if (!notes) return null;
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="text-[9px] font-bold uppercase tracking-wider text-accent hover:text-accent/80 underline decoration-accent/30 underline-offset-2 transition-colors ml-2"
+      >
+        View Intake
+      </button>
+      {isOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setIsOpen(false)} 
+          />
+          <div className="absolute right-0 top-6 z-50 w-72 rounded-xl border border-border bg-surface p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="size-3 text-accent" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-foreground">Intake Context</span>
+              </div>
+              <button onClick={() => setIsOpen(false)}>
+                <X className="size-3 text-foreground-subtle hover:text-foreground" />
+              </button>
+            </div>
+            
+            {isPublicIntake ? (
+              <div className="space-y-3">
+                {parsedFields.map((field) => (
+                  <div key={field.label} className="space-y-0.5">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-foreground-subtle">
+                      {field.label}
+                    </p>
+                    <p className="text-xs text-foreground leading-tight">
+                      {field.value}
+                    </p>
+                  </div>
+                ))}
+                <div className="border-t border-border pt-2">
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-foreground-subtle mb-1">Raw Notes</p>
+                  <p className="text-[10px] italic text-foreground-muted leading-relaxed">
+                    &ldquo;{cleanNotes}&rdquo;
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs italic text-foreground-muted leading-relaxed">
+                &ldquo;{notes}&rdquo;
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -217,11 +289,13 @@ function AddLineItemForm({
   autoFocus,
   onSuccess,
   onCancel,
+  leadNotes,
 }: {
   quoteId: string;
   autoFocus: boolean;
   onSuccess: () => void;
   onCancel: () => void;
+  leadNotes: string | null;
 }) {
   const [state, formAction, isPending] = useActionState(
     addQuoteLineItemWorkspaceAction.bind(null, quoteId),
@@ -305,7 +379,10 @@ function AddLineItemForm({
       </div>
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Staff-only line notes (optional)</span>
+          <div className="flex items-center justify-between">
+            <span className={fieldLabelClass}>Line-specific execution notes (optional)</span>
+            <IntakeReferencePopover notes={leadNotes} />
+          </div>
           <textarea
             name="internalNotes"
             rows={2}
@@ -337,11 +414,13 @@ function EditLineItemForm({
   line,
   onSuccess,
   onCancel,
+  leadNotes,
 }: {
   quoteId: string;
   line: QuoteLineItemPayload;
   onSuccess: () => void;
   onCancel: () => void;
+  leadNotes: string | null;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateQuoteLineItemWorkspaceAction.bind(null, quoteId, line.id),
@@ -404,7 +483,10 @@ function EditLineItemForm({
       </div>
       <div>
         <label className="block">
-          <span className={fieldLabelClass}>Staff-only line notes (optional)</span>
+          <div className="flex items-center justify-between">
+            <span className={fieldLabelClass}>Line-specific execution notes (optional)</span>
+            <IntakeReferencePopover notes={leadNotes} />
+          </div>
           <textarea
             name="internalNotes"
             rows={2}
@@ -486,7 +568,7 @@ export type QuoteAuthoringSurfaceProps = {
   initialTitle: string;
   initialInternalNotes: string | null;
   initialCustomerDocumentTitle: string | null;
-  hasLeadNotes: boolean;
+  lead: QuoteWorkspaceLead | null;
   lineItems: readonly QuoteLineItemPayload[];
   subtotalCents: number;
   totalCents: number;
@@ -521,7 +603,7 @@ export function QuoteAuthoringSurface({
   initialTitle,
   initialInternalNotes,
   initialCustomerDocumentTitle,
-  hasLeadNotes,
+  lead,
   lineItems,
   subtotalCents,
   totalCents,
@@ -539,6 +621,10 @@ export function QuoteAuthoringSurface({
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [autoFocusAdd, setAutoFocusAdd] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showRawIntake, setShowRawIntake] = useState(false);
+
+  const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead?.notes ?? null);
 
   const handleGeneratePlan = async (lineId: string) => {
     setIsGenerating(lineId);
@@ -586,79 +672,27 @@ export function QuoteAuthoringSurface({
 
   return (
     <div className="@container">
-      <QuoteDraftDetailsForm
-        quoteId={quoteId}
-        initialTitle={initialTitle}
-        initialInternalNotes={initialInternalNotes}
-        initialCustomerDocumentTitle={initialCustomerDocumentTitle}
-        hasLeadNotes={hasLeadNotes}
-        onMutated={onMutated}
-      />
-
-      <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-        <SectionHeading
-          title="Line items"
-          description="Each row is commercial scope and pricing first. Internal draft execution and planning stay under each line."
-          actions={
-            !isAddOpen ? (
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                onClick={() => {
-                  setIsAddOpen(true);
-                  setAutoFocusAdd(true);
-                }}
-              >
-                Add line item
-              </button>
-            ) : null
-          }
-        />
-
-        <div className="mb-5 grid gap-3 grid-cols-2 @lg:grid-cols-3">
-          <SignalCard
-            label="Subtotal"
-            value={formatMoneyCents(subtotalCents)}
-            hint="Sum of line totals."
-          />
-          <SignalCard
-            label="Total"
-            value={formatMoneyCents(totalCents)}
-            hint="Same as subtotal for now."
-          />
-          <SignalCard
-            label="Lines"
-            value={String(lineCount)}
-            hint="Persisted rows."
-          />
-        </div>
-
-        {isAddOpen && (
-          <div className="mb-6">
-            <AddLineItemForm
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        {/* Main Content Area */}
+        <div className="flex-1 min-w-0 space-y-6">
+          <WorkspacePanel padding="none" className="border-none bg-transparent shadow-none ring-0">
+            <QuoteDraftDetailsForm
               quoteId={quoteId}
-              autoFocus={autoFocusAdd}
-              onSuccess={handleAddSuccess}
-              onCancel={() => {
-                setIsAddOpen(false);
-                setAutoFocusAdd(false);
-              }}
+              initialTitle={initialTitle}
+              initialCustomerDocumentTitle={initialCustomerDocumentTitle}
+              onMutated={onMutated}
             />
-          </div>
-        )}
+          </WorkspacePanel>
 
-        {lineCount === 0 ? (
-          <div className="mt-6">
-            <EmptyState
-              icon={ListOrdered}
-              title="No line items on this quote yet"
-              description="This draft quote has no line items. Add custom scope or copy reusable scope from the Scope Library."
-            >
-              <div className="flex flex-wrap gap-2">
-                {!isAddOpen && (
+          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+            <SectionHeading
+              title="Line items"
+              description="Each row is commercial scope and pricing first. Internal draft execution and planning stay under each line."
+              actions={
+                !isAddOpen ? (
                   <button
                     type="button"
-                    className={primaryButtonClass}
+                    className={secondaryButtonClass}
                     onClick={() => {
                       setIsAddOpen(true);
                       setAutoFocusAdd(true);
@@ -666,7 +700,153 @@ export function QuoteAuthoringSurface({
                   >
                     Add line item
                   </button>
-                )}
+                ) : null
+              }
+            />
+
+            <div className="mb-5 grid gap-3 grid-cols-2 @lg:grid-cols-3">
+              <SignalCard
+                label="Subtotal"
+                value={formatMoneyCents(subtotalCents)}
+                hint="Sum of line totals."
+              />
+              <SignalCard
+                label="Total"
+                value={formatMoneyCents(totalCents)}
+                hint="Same as subtotal for now."
+              />
+              <SignalCard
+                label="Lines"
+                value={String(lineCount)}
+                hint="Persisted rows."
+              />
+            </div>
+
+            {isAddOpen && (
+              <div className="mb-6">
+                <AddLineItemForm
+                  quoteId={quoteId}
+                  autoFocus={autoFocusAdd}
+                  onSuccess={handleAddSuccess}
+                  onCancel={() => {
+                    setIsAddOpen(false);
+                    setAutoFocusAdd(false);
+                  }}
+                  leadNotes={lead?.notes ?? null}
+                />
+              </div>
+            )}
+
+            {lineCount === 0 ? (
+              <div className="mt-6">
+                <EmptyState
+                  icon={ListOrdered}
+                  title="No line items on this quote yet"
+                  description="This draft quote has no line items. Add custom scope or copy reusable scope from the Scope Library."
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {!isAddOpen && (
+                      <button
+                        type="button"
+                        className={primaryButtonClass}
+                        onClick={() => {
+                          setIsAddOpen(true);
+                          setAutoFocusAdd(true);
+                        }}
+                      >
+                        Add line item
+                      </button>
+                    )}
+                    <SavedLineItemPickerDialog
+                      quoteId={quoteId}
+                      templates={[...lineItemTemplates]}
+                      onApplied={onMutated}
+                      closeOnApply={false}
+                      triggerVariant="compact"
+                      requestOpen={shouldOpenScopeLibraryPicker}
+                      onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}
+                    />
+                  </div>
+                </EmptyState>
+              </div>
+            ) : (
+              <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-surface">
+                {lineItems.map((line) => {
+                  const isEditing = editingLineId === line.id;
+                  return (
+                    <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {line.description}
+                          </p>
+                          <p className="mt-0.5 text-[0.7rem] text-foreground-subtle tabular-nums">
+                            {line.quantityDisplay} ×{" "}
+                            {formatMoneyCents(line.unitAmountCents)} ·{" "}
+                            <span className="font-medium text-foreground">
+                              {formatMoneyCents(line.lineTotalCents)}
+                            </span>
+                          </p>
+                          <QuoteLineDraftExecutionSummary
+                            quoteId={quoteId}
+                            line={line}
+                            isExecutionEditable
+                            draftTasks={draftTasksByLineId[line.id] ?? []}
+                            reusableOptions={reusableTaskOptions}
+                            stages={stages}
+                          />
+                        </div>
+                        {!isEditing && (
+                          <div className="flex shrink-0 flex-col items-end gap-2 @lg:flex-row @lg:items-center">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className={secondaryButtonClass}
+                                onClick={() => setEditingLineId(line.id)}
+                              >
+                                Edit
+                              </button>
+                              <DeleteLineItemForm
+                                quoteId={quoteId}
+                                lineId={line.id}
+                                onSuccess={onMutated}
+                              />
+                            </div>
+                            {(draftTasksByLineId[line.id]?.length ?? 0) === 0 && (
+                              <button
+                                type="button"
+                                disabled={isGenerating === line.id}
+                                onClick={() => handleGeneratePlan(line.id)}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                              >
+                                {isGenerating === line.id ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Sparkles className="size-3" />
+                                )}
+                                {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {isEditing && (
+                        <EditLineItemForm
+                          quoteId={quoteId}
+                          line={line}
+                          onSuccess={handleEditSuccess}
+                          onCancel={() => setEditingLineId(null)}
+                          leadNotes={lead?.notes ?? null}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {lineCount > 0 && (
+              <div className="mt-4">
                 <SavedLineItemPickerDialog
                   quoteId={quoteId}
                   templates={[...lineItemTemplates]}
@@ -677,106 +857,98 @@ export function QuoteAuthoringSurface({
                   onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}
                 />
               </div>
-            </EmptyState>
+            )}
+          </WorkspacePanel>
+
+          <div className="mt-4 pt-1">
+            <Link
+              href={`${quoteHref}#line-items`}
+              className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              Open full quote page for advanced editing
+              <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
+            </Link>
           </div>
-        ) : (
-          <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-surface">
-            {lineItems.map((line) => {
-              const isEditing = editingLineId === line.id;
-              return (
-                <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {line.description}
-                      </p>
-                      <p className="mt-0.5 text-[0.7rem] text-foreground-subtle tabular-nums">
-                        {line.quantityDisplay} ×{" "}
-                        {formatMoneyCents(line.unitAmountCents)} ·{" "}
-                        <span className="font-medium text-foreground">
-                          {formatMoneyCents(line.lineTotalCents)}
-                        </span>
-                      </p>
-                      <QuoteLineDraftExecutionSummary
-                        quoteId={quoteId}
-                        line={line}
-                        isExecutionEditable
-                        draftTasks={draftTasksByLineId[line.id] ?? []}
-                        reusableOptions={reusableTaskOptions}
-                        stages={stages}
-                      />
-                    </div>
-                    {!isEditing && (
-                      <div className="flex shrink-0 flex-col items-end gap-2 @lg:flex-row @lg:items-center">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className={secondaryButtonClass}
-                            onClick={() => setEditingLineId(line.id)}
-                          >
-                            Edit
-                          </button>
-                          <DeleteLineItemForm
-                            quoteId={quoteId}
-                            lineId={line.id}
-                            onSuccess={onMutated}
-                          />
-                        </div>
-                        {(draftTasksByLineId[line.id]?.length ?? 0) === 0 && (
-                          <button
-                            type="button"
-                            disabled={isGenerating === line.id}
-                            onClick={() => handleGeneratePlan(line.id)}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                          >
-                            {isGenerating === line.id ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              <Sparkles className="size-3" />
-                            )}
-                            {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
-                          </button>
+        </div>
+
+        {/* Sidebar: Intake Reference & Internal Notes */}
+        <div className={`w-full lg:w-80 shrink-0 transition-all duration-300 ${isSidebarOpen ? "opacity-100" : "lg:w-10 opacity-50"}`}>
+          <div className="sticky top-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle hover:text-foreground transition-colors"
+              >
+                {isSidebarOpen ? (
+                  <>Hide Reference <X className="size-3" /></>
+                ) : (
+                  <><Sparkles className="size-3" /> Show Reference</>
+                )}
+              </button>
+            </div>
+
+            {isSidebarOpen && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                {/* Intake Reference Block */}
+                <section className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-3.5 text-accent" />
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Intake Reference
+                    </h3>
+                  </div>
+
+                  {isPublicIntake ? (
+                    <div className="space-y-4">
+                      {parsedFields.map((field) => {
+                        const isHighSignal = field.label === "Service Location Address" || field.label === "Request Type";
+                        return (
+                          <div key={field.label} className="space-y-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-foreground-subtle">
+                              {field.label}
+                            </p>
+                            <p className={`text-xs leading-tight ${isHighSignal ? "font-bold text-foreground" : "text-foreground-muted"}`}>
+                              {field.value}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      
+                      <div className="border-t border-border pt-2">
+                        <button
+                          onClick={() => setShowRawIntake(!showRawIntake)}
+                          className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground transition-colors"
+                        >
+                          <ChevronDown className={`size-2.5 transition-transform ${showRawIntake ? "rotate-180" : ""}`} />
+                          {showRawIntake ? "Hide raw notes" : "View raw notes"}
+                        </button>
+                        {showRawIntake && (
+                          <p className="mt-2 text-[10px] italic text-foreground-muted leading-relaxed">
+                            &ldquo;{cleanNotes}&rdquo;
+                          </p>
                         )}
                       </div>
-                    )}
-                  </div>
-                  {isEditing && (
-                    <EditLineItemForm
-                      quoteId={quoteId}
-                      line={line}
-                      onSuccess={handleEditSuccess}
-                      onCancel={() => setEditingLineId(null)}
-                    />
+                    </div>
+                  ) : lead?.notes ? (
+                    <p className="text-xs italic text-foreground-muted leading-relaxed">
+                      &ldquo;{lead.notes}&rdquo;
+                    </p>
+                  ) : (
+                    <p className="text-xs italic text-foreground-subtle">No intake notes available.</p>
                   )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                </section>
 
-        {lineCount > 0 && (
-          <div className="mt-4">
-            <SavedLineItemPickerDialog
-              quoteId={quoteId}
-              templates={[...lineItemTemplates]}
-              onApplied={onMutated}
-              closeOnApply={false}
-              triggerVariant="compact"
-              requestOpen={shouldOpenScopeLibraryPicker}
-              onRequestOpenConsumed={onScopeLibraryPickerOpenConsumed}
-            />
+                {/* Internal Quote Notes Block */}
+                <QuoteInternalNotesSidebarForm
+                  quoteId={quoteId}
+                  initialTitle={initialTitle}
+                  initialInternalNotes={initialInternalNotes}
+                  onMutated={onMutated}
+                />
+              </div>
+            )}
           </div>
-        )}
-      </WorkspacePanel>
-
-      <div className="mt-4 pt-1">
-        <Link
-          href={`${quoteHref}#line-items`}
-          className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
-        >
-          Open full quote page for advanced editing
-          <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
-        </Link>
+        </div>
       </div>
     </div>
   );

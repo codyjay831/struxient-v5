@@ -1,7 +1,7 @@
 "use client";
 
 import { LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
-import { formatLeadChannel, formatLeadStatus, leadStatusBadgeTone } from "@/lib/lead-display";
+import { formatLeadChannel, formatLeadStatus, leadStatusBadgeTone, parseIntakeNotes } from "@/lib/lead-display";
 import { LeadStatus, QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { resolveLeadCommercialProgressActionHref } from "@/lib/lead-commercial-progress";
@@ -21,7 +21,8 @@ import {
   Pencil,
   X,
   ChevronRight,
-  Loader2
+  Loader2,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 
@@ -46,7 +47,10 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
+  const [showRawNotes, setShowRawNotes] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
+
+  const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead.notes);
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
@@ -279,9 +283,40 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                 <FileText className="size-4 text-foreground-subtle" />
                 Source: {formatLeadChannel(lead.channel)}
               </div>
-              {lead.notes && (
+
+              {isPublicIntake ? (
+                <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+                  {parsedFields.map((field) => (
+                    <div key={field.label} className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                        {field.label}
+                      </p>
+                      <p className="text-sm font-medium leading-tight text-foreground">
+                        {field.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : lead.notes && (
                 <div className="rounded-lg bg-foreground/[0.02] p-3 text-sm italic text-foreground-muted">
                   &ldquo;{lead.notes}&rdquo;
+                </div>
+              )}
+
+              {isPublicIntake && (
+                <div className="border-t border-border pt-2">
+                  <button
+                    onClick={() => setShowRawNotes(!showRawNotes)}
+                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground transition-colors"
+                  >
+                    <ChevronDown className={`size-3 transition-transform ${showRawNotes ? "rotate-180" : ""}`} />
+                    {showRawNotes ? "Hide raw intake" : "View raw intake"}
+                  </button>
+                  {showRawNotes && (
+                    <div className="mt-3 rounded-lg bg-foreground/[0.02] p-3 text-xs italic text-foreground-muted leading-relaxed">
+                      &ldquo;{cleanNotes}&rdquo;
+                    </div>
+                  )}
                 </div>
               )}
             </div>
