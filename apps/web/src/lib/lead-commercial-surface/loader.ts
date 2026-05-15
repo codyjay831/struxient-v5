@@ -17,6 +17,7 @@ export interface LeadCommercialSurfacePayload {
     email: string;
     phone: string;
     notes: string;
+    companyName: string;
     status: LeadStatus;
     channel: LeadChannel;
     createdAt: Date;
@@ -188,6 +189,7 @@ export async function loadLeadCommercialSurface(
       email: projected.email || "",
       phone: projected.phone || "",
       notes: projected.notes || "",
+      companyName: projected.companyName || "",
       status: lead.status,
       channel: lead.channel,
       createdAt: lead.createdAt,

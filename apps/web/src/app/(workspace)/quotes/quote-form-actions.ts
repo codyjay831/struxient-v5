@@ -415,6 +415,7 @@ export async function createQuoteDraftAction(
   const result = await createQuoteDraft({
     title: resolved.data.title,
     customerId: resolved.data.customerId,
+    leadId: resolved.data.leadId,
     internalNotes: resolved.data.internalNotes,
   });
 

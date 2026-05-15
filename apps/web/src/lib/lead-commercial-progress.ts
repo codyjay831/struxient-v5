@@ -545,6 +545,7 @@ export function serializeLeadProgressAction(
     action.kind === "START_QUOTE";
   const opensContactTab =
     action.kind === "ATTACH_OR_CREATE_CUSTOMER" ||
+    action.kind === "RESOLVE_CUSTOMER_CONFLICT" ||
     action.kind === "EDIT_CONTACT_INFO";
   return { href, label: action.label, opensQuoteTab, opensContactTab };
 }

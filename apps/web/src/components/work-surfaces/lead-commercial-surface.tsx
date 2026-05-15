@@ -14,9 +14,10 @@ import {
   FileText, 
   ArrowRight, 
   CheckCircle2,
+  CircleAlert,
+  Search,
   ExternalLink,
   Archive,
-  GitMerge,
   Pencil,
   X,
   ChevronRight,
@@ -25,9 +26,10 @@ import {
 import Link from "next/link";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { archiveLeadInboxAction, linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { LeadCustomerAttachCard } from "@/components/leads/lead-customer-attach-card";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
@@ -42,12 +44,26 @@ export interface LeadCommercialSurfaceProps {
 export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCommercialSurfaceProps) {
   const { lead, customer, linkedQuotes, progress, matchHints } = payload;
   const router = useRouter();
+  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
-  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const customerSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
   }, [lead.id, entryPoint]);
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash === "#customer-link") {
+        customerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        customerSectionRef.current?.focus();
+      }
+    };
+
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   const handleArchive = async () => {
     if (!confirm("Are you sure you want to archive this opportunity?")) return;
@@ -55,20 +71,6 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
     startTransition(async () => {
       const result = await archiveLeadInboxAction(lead.id);
       if (result.success) {
-        router.refresh();
-      } else {
-        alert(result.error);
-      }
-    });
-  };
-
-  const handleMerge = async (customerId: string) => {
-    startTransition(async () => {
-      const formData = new FormData();
-      formData.append("customerId", customerId);
-      const result = await linkLeadToCustomerWorkspaceAction(lead.id, {}, formData);
-      if (result.success) {
-        setShowMergeDialog(false);
         router.refresh();
       } else {
         alert(result.error);
@@ -151,6 +153,122 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
             </div>
           </section>
 
+          {!customer && (
+            <section 
+              id="customer-link" 
+              ref={customerSectionRef}
+              tabIndex={-1}
+              className="space-y-4 scroll-mt-24 outline-none"
+            >
+              <div className="flex items-center gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+                  Customer
+                </h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-sm text-foreground-muted leading-relaxed">
+                  {progress.description}
+                </p>
+
+                {progress.state === "CONFLICT_WITH_EXISTING_CUSTOMER" && (
+                  <div className="rounded-xl border border-warning/30 bg-warning/[0.03] p-4 flex gap-3">
+                    <CircleAlert className="size-5 text-warning shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-foreground">
+                        {progress.label}
+                      </p>
+                      <p className="text-xs text-foreground-muted mt-1">
+                        One or more existing customers match this lead&apos;s contact info. Link to an existing record to avoid duplicates.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {matches.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Suggested Matches ({matches.length})
+                    </p>
+                    <div className="grid gap-2">
+                      {matches.map((candidate) => (
+                        <button
+                          key={candidate.id}
+                          onClick={async () => {
+                            startTransition(async () => {
+                              const formData = new FormData();
+                              formData.append("customerId", candidate.id);
+                              const result = await linkLeadToCustomerWorkspaceAction(lead.id, {}, formData);
+                              if (result.success) {
+                                router.refresh();
+                              } else {
+                                alert(result.error);
+                              }
+                            });
+                          }}
+                          disabled={isPending}
+                          className="w-full text-left p-3 rounded-xl border border-border bg-surface hover:border-accent/40 hover:bg-accent/[0.01] transition-all group disabled:opacity-50"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="text-sm font-bold text-foreground group-hover:text-accent transition-colors">
+                              {candidate.displayName}
+                            </h4>
+                            {isPending ? (
+                              <Loader2 className="size-3.5 animate-spin text-accent" />
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle bg-foreground/[0.04] px-1.5 py-0.5 rounded">
+                                  Match: {candidate.matchOn}
+                                </span>
+                                <ChevronRight className="size-3.5 text-foreground-subtle" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            {candidate.email && (
+                              <p className="text-xs text-foreground-muted flex items-center gap-1">
+                                <Mail className="size-3" /> {candidate.email}
+                              </p>
+                            )}
+                            {candidate.phone && (
+                              <p className="text-xs text-foreground-muted flex items-center gap-1">
+                                <Phone className="size-3" /> {candidate.phone}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Search className="size-3.5 text-foreground-subtle" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                      Find or create customer
+                    </p>
+                  </div>
+                  <LeadCustomerAttachCard
+                    lead={{
+                      id: lead.id,
+                      title: lead.title,
+                      contactName: lead.contactName,
+                      companyName: lead.companyName,
+                      email: lead.email,
+                      phone: lead.phone,
+                      notes: lead.notes,
+                      source: lead.channel,
+                      jobsiteAddressLine: lead.jobsiteAddressLine,
+                    }}
+                    editLeadHref={`/leads/${lead.id}/edit`}
+                    onSuccess={() => router.refresh()}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Request Snapshot */}
           <section className="space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
@@ -180,6 +298,11 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
               {progress.primaryAction ? (
                 <Link 
                   href={resolveLeadCommercialProgressActionHref(progress.primaryAction, { leadId: lead.id })}
+                  title={
+                    progress.state === "CONFLICT_WITH_EXISTING_CUSTOMER"
+                      ? "Resolve the matching customer conflict before starting a quote."
+                      : progress.primaryAction.label
+                  }
                   className="flex w-full items-center justify-between rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-opacity hover:opacity-90 group"
                 >
                   {progress.primaryAction.label}
@@ -193,25 +316,25 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                 <div className="flex flex-col gap-2">
                   <Link 
                     href={`/leads/${lead.id}#customer-link`}
+                    title="Link this opportunity to an existing customer record or create a new one."
+                    onClick={(e) => {
+                      if (pathname === `/leads/${lead.id}`) {
+                        e.preventDefault();
+                        customerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        customerSectionRef.current?.focus();
+                      }
+                    }}
                     className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-bold transition-colors hover:bg-foreground/[0.02]"
                   >
                     Link to Customer
                   </Link>
-                  {matches.length > 0 && (
-                    <button
-                      onClick={() => setShowMergeDialog(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-foreground/[0.02]"
-                    >
-                      <GitMerge className="size-4" />
-                      Merge ({matches.length})
-                    </button>
-                  )}
                 </div>
               )}
 
               <button
                 onClick={handleArchive}
                 disabled={isPending}
+                title="Archive this opportunity to remove it from the active pipeline."
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
               >
                 {isPending ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
@@ -249,55 +372,6 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
           )}
         </div>
       </div>
-
-      {/* Merge Dialog */}
-      {showMergeDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/20 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-foreground">Merge Opportunity</h3>
-                <p className="text-sm text-foreground-muted mt-1">
-                  Existing customers match this record&apos;s contact info.
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowMergeDialog(false)}
-                className="p-2 rounded-full hover:bg-foreground/5 text-foreground-subtle transition-colors"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
-              {matches.map(candidate => (
-                <button
-                  key={candidate.id}
-                  onClick={() => handleMerge(candidate.id)}
-                  disabled={isPending}
-                  className="w-full text-left p-4 rounded-xl border border-border hover:border-accent/40 hover:bg-accent/[0.02] transition-all group disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-bold text-foreground group-hover:text-accent transition-colors">{candidate.displayName}</h4>
-                    {isPending ? <Loader2 className="size-4 animate-spin text-accent" /> : <ChevronRight className="size-4 text-foreground-subtle" />}
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    {candidate.email && <p className="text-xs text-foreground-muted">{candidate.email}</p>}
-                    {candidate.phone && <p className="text-xs text-foreground-muted">{candidate.phone}</p>}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="p-4 bg-foreground/[0.02] border-t border-border flex justify-end gap-3">
-              <button 
-                onClick={() => setShowMergeDialog(false)}
-                className="px-4 py-2 text-sm font-bold text-foreground-subtle hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

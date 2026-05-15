@@ -33,9 +33,42 @@ function ActionLink({
   variant: "primary" | "secondary";
 }) {
   const href = resolveLeadCommercialProgressActionHref(action, { leadId });
+  
+  let title = action.label;
+  switch (action.kind) {
+    case "RESOLVE_CUSTOMER_CONFLICT":
+      title = "Resolve the matching customer conflict before starting a quote.";
+      break;
+    case "ATTACH_OR_CREATE_CUSTOMER":
+      title = "Link this opportunity to an existing customer record or create a new one.";
+      break;
+    case "EDIT_CONTACT_INFO":
+      title = "Complete the identity, contact, and location details to move toward a quote.";
+      break;
+    case "START_QUOTE":
+      title = "Start a new quote draft for this opportunity.";
+      break;
+    case "QUALIFY_INTAKE":
+      title = "Review the intake details and qualify this lead.";
+      break;
+    case "OPEN_DRAFT_QUOTE":
+      title = "Open the current draft quote.";
+      break;
+    case "OPEN_QUOTE":
+      title = "Open the sent quote.";
+      break;
+    case "OPEN_EXECUTION_REVIEW":
+      title = "Review the execution plan for this quote.";
+      break;
+    case "OPEN_JOB":
+      title = "Open the active job.";
+      break;
+  }
+
   return (
     <Link
       href={href}
+      title={title}
       className={variant === "primary" ? primaryActionClass : secondaryActionClass}
     >
       {action.label}
