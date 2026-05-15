@@ -2,6 +2,9 @@
 
 import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { AIService } from "@/lib/ai/ai-service";
+import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
@@ -517,4 +520,109 @@ export async function moveLineItemTemplateTaskAction(
   }
 
   redirect(lineItemTemplateDefaultExecutionPath(tid));
+}
+
+export async function generateLineItemTemplateAIProposalAction(
+  lineItemTemplateId: string,
+  userInstructions?: string,
+): Promise<{ error?: string; proposal?: AILibraryProposal }> {
+  const tid = lineItemTemplateId.trim();
+  if (!tid) {
+    return { error: "Missing saved line item." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  try {
+    const preset = await db.lineItemTemplate.findFirst({
+      where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
+      select: { description: true },
+    });
+
+    if (!preset) {
+      return { error: "Line item template not found." };
+    }
+
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    // TODO: Fetch existing signals for vocabulary normalization
+    const existingSignals: string[] = [];
+
+    const proposal = await AIService.generateLibraryExecutionPlan({
+      templateId: tid,
+      description: preset.description,
+      organizationName: ctx.organizationName,
+      existingStages: stages,
+      existingSignals,
+      userInstructions,
+    });
+
+    return { proposal };
+  } catch (e) {
+    console.error("Failed to generate AI execution plan", e);
+    return { error: "Failed to generate AI execution plan." };
+  }
+}
+
+export async function applyLineItemTemplateAIProposalAction(
+  lineItemTemplateId: string,
+  proposal: AILibraryProposal,
+): Promise<{ error?: string; success?: boolean }> {
+  const tid = lineItemTemplateId.trim();
+  if (!tid) {
+    return { error: "Missing saved line item." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  try {
+    await db.$transaction(async (tx) => {
+      const preset = await tx.lineItemTemplate.findFirst({
+        where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
+        select: { id: true },
+      });
+
+      if (!preset) {
+        throw new Error("Line item template not found.");
+      }
+
+      // Create tasks from proposal
+      for (const pTask of proposal.tasks) {
+        const sortOrder = await nextSortOrderInStage(tx, tid, pTask.stageId ?? null);
+
+        await tx.lineItemTemplateTask.create({
+          data: {
+            lineItemTemplateId: tid,
+            sourceType: LineItemTemplateTaskSource.CUSTOM,
+            title: pTask.title,
+            category: pTask.category,
+            instructions: pTask.instructions,
+            stageId: pTask.stageId ?? null,
+            providesSignals: pTask.providesSignals,
+            requiresSignals: pTask.requiresSignals,
+            hardSignal: pTask.hardSignal,
+            requirementsJson: {
+              checklist: pTask.checklist.map((c) => ({ id: crypto.randomUUID(), label: c.label })),
+            } as Prisma.InputJsonValue,
+            partsRequiredJson: {
+              resources: pTask.resources.map((r) => ({ id: crypto.randomUUID(), ...r })),
+            } as Prisma.InputJsonValue,
+            sortOrder,
+          },
+        });
+      }
+
+      await touchLineItemTemplateUpdatedAt(tx, tid, ctx.organizationId);
+    });
+
+    revalidatePath(lineItemTemplateDefaultExecutionPath(tid));
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to apply AI execution plan", e);
+    return { error: "Failed to apply AI execution plan." };
+  }
 }

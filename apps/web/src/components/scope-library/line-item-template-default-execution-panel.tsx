@@ -8,6 +8,8 @@ import {
   deleteLineItemTemplateTaskAction,
   moveLineItemTemplateTaskAction,
   updateLineItemTemplateTaskAction,
+  generateLineItemTemplateAIProposalAction,
+  applyLineItemTemplateAIProposalAction,
   type LineItemTemplateExecutionFormState,
 } from "@/app/(workspace)/settings/scope-library/line-item-template-execution-actions";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
@@ -27,8 +29,11 @@ import type {
   DefaultExecutionTaskRow,
   ReusableTaskPickerOption,
 } from "@/lib/line-item-template-default-execution-display";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Sparkles } from "lucide-react";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
+import { AILibraryProposalReviewPanel } from "./ai-library-proposal-review-panel";
+import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -400,19 +405,66 @@ export function LineItemTemplateDefaultExecutionPanel({
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
 }) {
+  const [proposal, setProposal] = useState<AILibraryProposal | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
   const totalTasks = stagesWithTasks.reduce((n, s) => n + s.tasks.length, 0);
+
+  const handleGenerateAI = async () => {
+    setAiGenerating(true);
+    try {
+      const result = await generateLineItemTemplateAIProposalAction(lineItemTemplateId);
+      if (result.error) {
+        toast.error(result.error);
+      } else if (result.proposal) {
+        setProposal(result.proposal);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate AI proposal.");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handleApplyProposal = async (approvedProposal: AILibraryProposal) => {
+    const result = await applyLineItemTemplateAIProposalAction(lineItemTemplateId, approvedProposal);
+    if (result.error) {
+      throw new Error(result.error);
+    }
+  };
 
   return (
     <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-      <SectionHeading
-        title="How this work usually runs"
-        description={`Optional default execution for “${presetDescription}”.`}
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+        <SectionHeading
+          title="How this work usually runs"
+          description={`Optional default execution for “${presetDescription}”.`}
+        />
+        <button
+          type="button"
+          onClick={handleGenerateAI}
+          disabled={aiGenerating}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          <Sparkles className="size-4" />
+          {aiGenerating ? "Generating..." : "Generate with AI"}
+        </button>
+      </div>
+
       <AddTaskSection 
         lineItemTemplateId={lineItemTemplateId} 
         reusableOptions={reusableOptions} 
         stages={stages}
       />
+
+      {proposal && (
+        <AILibraryProposalReviewPanel 
+          proposal={proposal}
+          stages={stages}
+          onClose={() => setProposal(null)}
+          onApply={handleApplyProposal}
+        />
+      )}
 
       <div className="mt-8">
         {totalTasks === 0 ? (

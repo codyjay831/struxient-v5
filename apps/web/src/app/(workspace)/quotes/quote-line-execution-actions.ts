@@ -641,13 +641,13 @@ export async function generateQuoteLineExecutionPlanAction(
             requiresSignals: gTask.requiresSignals,
             hardSignal: false,
             requirementsJson: {
-              checklist: gTask.checklist.map(label => ({
+              checklist: gTask.checklist.map((c: { label: string }) => ({
                 id: crypto.randomUUID(),
-                label,
+                label: c.label,
               })),
             } as Prisma.InputJsonValue,
             partsRequiredJson: {
-              resources: gTask.resources.map(r => ({
+              resources: gTask.resources.map((r: { name: string; quantity: number; isEquipment: boolean }) => ({
                 id: crypto.randomUUID(),
                 ...r,
               })),
