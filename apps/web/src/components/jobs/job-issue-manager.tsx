@@ -5,6 +5,7 @@ import {
   JobIssueSeverity,
   JobIssueStatus,
   JobIssueType,
+  JobRecoveryFlowStatus,
   JobTaskStatus,
 } from "@prisma/client";
 import {
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   createJobIssueAction,
+  forceResolveJobIssueAction,
   resolveJobIssueAction,
 } from "@/app/(workspace)/jobs/job-issue-actions";
 import { resolveIssueAndResumeAction } from "@/app/(workspace)/jobs/recovery-actions";
@@ -183,19 +185,49 @@ function IssueCard({
   const [isBuildingFlow, setIsBuildingFlow] = useState(false);
   const [note, setNote] = useState("");
   const [isResuming, setIsResuming] = useState(false);
+  const [isForceResolving, setIsForceResolving] = useState(false);
 
   const hasRecoveryFlow = !!issue.recoveryFlow;
   const recoveryTasks = issue.recoveryFlow?.tasks || [];
-  const allRecoveryTasksDone = recoveryTasks.length > 0 && recoveryTasks.every(t => t.status === JobTaskStatus.DONE);
+  const allRecoveryTasksDone =
+    recoveryTasks.length > 0 &&
+    recoveryTasks.every((t) => t.status === JobTaskStatus.DONE);
+  const isOpenRecoveryFlow =
+    !!issue.recoveryFlow &&
+    (issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT ||
+      issue.recoveryFlow.status === JobRecoveryFlowStatus.ACTIVE);
+  const recoveryIncomplete =
+    isOpenRecoveryFlow &&
+    (recoveryTasks.length === 0 ||
+      recoveryTasks.some((t) => t.status !== JobTaskStatus.DONE));
 
   const handleResume = async () => {
     setIsResuming(true);
     try {
-      await resolveIssueAndResumeAction(issue.id);
+      await resolveIssueAndResumeAction(issue.id, note || undefined);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to resume path");
     } finally {
       setIsResuming(false);
+    }
+  };
+
+  const handleForceResolve = async () => {
+    if (
+      !confirm(
+        "Force resolve will cancel the recovery flow without completing its steps. The issue will be marked resolved. Continue?",
+      )
+    ) {
+      return;
+    }
+    setIsForceResolving(true);
+    try {
+      await forceResolveJobIssueAction({ issueId: issue.id, resolutionNote: note || undefined });
+      setIsResolving(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to force resolve issue");
+    } finally {
+      setIsForceResolving(false);
     }
   };
 
@@ -343,7 +375,47 @@ function IssueCard({
                   Create Recovery Path
                 </button>
               )}
-              {!isResolving ? (
+              {recoveryIncomplete ? (
+                <div className="max-w-xs text-right">
+                  <p className="mb-2 text-[0.65rem] leading-relaxed text-foreground-muted">
+                    Complete recovery steps, then use Resume. Or force resolve to cancel recovery.
+                  </p>
+                  {!isResolving ? (
+                    <button
+                      onClick={() => setIsResolving(true)}
+                      disabled={isPending || isForceResolving}
+                      className="rounded-md border border-danger/30 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-danger transition-colors hover:border-danger/50 hover:bg-danger/[0.04] disabled:opacity-50"
+                    >
+                      Force resolve
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Why are you cancelling recovery?"
+                        className="w-48 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
+                        rows={2}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setIsResolving(false)}
+                          className="text-[0.65rem] font-medium text-foreground-muted hover:text-foreground"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleForceResolve}
+                          disabled={isPending || isForceResolving}
+                          className="rounded bg-danger px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-background hover:bg-danger/90 disabled:opacity-50"
+                        >
+                          {isForceResolving ? "Saving..." : "Confirm force"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : !isResolving ? (
                 <button
                   onClick={() => setIsResolving(true)}
                   disabled={isPending}

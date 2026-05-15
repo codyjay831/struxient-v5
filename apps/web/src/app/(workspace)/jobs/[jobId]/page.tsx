@@ -25,8 +25,15 @@ import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobVisitManager } from "@/components/jobs/job-visit-manager";
 import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobEventButton } from "@/components/jobs/job-event-button";
-import { JobIssueStatus } from "@prisma/client";
+import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import { getLiveSignals } from "@/lib/signal-bus";
+import {
+  attachScheduleAnchorsToRequirements,
+  buildPaymentDueContextFromJob,
+  deriveTaskPaymentHold,
+  getUnsettledEffectivelyDueRequirements,
+  loadScheduleAnchorsByIds,
+} from "@/lib/job-payment-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -133,8 +140,16 @@ export default async function JobDetailPage({
             id: true,
             title: true,
             sortOrder: true,
+            stageId: true,
             providesSignals: true,
             requiresSignals: true,
+            issues: {
+              where: {
+                status: JobIssueStatus.OPEN,
+                severity: JobIssueSeverity.BLOCKS_WORK,
+              },
+              select: { id: true, status: true, severity: true },
+            },
             tasks: {
               orderBy: [{ sortOrder: "asc" }],
               select: {
@@ -150,8 +165,9 @@ export default async function JobDetailPage({
                 requiresSignals: true,
                 hardSignal: true,
                 recoveryFlow: {
-                  select: { jobIssueId: true }
+                  select: { jobIssueId: true },
                 },
+                recoveryFlowId: true,
                 attachments: {
                   where: { status: "READY" },
                   select: {
@@ -199,6 +215,7 @@ export default async function JobDetailPage({
             status: true,
             notes: true,
             requiredBeforeStageId: true,
+            sourcePaymentScheduleItemId: true,
             requiredBeforeStage: { select: { title: true, sortOrder: true } },
             paidAt: true,
             waivedAt: true,
@@ -262,6 +279,33 @@ export default async function JobDetailPage({
 
   const totalTasks = job.stages.reduce((sum, s) => sum + s.tasks.length, 0);
   const activatedLabel = new Date(job.activatedAt).toLocaleString();
+
+  const paymentScheduleAnchors = await loadScheduleAnchorsByIds(
+    job.paymentRequirements.map((r) => r.sourcePaymentScheduleItemId),
+  );
+  const paymentRequirementsWithAnchors = attachScheduleAnchorsToRequirements(
+    job.paymentRequirements,
+    paymentScheduleAnchors,
+  );
+
+  const paymentDueContext = buildPaymentDueContextFromJob({
+    status: job.status,
+    stages: job.stages.map((s) => ({
+      id: s.id,
+      sortOrder: s.sortOrder,
+      stageId: s.stageId,
+      title: s.title,
+      tasks: s.tasks.map((t) => ({
+        status: t.status,
+        recoveryFlowId: t.recoveryFlowId,
+      })),
+    })),
+    paymentRequirements: paymentRequirementsWithAnchors,
+  });
+  const effectivelyDueRequirements = getUnsettledEffectivelyDueRequirements(
+    paymentRequirementsWithAnchors,
+    paymentDueContext,
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -398,8 +442,9 @@ export default async function JobDetailPage({
 
       <JobPaymentManager
         jobId={job.id}
-        initialRequirements={job.paymentRequirements}
+        initialRequirements={paymentRequirementsWithAnchors}
         stages={job.stages}
+        effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
       />
 
       <JobVisitManager
@@ -459,6 +504,11 @@ export default async function JobDetailPage({
                 ) : (
                   <ul className="space-y-3">
                     {stage.tasks.map((task) => {
+                      const paymentHold = deriveTaskPaymentHold(
+                        stage.id,
+                        paymentRequirementsWithAnchors,
+                        paymentDueContext,
+                      );
                       return (
                         <li key={task.id}>
                           <JobTaskCard
@@ -471,8 +521,11 @@ export default async function JobDetailPage({
                             jobsiteAddressLine={jobsiteAddressLine}
                             customerId={jobCustomerId}
                             leadEditHref={jobLeadEditHref}
-                            task={{ ...task, paymentBlockers: [] }}
+                            task={task}
                             liveSignals={liveSignals}
+                            stageRequiresSignals={stage.requiresSignals}
+                            stageIssues={stage.issues}
+                            paymentHold={paymentHold}
                           />
                         </li>
                       );

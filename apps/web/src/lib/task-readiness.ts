@@ -21,6 +21,17 @@ export type TaskCompletionRequirements = {
   checklist?: ChecklistItem[];
 };
 
+export type TaskIssueRef = {
+  id: string;
+  status: JobIssueStatus;
+  severity: JobIssueSeverity;
+};
+
+export type TaskStageContext = {
+  requiresSignals: string[];
+  issues: TaskIssueRef[];
+};
+
 export type TaskReadinessInput = {
   status: JobTaskStatus;
   completedAt: Date | null;
@@ -29,20 +40,52 @@ export type TaskReadinessInput = {
   attachments: { id: string }[];
   requiresSignals: string[];
   recoveryFlowId?: string | null;
-  issues: {
-    id: string;
-    status: JobIssueStatus;
-    severity: JobIssueSeverity;
-  }[];
-  stage?: {
-    requiresSignals: string[];
-    issues: {
-      id: string;
-      status: JobIssueStatus;
-      severity: JobIssueSeverity;
-    }[];
-  } | null;
+  issues: TaskIssueRef[];
+  stage?: TaskStageContext | null;
 };
+
+/** Minimal task fields accepted from Prisma includes or flat UI payloads. */
+export type TaskReadinessSource = {
+  status: JobTaskStatus;
+  completedAt?: Date | null;
+  completionNote?: string | null;
+  completionRequirementsJson?: unknown;
+  attachments?: { id: string }[];
+  requiresSignals?: string[];
+  recoveryFlowId?: string | null;
+  issues?: TaskIssueRef[];
+  /** Prisma relation name — stage context is usually passed via the second argument. */
+  jobStage?: {
+    requiresSignals?: string[];
+    issues?: TaskIssueRef[];
+  };
+};
+
+/**
+ * Maps Prisma task rows or UI payloads into the canonical shape for deriveTaskState.
+ */
+export function toTaskReadinessInput(
+  task: TaskReadinessSource,
+  stageContext: TaskStageContext,
+): TaskReadinessInput {
+  return {
+    status: task.status,
+    completedAt: task.completedAt ?? null,
+    completionNote: task.completionNote ?? null,
+    completionRequirementsJson: task.completionRequirementsJson ?? {},
+    attachments: task.attachments ?? [],
+    requiresSignals: task.requiresSignals ?? [],
+    recoveryFlowId: task.recoveryFlowId ?? null,
+    issues: task.issues ?? [],
+    stage: {
+      requiresSignals:
+        stageContext.requiresSignals ??
+        task.jobStage?.requiresSignals ??
+        [],
+      issues: stageContext.issues ?? task.jobStage?.issues ?? [],
+    },
+  };
+}
 
 /**
  * Derives the operational state of a task based on its facts, blockers, and signals.

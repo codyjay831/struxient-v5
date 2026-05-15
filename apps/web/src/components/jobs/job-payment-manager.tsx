@@ -35,11 +35,14 @@ export function JobPaymentManager({
   jobId,
   initialRequirements,
   stages,
+  effectivelyDueRequirementIds = [],
 }: {
   jobId: string;
   initialRequirements: PaymentRequirement[];
   stages: Pick<JobStage, "id" | "title">[];
+  effectivelyDueRequirementIds?: string[];
 }) {
+  const effectivelyDueSet = new Set(effectivelyDueRequirementIds);
   const [isPending] = useTransition();
   const [showForm, setShowForm] = useState(false);
   const [showHistorical, setShowHistorical] = useState(false);
@@ -73,7 +76,12 @@ export function JobPaymentManager({
         ) : (
           <div className="space-y-3">
             {activeRequirements.map((req) => (
-              <RequirementCard key={req.id} requirement={req} isPending={isPending} />
+              <RequirementCard
+                key={req.id}
+                requirement={req}
+                isPending={isPending}
+                isEffectivelyDue={effectivelyDueSet.has(req.id)}
+              />
             ))}
           </div>
         )}
@@ -121,9 +129,11 @@ export function JobPaymentManager({
 function RequirementCard({
   requirement,
   isPending,
+  isEffectivelyDue = false,
 }: {
   requirement: PaymentRequirement;
   isPending: boolean;
+  isEffectivelyDue?: boolean;
 }) {
   const [, startTransition] = useTransition();
 
@@ -162,10 +172,10 @@ function RequirementCard({
               label={formatJobPaymentStatus(requirement.status)}
               tone={jobPaymentStatusBadgeTone(requirement.status)}
             />
-            {requirement.status === "DUE" && (
+            {isEffectivelyDue && (
               <span className="flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger">
                 <Ban className="size-2.5" />
-                Blocking work
+                {requirement.status === "PENDING" ? "Due (scheduled)" : "Blocking work"}
               </span>
             )}
           </div>

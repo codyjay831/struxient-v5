@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
-import { deriveTaskState, type TaskCompletionRequirements, type TaskReadinessInput } from "@/lib/task-readiness";
+import { deriveTaskState, toTaskReadinessInput, type TaskCompletionRequirements } from "@/lib/task-readiness";
 import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
+import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
 
 export type JobTaskActionState = {
   error?: string;
@@ -56,8 +57,12 @@ export async function completeJobTaskAction(
 
     // 1. Check readiness using Signal Bus
     const liveSignals = await getLiveSignals(task.jobId);
-    const state = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
-      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+    const readinessInput = toTaskReadinessInput(task, {
+      requiresSignals: task.jobStage.requiresSignals,
+      issues: task.jobStage.issues,
+    });
+    const state = deriveTaskState(readinessInput, liveSignals, {
+      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
     });
 
     if (state === "BLOCKED_BY_ISSUE") {
@@ -133,6 +138,8 @@ export async function completeJobTaskAction(
         },
         tx
       );
+
+      await promotePendingPaymentsToDue(task.jobId, tx);
     });
 
     revalidatePath("/workstation");
@@ -146,6 +153,10 @@ export async function completeJobTaskAction(
   }
 }
 
+/**
+ * @internal Prefer completeJobTaskAction for marking tasks DONE.
+ * Signal retraction on revert is not implemented in v1.
+ */
 export async function updateJobTaskStatusAction(
   taskId: string,
   status: JobTaskStatus,
@@ -153,29 +164,41 @@ export async function updateJobTaskStatusAction(
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
+  if (status === JobTaskStatus.DONE) {
+    return {
+      error: "Use the complete task action to mark a task done with proper readiness checks.",
+    };
+  }
+
   try {
     const task = await db.jobTask.findFirst({
       where: { id: taskId, job: { organizationId } },
-      select: { id: true, jobId: true },
+      select: { id: true, jobId: true, status: true },
     });
 
     if (!task) {
       return { error: "Task not found in your organization." };
     }
 
-    // Note: If reverting from DONE to TODO, we might need to retract signals.
-    // For V1, we'll assume completion is a one-way street or handle retraction explicitly.
-    // Retracting signals is complex because it might re-block many things.
-    
+    const data =
+      status === JobTaskStatus.TODO
+        ? {
+            status: JobTaskStatus.TODO,
+            completedAt: null,
+            completedByUserId: null,
+            completionNote: null,
+          }
+        : { status };
+
     await db.jobTask.update({
       where: { id: taskId },
-      data: { status },
+      data,
     });
 
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");
     revalidatePath(`/jobs/${task.jobId}`);
-    
+
     return {};
   } catch (e) {
     console.error("Failed to update task status", e);

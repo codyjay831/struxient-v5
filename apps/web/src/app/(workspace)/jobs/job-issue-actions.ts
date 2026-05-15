@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
 
@@ -105,33 +106,68 @@ export async function resolveJobIssueAction(input: ResolveJobIssueInput) {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
-  // Verify issue belongs to organization
   const issue = await db.jobIssue.findFirst({
     where: { id: input.issueId, organizationId },
+    include: {
+      recoveryFlow: {
+        include: {
+          tasks: { select: { id: true, status: true } },
+        },
+      },
+    },
   });
 
   if (!issue) {
     throw new Error("Issue not found or access denied.");
   }
 
-  await db.jobIssue.update({
-    where: { id: input.issueId },
-    data: {
-      status: JobIssueStatus.RESOLVED,
-      resolutionNote: input.resolutionNote,
-      resolvedAt: new Date(),
+  try {
+    await db.$transaction(async (tx) => {
+      await resolveJobIssueWithRecoveryHandling(tx, {
+        organizationId,
+        issue,
+        resolutionNote: input.resolutionNote,
+        mode: "standard",
+        actorUserId: session.userId,
+      });
+    });
+  } catch (e) {
+    throw e instanceof Error ? e : new Error("Failed to resolve issue.");
+  }
+
+  revalidatePath("/workstation");
+  revalidatePath(`/jobs/${issue.jobId}`);
+
+  return { success: true };
+}
+
+export async function forceResolveJobIssueAction(input: ResolveJobIssueInput) {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  const issue = await db.jobIssue.findFirst({
+    where: { id: input.issueId, organizationId },
+    include: {
+      recoveryFlow: {
+        include: {
+          tasks: { select: { id: true, status: true } },
+        },
+      },
     },
   });
 
-  await recordJobActivity({
-    organizationId,
-    jobId: issue.jobId,
-    type: JobActivityType.ISSUE_RESOLVED,
-    title: `Issue resolved: ${issue.title}`,
-    details: input.resolutionNote,
-    entityType: "JobIssue",
-    entityId: issue.id,
-    actorUserId: session.userId,
+  if (!issue) {
+    throw new Error("Issue not found or access denied.");
+  }
+
+  await db.$transaction(async (tx) => {
+    await resolveJobIssueWithRecoveryHandling(tx, {
+      organizationId,
+      issue,
+      resolutionNote: input.resolutionNote,
+      mode: "force",
+      actorUserId: session.userId,
+    });
   });
 
   revalidatePath("/workstation");

@@ -7,10 +7,12 @@ import {
   deriveTaskState,
   taskStateLabel,
   taskStateTone,
-  type TaskReadinessInput,
+  toTaskReadinessInput,
+  type TaskIssueRef,
 } from "@/lib/task-readiness";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
+import type { TaskPaymentHold } from "@/lib/job-payment-readiness";
 import { ChevronRight, Lock, Zap } from "lucide-react";
 
 type Task = JobTaskExecutionTask;
@@ -25,6 +27,9 @@ export function JobTaskCard({
   leadEditHref,
   task,
   liveSignals,
+  stageRequiresSignals,
+  stageIssues,
+  paymentHold = null,
 }: {
   jobId: string;
   jobStageId: string;
@@ -35,12 +40,19 @@ export function JobTaskCard({
   leadEditHref: string | null;
   task: Task;
   liveSignals: string[];
+  stageRequiresSignals: string[];
+  stageIssues: TaskIssueRef[];
+  paymentHold?: TaskPaymentHold;
 }) {
   const router = useRouter();
   const [surfaceOpen, setSurfaceOpen] = useState(false);
 
-  const derivedState = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
-    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+  const readinessInput = toTaskReadinessInput(task, {
+    requiresSignals: stageRequiresSignals,
+    issues: stageIssues,
+  });
+  const derivedState = deriveTaskState(readinessInput, liveSignals, {
+    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
   });
   const isCompleted = derivedState === "COMPLETED";
   const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
@@ -57,13 +69,18 @@ export function JobTaskCard({
   const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
   const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
   
-  const paymentBlocker = task.paymentBlockers.find((p) => p.status === "DUE");
-  const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
+  const missingSignals = [
+    ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
+    ...stageRequiresSignals.filter((s) => !liveSignals.includes(s)),
+  ];
 
   const payload = {
     jobId,
     jobStageId,
     stageTitle,
+    stageRequiresSignals,
+    stageIssues,
+    paymentHold,
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
@@ -105,13 +122,13 @@ export function JobTaskCard({
             )}
             {isBlocked && (
               <div className="mt-1 space-y-1">
-                {paymentBlocker && (
+                {paymentHold && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
                     <Lock className="size-3 shrink-0" />
-                    Payment: {paymentBlocker.title}
+                    Payment: {paymentHold.title}
                   </p>
                 )}
-                {isBlockedByIssue && !paymentBlocker && (
+                {isBlockedByIssue && !paymentHold && (
                   <div className="space-y-1">
                     <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
                       <Lock className="size-3 shrink-0" />

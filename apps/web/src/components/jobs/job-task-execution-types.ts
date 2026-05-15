@@ -2,9 +2,10 @@ import type {
   JobIssueSeverity,
   JobIssueStatus,
   JobIssueType,
-  JobPaymentRequirementStatus,
   JobTaskStatus,
 } from "@prisma/client";
+import type { TaskIssueRef } from "@/lib/task-readiness";
+import type { TaskPaymentHold } from "@/lib/job-payment-readiness";
 
 export type JobTaskExecutionTask = {
   id: string;
@@ -46,16 +47,15 @@ export type JobTaskExecutionTask = {
   recoveryFlow?: {
     jobIssueId: string;
   } | null;
-  paymentBlockers: {
-    status: JobPaymentRequirementStatus;
-    title: string;
-  }[];
 };
 
 export type JobTaskExecutionPayload = {
   jobId: string;
   jobStageId: string;
   stageTitle: string;
+  stageRequiresSignals: string[];
+  stageIssues: TaskIssueRef[];
+  paymentHold: TaskPaymentHold;
   jobContextLabel: string;
   /** Jobsite / project address for field context (customer profile or lead). */
   jobsiteAddressLine: string | null;

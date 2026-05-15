@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JobTaskStatus, JobIssueStatus, JobIssueSeverity } from "@prisma/client";
-import { deriveTaskState, deriveStageState } from "./task-readiness";
+import {
+  deriveTaskState,
+  deriveStageState,
+  toTaskReadinessInput,
+} from "./task-readiness";
 
 test("deriveTaskState: READY when no requirements", () => {
   const state = deriveTaskState({
@@ -165,6 +169,22 @@ test("deriveStageState: BLOCKED_BY_SIGNAL when stage requirement missing", () =>
     ]
   }, []);
   assert.equal(state, "BLOCKED_BY_SIGNAL");
+});
+
+test("toTaskReadinessInput: maps jobStage issues into stage context", () => {
+  const input = toTaskReadinessInput(
+    {
+      status: JobTaskStatus.TODO,
+      issues: [],
+      jobStage: {
+        requiresSignals: ["stage-signal"],
+        issues: [{ id: "issue-2", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }],
+      },
+    },
+    { requiresSignals: ["stage-signal"], issues: [{ id: "issue-2", status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK }] },
+  );
+  const state = deriveTaskState(input, []);
+  assert.equal(state, "BLOCKED_BY_ISSUE");
 });
 
 test("deriveStageState: COMPLETED when all tasks DONE", () => {

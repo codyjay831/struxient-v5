@@ -24,8 +24,14 @@ import {
   toEmbeddedWorkflow,
   type WorkItemEmbeddedWorkflow,
 } from "@/lib/record-workflow-surface";
-import { deriveTaskState, taskStateLabel } from "./task-readiness";
+import { deriveTaskState, taskStateLabel, toTaskReadinessInput } from "./task-readiness";
 import { getLiveSignals } from "./signal-bus";
+import {
+  attachScheduleAnchorsToRequirements,
+  buildPaymentDueContextFromJob,
+  getUnsettledEffectivelyDueRequirements,
+  loadScheduleAnchorsByIds,
+} from "./job-payment-readiness";
 import { rank, WorkstationLane } from "./workstation/rank";
 
 export type WorkstationWorkItemKind =
@@ -365,13 +371,30 @@ export async function queryWorkstationWorkItems(
       },
       issues: {
         where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+        select: { id: true, status: true, severity: true, jobStageId: true },
       },
       paymentRequirements: {
         where: {
           status: { in: [JobPaymentRequirementStatus.DUE, JobPaymentRequirementStatus.PENDING] },
         },
-        include: {
-          requiredBeforeStage: { select: { sortOrder: true } },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          updatedAt: true,
+          requiredBeforeStageId: true,
+          sourcePaymentScheduleItemId: true,
+        },
+      },
+      stages: {
+        select: {
+          id: true,
+          sortOrder: true,
+          stageId: true,
+          title: true,
+          tasks: {
+            select: { status: true, recoveryFlowId: true },
+          },
         },
       },
       visits: {
@@ -382,10 +405,26 @@ export async function queryWorkstationWorkItems(
     },
   });
 
+  const jobPaymentScheduleAnchors = await loadScheduleAnchorsByIds(
+    jobs.flatMap((job) => job.paymentRequirements.map((r) => r.sourcePaymentScheduleItemId)),
+  );
+
   for (const job of jobs) {
     const liveSignals = await getLiveSignals(job.id);
-    const unpaidRequirements = job.paymentRequirements.filter(p => p.status === JobPaymentRequirementStatus.DUE);
-    const isJobBlocked = job.issues.length > 0 || unpaidRequirements.length > 0;
+    const enrichedPaymentRequirements = attachScheduleAnchorsToRequirements(
+      job.paymentRequirements,
+      jobPaymentScheduleAnchors,
+    );
+    const paymentDueContext = buildPaymentDueContextFromJob({
+      status: job.status,
+      stages: job.stages,
+      paymentRequirements: enrichedPaymentRequirements,
+    });
+    const effectivelyDuePayments = getUnsettledEffectivelyDueRequirements(
+      enrichedPaymentRequirements,
+      paymentDueContext,
+    );
+    const isJobBlocked = job.issues.length > 0 || effectivelyDuePayments.length > 0;
     const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
     const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
@@ -463,37 +502,6 @@ export async function queryWorkstationWorkItems(
       });
     }
 
-    // 3b. Payment Signals (surfaced as attention items)
-    for (const payment of unpaidRequirements) {
-      const { lane, withinLaneRank } = rank({
-        kind: "job",
-        priority: "high",
-        group: "investigate",
-        updatedAt: payment.updatedAt,
-      }, role, now);
-
-      items.push({
-        id: `payment-needed-${payment.id}`,
-        kind: "job",
-        title: `Payment Due: ${payment.title}`,
-        subtitle: primaryJobIdentity,
-        status: "Unpaid",
-        priority: "high",
-        group: "investigate",
-        lens: "attention",
-        lane,
-        withinLaneRank,
-        filterCategory: "payments",
-        reason: payment.requiredBeforeStageId ? "Payment required before next stage." : "Required payment is due.",
-        nextStep: "Record payment or waive.",
-        recordId: job.id,
-        parentRecordId: job.customerId || job.leadId || undefined,
-        parentLabel: primaryJobIdentity,
-        href: `/jobs/${job.id}`,
-        updatedAt: payment.updatedAt,
-      });
-    }
-
     if (!hasFutureVisit && job.status === JobStatus.ACTIVE && !isJobBlocked) {
       // Only signal unscheduled if there are tasks to do
       const hasOpenTasks = job.tasks.length > 0;
@@ -535,6 +543,17 @@ export async function queryWorkstationWorkItems(
       return a.sortOrder - b.sortOrder;
     });
 
+    const stageIssuesByJobStageId = new Map<
+      string,
+      { id: string; status: JobIssueStatus; severity: JobIssueSeverity }[]
+    >();
+    for (const issue of job.issues) {
+      if (!issue.jobStageId) continue;
+      const list = stageIssuesByJobStageId.get(issue.jobStageId) ?? [];
+      list.push({ id: issue.id, status: issue.status, severity: issue.severity });
+      stageIssuesByJobStageId.set(issue.jobStageId, list);
+    }
+
     const primaryTaskId = sortedTasks[0]?.id;
 
     for (const task of sortedTasks) {
@@ -542,20 +561,12 @@ export async function queryWorkstationWorkItems(
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
-      const derivedState = deriveTaskState({
-        status: task.status,
-        completedAt: task.completedAt,
-        completionNote: task.completionNote,
-        completionRequirementsJson: task.completionRequirementsJson,
-        attachments: task.attachments,
-        requiresSignals: task.requiresSignals,
-        issues: task.issues,
-        stage: {
-          requiresSignals: task.jobStage.requiresSignals,
-          issues: [], // Job-level issues already check muted state
-        },
-      }, liveSignals, {
-        recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+      const readinessInput = toTaskReadinessInput(task, {
+        requiresSignals: task.jobStage.requiresSignals,
+        issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
+      });
+      const derivedState = deriveTaskState(readinessInput, liveSignals, {
+        recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
       });
 
       let priority: WorkstationWorkItemPriority = derivedState === "READY" ? "high" : "medium";
@@ -729,26 +740,72 @@ export async function queryWorkstationWorkItems(
     });
   }
 
-  // 5. Job Payment Requirements (Due)
-  const duePayments = await db.jobPaymentRequirement.findMany({
+  // 5. Job Payment Requirements (effectively due — single emission path)
+  const paymentCandidates = await db.jobPaymentRequirement.findMany({
     where: {
       organizationId,
-      status: JobPaymentRequirementStatus.DUE,
+      status: { in: [JobPaymentRequirementStatus.DUE, JobPaymentRequirementStatus.PENDING] },
+      job: { status: JobStatus.ACTIVE },
     },
     include: {
       job: {
         include: {
           customer: true,
           lead: true,
+          stages: {
+            select: {
+              id: true,
+              sortOrder: true,
+              stageId: true,
+              title: true,
+              tasks: {
+                select: { status: true, recoveryFlowId: true },
+              },
+            },
+          },
+          paymentRequirements: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              requiredBeforeStageId: true,
+              sourcePaymentScheduleItemId: true,
+            },
+          },
         },
       },
       requiredBeforeStage: true,
     },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 100,
   });
 
-  for (const payment of duePayments) {
+  const workstationPaymentScheduleAnchors = await loadScheduleAnchorsByIds(
+    paymentCandidates.flatMap((payment) => [
+      payment.sourcePaymentScheduleItemId,
+      ...payment.job.paymentRequirements.map((r) => r.sourcePaymentScheduleItemId),
+    ]),
+  );
+
+  const emittedPaymentIds = new Set<string>();
+
+  for (const payment of paymentCandidates) {
+    const enrichedJobRequirements = attachScheduleAnchorsToRequirements(
+      payment.job.paymentRequirements,
+      workstationPaymentScheduleAnchors,
+    );
+    const ctx = buildPaymentDueContextFromJob({
+      status: payment.job.status,
+      stages: payment.job.stages,
+      paymentRequirements: enrichedJobRequirements,
+    });
+    const dueOnJob = getUnsettledEffectivelyDueRequirements(
+      enrichedJobRequirements,
+      ctx,
+    );
+    if (!dueOnJob.some((r) => r.id === payment.id)) continue;
+    if (emittedPaymentIds.has(payment.id)) continue;
+    emittedPaymentIds.add(payment.id);
     const primaryJobIdentity = payment.job.lead?.title || payment.job.customer?.displayName || payment.job.title;
     const secondaryJobIdentity = payment.job.title !== primaryJobIdentity ? payment.job.title : null;
 

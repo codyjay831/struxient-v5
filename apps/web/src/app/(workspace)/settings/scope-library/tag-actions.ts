@@ -1,5 +1,8 @@
 "use server";
 
+// Tag.usageCountLineItems / usageCountTasks are deprecated schema fields — never updated here.
+// Tag management UI uses Prisma `_count` on relations for live usage totals.
+
 import { TagStatus, TagSource, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";

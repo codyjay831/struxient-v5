@@ -1,8 +1,14 @@
-import { JobIssueStatus } from "@prisma/client";
+import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
+import {
+  attachScheduleAnchorsToRequirements,
+  buildPaymentDueContextFromJob,
+  deriveTaskPaymentHold,
+  loadScheduleAnchorsByIds,
+} from "@/lib/job-payment-readiness";
 
 /**
  * Loads a single job task with the same facts used for readiness on the job page,
@@ -26,11 +32,43 @@ export async function loadJobTaskExecutionPayload(
       requiresSignals: true,
       hardSignal: true,
       jobStageId: true,
-      jobStage: { select: { id: true, title: true, sortOrder: true } },
+      recoveryFlow: {
+        select: { jobIssueId: true },
+      },
+      jobStage: {
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          requiresSignals: true,
+          issues: {
+            where: {
+              status: JobIssueStatus.OPEN,
+              severity: JobIssueSeverity.BLOCKS_WORK,
+            },
+            select: { id: true, status: true, severity: true },
+          },
+        },
+      },
       job: {
         select: {
           id: true,
           title: true,
+          status: true,
+          stages: {
+            select: {
+              id: true,
+              sortOrder: true,
+              stageId: true,
+              title: true,
+              tasks: {
+                select: {
+                  status: true,
+                  recoveryFlowId: true,
+                },
+              },
+            },
+          },
           customer: {
             select: {
               id: true,
@@ -59,6 +97,7 @@ export async function loadJobTaskExecutionPayload(
               title: true,
               status: true,
               requiredBeforeStageId: true,
+              sourcePaymentScheduleItemId: true,
               requiredBeforeStage: { select: { title: true, sortOrder: true } },
             },
           },
@@ -129,10 +168,33 @@ export async function loadJobTaskExecutionPayload(
   const customerId = safeCustomer?.id ?? null;
   const leadEditHref = safeLead ? `/leads/${safeLead.id}/edit` : null;
 
+  const paymentScheduleAnchors = await loadScheduleAnchorsByIds(
+    job.paymentRequirements.map((r) => r.sourcePaymentScheduleItemId),
+  );
+  const paymentRequirementsWithAnchors = attachScheduleAnchorsToRequirements(
+    job.paymentRequirements,
+    paymentScheduleAnchors,
+  );
+
+  const paymentCtx = buildPaymentDueContextFromJob({
+    status: job.status,
+    stages: job.stages,
+    paymentRequirements: paymentRequirementsWithAnchors,
+  });
+
+  const paymentHold = deriveTaskPaymentHold(
+    task.jobStageId,
+    paymentRequirementsWithAnchors,
+    paymentCtx,
+  );
+
   return {
     jobId: job.id,
     jobStageId: task.jobStage.id,
     stageTitle: task.jobStage.title,
+    stageRequiresSignals: task.jobStage.requiresSignals,
+    stageIssues: task.jobStage.issues,
+    paymentHold,
     jobContextLabel,
     jobsiteAddressLine,
     customerId,
@@ -151,7 +213,7 @@ export async function loadJobTaskExecutionPayload(
       providesSignals: task.providesSignals,
       requiresSignals: task.requiresSignals,
       hardSignal: task.hardSignal,
-      paymentBlockers: [], // Deprecated: readiness now uses signals
+      recoveryFlow: task.recoveryFlow ?? null,
     },
   };
 }

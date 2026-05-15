@@ -7,11 +7,11 @@ import {
   LineItemTemplateTaskSource,
   TaskTemplateCategory,
   JobActivityType,
-  JobIssueStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
 import { AIService } from "@/lib/ai/ai-service";
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
@@ -219,47 +219,32 @@ export async function resolveIssueAndResumeAction(jobIssueId: string, resolution
 
   const issue = await db.jobIssue.findFirst({
     where: { id: jobIssueId, organizationId },
-    include: { recoveryFlow: true },
+    include: {
+      recoveryFlow: {
+        include: {
+          tasks: { select: { id: true, status: true } },
+        },
+      },
+    },
   });
 
   if (!issue) {
     throw new Error("Job issue not found or access denied.");
   }
 
-  await db.$transaction(async (tx) => {
-    // 1. Resolve the issue
-    await tx.jobIssue.update({
-      where: { id: jobIssueId },
-      data: {
-        status: JobIssueStatus.RESOLVED,
-        resolutionNote,
-        resolvedAt: new Date(),
-      },
-    });
-
-    // 2. Mark flow as completed if it exists
-    if (issue.recoveryFlow) {
-      await tx.jobRecoveryFlow.update({
-        where: { id: issue.recoveryFlow.id },
-        data: { status: JobRecoveryFlowStatus.COMPLETED },
-      });
-    }
-
-    // 3. Record activity
-    await recordJobActivity(
-      {
+  try {
+    await db.$transaction(async (tx) => {
+      await resolveJobIssueWithRecoveryHandling(tx, {
         organizationId,
-        jobId: issue.jobId,
-        type: JobActivityType.RECOVERY_FLOW_COMPLETED,
-        title: `Recovery complete: ${issue.title}`,
-        details: resolutionNote,
-        entityType: "JobIssue",
-        entityId: issue.id,
+        issue,
+        resolutionNote,
+        mode: "resume",
         actorUserId: session.userId,
-      },
-      tx
-    );
-  });
+      });
+    });
+  } catch (e) {
+    throw e instanceof Error ? e : new Error("Failed to resume job path.");
+  }
 
   revalidatePath(`/jobs/${issue.jobId}`);
   revalidatePath("/workstation");

@@ -1145,8 +1145,9 @@ model Tag {
   /// Alternative names that map to this canonical tag.
   aliases String[] @default([])
 
-  /// Cached usage counts for UI display.
+  /// @deprecated Unused cache — UI derives counts via Prisma `_count` relations. Do not write.
   usageCountLineItems Int @default(0)
+  /// @deprecated Unused cache — UI derives counts via Prisma `_count` relations. Do not write.
   usageCountTasks     Int @default(0)
 
   /// Audit log of merge events: [{ from: "visit site", at: "2024-05-15" }]

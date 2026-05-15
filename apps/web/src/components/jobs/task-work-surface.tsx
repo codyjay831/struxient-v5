@@ -9,8 +9,8 @@ import {
   deriveTaskState,
   taskStateLabel,
   taskStateTone,
+  toTaskReadinessInput,
   type TaskCompletionRequirements,
-  type TaskReadinessInput,
 } from "@/lib/task-readiness";
 import {
   completeJobTaskAction,
@@ -67,6 +67,9 @@ export function TaskWorkSurface({
   jobId,
   jobStageId,
   stageTitle,
+  stageRequiresSignals,
+  stageIssues,
+  paymentHold,
   jobContextLabel,
   jobsiteAddressLine,
   customerId,
@@ -90,7 +93,6 @@ export function TaskWorkSurface({
 
   const attachmentSyncKey = initialTask.attachments.map((a) => a.id).join(",");
   const issuesSyncKey = initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|");
-  const paymentSyncKey = initialTask.paymentBlockers.map((p) => `${p.status}:${p.title}`).join("|");
 
   /* Sync local editor state when the server task snapshot changes (e.g. after router.refresh()). */
   useEffect(() => {
@@ -105,7 +107,6 @@ export function TaskWorkSurface({
     initialTask.completionNote,
     attachmentSyncKey,
     issuesSyncKey,
-    paymentSyncKey,
   ]);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string; issueId?: string } | null>(null);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
@@ -134,8 +135,12 @@ export function TaskWorkSurface({
     router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
   }, [clearWorkstationSelectionOnComplete, pathname, router, searchParams]);
 
-  const derivedState = deriveTaskState(task as unknown as TaskReadinessInput, liveSignals, {
-    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId
+  const readinessInput = toTaskReadinessInput(task, {
+    requiresSignals: stageRequiresSignals,
+    issues: stageIssues,
+  });
+  const derivedState = deriveTaskState(readinessInput, liveSignals, {
+    recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
   });
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
 
@@ -145,8 +150,10 @@ export function TaskWorkSurface({
   const isBlocked = isBlockedByIssue || isBlockedBySignal;
   const needsProof = derivedState === "NEEDS_PROOF";
 
-  const paymentBlocker = task.paymentBlockers.find((p) => p.status === "DUE");
-  const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
+  const missingSignals = [
+    ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
+    ...stageRequiresSignals.filter((s) => !liveSignals.includes(s)),
+  ];
 
   const handleComplete = () => {
     setActionMessage(null);
@@ -513,19 +520,19 @@ export function TaskWorkSurface({
             );
           })}
 
-          {paymentBlocker && (
+          {paymentHold && (
             <div className="flex gap-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
               <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
               <div className="min-w-0 flex-1">
                 <h4 className="text-sm font-bold text-foreground">Payment Required</h4>
                 <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                  Requires payment: {paymentBlocker.title}
+                  {paymentHold.reason}: {paymentHold.title}
                 </p>
               </div>
             </div>
           )}
           
-          {missingSignals.length > 0 && !isBlockedByIssue && !paymentBlocker && (
+          {missingSignals.length > 0 && !isBlockedByIssue && !paymentHold && (
              <div className="flex gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
               <Zap className="mt-0.5 size-5 shrink-0 text-accent" />
               <div className="min-w-0 flex-1">
