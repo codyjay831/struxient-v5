@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint",
-    "test": "tsx --test src/lib/**/*.test.ts"
+    "test": "tsx --test src/lib/**/*.test.ts",
+    "guardrails": "node ../../scripts/guardrails/run-all.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

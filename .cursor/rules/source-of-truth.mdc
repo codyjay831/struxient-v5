@@ -1,0 +1,60 @@
+---
+description: Use canonical helpers — no duplicate blocked/ready/due/done definitions
+globs: apps/web/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Source of truth
+
+Full map: [`docs/source-of-truth-map.md`](../../docs/source-of-truth-map.md)
+
+## Task readiness
+
+Use `toTaskReadinessInput()` + `deriveTaskState()` from `@/lib/task-readiness`.
+
+```typescript
+// ❌ BAD — parallel blocking logic
+if (task.status === "TODO" && openIssues.length) { ... }
+
+// ✅ GOOD
+const state = deriveTaskState(toTaskReadinessInput(task, stageContext), liveSignals, {
+  recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
+});
+```
+
+Server completion must go through `completeJobTaskAction`, not ad-hoc status updates to DONE.
+
+## Payments
+
+Use `@/lib/job-payment-readiness` for operational due-ness and holds.
+
+```typescript
+// ❌ BAD — raw status for gating
+if (req.status === "DUE") { blockWork(); }
+
+// ✅ GOOD
+if (isPaymentEffectivelyDue(req, ctx)) { ... }
+```
+
+Display labels may use `job-payment-display.ts`. Do not add stored payment blocker flags on tasks.
+
+## Workstation attention
+
+Extend `queryWorkstationWorkItems()` and `rank()` — do not create a second queue builder.
+
+## Quote / lead progress
+
+- Quotes: `getQuoteReadiness()`, `evaluateQuoteJobActivationReadiness()`
+- Leads: `getLeadCommercialProgress()` — progress is derived, not stored on Lead
+
+## Issues / recovery
+
+All resolve paths through `resolveJobIssueWithRecoveryHandling()` with explicit mode (`standard` | `resume` | `force`).
+
+## Activity
+
+Significant mutations call `recordJobActivity()`.
+
+## Theme
+
+Use semantic tokens (`text-foreground-muted`, `bg-surface`, `border-border`). No raw `zinc-*` / `gray-*` / `slate-*` classes.

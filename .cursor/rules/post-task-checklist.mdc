@@ -1,0 +1,39 @@
+---
+description: Self-check after every coding task — architecture drift prevention
+alwaysApply: true
+---
+
+# Post-task checklist
+
+Before finishing a task, verify:
+
+## Source of truth
+
+- [ ] What **stored facts** vs **derived state** did this touch?
+- [ ] Did I reuse **canonical helpers** (`deriveTaskState`, `isPaymentEffectivelyDue`, `getQuoteReadiness`, `getLeadCommercialProgress`, `resolveJobIssueWithRecoveryHandling`)?
+- [ ] Did I avoid adding **duplicate definitions** of blocked, ready, due, or done?
+
+## Scope discipline
+
+- [ ] Did I change **`schema.prisma`**? If yes, was it explicitly approved?
+- [ ] Did I create a **duplicate work surface** instead of extending shared components?
+- [ ] Did Workstation changes stay **cockpit/attention** (not a new workflow engine)?
+
+## Quality
+
+- [ ] Server actions scoped by **`organizationId`**
+- [ ] Significant job mutations recorded via **`recordJobActivity`** where appropriate
+- [ ] **Semantic theme tokens** — no raw palette classes
+- [ ] AI output **review-then-apply** only
+
+## Verification
+
+Run when feasible:
+
+```bash
+npm test
+npm run lint
+npm run guardrails
+```
+
+Report any guardrail failures or intentional `ALLOW_SCHEMA=1` usage in the task summary.

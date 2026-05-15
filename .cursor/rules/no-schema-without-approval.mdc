@@ -1,0 +1,34 @@
+---
+description: Block casual Prisma schema changes — requires explicit approval
+globs: apps/web/prisma/**/*
+alwaysApply: false
+---
+
+# No schema changes without approval
+
+`apps/web/prisma/schema.prisma` is **protected**. Schema changes affect migrations, data gravity, and canon (I2–I4).
+
+## Required process
+
+1. **Stop** if the user did not explicitly request a schema change.
+2. Check whether existing fields, JSON blobs, helpers, or events can solve the problem (see [`docs/source-of-truth-map.md`](../../docs/source-of-truth-map.md)).
+3. Prefer **derived state** over new stored columns for readiness, blocking, or attention.
+4. If schema seems necessary, **report why** and wait for approval — do not implement silently.
+
+## Anti-patterns
+
+- Adding `isBlocked`, `paymentDue`, `readinessState`, or similar cached columns
+- Duplicate models for work that belongs in JobTask, JobIssue, JobPaymentRequirement, or JobActivity
+- Writing to deprecated fields (e.g. `Tag.usageCountLineItems` — use relation `_count`)
+
+## When approved
+
+Set `ALLOW_SCHEMA=1` for guardrails and include migration rationale in the PR description.
+
+```bash
+ALLOW_SCHEMA=1 npm run guardrails
+```
+
+## Automated check
+
+`scripts/guardrails/detect-schema-changes.mjs` fails if `schema.prisma` has uncommitted changes without `ALLOW_SCHEMA=1`.

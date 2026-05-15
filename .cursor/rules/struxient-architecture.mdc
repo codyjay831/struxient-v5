@@ -1,0 +1,54 @@
+---
+description: Struxient v5 core architecture — stored vs derived, canon-first, no duplicate engines
+alwaysApply: true
+---
+
+# Struxient v5 architecture
+
+Pre-launch construction workflow app. Core promise: **know what is happening on a job and tell the right person what should happen next.**
+
+## Before coding
+
+1. Read relevant [`docs/canon/`](../../docs/canon/README.md) for product intent.
+2. Read [`docs/architecture-guardrails.md`](../../docs/architecture-guardrails.md) and [`docs/source-of-truth-map.md`](../../docs/source-of-truth-map.md) for code locations.
+3. Do **not** change `apps/web/prisma/schema.prisma` without explicit user approval (see `no-schema-without-approval.mdc`).
+
+## Stored vs derived
+
+- **Stored:** workflow facts — statuses, completion timestamps, issue/payment/recovery enums, activity rows.
+- **Derived:** readiness, attention, blocking labels, commercial progress — compute via canonical helpers in `apps/web/src/lib/`.
+
+Never add schema columns for values that should be derived.
+
+## Domain spine
+
+Lead → Quote (working commercial) → Checkpoints (hidden proof) → Job (runtime execution) → Activity (explanation).
+
+Copy-on-activate: post-activation quote edits must not mutate materialized job rows.
+
+## Where logic lives
+
+| Domain | Canonical location |
+|--------|-------------------|
+| Task readiness | `lib/task-readiness.ts` |
+| Payments due / holds | `lib/job-payment-readiness.ts` |
+| Workstation queue | `lib/workstation-query.ts` |
+| Issue resolve + recovery | `lib/resolve-job-issue-core.ts` |
+| Quote / lead progress | `lib/quote-readiness.ts`, `lib/lead-commercial-progress.ts` |
+| Server mutations | `app/**/**-actions.ts` scoped by `organizationId` |
+
+## Work surfaces
+
+Reuse `components/work-surfaces/*` and `components/jobs/task-work-surface.tsx`. Do not build parallel editors per route.
+
+## Workstation
+
+Attention cockpit only — see [`docs/workstation-guardrails.md`](../../docs/workstation-guardrails.md) and [workstation-canon.md](../../docs/canon/workstation-canon.md).
+
+## AI
+
+Proposals are **review-then-apply**. No silent persistence from AI output.
+
+## After every task
+
+Complete [`post-task-checklist.mdc`](./post-task-checklist.mdc).
