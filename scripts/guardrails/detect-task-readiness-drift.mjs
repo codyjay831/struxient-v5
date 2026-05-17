@@ -18,6 +18,8 @@ const IMPORT_RE = /["']@\/lib\/task-readiness["']|["']\.\/task-readiness["']|["'
 const ALLOWLIST_FULL = new Set([
   "apps/web/src/lib/task-readiness.ts",
   "apps/web/src/lib/task-readiness.test.ts",
+  "apps/web/src/lib/job-execution-health.ts",
+  "apps/web/src/lib/job-execution-health.test.ts",
 ]);
 
 function toPosix(p) {

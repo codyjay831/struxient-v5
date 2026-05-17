@@ -132,6 +132,7 @@ async function performActivateQuoteJob(
         tasks: l.draftExecutionTasks.map(t => ({
           id: t.id,
           title: t.title,
+          stageId: t.stageId,
           providesSignals: t.providesSignals,
           requiresSignals: t.requiresSignals,
           hardSignal: t.hardSignal,
@@ -200,12 +201,16 @@ async function performActivateQuoteJob(
         l.draftExecutionTasks.map(t => ({ ...t, lineId: l.id }))
       );
 
+      let activatedTaskCount = 0;
+
       for (const task of allTasksToActivate) {
         const jobStageId = task.stageId ? stageIdToJobStageId[task.stageId] : null;
-        // If task has no stage, we might need a default stage or handle it.
-        // For V1, we'll assume tasks have stages or create a "General" stage if needed.
-        // But for now, let's just skip if no stage (or handle null).
-        if (!jobStageId) continue; 
+        if (!jobStageId) {
+          throw new ActivationError(
+            "NOT_READY",
+            `Task "${task.title}" has no stage assigned—assign a stage before activation.`,
+          );
+        }
 
         await tx.jobTask.create({
           data: {
@@ -227,6 +232,7 @@ async function performActivateQuoteJob(
             sortOrder: task.sortOrder,
           },
         });
+        activatedTaskCount += 1;
       }
 
       // 4. Initialize Signal Bus & Auto-satisfy Soft Orphans
@@ -241,7 +247,7 @@ async function performActivateQuoteJob(
             await publishSignal({
               jobId: job.id,
               name: req,
-              // No source task, it's auto-satisfied
+              tx,
             });
           }
         }
@@ -279,13 +285,13 @@ async function performActivateQuoteJob(
           jobId: job.id,
           type: JobActivityType.JOB_ACTIVATED,
           title: "Job activated from approved quote",
-          details: `Copied ${readiness.totalTasksToActivate} tasks from quote execution planning.`,
+          details: `Copied ${activatedTaskCount} tasks from quote execution planning.`,
           entityType: "Quote",
           entityId: quote.id,
           actorUserId: ctx.userId,
           metadataJson: {
             quoteId: quote.id,
-            activatedTaskCount: readiness.totalTasksToActivate,
+            activatedTaskCount,
             approvalCheckpointId: approvalCheckpoint.id,
           },
         },

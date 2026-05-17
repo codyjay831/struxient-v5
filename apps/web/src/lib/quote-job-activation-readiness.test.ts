@@ -12,13 +12,27 @@ const line = (
   overrides: Partial<{
     id: string;
     description: string;
-    tasks: { id: string; title: string; providesSignals: string[]; requiresSignals: string[]; hardSignal: boolean }[];
+    tasks: {
+      id: string;
+      title: string;
+      stageId: string | null;
+      providesSignals: string[];
+      requiresSignals: string[];
+      hardSignal: boolean;
+    }[];
   }> = {},
 ) => ({
   id: "line-1",
   description: "Rough-in",
   tasks: [
-    { id: "task-1", title: "Task 1", providesSignals: [], requiresSignals: [], hardSignal: false }
+    {
+      id: "task-1",
+      title: "Task 1",
+      stageId: "stage-1",
+      providesSignals: [],
+      requiresSignals: [],
+      hardSignal: false,
+    },
   ],
   ...overrides,
 });
@@ -51,7 +65,14 @@ test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provide
     lines: [
       line({
         tasks: [
-          { id: "task-1", title: "Task 1", providesSignals: [], requiresSignals: ["hard-fact"], hardSignal: true }
+          {
+            id: "task-1",
+            title: "Task 1",
+            stageId: "stage-1",
+            providesSignals: [],
+            requiresSignals: ["hard-fact"],
+            hardSignal: true,
+          },
         ]
       })
     ],
@@ -67,8 +88,22 @@ test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => 
     lines: [
       line({
         tasks: [
-          { id: "task-1", title: "Task 1", providesSignals: ["signal-a"], requiresSignals: ["signal-b"], hardSignal: false },
-          { id: "task-2", title: "Task 2", providesSignals: ["signal-b"], requiresSignals: ["signal-a"], hardSignal: false }
+          {
+            id: "task-1",
+            title: "Task 1",
+            stageId: "stage-1",
+            providesSignals: ["signal-a"],
+            requiresSignals: ["signal-b"],
+            hardSignal: false,
+          },
+          {
+            id: "task-2",
+            title: "Task 2",
+            stageId: "stage-1",
+            providesSignals: ["signal-b"],
+            requiresSignals: ["signal-a"],
+            hardSignal: false,
+          },
         ]
       })
     ],
@@ -76,4 +111,27 @@ test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => 
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "CIRCULAR_SIGNAL_DEPENDENCY");
+});
+
+test("evaluateQuoteJobActivationReadiness blocks when task missing stage", () => {
+  const readiness = evaluateQuoteJobActivationReadiness({
+    status: QuoteStatus.APPROVED,
+    lines: [
+      line({
+        tasks: [
+          {
+            id: "task-1",
+            title: "No stage task",
+            stageId: null,
+            providesSignals: [],
+            requiresSignals: [],
+            hardSignal: false,
+          },
+        ],
+      }),
+    ],
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.blockReasons[0]?.code, "TASK_MISSING_STAGE");
 });

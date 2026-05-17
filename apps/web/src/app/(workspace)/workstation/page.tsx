@@ -5,7 +5,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { db } from "@/lib/db";
-import { JobTaskStatus } from "@prisma/client";
+import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import {
   queryWorkstationWorkItems,
   type WorkstationWorkItem,
@@ -392,22 +392,89 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
   const job = await db.job.findFirst({
     where: { id: jobId, organizationId: ctx.organizationId },
     include: {
-      stages: true,
-      tasks: {
-        where: { status: JobTaskStatus.TODO },
+      stages: {
         orderBy: { sortOrder: "asc" },
-        take: 1,
+        select: {
+          id: true,
+          sortOrder: true,
+          requiresSignals: true,
+          issues: {
+            where: {
+              status: JobIssueStatus.OPEN,
+              severity: JobIssueSeverity.BLOCKS_WORK,
+            },
+            select: { id: true, status: true, severity: true },
+          },
+        },
+      },
+      tasks: {
+        where: { completedAt: null },
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          status: true,
+          completedAt: true,
+          completionNote: true,
+          completionRequirementsJson: true,
+          requiresSignals: true,
+          attachments: {
+            where: { status: "READY" },
+            select: { id: true },
+          },
+          issues: {
+            where: {
+              status: JobIssueStatus.OPEN,
+              severity: JobIssueSeverity.BLOCKS_WORK,
+            },
+            select: { id: true, status: true, severity: true },
+          },
+          recoveryFlow: { select: { jobIssueId: true } },
+          jobStage: {
+            select: {
+              id: true,
+              sortOrder: true,
+              requiresSignals: true,
+            },
+          },
+        },
       },
     },
   });
 
   if (!job) return null;
 
+  const { getLiveSignals } = await import("@/lib/signal-bus");
+  const { deriveTaskState, toTaskReadinessInput } = await import("@/lib/task-readiness");
+  const liveSignals = await getLiveSignals(job.id);
+
+  const stageIssuesByJobStageId = new Map(
+    job.stages.map((s) => [s.id, s.issues] as const),
+  );
+
+  const sortedTasks = [...job.tasks].sort((a, b) => {
+    if (a.jobStage.sortOrder !== b.jobStage.sortOrder) {
+      return a.jobStage.sortOrder - b.jobStage.sortOrder;
+    }
+    return a.sortOrder - b.sortOrder;
+  });
+
+  const nextReadyTask = sortedTasks.find((task) => {
+    const readinessInput = toTaskReadinessInput(task, {
+      requiresSignals: task.jobStage.requiresSignals,
+      issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
+    });
+    const state = deriveTaskState(readinessInput, liveSignals, {
+      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
+    });
+    return state === "READY";
+  });
+
   const stageCount = job.stages.length;
   const activeTaskCount = await db.jobTask.count({
     where: {
       jobId: job.id,
-      status: JobTaskStatus.TODO,
+      completedAt: null,
       job: { organizationId: ctx.organizationId },
     },
   });
@@ -416,7 +483,7 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
     <WorkstationJobPanel
       stageCount={stageCount}
       taskCount={activeTaskCount}
-      nextTaskTitle={job.tasks[0]?.title}
+      nextTaskTitle={nextReadyTask?.title ?? sortedTasks[0]?.title}
     />
   );
 }

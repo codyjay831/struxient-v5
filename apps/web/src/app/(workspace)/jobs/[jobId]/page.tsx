@@ -34,6 +34,12 @@ import {
   getUnsettledEffectivelyDueRequirements,
   loadScheduleAnchorsByIds,
 } from "@/lib/job-payment-readiness";
+import {
+  buildJobExecutionContextFromJob,
+  deriveJobExecutionHealth,
+  isExecutionHealthBannerEnabled,
+} from "@/lib/job-execution-health";
+import { JobExecutionHealthBanner } from "@/components/jobs/job-execution-health-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +170,7 @@ export default async function JobDetailPage({
                 providesSignals: true,
                 requiresSignals: true,
                 hardSignal: true,
+                sortOrder: true,
                 recoveryFlow: {
                   select: { jobIssueId: true },
                 },
@@ -307,6 +314,50 @@ export default async function JobDetailPage({
     paymentDueContext,
   );
 
+  const executionHealth = deriveJobExecutionHealth(
+    buildJobExecutionContextFromJob(
+      {
+        id: job.id,
+        status: job.status,
+        stages: job.stages.map((s) => ({
+          id: s.id,
+          title: s.title,
+          sortOrder: s.sortOrder,
+          stageId: s.stageId,
+          requiresSignals: s.requiresSignals,
+          issues: s.issues,
+          tasks: s.tasks.map((t) => ({
+            id: t.id,
+            status: t.status,
+            completedAt: t.completedAt,
+            completionNote: t.completionNote,
+            completionRequirementsJson: t.completionRequirementsJson,
+            attachments: t.attachments,
+            requiresSignals: t.requiresSignals,
+            recoveryFlowId: t.recoveryFlowId,
+            recoveryFlow: t.recoveryFlow,
+            sortOrder: t.sortOrder,
+            issues: t.issues.map((i) => ({
+              id: i.id,
+              status: i.status,
+              severity: i.severity,
+            })),
+          })),
+        })),
+        issues: job.issues.map((i) => ({
+          id: i.id,
+          title: i.title,
+          status: i.status,
+          severity: i.severity,
+          recoveryFlow: i.recoveryFlow,
+        })),
+        paymentRequirements: paymentRequirementsWithAnchors,
+      },
+      liveSignals,
+    ),
+  );
+  const showExecutionHealthBanner = isExecutionHealthBannerEnabled();
+
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
@@ -316,6 +367,9 @@ export default async function JobDetailPage({
           { label: primaryIdentity },
         ]}
       />
+      {showExecutionHealthBanner && (
+        <JobExecutionHealthBanner health={executionHealth} />
+      )}
       <PageHeader
         title={primaryIdentity}
         eyebrow={

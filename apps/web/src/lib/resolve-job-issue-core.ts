@@ -116,7 +116,15 @@ export async function resolveJobIssueWithRecoveryHandling(
     return;
   }
 
-  if (mode === "resume" && isOpenFlow && flow) {
+  const recoveryCompleteAndOpenFlow =
+    isOpenFlow &&
+    flow &&
+    !recoveryFlowHasIncompleteTasks(flow);
+
+  if (
+    (mode === "resume" || mode === "standard") &&
+    recoveryCompleteAndOpenFlow
+  ) {
     await tx.jobRecoveryFlow.update({
       where: { id: flow.id },
       data: { status: JobRecoveryFlowStatus.COMPLETED },
@@ -127,11 +135,19 @@ export async function resolveJobIssueWithRecoveryHandling(
         organizationId,
         jobId: issue.jobId,
         type: JobActivityType.RECOVERY_FLOW_COMPLETED,
-        title: `Recovery complete: ${issue.title}`,
-        details: resolutionNote?.trim() || undefined,
+        title: `Recovery complete — original path resumed: ${issue.title}`,
+        details:
+          resolutionNote?.trim() ||
+          "Issue resolved; recovery flow completed; original execution path resumed.",
         entityType: "JobIssue",
         entityId: issue.id,
         actorUserId,
+        metadataJson: {
+          issueResolved: true,
+          recoveryFlowId: flow.id,
+          recoveryFlowStatus: JobRecoveryFlowStatus.COMPLETED,
+          originalPathResumed: true,
+        },
       },
       tx,
     );

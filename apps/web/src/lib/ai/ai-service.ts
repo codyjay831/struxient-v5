@@ -69,6 +69,25 @@ export class AIService {
   }
 
   /**
+   * Maps model-returned confidence (often 0–100) into [0, 1] for Zod.
+   * Returns `undefined` when absent or non-numeric so schema defaults apply.
+   */
+  private static normalizeConfidenceToUnitInterval(raw: unknown): number | undefined {
+    if (raw == null) return undefined;
+    const n =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && String(raw).trim() !== ""
+          ? Number(String(raw).trim())
+          : NaN;
+    if (!Number.isFinite(n)) return undefined;
+    if (n >= 0 && n <= 1) return Math.min(1, Math.max(0, n));
+    if (n > 1 && n <= 100) return Math.min(1, Math.max(0, n / 100));
+    if (n > 100) return 1;
+    return 0;
+  }
+
+  /**
    * Returns true for errors that are worth retrying:
    * - Low-level fetch/network failures ("fetch failed", ECONNRESET, ETIMEDOUT, etc.)
    * - HTTP 5xx (server-side hiccups)
@@ -499,6 +518,7 @@ RULES:
 6. Specify proof requirements (noteRequired, photoRequired, attachmentRequired).
 7. Assign a classification (FIELD, OFFICE, CUSTOMER, MATERIAL, PERMIT, INSPECTION).
 8. Provide "reasoning" for why this recovery step is necessary.
+9. "confidence" must be a decimal between 0 and 1 inclusive (model certainty for that step), e.g. 0.85 — not a percent.
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object:
@@ -522,7 +542,7 @@ Return ONLY a valid JSON object:
       "hardSignal": boolean,
       "checklist": [{"label": "string"}],
       "reasoning": "string",
-      "confidence": number
+      "confidence": 0.85
     }
   ]
 }
@@ -537,12 +557,17 @@ Return ONLY a valid JSON object:
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
       const raw = JSON.parse(jsonStr);
 
-      // Normalize categories
-      const normalizedTasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: Record<string, unknown>) => ({
-        ...t,
-        tempId: crypto.randomUUID(),
-        category: AIService.normalizeCategory(t.category) || TaskTemplateCategory.GENERAL,
-      }));
+      // Normalize categories and confidence (models often emit 0–100).
+      const normalizedTasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: Record<string, unknown>) => {
+        const { confidence: rawConfidence, ...rest } = t;
+        const confidence = AIService.normalizeConfidenceToUnitInterval(rawConfidence);
+        return {
+          ...rest,
+          ...(confidence !== undefined ? { confidence } : {}),
+          tempId: crypto.randomUUID(),
+          category: AIService.normalizeCategory(t.category) || TaskTemplateCategory.GENERAL,
+        };
+      });
 
       const proposal = {
         ...raw,

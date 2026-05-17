@@ -26,7 +26,7 @@ type RecoveryTaskDraft = {
   title: string;
   category: TaskTemplateCategory;
   instructions: string;
-  checklist: { label: string }[];
+  checklist: { id: string; label: string }[];
   noteRequired: boolean;
   photoRequired: boolean;
   attachmentRequired: boolean;
@@ -107,7 +107,7 @@ export function RecoveryFlowBuilder({
         title: t.title,
         category: t.category,
         instructions: t.instructions || "",
-        checklist: t.checklist.map(c => ({ label: c.label })),
+        checklist: t.checklist.map((c) => ({ id: crypto.randomUUID(), label: c.label })),
         noteRequired: t.proofRequirements?.noteRequired ?? false,
         photoRequired: t.proofRequirements?.photoRequired ?? false,
         attachmentRequired: t.proofRequirements?.attachmentRequired ?? false,
@@ -406,7 +406,7 @@ export function RecoveryFlowBuilder({
               <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Checklist</p>
               <div className="space-y-2">
                 {task.checklist.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <div key={item.id} className="flex items-center gap-2">
                     <input
                       value={item.label}
                       onChange={(e) => {
@@ -432,7 +432,9 @@ export function RecoveryFlowBuilder({
                 <button
                   type="button"
                   onClick={() => {
-                    updateTask(task.id, { checklist: [...task.checklist, { label: "" }] });
+                    updateTask(task.id, {
+                      checklist: [...task.checklist, { id: crypto.randomUUID(), label: "" }],
+                    });
                   }}
                   className="flex items-center gap-1 text-[10px] font-bold text-primary hover:underline"
                 >

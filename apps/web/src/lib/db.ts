@@ -153,9 +153,84 @@ declare global {
   var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
 }
 
+function parseDatabaseUrlForDebug(url: string | undefined) {
+  if (!url) return { set: false as const };
+  try {
+    const parsed = new URL(url.replace(/^postgresql:/, "http:"));
+    return {
+      set: true as const,
+      host: parsed.hostname,
+      port: parsed.port || "5432",
+      database: parsed.pathname.replace(/^\//, "") || null,
+    };
+  } catch {
+    return { set: true as const, parseError: true as const };
+  }
+}
+
 function getPrisma(): ExtendedPrismaClient {
   if (!globalThis.prisma) {
+    // #region agent log
+    const dbUrlDebug = parseDatabaseUrlForDebug(process.env.DATABASE_URL);
+    fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "9aaf15",
+      },
+      body: JSON.stringify({
+        sessionId: "9aaf15",
+        runId: "pre-fix",
+        hypothesisId: "B-C",
+        location: "db.ts:getPrisma",
+        message: "Prisma client init — DATABASE_URL shape",
+        data: dbUrlDebug,
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     globalThis.prisma = prismaClientSingleton();
+    // #region agent log
+    void globalThis.prisma
+      .$connect()
+      .then(() => {
+        fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "9aaf15",
+          },
+          body: JSON.stringify({
+            sessionId: "9aaf15",
+            runId: "pre-fix",
+            hypothesisId: "A",
+            location: "db.ts:getPrisma:$connect",
+            message: "Prisma $connect succeeded",
+            data: { ok: true },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "9aaf15",
+          },
+          body: JSON.stringify({
+            sessionId: "9aaf15",
+            runId: "pre-fix",
+            hypothesisId: "A-D",
+            location: "db.ts:getPrisma:$connect",
+            message: "Prisma $connect failed",
+            data: { ok: false, errorMessage: message.slice(0, 200) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      });
+    // #endregion
   }
   return globalThis.prisma;
 }

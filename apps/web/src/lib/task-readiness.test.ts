@@ -5,6 +5,7 @@ import {
   deriveTaskState,
   deriveStageState,
   toTaskReadinessInput,
+  validateTaskCompletionReadiness,
 } from "./task-readiness";
 
 test("deriveTaskState: READY when no requirements", () => {
@@ -204,4 +205,29 @@ test("deriveStageState: COMPLETED when all tasks DONE", () => {
     ]
   }, []);
   assert.equal(state, "COMPLETED");
+});
+
+test("validateTaskCompletionReadiness: rejects incomplete checklist", () => {
+  const result = validateTaskCompletionReadiness({
+    completionNote: null,
+    completionRequirementsJson: {
+      checklist: [{ id: "c1", label: "Item 1", completedAt: null }],
+    },
+    attachments: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /checklist/i);
+  }
+});
+
+test("validateTaskCompletionReadiness: accepts complete checklist", () => {
+  const result = validateTaskCompletionReadiness({
+    completionNote: null,
+    completionRequirementsJson: {
+      checklist: [{ id: "c1", label: "Item 1", completedAt: "2026-01-01T00:00:00.000Z" }],
+    },
+    attachments: [],
+  });
+  assert.equal(result.ok, true);
 });

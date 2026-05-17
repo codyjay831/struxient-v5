@@ -5,9 +5,14 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
-import { deriveTaskState, toTaskReadinessInput, type TaskCompletionRequirements } from "@/lib/task-readiness";
+import {
+  deriveTaskState,
+  toTaskReadinessInput,
+  validateTaskCompletionReadiness,
+} from "@/lib/task-readiness";
 import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
 import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
+import { assertCanOverrideTaskReadiness } from "@/lib/job-task-override-guard";
 
 export type JobTaskActionState = {
   error?: string;
@@ -72,14 +77,13 @@ export async function completeJobTaskAction(
       return { error: "Task is waiting on a signal." };
     }
 
-    // 2. Validate requirements
-    const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
-    if (requirements.noteRequired && !completionNote?.trim()) {
-      return { error: "A completion note is required for this task." };
-    }
-
-    if ((requirements.photoRequired || requirements.attachmentRequired) && task.attachments.length === 0) {
-      return { error: "Photo or attachment proof is required for this task." };
+    const proofCheck = validateTaskCompletionReadiness({
+      completionNote: completionNote?.trim() || task.completionNote,
+      completionRequirementsJson: task.completionRequirementsJson,
+      attachments: task.attachments,
+    });
+    if (!proofCheck.ok) {
+      return { error: proofCheck.error };
     }
 
     await db.$transaction(async (tx) => {
@@ -217,10 +221,21 @@ export async function overrideJobTaskReadinessAction(
     const task = await db.jobTask.findFirst({
       where: { id: taskId, job: { organizationId } },
       include: {
-        jobStage: true,
-        attachments: { 
+        jobStage: {
+          include: {
+            issues: {
+              where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+              select: { id: true, status: true, severity: true },
+            },
+          },
+        },
+        attachments: {
           where: { status: "READY" },
-          select: { id: true } 
+          select: { id: true },
+        },
+        issues: {
+          where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+          select: { id: true, status: true, severity: true },
         },
       },
     });
@@ -229,8 +244,9 @@ export async function overrideJobTaskReadinessAction(
       return { error: "Task not found in your organization." };
     }
 
-    if (task.status === JobTaskStatus.DONE) {
-      return { error: "Task is already completed." };
+    const overrideGate = assertCanOverrideTaskReadiness(task);
+    if (!overrideGate.ok) {
+      return { error: overrideGate.error };
     }
 
     await db.$transaction(async (tx) => {
@@ -286,6 +302,7 @@ export async function overrideJobTaskReadinessAction(
           entityType: "JobTask",
           entityId: task.id,
           actorUserId: session.userId,
+          metadataJson: { forced: true, override: true },
         },
         tx
       );

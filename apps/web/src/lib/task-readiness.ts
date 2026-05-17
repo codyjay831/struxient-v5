@@ -176,6 +176,43 @@ export function deriveTaskState(
   return "READY";
 }
 
+export type TaskCompletionValidationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Validates that stored facts satisfy completion requirements aligned with deriveTaskState.
+ * Use in completeJobTaskAction after issue/signal gates pass.
+ */
+export function validateTaskCompletionReadiness(
+  task: Pick<
+    TaskReadinessInput,
+    "completionNote" | "completionRequirementsJson" | "attachments"
+  >,
+): TaskCompletionValidationResult {
+  const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
+
+  if (requirements.noteRequired && !task.completionNote?.trim()) {
+    return { ok: false, error: "A completion note is required for this task." };
+  }
+
+  if (
+    (requirements.photoRequired || requirements.attachmentRequired) &&
+    task.attachments.length === 0
+  ) {
+    return { ok: false, error: "Photo or attachment proof is required for this task." };
+  }
+
+  if (requirements.checklist && requirements.checklist.length > 0) {
+    const allChecked = requirements.checklist.every((item) => !!item.completedAt);
+    if (!allChecked) {
+      return { ok: false, error: "Complete all checklist items before finishing this task." };
+    }
+  }
+
+  return { ok: true };
+}
+
 export type StageDerivedState =
   | "COMPLETED"
   | "BLOCKED_BY_ISSUE"

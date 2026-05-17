@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 
 /**
@@ -15,13 +15,16 @@ export async function publishSignal({
   name,
   sourceJobTaskId,
   sourceJobStageId,
+  tx,
 }: {
   jobId: string;
   name: string;
   sourceJobTaskId?: string;
   sourceJobStageId?: string;
+  tx?: ExtendedTransactionClient;
 }) {
-  return await db.jobSignal.upsert({
+  const client = tx ?? db;
+  return await client.jobSignal.upsert({
     where: {
       jobId_name: {
         jobId,

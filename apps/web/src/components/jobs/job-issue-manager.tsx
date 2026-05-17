@@ -415,6 +415,14 @@ function IssueCard({
                     </div>
                   )}
                 </div>
+              ) : allRecoveryTasksDone && isOpenRecoveryFlow ? (
+                <button
+                  onClick={handleResume}
+                  disabled={isResuming || isPending}
+                  className="rounded-md border border-success/30 bg-success/[0.04] px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-success transition-colors hover:border-success/50 disabled:opacity-50"
+                >
+                  {isResuming ? "Resuming…" : "Resume original path"}
+                </button>
               ) : !isResolving ? (
                 <button
                   onClick={() => setIsResolving(true)}

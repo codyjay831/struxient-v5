@@ -25,6 +25,11 @@ import {
   type WorkItemEmbeddedWorkflow,
 } from "@/lib/record-workflow-surface";
 import { deriveTaskState, taskStateLabel, toTaskReadinessInput } from "./task-readiness";
+import {
+  buildJobExecutionContextFromJob,
+  deriveJobExecutionHealth,
+  type ExecutionHealthPrimaryState,
+} from "./job-execution-health";
 import { getLiveSignals } from "./signal-bus";
 import {
   attachScheduleAnchorsToRequirements,
@@ -94,6 +99,9 @@ export type WorkstationWorkItem = {
   signalId?: string;
   /** Shared readiness / checklist model for Workstation + full-record alignment. */
   workflow?: WorkItemEmbeddedWorkflow;
+  /** Derived job execution health (Slice 5). */
+  executionHealthState?: ExecutionHealthPrimaryState;
+  executionHealthHeadline?: string;
 };
 
 export type WorkstationSummary = {
@@ -250,6 +258,7 @@ export async function queryWorkstationWorkItems(
         tasks: l.draftExecutionTasks.map((t) => ({
           id: t.id,
           title: t.title,
+          stageId: t.stageId,
           providesSignals: t.providesSignals,
           requiresSignals: t.requiresSignals,
           hardSignal: t.hardSignal,
@@ -365,13 +374,34 @@ export async function queryWorkstationWorkItems(
             select: { id: true, status: true, severity: true },
           },
           recoveryFlow: {
-            select: { jobIssueId: true }
+            select: { jobIssueId: true },
           },
+          sortOrder: true,
+          status: true,
+          completedAt: true,
+          completionNote: true,
+          completionRequirementsJson: true,
+          requiresSignals: true,
+          recoveryFlowId: true,
+          recoveryFlowOrder: true,
         },
       },
       issues: {
         where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
-        select: { id: true, status: true, severity: true, jobStageId: true },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          severity: true,
+          jobStageId: true,
+          recoveryFlow: {
+            select: {
+              id: true,
+              status: true,
+              tasks: { select: { id: true, status: true } },
+            },
+          },
+        },
       },
       paymentRequirements: {
         where: {
@@ -392,6 +422,14 @@ export async function queryWorkstationWorkItems(
           sortOrder: true,
           stageId: true,
           title: true,
+          requiresSignals: true,
+          issues: {
+            where: {
+              status: JobIssueStatus.OPEN,
+              severity: JobIssueSeverity.BLOCKS_WORK,
+            },
+            select: { id: true, status: true, severity: true },
+          },
           tasks: {
             select: { status: true, recoveryFlowId: true },
           },
@@ -427,6 +465,94 @@ export async function queryWorkstationWorkItems(
     const isJobBlocked = job.issues.length > 0 || effectivelyDuePayments.length > 0;
     const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
     const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+
+    const stagesForHealth = job.stages.map((stage) => ({
+      id: stage.id,
+      title: stage.title,
+      sortOrder: stage.sortOrder,
+      stageId: stage.stageId,
+      requiresSignals: stage.requiresSignals ?? [],
+      issues: stage.issues,
+      tasks: job.tasks
+        .filter((t) => t.jobStage.id === stage.id)
+        .map((t) => ({
+          id: t.id,
+          status: t.status,
+          completedAt: t.completedAt,
+          completionNote: t.completionNote,
+          completionRequirementsJson: t.completionRequirementsJson,
+          attachments: t.attachments,
+          requiresSignals: t.requiresSignals,
+          recoveryFlowId: t.recoveryFlowId,
+          recoveryFlow: t.recoveryFlow,
+          sortOrder: t.sortOrder,
+          recoveryFlowOrder: t.recoveryFlowOrder,
+          issues: t.issues,
+        })),
+    }));
+
+    const executionHealth = deriveJobExecutionHealth(
+      buildJobExecutionContextFromJob(
+        {
+          id: job.id,
+          status: job.status,
+          stages: stagesForHealth,
+          issues: job.issues.map((i) => ({
+            id: i.id,
+            title: i.title,
+            status: i.status,
+            severity: i.severity,
+            recoveryFlow: i.recoveryFlow,
+          })),
+          paymentRequirements: enrichedPaymentRequirements,
+        },
+        liveSignals,
+      ),
+    );
+
+    const healthWarningStates: ExecutionHealthPrimaryState[] = [
+      "NO_NEXT_ACTION",
+      "STALE_RECOVERY_FLOW",
+      "BROKEN_REFERENCE",
+    ];
+    if (
+      healthWarningStates.includes(executionHealth.primaryState) ||
+      !executionHealth.invariantSatisfied
+    ) {
+      const { lane, withinLaneRank } = rank(
+        {
+          kind: "investigate",
+          priority: "critical",
+          group: "investigate",
+          updatedAt: job.updatedAt,
+        },
+        role,
+        now,
+      );
+
+      items.push({
+        id: `job-health-${job.id}`,
+        kind: "investigate",
+        title: executionHealth.headline,
+        subtitle: primaryJobIdentity,
+        status: executionHealth.primaryState,
+        priority: "critical",
+        group: "investigate",
+        lens: "attention",
+        lane,
+        withinLaneRank,
+        filterCategory: "jobs",
+        reason: executionHealth.detail,
+        nextStep: executionHealth.recommendedNextAction.label,
+        recordId: job.id,
+        parentRecordId: job.customerId || job.leadId || undefined,
+        parentLabel: primaryJobIdentity,
+        href: `/jobs/${job.id}`,
+        updatedAt: job.updatedAt,
+        executionHealthState: executionHealth.primaryState,
+        executionHealthHeadline: executionHealth.headline,
+      });
+    }
 
     // 3a. Scheduling Signals
     const now = new Date();
@@ -547,11 +673,16 @@ export async function queryWorkstationWorkItems(
       string,
       { id: string; status: JobIssueStatus; severity: JobIssueSeverity }[]
     >();
+    for (const stage of job.stages) {
+      stageIssuesByJobStageId.set(stage.id, [...stage.issues]);
+    }
     for (const issue of job.issues) {
       if (!issue.jobStageId) continue;
       const list = stageIssuesByJobStageId.get(issue.jobStageId) ?? [];
-      list.push({ id: issue.id, status: issue.status, severity: issue.severity });
-      stageIssuesByJobStageId.set(issue.jobStageId, list);
+      if (!list.some((i) => i.id === issue.id)) {
+        list.push({ id: issue.id, status: issue.status, severity: issue.severity });
+        stageIssuesByJobStageId.set(issue.jobStageId, list);
+      }
     }
 
     const primaryTaskId = sortedTasks[0]?.id;
@@ -599,7 +730,7 @@ export async function queryWorkstationWorkItems(
         status: taskStateLabel(derivedState),
         priority,
         group,
-        lens: "attention",
+        lens: derivedState === "BLOCKED_BY_SIGNAL" ? "waiting" : "attention",
         lane,
         withinLaneRank,
         filterCategory: "tasks",
@@ -615,6 +746,8 @@ export async function queryWorkstationWorkItems(
         updatedAt: task.updatedAt,
         isBlocked,
         missingSignals: missingSignals.length > 0 ? missingSignals : undefined,
+        executionHealthState: isPrimary ? executionHealth.primaryState : undefined,
+        executionHealthHeadline: isPrimary ? executionHealth.headline : undefined,
       });
     }
 

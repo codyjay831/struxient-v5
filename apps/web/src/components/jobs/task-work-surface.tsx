@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { JobIssueSeverity, JobIssueType, JobTaskStatus } from "@prisma/client";
+import {
+  JobIssueSeverity,
+  JobIssueStatus,
+  JobIssueType,
+  JobRecoveryFlowStatus,
+  JobTaskStatus,
+} from "@prisma/client";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   deriveTaskState,
@@ -11,7 +17,9 @@ import {
   taskStateTone,
   toTaskReadinessInput,
   type TaskCompletionRequirements,
+  type TaskIssueRef,
 } from "@/lib/task-readiness";
+import { getOverrideBlockedByIssueError } from "@/lib/job-task-override-guard";
 import {
   completeJobTaskAction,
   overrideJobTaskReadinessAction,
@@ -23,6 +31,7 @@ import {
   completeTaskAttachmentUploadAction,
 } from "@/app/(workspace)/jobs/attachment-actions";
 import { createJobIssueAction } from "@/app/(workspace)/jobs/job-issue-actions";
+import { resolveIssueAndResumeAction } from "@/app/(workspace)/jobs/recovery-actions";
 import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-display";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
@@ -126,6 +135,25 @@ export function TaskWorkSurface({
     router.refresh();
   }, [router]);
 
+  const handleResumeAfterRecovery = useCallback(
+    (issueId: string, resolutionNote?: string) => {
+      setActionMessage(null);
+      startTransition(async () => {
+        try {
+          await resolveIssueAndResumeAction(issueId, resolutionNote);
+          setActionMessage({ tone: "success", text: "Original path resumed. Issue resolved." });
+          refreshAfterMutation();
+        } catch (e) {
+          setActionMessage({
+            tone: "error",
+            text: e instanceof Error ? e.message : "Failed to resume the original path.",
+          });
+        }
+      });
+    },
+    [refreshAfterMutation, startTransition],
+  );
+
   const clearWorkstationSelection = useCallback(() => {
     if (!clearWorkstationSelectionOnComplete) return;
     const p = new URLSearchParams(searchParams.toString());
@@ -149,6 +177,16 @@ export function TaskWorkSurface({
   const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";
   const isBlocked = isBlockedByIssue || isBlockedBySignal;
   const needsProof = derivedState === "NEEDS_PROOF";
+
+  const taskIssueRefs: TaskIssueRef[] = task.issues.map((issue) => ({
+    id: issue.id,
+    status: issue.status,
+    severity: issue.severity,
+  }));
+  const overrideBlockedByIssueError = getOverrideBlockedByIssueError({
+    taskIssues: taskIssueRefs,
+    stageIssues,
+  });
 
   const missingSignals = [
     ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
@@ -410,9 +448,9 @@ export function TaskWorkSurface({
             Checklist
           </h4>
           <div className="space-y-2">
-            {requirements.checklist.map((item) => (
+            {requirements.checklist.map((item, index) => (
               <label
-                key={item.id}
+                key={item.id?.trim() ? item.id : `checklist-${index}`}
                 className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors sm:rounded-lg sm:p-3 ${
                   item.completedAt
                     ? "border-approved/20 bg-approved/5 text-approved-strong"
@@ -458,12 +496,23 @@ export function TaskWorkSurface({
 
       {isBlocked && (
         <div className="space-y-4">
-          {task.issues.filter(i => i.status === "OPEN").map((issue) => {
+          {task.issues.filter((i) => i.status === JobIssueStatus.OPEN).map((issue) => {
             const recoveryTasks = issue.recoveryFlow?.tasks || [];
             const totalRecoveryTasks = recoveryTasks.length;
-            const completedRecoveryTasks = recoveryTasks.filter(t => t.status === "DONE").length;
-            const hasActiveRecovery = issue.recoveryFlow?.status === "ACTIVE";
-            
+            const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === JobTaskStatus.DONE).length;
+            const recoveryFlowOpen =
+              issue.recoveryFlow &&
+              (issue.recoveryFlow.status === JobRecoveryFlowStatus.ACTIVE ||
+                issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT);
+            const showRecoveryProgress = !!recoveryFlowOpen && totalRecoveryTasks > 0;
+            const allRecoveryTasksDone =
+              totalRecoveryTasks > 0 &&
+              recoveryTasks.every((t) => t.status === JobTaskStatus.DONE);
+            const canResumeAfterRecovery =
+              issue.status === JobIssueStatus.OPEN &&
+              allRecoveryTasksDone &&
+              !!recoveryFlowOpen;
+
             return (
               <div key={issue.id} className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
                 <div className="flex gap-3">
@@ -494,16 +543,28 @@ export function TaskWorkSurface({
                       )}
                     </div>
 
-                    {hasActiveRecovery && (
-                      <div className="mt-3 rounded-lg bg-success/10 px-3 py-2">
+                    {showRecoveryProgress && (
+                      <div className="mt-3 space-y-2 rounded-lg bg-success/10 px-3 py-2">
                         <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success">
                           <Zap className="size-3" />
-                          Active follow-up: {completedRecoveryTasks}/{totalRecoveryTasks} steps done
+                          {allRecoveryTasksDone
+                            ? `All follow-up steps done (${completedRecoveryTasks}/${totalRecoveryTasks}). Resume the original path to clear this blocker.`
+                            : `Active follow-up: ${completedRecoveryTasks}/${totalRecoveryTasks} steps done`}
                         </p>
+                        {canResumeAfterRecovery && (
+                          <button
+                            type="button"
+                            onClick={() => handleResumeAfterRecovery(issue.id)}
+                            disabled={isPending}
+                            className="w-full rounded-md bg-success/20 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-success hover:bg-success/30 disabled:opacity-50 sm:w-auto"
+                          >
+                            {isPending ? "Resuming…" : "Resume original path"}
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {!hasActiveRecovery && !showRecoveryBuilder && (
+                    {!issue.recoveryFlow && !showRecoveryBuilder && (
                       <button
                         onClick={() => {
                           setSelectedIssueId(issue.id);
@@ -546,19 +607,27 @@ export function TaskWorkSurface({
 
           <div className="rounded-xl border border-danger/10 bg-danger/[0.02] p-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-danger-subtle mb-2">Manager Override</p>
-            <p className="mb-3 text-[10px] leading-relaxed text-foreground-muted">
-              If this work is actually ready despite the blockers above, a manager can override the engine. 
-              This action is audited.
-            </p>
-            <button
-              type="button"
-              onClick={handleOverride}
-              disabled={isPending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-danger hover:bg-danger/5 disabled:opacity-50"
-            >
-              <ShieldAlert className="size-3" />
-              Audit-Override & Complete
-            </button>
+            {overrideBlockedByIssueError ? (
+              <p className="text-[10px] leading-relaxed text-foreground-muted">
+                {overrideBlockedByIssueError}
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-[10px] leading-relaxed text-foreground-muted">
+                  If this work is actually ready despite the blockers above, a manager can override the engine.
+                  This action is audited.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOverride}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-danger hover:bg-danger/5 disabled:opacity-50"
+                >
+                  <ShieldAlert className="size-3" />
+                  Audit-Override & Complete
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

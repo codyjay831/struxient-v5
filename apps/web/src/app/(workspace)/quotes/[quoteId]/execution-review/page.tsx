@@ -160,6 +160,7 @@ export default async function QuoteExecutionReviewPreviewPage({
         tasks: l.draftExecutionTasks.map((t) => ({
           id: t.id,
           title: t.title,
+          stageId: t.stageId,
           providesSignals: t.providesSignals,
           requiresSignals: t.requiresSignals,
           hardSignal: t.hardSignal,

@@ -25,6 +25,7 @@ These guardrails exist to **steer implementation** toward the architecture alrea
 | [source-of-truth-map.md](./source-of-truth-map.md) | Stored vs derived concepts and canonical helpers |
 | [workstation-guardrails.md](./workstation-guardrails.md) | Workstation as cockpit; attention vs editors |
 | [task-payment-recovery-guardrails.md](./task-payment-recovery-guardrails.md) | Task readiness, payments, issues, recovery flows |
+| [guardrails-pass3-triage.md](./guardrails-pass3-triage.md) | Warn-only backlog: categories, payment decision context, next steps |
 
 ## Repo layout (runnable app)
 
@@ -90,4 +91,4 @@ Project rules live in `.cursor/rules/`:
 
 ---
 
-*Created 2026-05-16 — Guardrails v1 Pass 1. Updated Pass 2 — drift detectors + `resolve-job-issue-core` tests.*
+*Created 2026-05-16 — Guardrails v1 Pass 1. Updated Pass 2 — drift detectors + `resolve-job-issue-core` tests. Pass 3 — [guardrails-pass3-triage.md](./guardrails-pass3-triage.md).*

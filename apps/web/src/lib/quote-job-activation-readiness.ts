@@ -6,6 +6,7 @@ import { QuoteStatus } from "@prisma/client";
 export type QuoteActivationTaskInput = {
   id: string;
   title: string;
+  stageId: string | null;
   providesSignals: string[];
   requiresSignals: string[];
   hardSignal: boolean;
@@ -29,6 +30,7 @@ export type QuoteActivationBlockReasonCode =
   | "QUOTE_NOT_APPROVED"
   | "QUOTE_HAS_NO_LINES"
   | "NO_EXECUTION_TASKS"
+  | "TASK_MISSING_STAGE"
   | "HARD_SIGNAL_NO_PROVIDER"
   | "CIRCULAR_SIGNAL_DEPENDENCY";
 
@@ -74,6 +76,16 @@ export function evaluateQuoteJobActivationReadiness(
     reasons.push({
       code: "NO_EXECUTION_TASKS",
       message: "No execution tasks to activate—add at least one task before activation.",
+    });
+  }
+
+  const tasksMissingStage = allTasks.filter((t) => !t.stageId);
+  if (tasksMissingStage.length > 0) {
+    reasons.push({
+      code: "TASK_MISSING_STAGE",
+      message:
+        "Every execution task must have a stage before activation—assign a stage or remove the task.",
+      details: tasksMissingStage.map((t) => t.title),
     });
   }
 

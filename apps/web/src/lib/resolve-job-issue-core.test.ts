@@ -224,6 +224,36 @@ test("resolveJobIssueWithRecoveryHandling: force cancels flow and records forced
   assert.equal(act.data.metadataJson && (act.data.metadataJson as { forced?: boolean }).forced, true);
 });
 
+test("resolveJobIssueWithRecoveryHandling: standard with complete recovery matches resume", async () => {
+  const tx = createMockTx();
+  await resolveJobIssueWithRecoveryHandling(tx as never, {
+    organizationId: "org-1",
+    issue: {
+      id: "issue-1",
+      jobId: "job-1",
+      title: "Leak",
+      recoveryFlow: {
+        id: "flow-1",
+        status: JobRecoveryFlowStatus.ACTIVE,
+        tasks: [{ id: "t1", status: JobTaskStatus.DONE }],
+      },
+    },
+    mode: "standard",
+    actorUserId: "user-1",
+  });
+
+  assert.equal(tx.jobRecoveryFlowUpdates.length, 1);
+  const flowUpdate = tx.jobRecoveryFlowUpdates[0] as {
+    data: { status: JobRecoveryFlowStatus };
+  };
+  assert.equal(flowUpdate.data.status, JobRecoveryFlowStatus.COMPLETED);
+
+  const act = tx.jobActivityCreates[0] as { data: Record<string, unknown> };
+  assert.equal(act.data.type, JobActivityType.RECOVERY_FLOW_COMPLETED);
+  const meta = act.data.metadataJson as { originalPathResumed?: boolean };
+  assert.equal(meta.originalPathResumed, true);
+});
+
 test("resolveJobIssueWithRecoveryHandling: resume completes flow", async () => {
   const tx = createMockTx();
   await resolveJobIssueWithRecoveryHandling(tx as never, {
