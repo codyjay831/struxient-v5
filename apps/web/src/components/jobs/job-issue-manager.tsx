@@ -47,11 +47,6 @@ type Issue = {
   createdAt: Date;
   jobStage?: { title: string } | null;
   jobTask?: { title: string } | null;
-  followUpTasks: {
-    id: string;
-    title: string;
-    status: string;
-  }[];
   recoveryFlow?: {
     id: string;
     status: string;

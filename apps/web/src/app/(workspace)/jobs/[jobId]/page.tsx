@@ -117,13 +117,6 @@ export default async function JobDetailPage({
             createdAt: true,
             jobStage: { select: { title: true } },
             jobTask: { select: { title: true } },
-            followUpTasks: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-              },
-            },
             recoveryFlow: {
               select: {
                 id: true,

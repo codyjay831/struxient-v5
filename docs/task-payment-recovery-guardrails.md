@@ -113,16 +113,19 @@ Recovery work is normal `JobTask` rows linked via `recoveryFlowId`. Created thro
 
 ### Corrections stage
 
-The string `"Corrections"` is used for recovery/follow-up staging. Import `CORRECTIONS_STAGE_NAME` from `job-payment-readiness.ts` when touching payment or stage logic—do not duplicate the literal in new files.
+The string `"Corrections"` is used for recovery staging. Import `CORRECTIONS_STAGE_NAME` from `job-payment-readiness.ts` when touching payment or stage logic—do not duplicate the literal in new files.
 
-### Follow-up tasks vs recovery flows
+### Canonical mitigation model (BLOCKS_WORK)
 
-Two paths exist today:
+For `BLOCKS_WORK` issues, mitigation is **RecoveryFlow-only**:
 
-- **Recovery flow** — structured multi-step path tied to `JobRecoveryFlow`
-- **Follow-up task** — single task from `createFollowUpTaskFromIssueAction`
+- Draft/activate recovery flow on the issue
+- Execute recovery tasks (`JobTask` rows with `recoveryFlowId`)
+- Resume or force-resolve via canonical issue resolution actions
 
-Do not add a third pattern without canon review. Recovery progress UI should stay consistent with `recoveryFlowHasIncompleteTasks` semantics.
+`createFollowUpTaskFromIssueAction` is deprecated and must not be used for blocker mitigation.
+
+Do not add a second user-facing path for fixing blocking issues without canon review. Recovery progress UI should stay consistent with `recoveryFlowHasIncompleteTasks` semantics.
 
 ---
 
