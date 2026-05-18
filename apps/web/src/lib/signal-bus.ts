@@ -48,19 +48,22 @@ export async function publishSignal({
 /**
  * Retracts a signal from the job's signal bus.
  */
-export async function retractSignal(jobId: string, name: string) {
-  try {
-    await db.jobSignal.delete({
-      where: {
-        jobId_name: {
-          jobId,
-          name,
-        },
-      },
-    });
-  } catch {
-    // Ignore if already deleted or doesn't exist
-  }
+export async function retractSignal({
+  jobId,
+  name,
+  tx,
+}: {
+  jobId: string;
+  name: string;
+  tx?: ExtendedTransactionClient;
+}) {
+  const client = tx ?? db;
+  await client.jobSignal.deleteMany({
+    where: {
+      jobId,
+      name,
+    },
+  });
 }
 
 /**

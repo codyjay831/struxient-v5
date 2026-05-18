@@ -11,10 +11,11 @@ import {
   validateTaskCompletionReadiness,
   type TaskCompletionRequirements,
 } from "@/lib/task-readiness";
-import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
+import { publishSignal, getLiveSignals, retractSignal } from "@/lib/signal-bus";
 import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
 import { assertCanOverrideTaskReadiness } from "@/lib/job-task-override-guard";
 import { assertCanToggleTaskChecklistItem } from "@/lib/job-task-checklist-guard";
+import { assertCanRevertJobTaskToTodo } from "@/lib/job-task-revert";
 
 export type JobTaskActionState = {
   error?: string;
@@ -141,7 +142,7 @@ export async function completeJobTaskAction(
 
 /**
  * @internal Prefer completeJobTaskAction for marking tasks DONE.
- * Signal retraction on revert is not implemented in v1.
+ * Reverting DONE → TODO retracts task-sourced signals when safe (see job-task-revert).
  */
 export async function updateJobTaskStatusAction(
   taskId: string,
@@ -159,7 +160,7 @@ export async function updateJobTaskStatusAction(
   try {
     const task = await db.jobTask.findFirst({
       where: { id: taskId, job: { organizationId } },
-      select: { id: true, jobId: true, status: true },
+      select: { id: true, jobId: true, status: true, providesSignals: true },
     });
 
     if (!task) {
@@ -176,10 +177,58 @@ export async function updateJobTaskStatusAction(
           }
         : { status };
 
-    await db.jobTask.update({
-      where: { id: taskId },
-      data,
-    });
+    const isRevertFromDone =
+      status === JobTaskStatus.TODO && task.status === JobTaskStatus.DONE;
+
+    if (isRevertFromDone) {
+      const jobSignals =
+        task.providesSignals.length > 0
+          ? await db.jobSignal.findMany({
+              where: {
+                jobId: task.jobId,
+                name: { in: task.providesSignals },
+              },
+              select: { name: true, sourceJobTaskId: true },
+            })
+          : [];
+
+      const downstreamDoneTasks = await db.jobTask.findMany({
+        where: {
+          jobId: task.jobId,
+          id: { not: taskId },
+          status: JobTaskStatus.DONE,
+        },
+        select: { id: true, requiresSignals: true },
+      });
+
+      const revertGate = assertCanRevertJobTaskToTodo({
+        currentStatus: task.status,
+        taskId: task.id,
+        providesSignals: task.providesSignals,
+        jobSignals,
+        downstreamDoneTasks,
+      });
+
+      if (!revertGate.ok) {
+        return { error: revertGate.error };
+      }
+
+      await db.$transaction(async (tx) => {
+        await tx.jobTask.update({
+          where: { id: taskId },
+          data,
+        });
+
+        for (const signalName of revertGate.signalNamesToRetract) {
+          await retractSignal({ jobId: task.jobId, name: signalName, tx });
+        }
+      });
+    } else {
+      await db.jobTask.update({
+        where: { id: taskId },
+        data,
+      });
+    }
 
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");

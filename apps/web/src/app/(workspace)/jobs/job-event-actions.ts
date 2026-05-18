@@ -144,7 +144,7 @@ export async function removeJobEventAction(
         }
 
         // 2. Retract signal from bus
-        await retractSignal(jobId, eventSignal);
+        await retractSignal({ jobId, name: eventSignal, tx });
       }
 
       // 3. Delete the task
