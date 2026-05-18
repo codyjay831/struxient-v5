@@ -307,6 +307,8 @@ export async function overrideJobTaskReadinessAction(
         },
         tx
       );
+
+      await promotePendingPaymentsToDue(task.jobId, tx);
     });
 
     revalidatePath("/workstation");

@@ -263,7 +263,7 @@ export default async function WorkstationTodayLensPage({
           )}
         </div>
 
-        {/* Sidebar: Activity & Insights */}
+        {/* Sidebar: Activity */}
         <aside className="space-y-8">
           <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
             <div className="flex items-center gap-2 mb-6">
@@ -302,35 +302,6 @@ export default async function WorkstationTodayLensPage({
                 No recent activity recorded.
               </p>
             )}
-          </section>
-
-          <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
-            <div className="flex items-center gap-2 mb-6">
-              <Zap className="size-4 text-accent" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">
-                Insights
-              </h3>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
-                  <span>Job Velocity</span>
-                  <span className="text-success">↑ 12%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-foreground/5">
-                  <div className="h-full w-[75%] rounded-full bg-accent" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
-                  <span>Quote Conversion</span>
-                  <span className="text-foreground">68%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-foreground/5">
-                  <div className="h-full w-[68%] rounded-full bg-foreground/20" />
-                </div>
-              </div>
-            </div>
           </section>
         </aside>
       </div>

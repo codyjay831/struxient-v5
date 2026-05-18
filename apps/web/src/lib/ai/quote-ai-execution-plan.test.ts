@@ -85,6 +85,24 @@ test("validateQuoteAiExecutionPlanForPersist blocks when org has no stages", () 
   assert.equal(result.ok, false);
 });
 
+test("validateQuoteAiExecutionPlanForPersist blocks simulated proposals without dev apply flag", () => {
+  const previous = process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS;
+  delete process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS;
+
+  const simulated = proposal([mappedTask]);
+  simulated.assumptions = ["Simulated: Assumed standard residential safety protocols apply."];
+
+  const result = validateQuoteAiExecutionPlanForPersist(simulated, stages);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /demo ai execution output/i);
+  }
+
+  if (previous !== undefined) {
+    process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS = previous;
+  }
+});
+
 test("mapped AI quote tasks satisfy activation readiness", () => {
   const validation = validateQuoteAiExecutionPlanForPersist(proposal([mappedTask]), stages);
   assert.equal(validation.ok, true);

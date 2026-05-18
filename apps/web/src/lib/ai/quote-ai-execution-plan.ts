@@ -1,8 +1,12 @@
 import type { AILibraryProposal } from "./library-proposal-schema";
 import type { AllowedStage } from "./map-ai-stage";
-import { 
-  isTaskOnCorrectionsStage, 
-  CORRECTIONS_CONDITIONAL_WORK_WARNING 
+import {
+  canApplySimulatedExecutionPlans,
+  isSimulatedExecutionProposal,
+} from "./ai-execution-plan-generation";
+import {
+  isTaskOnCorrectionsStage,
+  CORRECTIONS_CONDITIONAL_WORK_WARNING,
 } from "./ai-execution-plan-corrections";
 
 export type QuoteAiPlanValidationResult =
@@ -30,6 +34,14 @@ export function validateQuoteAiExecutionPlanForPersist(
       error:
         "Add execution stages in Scope Library settings before generating an AI execution plan.",
       unmappedTaskTitles: proposal.tasks.map((t) => t.title),
+    };
+  }
+
+  if (isSimulatedExecutionProposal(proposal) && !canApplySimulatedExecutionPlans()) {
+    return {
+      ok: false,
+      error: "Demo AI execution output cannot be applied.",
+      unmappedTaskTitles: [],
     };
   }
 

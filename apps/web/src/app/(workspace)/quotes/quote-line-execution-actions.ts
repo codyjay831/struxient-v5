@@ -680,7 +680,10 @@ export async function generateQuoteLineExecutionPlanAction(
         await tx.quoteLineExecutionTask.create({
           data: {
             quoteLineItemId: lid,
-            sourceType: LineItemTemplateTaskSource.CUSTOM,
+            sourceType: gTask.sourceTaskTemplateId
+              ? LineItemTemplateTaskSource.TASK_TEMPLATE
+              : LineItemTemplateTaskSource.CUSTOM,
+            sourceTaskTemplateId: gTask.sourceTaskTemplateId ?? null,
             title: gTask.title,
             category: gTask.category,
             instructions: gTask.instructions,
