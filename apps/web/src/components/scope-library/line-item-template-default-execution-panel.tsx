@@ -12,6 +12,7 @@ import {
   applyLineItemTemplateAIProposalAction,
   type LineItemTemplateExecutionFormState,
 } from "@/app/(workspace)/settings/scope-library/line-item-template-execution-actions";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import {
   workspaceFormControlClass,
@@ -459,7 +460,7 @@ export function LineItemTemplateDefaultExecutionPanel({
       }
     } catch (e) {
       console.error(e);
-      toast.error("Failed to generate AI proposal.");
+      toast.error(getAiActionErrorMessage(e, "Failed to generate AI proposal."));
     } finally {
       setAiGenerating(false);
     }

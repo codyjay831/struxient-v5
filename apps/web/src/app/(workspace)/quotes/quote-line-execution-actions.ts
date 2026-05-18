@@ -2,6 +2,7 @@
 
 import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { AIService } from "@/lib/ai/ai-service";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import { validateQuoteAiExecutionPlanForPersist } from "@/lib/ai/quote-ai-execution-plan";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
@@ -702,6 +703,6 @@ export async function generateQuoteLineExecutionPlanAction(
     return { warnings: validation.warnings.length > 0 ? validation.warnings : undefined };
   } catch (e) {
     console.error("Failed to generate execution plan", e);
-    return { error: "Failed to generate AI execution plan." };
+    return { error: getAiActionErrorMessage(e) };
   }
 }

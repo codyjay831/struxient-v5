@@ -4,6 +4,7 @@ import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { AIService } from "@/lib/ai/ai-service";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/library-ai-execution-plan";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
@@ -587,7 +588,7 @@ export async function generateLineItemTemplateAIProposalAction(
     return { proposal };
   } catch (e) {
     console.error("Failed to generate AI execution plan", e);
-    return { error: "Failed to generate AI execution plan." };
+    return { error: getAiActionErrorMessage(e) };
   }
 }
 

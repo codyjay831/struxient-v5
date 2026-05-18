@@ -1,5 +1,9 @@
 import { TaskTemplateCategory, JobIssueType, JobIssueSeverity } from "@prisma/client";
 import { AILibraryProposal, AILibraryProposalSchema } from "./library-proposal-schema";
+import {
+  AiProviderTemporarilyUnavailableError,
+  isAiProviderTemporarilyUnavailable,
+} from "./ai-provider-errors";
 import { mapAiStageToStageId, parseStageIntent, type StageIntent } from "./map-ai-stage";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -96,15 +100,11 @@ export class AIService {
    * Returns false for hard 4xx (auth, bad model, bad request) — those won't fix themselves.
    */
   private static isRetryableError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-
-    // The Google SDK attaches `status` for HTTP-level errors.
-    const status = (error as { status?: number }).status;
-    if (typeof status === "number") {
-      if (status === 429) return true;
-      if (status >= 500 && status < 600) return true;
-      return false;
+    if (isAiProviderTemporarilyUnavailable(error)) {
+      return true;
     }
+
+    if (!(error instanceof Error)) return false;
 
     const msg = error.message.toLowerCase();
     return (
@@ -267,7 +267,10 @@ export class AIService {
 
       return AILibraryProposalSchema.parse(proposal);
     } catch (e) {
-      console.error("Gemini generation failed, falling back to simulation", e);
+      console.error("Gemini generation failed", e);
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
       return this.simulateLibraryExecutionPlan(context, {
         reason: this.friendlyErrorMessage(e),
       });
@@ -611,6 +614,9 @@ Return ONLY a valid JSON object:
       return AIRecoveryProposalSchema.parse(proposal);
     } catch (e) {
       console.error("AI Recovery Path Suggestion failed", e);
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
       throw e;
     }
   }
