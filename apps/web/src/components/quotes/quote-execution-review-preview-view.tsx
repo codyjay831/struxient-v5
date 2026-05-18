@@ -366,6 +366,14 @@ function ActivationPanel({
         {r.blockReasons.map((reason) => (
           <li key={reason.code} className="rounded-md border border-border bg-background/40 px-3 py-2">
             <p className="text-sm font-medium text-foreground">{reason.message}</p>
+            {reason.code === "TASK_MISSING_STAGE" ? (
+              <Link
+                href={`/quotes/${quoteId}`}
+                className="mt-2 inline-flex text-xs font-medium text-primary hover:underline"
+              >
+                Assign stages on the quote
+              </Link>
+            ) : null}
             {reason.details && reason.details.length > 0 ? (
               <ul className="mt-1 space-y-1 text-xs text-foreground-muted">
                 {reason.details.map((detail) => (

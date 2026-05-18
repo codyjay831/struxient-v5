@@ -93,9 +93,18 @@ export function AILibraryProposalReviewPanel({
     });
   };
 
+  const unmappedStageCount = editedProposal.tasks.filter((t) => !t.stageId).length;
+  const canApply = editedProposal.tasks.length > 0 && unmappedStageCount === 0;
+
   const handleApply = async () => {
     if (editedProposal.tasks.length === 0) {
       toast.error("Add at least one task before applying.");
+      return;
+    }
+    if (unmappedStageCount > 0) {
+      toast.error(
+        `${unmappedStageCount} ${unmappedStageCount === 1 ? "task needs" : "tasks need"} a stage before applying.`,
+      );
       return;
     }
     setApplying(true);
@@ -130,7 +139,14 @@ export function AILibraryProposalReviewPanel({
             </div>
             <div>
               <h2 className="text-lg font-bold text-foreground">AI Execution Proposal</h2>
-              <p className="text-xs text-foreground-muted">Review and refine the generated execution plan.</p>
+              <p className="text-xs text-foreground-muted">
+                Review and refine the generated execution plan.
+                {unmappedStageCount > 0 ? (
+                  <span className="mt-1 block font-semibold text-danger-strong">
+                    {unmappedStageCount} {unmappedStageCount === 1 ? "task needs" : "tasks need"} a stage
+                  </span>
+                ) : null}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-md p-2 hover:bg-foreground/5 transition-colors">
@@ -217,6 +233,11 @@ export function AILibraryProposalReviewPanel({
                               </button>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {!task.stageId ? (
+                                <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
+                                  Needs stage
+                                </span>
+                              ) : null}
                               <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
                                 {getTaskTemplateCategoryLabel(task.category)}
                               </span>
@@ -353,7 +374,7 @@ export function AILibraryProposalReviewPanel({
             </button>
             <button 
               onClick={handleApply}
-              disabled={applying}
+              disabled={applying || !canApply}
               className={`${primaryButtonClass} flex-1 justify-center gap-2`}
             >
               {applying ? (

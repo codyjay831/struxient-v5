@@ -633,6 +633,9 @@ export function QuoteAuthoringSurface({
       if (result.error) {
         toast.error(result.error);
       } else {
+        if (result.warnings?.length) {
+          result.warnings.forEach((w) => toast.warning(w));
+        }
         toast.success("AI execution plan generated.");
         onMutated();
       }

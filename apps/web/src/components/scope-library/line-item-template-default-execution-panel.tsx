@@ -71,6 +71,50 @@ function sourceLabel(sourceType: LineItemTemplateTaskSource): string {
     : "Custom task";
 }
 
+const defaultExecutionStageHelper =
+  "Default execution tasks must belong to a stage.";
+
+function DefaultExecutionStageField({
+  stages,
+  defaultStageId,
+}: {
+  stages: { id: string; name: string }[];
+  /** When empty, user must select a stage (legacy unstaged tasks). */
+  defaultStageId?: string | null;
+}) {
+  const needsPlaceholder = !defaultStageId || !stages.some((s) => s.id === defaultStageId);
+
+  return (
+    <label className="block">
+      <span className={fieldLabelClass}>Stage</span>
+      <select
+        name="stageId"
+        required
+        className={controlClass}
+        defaultValue={defaultStageId ?? ""}
+        disabled={stages.length === 0}
+      >
+        {needsPlaceholder ? (
+          <option value="" disabled>
+            Select a stage
+          </option>
+        ) : null}
+        {stages.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-foreground-muted">{defaultExecutionStageHelper}</p>
+      {stages.length === 0 ? (
+        <p className="mt-1 text-xs text-foreground-subtle">
+          Add stages in Scope Library settings before adding default execution tasks.
+        </p>
+      ) : null}
+    </label>
+  );
+}
+
 function AddTaskSection({
   lineItemTemplateId,
   reusableOptions,
@@ -159,17 +203,10 @@ function AddTaskSection({
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className={fieldLabelClass}>Stage</span>
-                <select name="stageId" className={controlClass}>
-                  <option value="">(No stage)</option>
-                  {stages.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <DefaultExecutionStageField
+                stages={stages}
+                defaultStageId={stages[0]?.id}
+              />
               <label className="block">
                 <span className={fieldLabelClass}>Category</span>
                 <select
@@ -199,7 +236,11 @@ function AddTaskSection({
 
             <SmartTaskDisclosure title={customTitle} category={customCategory} />
 
-            <button type="submit" className={primaryButtonClass} disabled={customPending}>
+            <button
+              type="submit"
+              className={primaryButtonClass}
+              disabled={customPending || stages.length === 0}
+            >
               {customPending ? "Saving…" : "Save custom task"}
             </button>
           </form>
@@ -249,6 +290,11 @@ function ExecutionTaskRow({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{task.title}</p>
+          {!task.stageId ? (
+            <span className="mt-1 inline-flex rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
+              Missing stage
+            </span>
+          ) : null}
           <p className="mt-0.5 text-xs text-foreground-muted">
             {getTaskTemplateCategoryLabel(task.category)} · {sourceLabel(task.sourceType)}
           </p>
@@ -330,21 +376,10 @@ function ExecutionTaskRow({
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className={fieldLabelClass}>Stage</span>
-              <select 
-                name="stageId" 
-                className={controlClass} 
-                defaultValue={task.stageId ?? ""}
-              >
-                <option value="">(No stage)</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DefaultExecutionStageField
+              stages={stages}
+              defaultStageId={task.stageId}
+            />
             <label className="block">
               <span className={fieldLabelClass}>Category</span>
               <select 
@@ -383,7 +418,11 @@ function ExecutionTaskRow({
             category={category}
           />
 
-          <button type="submit" className={primaryButtonClass} disabled={updatePending}>
+          <button
+            type="submit"
+            className={primaryButtonClass}
+            disabled={updatePending || stages.length === 0}
+          >
             {updatePending ? "Saving…" : "Save changes"}
           </button>
         </form>

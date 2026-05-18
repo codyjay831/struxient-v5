@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { AIService } from "@/lib/ai/ai-service";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/library-ai-execution-plan";
+import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
@@ -270,6 +272,14 @@ export async function addLineItemTemplateTaskCustomAction(
     return parsed;
   }
 
+  const stageCheck = validateExecutionTaskStage(
+    parsed.data.stageId,
+    "line_item_default_execution",
+  );
+  if (!stageCheck.ok) {
+    return { error: stageCheck.message };
+  }
+
   const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
@@ -330,6 +340,14 @@ export async function updateLineItemTemplateTaskAction(
   const parsed = parseTaskBodyFromForm(formData);
   if (!("data" in parsed)) {
     return parsed;
+  }
+
+  const stageCheck = validateExecutionTaskStage(
+    parsed.data.stageId,
+    "line_item_default_execution",
+  );
+  if (!stageCheck.ok) {
+    return { error: stageCheck.message };
   }
 
   const ctx = await getRequestContextOrThrow();
@@ -585,6 +603,15 @@ export async function applyLineItemTemplateAIProposalAction(
   const ctx = await getRequestContextOrThrow();
 
   try {
+    const applyValidation = validateLibraryDefaultExecutionProposalForApply(proposal);
+    if (!applyValidation.ok) {
+      const detail =
+        applyValidation.unmappedTaskTitles.length > 0
+          ? ` Unmapped: ${applyValidation.unmappedTaskTitles.join(", ")}.`
+          : "";
+      return { error: `${applyValidation.error}${detail}` };
+    }
+
     await db.$transaction(async (tx) => {
       const preset = await tx.lineItemTemplate.findFirst({
         where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },

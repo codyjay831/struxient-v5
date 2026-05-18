@@ -76,12 +76,14 @@ function StageTaskEditForm({
   quoteId,
   lineItemId,
   task,
+  stages,
   revalidateScope,
   onClose,
 }: {
   quoteId: string;
   lineItemId: string;
   task: QuoteLineDraftExecutionTaskRow;
+  stages: { id: string; name: string }[];
   revalidateScope: QuoteLineExecutionRevalidateScope;
   onClose: () => void;
 }) {
@@ -91,13 +93,13 @@ function StageTaskEditForm({
   );
   const [title, setTitle] = useState(task.title);
   const [category, setCategory] = useState(task.category);
+  const [stageId, setStageId] = useState(task.stageId ?? "");
 
   const categoryOptions = taskTemplateCategorySelectOptions();
 
   return (
     <form action={action} className="mt-3 space-y-3 border-t border-border pt-3">
       {state.error ? <FormError message={state.error} /> : null}
-      <input type="hidden" name="stageId" value={task.stageId ?? ""} />
       <input type="hidden" name="revalidateScope" value={revalidateScope} />
       <label className="block">
         <span className={fieldLabelClass}>Title</span>
@@ -124,6 +126,25 @@ function StageTaskEditForm({
           {categoryOptions.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className={fieldLabelClass}>Stage</span>
+        <select
+          name="stageId"
+          required
+          className={controlClass}
+          value={stageId}
+          onChange={(e) => setStageId(e.target.value)}
+        >
+          <option value="" disabled>
+            Select a stage
+          </option>
+          {stages.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
             </option>
           ))}
         </select>
@@ -170,6 +191,7 @@ function StageTaskRow({
   quoteId,
   lineItemId,
   task,
+  stages,
   isFirstInStage,
   isLastInStage,
   revalidateScope,
@@ -177,6 +199,7 @@ function StageTaskRow({
   quoteId: string;
   lineItemId: string;
   task: QuoteLineDraftExecutionTaskRow;
+  stages: { id: string; name: string }[];
   isFirstInStage: boolean;
   isLastInStage: boolean;
   revalidateScope: QuoteLineExecutionRevalidateScope;
@@ -200,6 +223,11 @@ function StageTaskRow({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{task.title}</p>
+          {!task.stageId ? (
+            <span className="mt-1 inline-flex rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
+              Missing stage
+            </span>
+          ) : null}
           <p className="mt-0.5 text-xs text-foreground-muted">
             {getTaskTemplateCategoryLabel(task.category)} ·{" "}
             {quoteLineDraftExecutionSourceLabel({
@@ -281,6 +309,7 @@ function StageTaskRow({
           quoteId={quoteId}
           lineItemId={lineItemId}
           task={task}
+          stages={stages}
           revalidateScope={revalidateScope}
           onClose={() => setEditing(false)}
         />
@@ -447,6 +476,7 @@ function StageSection({
   lineItemId,
   stage,
   tasks,
+  stages,
   reusableOptions,
   addMode,
   setAddMode,
@@ -456,6 +486,7 @@ function StageSection({
   lineItemId: string;
   stage: { id: string | null, name: string };
   tasks: QuoteLineDraftExecutionTaskRow[];
+  stages: { id: string; name: string }[];
   reusableOptions: ReusableTaskPickerOption[];
   addMode: AddMode;
   setAddMode: (next: AddMode) => void;
@@ -484,6 +515,7 @@ function StageSection({
               quoteId={quoteId}
               lineItemId={lineItemId}
               task={task}
+              stages={stages}
               isFirstInStage={idx === 0}
               isLastInStage={idx === tasks.length - 1}
               revalidateScope={revalidateScope}
@@ -568,8 +600,10 @@ export function QuoteLineDraftExecutionInlinePanel({
   
   const noStageTasks = tasksByStage.get(null) || [];
   if (noStageTasks.length > 0) {
-    sections.push({ id: null, name: "No stage", tasks: noStageTasks });
+    sections.push({ id: null, name: "Missing stage", tasks: noStageTasks });
   }
+
+  const missingStageCount = noStageTasks.length;
 
   for (const s of stages) {
     sections.push({ id: s.id, name: s.name, tasks: tasksByStage.get(s.id) || [] });
@@ -580,6 +614,11 @@ export function QuoteLineDraftExecutionInlinePanel({
       <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
         Draft execution for this line
       </p>
+      {missingStageCount > 0 ? (
+        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
+          {missingStageCount} {missingStageCount === 1 ? "task needs" : "tasks need"} a stage
+        </p>
+      ) : null}
       <div className="mt-4 space-y-3">
         {sections.map((section) => (
           <StageSection
@@ -588,6 +627,7 @@ export function QuoteLineDraftExecutionInlinePanel({
             lineItemId={lineItemId}
             stage={section}
             tasks={section.tasks}
+            stages={stages}
             reusableOptions={reusableOptions}
             addMode={addMode}
             setAddMode={setAddMode}

@@ -558,7 +558,6 @@ export async function queryWorkstationWorkItems(
     }
 
     // 3a. Scheduling Signals
-    const now = new Date();
     const upcomingVisits = job.visits.filter(
       (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt > now
     );

@@ -1,5 +1,6 @@
 import { TaskTemplateCategory, JobIssueType, JobIssueSeverity } from "@prisma/client";
 import { AILibraryProposal, AILibraryProposalSchema } from "./library-proposal-schema";
+import { mapAiStageToStageId, parseStageIntent, type StageIntent } from "./map-ai-stage";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
@@ -209,6 +210,7 @@ export class AIService {
 
       // Normalize categories and track which ones we had to coerce.
       const normalizationWarnings: string[] = [];
+      const stageMappingWarnings: string[] = [];
       const normalizedTasks = (Array.isArray(rawProposal.tasks) ? rawProposal.tasks : []).map(
         (t: Record<string, unknown>, idx: number) => {
           const originalCategory = t?.category;
@@ -222,14 +224,31 @@ export class AIService {
             );
           }
 
+          const stageMapping = mapAiStageToStageId({
+            stageName: t?.stageName as string | undefined,
+            stageKey: t?.stageKey as string | undefined,
+            stageIntent: parseStageIntent(t?.stageIntent),
+            allowedStages: context.existingStages,
+          });
+
+          if (stageMapping.warning) {
+            const taskLabel = t?.title ? `"${t.title}"` : `Task ${idx + 1}`;
+            stageMappingWarnings.push(`${taskLabel}: ${stageMapping.warning}`);
+          } else if (stageMapping.confidence === "unmapped" && stageMapping.reason) {
+            const taskLabel = t?.title ? `"${t.title}"` : `Task ${idx + 1}`;
+            stageMappingWarnings.push(`${taskLabel}: ${stageMapping.reason}`);
+          }
+
           return {
             ...t,
             category: finalCategory,
             tempId: crypto.randomUUID(),
-            stageId:
-              context.existingStages.find(
-                (s) => s.name.toLowerCase() === (t?.stageName as string | undefined)?.toLowerCase(),
-              )?.id ?? null,
+            stageId: stageMapping.stageId,
+            stageName:
+              stageMapping.stageId != null
+                ? context.existingStages.find((s) => s.id === stageMapping.stageId)?.name ??
+                  (t?.stageName as string | undefined)
+                : (t?.stageName as string | undefined),
           };
         },
       );
@@ -242,7 +261,7 @@ export class AIService {
         templateId: context.templateId,
         sourceContext: context.description,
         assumptions: baseAssumptions,
-        warnings: [...baseWarnings, ...normalizationWarnings],
+        warnings: [...baseWarnings, ...normalizationWarnings, ...stageMappingWarnings],
         tasks: normalizedTasks,
       };
 
@@ -259,6 +278,11 @@ export class AIService {
     context: AIExecutionPlanContext,
     reusableTasks: { id: string; title: string; category: string; stage?: { name: string } | null; tags: { name: string }[] }[] = []
   ): string {
+    const stageListJson = JSON.stringify(
+      context.existingStages.map((s) => ({ name: s.name })),
+      null,
+      2,
+    );
     const stageNames = context.existingStages.map(s => s.name).join(", ");
     const signalNames = context.existingSignals.join(", ");
     const allowedCategories = Object.values(TaskTemplateCategory).join(", ");
@@ -273,7 +297,9 @@ You are a realistic contractor execution planner. Your job is to draft a structu
 LINE ITEM DESCRIPTION: "${context.description}"
 LINE ITEM TAGS: [${context.tags.join(", ")}]
 ORGANIZATION CONTEXT: "${context.organizationName || 'General Contractor'}"
-EXISTING STAGES: [${stageNames}]
+ALLOWED STAGES (stageName on each task MUST be copied exactly from this list):
+${stageListJson}
+EXISTING STAGES (summary): [${stageNames || "None — add stages in Scope Library before generating tasks."}]
 EXISTING SIGNALS: [${signalNames}]
 USER INSTRUCTIONS: "${context.userInstructions || 'None'}"
 
@@ -300,7 +326,7 @@ Avoid generic task lists. Think about permits, material orders, site prep, rough
 RULES:
 1. SELECT FROM REUSABLE TASKS FIRST. If an available reusable task fits the need, use its ID and title exactly.
 2. ONLY GENERATE NEW TASKS for gaps not covered by the library.
-3. Group tasks by STAGE. Use the existing stages provided if they fit, or suggest a logical stage name.
+3. Group tasks by STAGE. Each task's "stageName" MUST be copied exactly from EXISTING STAGES above — do not invent new stage names.
 4. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
 5. Mark critical blockers as "hardSignal: true".
 6. Include a checklist for each task.
@@ -319,7 +345,8 @@ Return ONLY a valid JSON object matching this structure:
       "title": "string",
       "category": "one of: ${allowedCategories}",
       "instructions": "string",
-      "stageName": "string",
+      "stageName": "string (exact copy of one ALLOWED STAGES name)",
+      "stageIntent": "optional — PRE_CONSTRUCTION | PERMITTING | MOBILIZATION | SITE_PREP | ROUGH_IN | INSPECTION | INSTALL | FINISHES | CLOSEOUT",
       "providesSignals": ["string"],
       "requiresSignals": ["string"],
       "hardSignal": boolean,
@@ -333,15 +360,21 @@ Return ONLY a valid JSON object matching this structure:
 `;
   }
 
-  /** Compatibility layer for existing Quote Mode */
-  static async generateExecutionPlan(description: string, organizationId: string, tags: string[] = []) {
+  /** Compatibility layer for quote-line AI execution planning */
+  static async generateExecutionPlan(
+    description: string,
+    organizationId: string,
+    tags: string[] = [],
+    existingStages: { id: string; name: string }[] = [],
+    existingSignals: string[] = [],
+  ) {
     const proposal = await this.generateLibraryExecutionPlan({
       templateId: "compat",
       description,
       organizationId,
       tags,
-      existingStages: [],
-      existingSignals: [],
+      existingStages,
+      existingSignals,
     });
     return proposal;
   }
@@ -604,20 +637,22 @@ Return ONLY a valid JSON object:
       tasks: [],
     };
 
-    const findStageId = (name: string) => {
-      const match = existingStages.find(s => s.name.toLowerCase().includes(name.toLowerCase()));
-      return match?.id || null;
-    };
+    const mapSimStage = (stageName: string, intent?: StageIntent) =>
+      mapAiStageToStageId({ stageName, stageIntent: intent, allowedStages: existingStages });
 
     if (d.includes("roof") || d.includes("shingle")) {
+      const prepStage = mapSimStage("Preparation", "SITE_PREP");
+      const roughStage = mapSimStage("Rough-in", "ROUGH_IN");
       proposal.tasks = [
         {
           tempId: crypto.randomUUID(),
           title: "Material Delivery & Roof Loading",
           category: TaskTemplateCategory.MATERIAL,
           instructions: "Ensure shingles are distributed across the ridge for weight balance.",
-          stageName: "Preparation",
-          stageId: findStageId("Prep"),
+          stageName: prepStage.stageId
+            ? existingStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
+            : "Preparation",
+          stageId: prepStage.stageId,
           providesSignals: ["materials-on-site"],
           requiresSignals: [],
           hardSignal: false,
@@ -634,8 +669,10 @@ Return ONLY a valid JSON object:
           title: "Tear-off & Deck Inspection",
           category: TaskTemplateCategory.GENERAL,
           instructions: "Remove existing shingles down to the wood deck. Report any rot immediately.",
-          stageName: "Rough-in",
-          stageId: findStageId("Rough"),
+          stageName: roughStage.stageId
+            ? existingStages.find((s) => s.id === roughStage.stageId)?.name ?? "Rough-in"
+            : "Rough-in",
+          stageId: roughStage.stageId,
           providesSignals: ["demo-complete"],
           requiresSignals: ["materials-on-site"],
           hardSignal: true,
@@ -649,13 +686,17 @@ Return ONLY a valid JSON object:
         }
       ];
     } else {
+      const prepStage = mapSimStage("Preparation", "SITE_PREP");
+      const installStage = mapSimStage("Installation", "INSTALL");
       proposal.tasks = [
         {
           tempId: crypto.randomUUID(),
           title: `Setup for ${description}`,
           category: TaskTemplateCategory.GENERAL,
-          stageName: "Preparation",
-          stageId: findStageId("Prep"),
+          stageName: prepStage.stageId
+            ? existingStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
+            : "Preparation",
+          stageId: prepStage.stageId,
           providesSignals: ["setup-complete"],
           requiresSignals: [],
           hardSignal: false,
@@ -668,8 +709,10 @@ Return ONLY a valid JSON object:
           tempId: crypto.randomUUID(),
           title: `Execute ${description}`,
           category: TaskTemplateCategory.GENERAL,
-          stageName: "Installation",
-          stageId: findStageId("Install"),
+          stageName: installStage.stageId
+            ? existingStages.find((s) => s.id === installStage.stageId)?.name ?? "Installation"
+            : "Installation",
+          stageId: installStage.stageId,
           providesSignals: ["execution-complete"],
           requiresSignals: ["setup-complete"],
           hardSignal: false,

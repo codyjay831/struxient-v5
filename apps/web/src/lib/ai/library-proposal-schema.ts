@@ -1,6 +1,18 @@
 import { TaskTemplateCategory } from "@prisma/client";
 import { z } from "zod";
 
+const stageIntentSchema = z.enum([
+  "PRE_CONSTRUCTION",
+  "PERMITTING",
+  "MOBILIZATION",
+  "SITE_PREP",
+  "ROUGH_IN",
+  "INSPECTION",
+  "INSTALL",
+  "FINISHES",
+  "CLOSEOUT",
+]);
+
 /**
  * Zod schema for a single proposed task in Library Mode.
  * Mirrors LineItemTemplateTask but includes AI-specific metadata.
@@ -11,8 +23,11 @@ export const AILibraryProposedTaskSchema = z.object({
   title: z.string().min(1).max(255),
   category: z.nativeEnum(TaskTemplateCategory),
   instructions: z.string().optional().nullable(),
-  stageName: z.string().optional().nullable(), // Proposed stage name (to be mapped to stageId)
-  stageId: z.string().optional().nullable(), // Populated if matched to existing stage
+  stageName: z.string().optional().nullable(), // Must match an allowed org stage name when set
+  stageKey: z.string().optional().nullable(), // Normalized stage label from allowed list
+  stageId: z.string().optional().nullable(), // Populated server-side from stageName/stageKey/stageIntent
+  stageIntent: stageIntentSchema.optional().nullable(), // Mapper fallback only — not persisted
+  stageMappingWarning: z.string().optional().nullable(),
   providesSignals: z.array(z.string()),
   requiresSignals: z.array(z.string()),
   hardSignal: z.boolean().default(false),

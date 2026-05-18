@@ -2,6 +2,8 @@
 
 import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { AIService } from "@/lib/ai/ai-service";
+import { validateQuoteAiExecutionPlanForPersist } from "@/lib/ai/quote-ai-execution-plan";
+import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -13,6 +15,7 @@ import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-lib
 
 export type QuoteLineExecutionFormState = {
   error?: string;
+  warnings?: string[];
 };
 
 function trimOrNull(value: FormDataEntryValue | null): string | null {
@@ -307,6 +310,11 @@ export async function addQuoteLineExecutionTaskCustomAction(
     return parsed;
   }
 
+  const stageCheck = validateExecutionTaskStage(parsed.data.stageId, "quote_line");
+  if (!stageCheck.ok) {
+    return { error: stageCheck.message };
+  }
+
   const ctx = await getRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
@@ -365,6 +373,11 @@ export async function updateQuoteLineExecutionTaskAction(
   const parsed = parseTaskBodyFromForm(formData);
   if (!("data" in parsed)) {
     return parsed;
+  }
+
+  const stageCheck = validateExecutionTaskStage(parsed.data.stageId, "quote_line");
+  if (!stageCheck.ok) {
+    return { error: stageCheck.message };
   }
 
   const ctx = await getRequestContextOrThrow();
@@ -626,17 +639,33 @@ export async function generateQuoteLineExecutionPlanAction(
       return { error: "Line item not found." };
     }
 
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
     const plan = await AIService.generateExecutionPlan(
       line.description,
       line.quote.organizationId,
       tags,
+      stages,
     );
+
+    const validation = validateQuoteAiExecutionPlanForPersist(plan, stages);
+    if (!validation.ok) {
+      const detail =
+        validation.unmappedTaskTitles.length > 0
+          ? ` Unmapped: ${validation.unmappedTaskTitles.join(", ")}.`
+          : "";
+      return { error: `${validation.error}${detail}` };
+    }
 
     await db.$transaction(async (tx) => {
       for (let i = 0; i < plan.tasks.length; i++) {
         const gTask = plan.tasks[i];
-        const sortOrder = await nextSortOrderInStage(tx, lid, null);
+        const sortOrder = await nextSortOrderInStage(tx, lid, gTask.stageId ?? null);
 
         await tx.quoteLineExecutionTask.create({
           data: {
@@ -645,6 +674,7 @@ export async function generateQuoteLineExecutionPlanAction(
             title: gTask.title,
             category: gTask.category,
             instructions: gTask.instructions,
+            stageId: gTask.stageId,
             providesSignals: gTask.providesSignals,
             requiresSignals: gTask.requiresSignals,
             hardSignal: false,
@@ -669,7 +699,7 @@ export async function generateQuoteLineExecutionPlanAction(
     });
 
     revalidatePath(`/quotes/${qid}`);
-    return {};
+    return { warnings: validation.warnings.length > 0 ? validation.warnings : undefined };
   } catch (e) {
     console.error("Failed to generate execution plan", e);
     return { error: "Failed to generate AI execution plan." };

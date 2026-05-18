@@ -9,6 +9,7 @@ import {
   deriveTaskState,
   toTaskReadinessInput,
   validateTaskCompletionReadiness,
+  type TaskCompletionRequirements,
 } from "@/lib/task-readiness";
 import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
 import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
