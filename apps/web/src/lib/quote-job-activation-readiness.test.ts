@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  PaymentScheduleAnchorType,
   QuoteStatus,
 } from "@prisma/client";
 import {
@@ -37,11 +38,23 @@ const line = (
   ...overrides,
 });
 
+function readinessInput(
+  overrides: Partial<Parameters<typeof evaluateQuoteJobActivationReadiness>[0]> = {},
+) {
+  return {
+    quoteTotalCents: 0,
+    paymentSchedule: [],
+    ...overrides,
+  };
+}
+
 test("evaluateQuoteJobActivationReadiness is ready for approved quote with executable tasks", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.APPROVED,
-    lines: [line()],
-  });
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [line()],
+    }),
+  );
 
   assert.equal(readiness.ready, true);
   assert.equal(readiness.totalTasksToActivate, 1);
@@ -49,10 +62,12 @@ test("evaluateQuoteJobActivationReadiness is ready for approved quote with execu
 });
 
 test("evaluateQuoteJobActivationReadiness blocks when quote is not approved", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.SENT,
-    lines: [line()],
-  });
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.SENT,
+      lines: [line()],
+    }),
+  );
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "QUOTE_NOT_APPROVED");
@@ -60,9 +75,10 @@ test("evaluateQuoteJobActivationReadiness blocks when quote is not approved", ()
 });
 
 test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provider", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.APPROVED,
-    lines: [
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [
       line({
         tasks: [
           {
@@ -73,19 +89,21 @@ test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provide
             requiresSignals: ["hard-fact"],
             hardSignal: true,
           },
-        ]
-      })
+        ],
+      }),
     ],
-  });
+    }),
+  );
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "HARD_SIGNAL_NO_PROVIDER");
 });
 
 test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.APPROVED,
-    lines: [
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [
       line({
         tasks: [
           {
@@ -104,19 +122,21 @@ test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => 
             requiresSignals: ["signal-a"],
             hardSignal: false,
           },
-        ]
-      })
+        ],
+      }),
     ],
-  });
+    }),
+  );
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "CIRCULAR_SIGNAL_DEPENDENCY");
 });
 
 test("evaluateQuoteJobActivationReadiness blocks when task missing stage", () => {
-  const readiness = evaluateQuoteJobActivationReadiness({
-    status: QuoteStatus.APPROVED,
-    lines: [
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [
       line({
         tasks: [
           {
@@ -130,8 +150,52 @@ test("evaluateQuoteJobActivationReadiness blocks when task missing stage", () =>
         ],
       }),
     ],
-  });
+    }),
+  );
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "TASK_MISSING_STAGE");
+});
+
+test("evaluateQuoteJobActivationReadiness allows percentage-only milestone without final balance", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [line()],
+      quoteTotalCents: 1_000_000,
+      paymentSchedule: [
+        {
+          id: "pay-1",
+          title: "Deposit",
+          anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+          amountCents: null,
+          percentage: "30",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+});
+
+test("evaluateQuoteJobActivationReadiness blocks milestone missing amount and percentage", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [line()],
+      quoteTotalCents: 1_000_000,
+      paymentSchedule: [
+        {
+          id: "pay-1",
+          title: "Deposit",
+          anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+          amountCents: null,
+          percentage: null,
+        },
+      ],
+    }),
+  );
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.blockReasons[0]?.code, "PAYMENT_MILESTONE_MISSING_AMOUNT");
 });

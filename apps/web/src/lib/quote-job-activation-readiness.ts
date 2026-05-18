@@ -1,4 +1,5 @@
-import { QuoteStatus } from "@prisma/client";
+import { PaymentScheduleAnchorType, Prisma, QuoteStatus } from "@prisma/client";
+import { validatePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
 
 /**
  * Plain input for {@link evaluateQuoteJobActivationReadiness}
@@ -18,9 +19,19 @@ export type QuoteActivationLineInput = {
   tasks: QuoteActivationTaskInput[];
 };
 
+export type QuoteActivationPaymentScheduleItemInput = {
+  id: string;
+  title: string;
+  anchorType: PaymentScheduleAnchorType;
+  amountCents: number | null;
+  percentage: Prisma.Decimal | string | null;
+};
+
 export type QuoteActivationReadinessInput = {
   status: QuoteStatus;
   lines: QuoteActivationLineInput[];
+  quoteTotalCents: number;
+  paymentSchedule: QuoteActivationPaymentScheduleItemInput[];
 };
 
 /**
@@ -32,7 +43,10 @@ export type QuoteActivationBlockReasonCode =
   | "NO_EXECUTION_TASKS"
   | "TASK_MISSING_STAGE"
   | "HARD_SIGNAL_NO_PROVIDER"
-  | "CIRCULAR_SIGNAL_DEPENDENCY";
+  | "CIRCULAR_SIGNAL_DEPENDENCY"
+  | "PAYMENT_MILESTONE_MISSING_AMOUNT"
+  | "PAYMENT_SCHEDULE_EXCEEDS_QUOTE_TOTAL"
+  | "PAYMENT_MILESTONE_INVALID_PERCENTAGE";
 
 export type QuoteActivationBlockReason = {
   code: QuoteActivationBlockReasonCode;
@@ -164,6 +178,18 @@ export function evaluateQuoteJobActivationReadiness(
       code: "CIRCULAR_SIGNAL_DEPENDENCY",
       message: "Circular signal dependencies detected.",
       details: circulars,
+    });
+  }
+
+  const paymentErrors = validatePaymentScheduleForActivation(
+    input.paymentSchedule,
+    input.quoteTotalCents,
+  );
+  for (const paymentError of paymentErrors) {
+    reasons.push({
+      code: paymentError.code,
+      message: paymentError.message,
+      details: paymentError.details,
     });
   }
 

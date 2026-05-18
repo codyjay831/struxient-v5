@@ -141,6 +141,8 @@ test("mapped AI quote tasks satisfy activation readiness", () => {
 
   const readiness = evaluateQuoteJobActivationReadiness({
     status: QuoteStatus.APPROVED,
+    quoteTotalCents: 0,
+    paymentSchedule: [],
     lines: [
       {
         id: "line-1",

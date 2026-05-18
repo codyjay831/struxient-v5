@@ -39,8 +39,19 @@ export async function activateQuoteJobForSeed(
       id: true,
       title: true,
       status: true,
+      totalCents: true,
       customerId: true,
       leadId: true,
+      paymentSchedule: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          percentage: true,
+          anchorType: true,
+        },
+      },
       customer: { select: { organizationId: true } },
       lead: { select: { organizationId: true } },
       lineItems: {
@@ -100,6 +111,14 @@ export async function activateQuoteJobForSeed(
         requiresSignals: t.requiresSignals,
         hardSignal: t.hardSignal,
       })),
+    })),
+    quoteTotalCents: quote.totalCents,
+    paymentSchedule: quote.paymentSchedule.map((item) => ({
+      id: item.id,
+      title: item.title,
+      anchorType: item.anchorType,
+      amountCents: item.amountCents,
+      percentage: item.percentage,
     })),
   });
 

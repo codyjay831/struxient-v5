@@ -204,6 +204,14 @@ export async function loadQuoteWorkSurface(
         hardSignal: t.hardSignal,
       })),
     })),
+    quoteTotalCents: row.totalCents,
+    paymentSchedule: row.paymentSchedule.map((item) => ({
+      id: item.id,
+      title: item.title,
+      anchorType: item.anchorType,
+      amountCents: item.amountCents,
+      percentage: item.percentage,
+    })),
   });
 
   const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof, stages, organization] =

@@ -41,7 +41,18 @@ export default async function QuoteExecutionReviewPreviewPage({
         id: true,
         title: true,
         status: true,
+        totalCents: true,
         job: { select: { id: true } },
+        paymentSchedule: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            title: true,
+            amountCents: true,
+            percentage: true,
+            anchorType: true,
+          },
+        },
         lineItems: {
           orderBy: [{ sortOrder: "asc" }],
           select: {
@@ -165,6 +176,14 @@ export default async function QuoteExecutionReviewPreviewPage({
           requiresSignals: t.requiresSignals,
           hardSignal: t.hardSignal,
         })),
+      })),
+      quoteTotalCents: row.totalCents,
+      paymentSchedule: row.paymentSchedule.map((item) => ({
+        id: item.id,
+        title: item.title,
+        anchorType: item.anchorType,
+        amountCents: item.amountCents,
+        percentage: item.percentage,
       })),
     });
     activation = readiness.ready

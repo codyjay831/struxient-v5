@@ -244,6 +244,16 @@ export async function queryWorkstationWorkItems(
           draftExecutionTasks: true,
         },
       },
+      paymentSchedule: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          percentage: true,
+          anchorType: true,
+        },
+      },
     },
   });
 
@@ -264,6 +274,14 @@ export async function queryWorkstationWorkItems(
           requiresSignals: t.requiresSignals,
           hardSignal: t.hardSignal,
         })),
+      })),
+      quoteTotalCents: quote.totalCents,
+      paymentSchedule: quote.paymentSchedule.map((item) => ({
+        id: item.id,
+        title: item.title,
+        anchorType: item.anchorType,
+        amountCents: item.amountCents,
+        percentage: item.percentage,
       })),
     });
 

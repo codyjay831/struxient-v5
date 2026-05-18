@@ -20,6 +20,7 @@ import {
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { publishSignal } from "@/lib/signal-bus";
 import { buildJobTaskSortOrderMap } from "@/lib/quote-job-activation-task-order";
+import { materializePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
 
 export type QuoteJobActivationFormState = {
   error?: string;
@@ -60,6 +61,7 @@ async function performActivateQuoteJob(
               id: true,
               title: true,
               amountCents: true,
+              percentage: true,
               anchorType: true,
               anchorStageId: true,
             },
@@ -143,6 +145,14 @@ async function performActivateQuoteJob(
       const readiness = evaluateQuoteJobActivationReadiness({
         status: quote.status,
         lines: readinessLines,
+        quoteTotalCents: quote.totalCents,
+        paymentSchedule: quote.paymentSchedule.map((item) => ({
+          id: item.id,
+          title: item.title,
+          anchorType: item.anchorType,
+          amountCents: item.amountCents,
+          percentage: item.percentage,
+        })),
       });
 
       if (!readiness.ready) {
@@ -265,25 +275,40 @@ async function performActivateQuoteJob(
       }
 
       // 5. Materialize JobPaymentRequirements from PaymentSchedule
-      const scheduledCentsForActivation = quote.paymentSchedule.reduce((sum, item) => {
-        if (item.anchorType === "FINAL_BALANCE") return sum;
-        return sum + (item.amountCents ?? 0);
-      }, 0);
-      const activationRemainderCents = Math.max(0, quote.totalCents - scheduledCentsForActivation);
+      const materializedPayments = materializePaymentScheduleForActivation(
+        quote.paymentSchedule.map((item) => ({
+          id: item.id,
+          title: item.title,
+          anchorType: item.anchorType,
+          amountCents: item.amountCents,
+          percentage: item.percentage,
+        })),
+        quote.totalCents,
+      );
 
-      for (const item of quote.paymentSchedule) {
-        const jobStageId = item.anchorStageId ? stageIdToJobStageId[item.anchorStageId] : null;
+      if (!materializedPayments.ok) {
+        const first = materializedPayments.errors[0];
+        throw new ActivationError("NOT_READY", first.message);
+      }
+
+      const scheduleById = new Map(
+        quote.paymentSchedule.map((item) => [item.id, item] as const),
+      );
+
+      for (const item of materializedPayments.items) {
+        const source = scheduleById.get(item.id);
+        const jobStageId = source?.anchorStageId
+          ? stageIdToJobStageId[source.anchorStageId]
+          : null;
 
         await tx.jobPaymentRequirement.create({
           data: {
             organizationId: ctx.organizationId,
             jobId: job.id,
             title: item.title,
-            amountCents:
-              item.anchorType === "FINAL_BALANCE"
-                ? activationRemainderCents
-                : item.amountCents,
-            requiredBeforeStageId: item.anchorType === "BEFORE_STAGE" ? jobStageId : null,
+            amountCents: item.amountCents,
+            requiredBeforeStageId:
+              item.anchorType === "BEFORE_STAGE" ? jobStageId : null,
             sourcePaymentScheduleItemId: item.id,
             status: "PENDING",
           },
