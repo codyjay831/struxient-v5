@@ -356,26 +356,10 @@ export async function queryWorkstationWorkItems(
       lead: true,
       tasks: {
         where: { completedAt: null },
-        include: { 
-          jobStage: {
-            select: {
-              id: true,
-              title: true,
-              sortOrder: true,
-              requiresSignals: true,
-            }
-          },
-          attachments: { 
-            where: { status: "READY" },
-            select: { id: true } 
-          },
-          issues: {
-            where: { status: JobIssueStatus.OPEN },
-            select: { id: true, status: true, severity: true },
-          },
-          recoveryFlow: {
-            select: { jobIssueId: true },
-          },
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
           sortOrder: true,
           status: true,
           completedAt: true,
@@ -384,6 +368,25 @@ export async function queryWorkstationWorkItems(
           requiresSignals: true,
           recoveryFlowId: true,
           recoveryFlowOrder: true,
+          jobStage: {
+            select: {
+              id: true,
+              title: true,
+              sortOrder: true,
+              requiresSignals: true,
+            },
+          },
+          attachments: {
+            where: { status: "READY" },
+            select: { id: true },
+          },
+          issues: {
+            where: { status: JobIssueStatus.OPEN },
+            select: { id: true, status: true, severity: true },
+          },
+          recoveryFlow: {
+            select: { jobIssueId: true },
+          },
         },
       },
       issues: {
