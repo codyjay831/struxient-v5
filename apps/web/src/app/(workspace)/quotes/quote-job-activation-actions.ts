@@ -19,6 +19,7 @@ import {
 } from "@/lib/quote-job-activation-readiness";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { publishSignal } from "@/lib/signal-bus";
+import { buildJobTaskSortOrderMap } from "@/lib/quote-job-activation-task-order";
 
 export type QuoteJobActivationFormState = {
   error?: string;
@@ -197,6 +198,8 @@ async function performActivateQuoteJob(
       }
 
       // 3. Materialize JobTasks
+      const jobTaskSortOrderByExecutionTaskId = buildJobTaskSortOrderMap(quote.lineItems);
+
       const allTasksToActivate = quote.lineItems.flatMap(l => 
         l.draftExecutionTasks.map(t => ({ ...t, lineId: l.id }))
       );
@@ -209,6 +212,14 @@ async function performActivateQuoteJob(
           throw new ActivationError(
             "NOT_READY",
             `Task "${task.title}" has no stage assigned—assign a stage before activation.`,
+          );
+        }
+
+        const jobTaskSortOrder = jobTaskSortOrderByExecutionTaskId.get(task.id);
+        if (jobTaskSortOrder === undefined) {
+          throw new ActivationError(
+            "NOT_READY",
+            `Task "${task.title}" could not be assigned a stable sort order during activation.`,
           );
         }
 
@@ -229,7 +240,7 @@ async function performActivateQuoteJob(
             requiresSignals: task.requiresSignals,
             hardSignal: task.hardSignal,
             status: JobTaskStatus.TODO,
-            sortOrder: task.sortOrder,
+            sortOrder: jobTaskSortOrder,
           },
         });
         activatedTaskCount += 1;

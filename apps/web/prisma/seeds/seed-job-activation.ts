@@ -12,6 +12,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { evaluateQuoteJobActivationReadiness } from "../../src/lib/quote-job-activation-readiness";
+import { buildJobTaskSortOrderMap } from "../../src/lib/quote-job-activation-task-order";
 
 export async function activateQuoteJobForSeed(
   prisma: PrismaClient,
@@ -46,6 +47,7 @@ export async function activateQuoteJobForSeed(
         orderBy: [{ sortOrder: "asc" }],
         select: {
           id: true,
+          sortOrder: true,
           description: true,
           draftExecutionTasks: {
             orderBy: [{ sortOrder: "asc" }],
@@ -150,6 +152,8 @@ export async function activateQuoteJobForSeed(
     stageIdToJobStageId[stage.id] = jobStage.id;
   }
 
+  const jobTaskSortOrderByExecutionTaskId = buildJobTaskSortOrderMap(quote.lineItems);
+
   const allTasks = quote.lineItems.flatMap((l) =>
     l.draftExecutionTasks.map((t) => ({ ...t, lineId: l.id })),
   );
@@ -159,6 +163,13 @@ export async function activateQuoteJobForSeed(
     const jobStageId = task.stageId ? stageIdToJobStageId[task.stageId] : null;
     if (!jobStageId) {
       throw new Error(`[seed activation] task "${task.title}" missing stage`);
+    }
+
+    const jobTaskSortOrder = jobTaskSortOrderByExecutionTaskId.get(task.id);
+    if (jobTaskSortOrder === undefined) {
+      throw new Error(
+        `[seed activation] task "${task.title}" could not be assigned a stable sort order`,
+      );
     }
 
     await prisma.jobTask.create({
@@ -178,7 +189,7 @@ export async function activateQuoteJobForSeed(
         requiresSignals: task.requiresSignals,
         hardSignal: task.hardSignal,
         status: JobTaskStatus.TODO,
-        sortOrder: task.sortOrder,
+        sortOrder: jobTaskSortOrder,
       },
     });
     taskCount += 1;
