@@ -14,6 +14,7 @@ import {
 import { publishSignal, getLiveSignals } from "@/lib/signal-bus";
 import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
 import { assertCanOverrideTaskReadiness } from "@/lib/job-task-override-guard";
+import { assertCanToggleTaskChecklistItem } from "@/lib/job-task-checklist-guard";
 
 export type JobTaskActionState = {
   error?: string;
@@ -293,11 +294,51 @@ export async function toggleJobTaskChecklistItemAction(
   try {
     const task = await db.jobTask.findFirst({
       where: { id: taskId, job: { organizationId } },
-      select: { id: true, jobId: true, completionRequirementsJson: true },
+      select: {
+        id: true,
+        jobId: true,
+        status: true,
+        completedAt: true,
+        completionNote: true,
+        completionRequirementsJson: true,
+        requiresSignals: true,
+        issues: {
+          where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+          select: { id: true, status: true, severity: true },
+        },
+        jobStage: {
+          select: {
+            issues: {
+              where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
+              select: { id: true, status: true, severity: true },
+            },
+          },
+        },
+        recoveryFlow: {
+          select: { jobIssueId: true },
+        },
+      },
     });
 
     if (!task) {
       return { error: "Task not found in your organization." };
+    }
+
+    const liveSignals = await getLiveSignals(task.jobId);
+    const toggleGate = assertCanToggleTaskChecklistItem({
+      status: task.status,
+      completedAt: task.completedAt,
+      completionNote: task.completionNote,
+      completionRequirementsJson: task.completionRequirementsJson,
+      requiresSignals: task.requiresSignals,
+      issues: task.issues,
+      jobStage: task.jobStage,
+      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
+      liveSignals,
+      completed,
+    });
+    if (!toggleGate.ok) {
+      return { error: toggleGate.error };
     }
 
     const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};

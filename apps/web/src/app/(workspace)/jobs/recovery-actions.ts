@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import {
   JobRecoveryFlowStatus,
   JobTaskStatus,
@@ -12,7 +13,14 @@ import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
+import {
+  materializeRecoveryFlowWithTasksInTx,
+  validateRecoveryFlowTasksInput,
+  type RecoveryFlowTaskInput,
+} from "@/lib/recovery-flow-materialize";
 import { AIService } from "@/lib/ai/ai-service";
+
+export type { RecoveryFlowTaskInput };
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
 
@@ -24,9 +32,69 @@ export type CreateRecoveryFlowInput = {
   sourceInspectionEventId?: string;
 };
 
+export type CreateAndActivateRecoveryFlowInput = {
+  jobIssueId: string;
+  tasks: RecoveryFlowTaskInput[];
+  sourceFailedTaskId?: string;
+  sourceChecklistItemId?: string;
+  sourcePermitEventId?: string;
+  sourceInspectionEventId?: string;
+};
+
+/**
+ * Creates an ACTIVE recovery flow and all recovery tasks in one transaction.
+ * Preferred path for initial recovery plan submission from the UI.
+ */
+export async function createAndActivateRecoveryFlowWithTasksAction(
+  input: CreateAndActivateRecoveryFlowInput,
+) {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  const normalizedTasks = validateRecoveryFlowTasksInput(input.tasks);
+
+  const issue = await db.jobIssue.findFirst({
+    where: { id: input.jobIssueId, organizationId },
+    select: { id: true, jobId: true, title: true },
+  });
+
+  if (!issue) {
+    throw new Error("Job issue not found or access denied.");
+  }
+
+  try {
+    const result = await db.$transaction(async (tx) =>
+      materializeRecoveryFlowWithTasksInTx(tx, {
+        organizationId,
+        jobIssueId: input.jobIssueId,
+        jobId: issue.jobId,
+        issueTitle: issue.title,
+        tasks: normalizedTasks,
+        actorUserId: session.userId,
+        sourceFailedTaskId: input.sourceFailedTaskId,
+        sourceChecklistItemId: input.sourceChecklistItemId,
+        sourcePermitEventId: input.sourcePermitEventId,
+        sourceInspectionEventId: input.sourceInspectionEventId,
+      }),
+    );
+
+    revalidatePath(`/jobs/${issue.jobId}`);
+    revalidatePath("/workstation");
+    return { success: true as const, flowId: result.flowId, taskIds: result.taskIds };
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new Error(
+        "A recovery path already exists for this issue. Refresh the page and try again.",
+      );
+    }
+    throw e;
+  }
+}
+
 /**
  * Creates a new recovery flow for a given job issue.
  * The flow starts in DRAFT status.
+ * Do not compose with addRecoveryTaskAction for UI submit — use createAndActivateRecoveryFlowWithTasksAction.
  */
 export async function createRecoveryFlowAction(input: CreateRecoveryFlowInput) {
   const session = await requireCurrentSession();
@@ -91,6 +159,7 @@ export type AddRecoveryTaskInput = {
 
 /**
  * Adds a task to a recovery flow.
+ * Not used for initial recovery path creation from the UI.
  */
 export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
   const session = await requireCurrentSession();
@@ -176,6 +245,7 @@ export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
 
 /**
  * Activates a recovery flow, moving it from DRAFT to ACTIVE.
+ * Not used for initial recovery path creation from the UI.
  */
 export async function activateRecoveryFlowAction(flowId: string) {
   const session = await requireCurrentSession();

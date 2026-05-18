@@ -12,13 +12,10 @@ import {
   Check,
 } from "lucide-react";
 import {
-  createRecoveryFlowAction,
-  addRecoveryTaskAction,
-  activateRecoveryFlowAction,
+  createAndActivateRecoveryFlowWithTasksAction,
   suggestRecoveryPathAction,
 } from "@/app/(workspace)/jobs/recovery-actions";
 import { Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { AIRecoveryProposal, AIRecoveryProposedTask } from "@/lib/ai/recovery-proposal-schema";
 
 type RecoveryTaskDraft = {
@@ -173,17 +170,9 @@ export function RecoveryFlowBuilder({
 
     startTransition(async () => {
       try {
-        // 1. Create the flow
-        const flowResult = await createRecoveryFlowAction({ jobIssueId: issueId });
-        if (!flowResult.success || !flowResult.flowId) {
-          throw new Error("Failed to create recovery flow.");
-        }
-
-        // 2. Add tasks
-        for (let i = 0; i < tasks.length; i++) {
-          const task = tasks[i];
-          await addRecoveryTaskAction({
-            flowId: flowResult.flowId,
+        await createAndActivateRecoveryFlowWithTasksAction({
+          jobIssueId: issueId,
+          tasks: tasks.map((task, i) => ({
             title: task.title,
             category: task.category,
             instructions: task.instructions,
@@ -197,11 +186,8 @@ export function RecoveryFlowBuilder({
             providesSignals: task.providesSignals,
             requiresSignals: task.requiresSignals,
             hardSignal: task.hardSignal,
-          });
-        }
-
-        // 3. Activate the flow
-        await activateRecoveryFlowAction(flowResult.flowId);
+          })),
+        });
 
         onSuccess();
       } catch (err) {

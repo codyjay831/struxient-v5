@@ -445,21 +445,31 @@ export function TaskWorkSurface({
           <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
             Checklist
           </h4>
+          {isBlockedByIssue && (
+            <p className="text-xs leading-relaxed text-foreground-muted">
+              Checklist progress is paused while this work is blocked by an issue. You can still
+              uncheck items if needed.
+            </p>
+          )}
           <div className="space-y-2">
             {requirements.checklist.map((item, index) => (
               <label
                 key={item.id?.trim() ? item.id : `checklist-${index}`}
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors sm:rounded-lg sm:p-3 ${
+                className={`flex items-start gap-3 rounded-xl border p-4 transition-colors sm:rounded-lg sm:p-3 ${
                   item.completedAt
                     ? "border-approved/20 bg-approved/5 text-approved-strong"
                     : "border-border bg-surface hover:border-border-strong"
+                } ${
+                  isPending || isCompleted || (isBlockedByIssue && !item.completedAt)
+                    ? "cursor-not-allowed opacity-80"
+                    : "cursor-pointer"
                 }`}
               >
                 <input
                   type="checkbox"
                   className="mt-1 h-5 w-5 rounded border-border text-approved focus:ring-approved sm:h-4 sm:w-4"
                   checked={!!item.completedAt}
-                  disabled={isPending || isCompleted}
+                  disabled={isPending || isCompleted || (isBlockedByIssue && !item.completedAt)}
                   onChange={(e) => handleToggleChecklist(item.id, e.target.checked)}
                 />
                 <div className="min-w-0 flex-1">
