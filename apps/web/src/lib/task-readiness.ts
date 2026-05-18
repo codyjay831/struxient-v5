@@ -78,10 +78,7 @@ export function toTaskReadinessInput(
     recoveryFlowId: task.recoveryFlowId ?? null,
     issues: task.issues ?? [],
     stage: {
-      requiresSignals:
-        stageContext.requiresSignals ??
-        task.jobStage?.requiresSignals ??
-        [],
+      requiresSignals: [],
       issues: stageContext.issues ?? task.jobStage?.issues ?? [],
     },
   };
@@ -135,17 +132,7 @@ export function deriveTaskState(
     }
   }
 
-  // 3. Check for missing signals (Stage level)
-  if (task.stage && task.stage.requiresSignals.length > 0) {
-    const missingStageSignals = task.stage.requiresSignals.filter(
-      (s) => !liveSignals.includes(s)
-    );
-    if (missingStageSignals.length > 0) {
-      return "BLOCKED_BY_SIGNAL";
-    }
-  }
-
-  // 4. Check for missing signals (Task level)
+  // 3. Check for missing signals (Task level)
   if (task.requiresSignals.length > 0) {
     const missingTaskSignals = task.requiresSignals.filter(
       (s) => !liveSignals.includes(s)
@@ -155,7 +142,7 @@ export function deriveTaskState(
     }
   }
 
-  // 5. Check for completion requirements (if unblocked)
+  // 4. Check for completion requirements (if unblocked)
   const requirements = (task.completionRequirementsJson as TaskCompletionRequirements) || {};
   
   if (requirements.noteRequired && !task.completionNote) {
@@ -234,7 +221,7 @@ export type StageReadinessInput = {
  */
 export function deriveStageState(
   stage: StageReadinessInput,
-  liveSignals: string[],
+  _liveSignals: string[],
   options?: {
     recoveryFlowIssueId?: string | null;
   }
@@ -259,16 +246,6 @@ export function deriveStageState(
   });
   if (hasBlockingIssue) {
     return "BLOCKED_BY_ISSUE";
-  }
-
-  // 3. Check for missing signals
-  if (stage.requiresSignals.length > 0) {
-    const missingSignals = stage.requiresSignals.filter(
-      (s) => !liveSignals.includes(s)
-    );
-    if (missingSignals.length > 0) {
-      return "BLOCKED_BY_SIGNAL";
-    }
   }
 
   return "READY";

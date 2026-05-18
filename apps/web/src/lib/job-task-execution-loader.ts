@@ -40,7 +40,6 @@ export async function loadJobTaskExecutionPayload(
           id: true,
           title: true,
           sortOrder: true,
-          requiresSignals: true,
           issues: {
             where: {
               status: JobIssueStatus.OPEN,
@@ -192,7 +191,6 @@ export async function loadJobTaskExecutionPayload(
     jobId: job.id,
     jobStageId: task.jobStage.id,
     stageTitle: task.jobStage.title,
-    stageRequiresSignals: task.jobStage.requiresSignals,
     stageIssues: task.jobStage.issues,
     paymentHold,
     jobContextLabel,

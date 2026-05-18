@@ -140,8 +140,6 @@ export default async function JobDetailPage({
             title: true,
             sortOrder: true,
             stageId: true,
-            providesSignals: true,
-            requiresSignals: true,
             issues: {
               where: {
                 status: JobIssueStatus.OPEN,
@@ -317,7 +315,6 @@ export default async function JobDetailPage({
           title: s.title,
           sortOrder: s.sortOrder,
           stageId: s.stageId,
-          requiresSignals: s.requiresSignals,
           issues: s.issues,
           tasks: s.tasks.map((t) => ({
             id: t.id,
@@ -533,18 +530,6 @@ export default async function JobDetailPage({
                   <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
                     {stage.title}
                   </h3>
-                  {stage.requiresSignals.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-medium text-foreground-subtle">Requires:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {stage.requiresSignals.map(s => (
-                          <span key={s} className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${liveSignals.includes(s) ? 'bg-success/10 text-success' : 'bg-accent/10 text-accent'}`}>
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
                 {stage.tasks.length === 0 ? (
                   <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
@@ -570,7 +555,6 @@ export default async function JobDetailPage({
                             leadEditHref={jobLeadEditHref}
                             task={task}
                             liveSignals={liveSignals}
-                            stageRequiresSignals={stage.requiresSignals}
                             stageIssues={stage.issues}
                             paymentHold={paymentHold}
                           />

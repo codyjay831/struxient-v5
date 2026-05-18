@@ -64,7 +64,7 @@ export async function completeJobTaskAction(
     // 1. Check readiness using Signal Bus
     const liveSignals = await getLiveSignals(task.jobId);
     const readinessInput = toTaskReadinessInput(task, {
-      requiresSignals: task.jobStage.requiresSignals,
+      requiresSignals: [],
       issues: task.jobStage.issues,
     });
     const state = deriveTaskState(readinessInput, liveSignals, {
@@ -106,26 +106,6 @@ export async function completeJobTaskAction(
             jobId: task.jobId,
             name: signalName,
             sourceJobTaskId: task.id,
-          });
-        }
-      }
-
-      // 5. Check if stage is complete and publish stage signals
-      const otherTasksInStage = await tx.jobTask.findMany({
-        where: { 
-          jobStageId: task.jobStageId,
-          id: { not: taskId }
-        },
-        select: { status: true },
-      });
-
-      const allOtherTasksDone = otherTasksInStage.every(t => t.status === JobTaskStatus.DONE);
-      if (allOtherTasksDone && task.jobStage.providesSignals.length > 0) {
-        for (const signalName of task.jobStage.providesSignals) {
-          await publishSignal({
-            jobId: task.jobId,
-            name: signalName,
-            sourceJobStageId: task.jobStageId,
           });
         }
       }
@@ -269,26 +249,6 @@ export async function overrideJobTaskReadinessAction(
             jobId: task.jobId,
             name: signalName,
             sourceJobTaskId: task.id,
-          });
-        }
-      }
-
-      // 3. Check if stage is complete and publish stage signals
-      const otherTasksInStage = await tx.jobTask.findMany({
-        where: { 
-          jobStageId: task.jobStageId,
-          id: { not: taskId }
-        },
-        select: { status: true },
-      });
-
-      const allOtherTasksDone = otherTasksInStage.every(t => t.status === JobTaskStatus.DONE);
-      if (allOtherTasksDone && task.jobStage.providesSignals.length > 0) {
-        for (const signalName of task.jobStage.providesSignals) {
-          await publishSignal({
-            jobId: task.jobId,
-            name: signalName,
-            sourceJobStageId: task.jobStageId,
           });
         }
       }

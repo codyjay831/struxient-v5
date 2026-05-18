@@ -44,7 +44,6 @@ function baseJob(
         title: "Install",
         sortOrder: 0,
         stageId: "org-stage-1",
-        requiresSignals: [],
         issues: [],
         tasks: [baseTask()],
       },
@@ -72,7 +71,6 @@ test("deriveJobExecutionHealth: COMPLETE when all main tasks done", () => {
           title: "Install",
           sortOrder: 0,
           stageId: "org-stage-1",
-          requiresSignals: [],
           issues: [],
           tasks: [
             baseTask({
@@ -100,7 +98,6 @@ test("deriveJobExecutionHealth: BLOCKED_BY_SIGNAL when all incomplete main tasks
           title: "Install",
           sortOrder: 0,
           stageId: "org-stage-1",
-          requiresSignals: [],
           issues: [],
           tasks: [
             baseTask({
@@ -127,7 +124,6 @@ test("deriveJobExecutionHealth: BLOCKED_BY_ISSUE when stage has blocking issue",
           title: "Install",
           sortOrder: 0,
           stageId: "org-stage-1",
-          requiresSignals: [],
           issues: [
             {
               id: "issue-1",
@@ -164,7 +160,6 @@ test("deriveJobExecutionHealth: RECOVERY_READY_TO_RESUME when recovery done and 
           title: "Install",
           sortOrder: 0,
           stageId: "org-stage-1",
-          requiresSignals: [],
           issues: [
             {
               id: "issue-1",
@@ -238,7 +233,6 @@ test("deriveJobExecutionHealth: BLOCKED_BY_PAYMENT when payment due and no READY
           title: "Install",
           sortOrder: 0,
           stageId: "org-stage-1",
-          requiresSignals: ["deposit-cleared"],
           issues: [],
           tasks: [
             baseTask({
@@ -273,7 +267,6 @@ test("deriveJobExecutionHealth: recovery-only job with incomplete recovery repor
           title: CORRECTIONS_STAGE_NAME,
           sortOrder: 0,
           stageId: "org-stage-corrections",
-          requiresSignals: [],
           issues: [
             {
               id: "issue-1",
@@ -321,7 +314,6 @@ test("deriveJobExecutionHealth: RECOVERY_ACTIVE when recovery task blocked by an
           title: CORRECTIONS_STAGE_NAME,
           sortOrder: 0,
           stageId: "org-stage-corrections",
-          requiresSignals: [],
           issues: [
             {
               id: "issue-1",
@@ -382,7 +374,6 @@ test("deriveJobExecutionHealth: BROKEN_REFERENCE when recovery flow id is orphan
           title: CORRECTIONS_STAGE_NAME,
           sortOrder: 0,
           stageId: "org-stage-corrections",
-          requiresSignals: [],
           issues: [],
           tasks: [
             baseTask({

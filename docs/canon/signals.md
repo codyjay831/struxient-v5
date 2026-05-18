@@ -1,6 +1,6 @@
 # Signal-Based Readiness Engine (canon, Struxient v5)
 
-> **Strategic role:** The Signal-Based Readiness Engine is the "smart" layer of Struxient. It replaces rigid, hardcoded workflows with a flexible, fact-based system where tasks and stages communicate readiness via a per-job **Signal Bus**.
+> **Strategic role:** The Signal-Based Readiness Engine is the "smart" layer of Struxient. It replaces rigid, hardcoded workflows with a flexible, fact-based system where tasks communicate readiness via a per-job **Signal Bus**.
 
 ## Core Concepts
 
@@ -9,17 +9,18 @@ The **Signal Bus** is a per-job collection of "facts" (signals) that have been p
 
 ### 2. Signals
 A **Signal** is a named string (e.g., `roof-sealed`, `permit-approved`, `payment:deposit:cleared`).
-- **Provides**: The signal(s) a task or stage publishes when it is completed.
-- **Requires**: The signal(s) a task or stage must "hear" before it becomes **READY**.
+- **Provides**: The signal(s) a task publishes when it is completed.
+- **Requires**: The signal(s) a task must "hear" before it becomes **READY**.
 
 ### 3. Smart vs. Dumb Tasks
 - **Smart Task**: Has `Requires` or `Provides` signals. Its lifecycle is automated by the Signal Bus.
 - **Dumb Task**: Has no signal requirements. It is always `READY` as soon as its stage is active.
 
-### 4. Stage Gates
-Stages can also have `Requires` and `Provides` signals.
-- A stage with `Requires` signals blocks all tasks within it until the signals are present.
-- A stage with `Provides` signals publishes them only when all tasks within the stage are `DONE`.
+### 4. Stage gates are deferred in v5 MVP
+`JobStage.providesSignals` and `JobStage.requiresSignals` exist in schema but are **not runtime canon in v5 MVP**.
+- Runtime readiness and signal publishing are **task-scoped**.
+- Stage-level signal gates are **deferred** until a future release defines authoring + activation + UX.
+- Stage-level **issue blocking remains valid** (open `BLOCKS_WORK` issues on a stage still block tasks in that stage).
 
 ## Readiness Logic
 
@@ -54,4 +55,5 @@ The Signal Engine manages operational readiness and task dependencies. Commercia
 
 ---
 
-*Canon update (2026-05-13): Initial version of the Signal-Based Readiness Engine canon.*
+*Canon update (2026-05-13): Initial version of the Signal-Based Readiness Engine canon.*  
+*Canon update (2026-05-19): v5 MVP signals are task-scoped; stage-level signal gates are deferred and not runtime canon. Stage issue blocking remains in force.*

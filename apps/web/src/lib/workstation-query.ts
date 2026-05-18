@@ -373,7 +373,6 @@ export async function queryWorkstationWorkItems(
               id: true,
               title: true,
               sortOrder: true,
-              requiresSignals: true,
             },
           },
           attachments: {
@@ -425,7 +424,6 @@ export async function queryWorkstationWorkItems(
           sortOrder: true,
           stageId: true,
           title: true,
-          requiresSignals: true,
           issues: {
             where: {
               status: JobIssueStatus.OPEN,
@@ -474,7 +472,6 @@ export async function queryWorkstationWorkItems(
       title: stage.title,
       sortOrder: stage.sortOrder,
       stageId: stage.stageId,
-      requiresSignals: stage.requiresSignals ?? [],
       issues: stage.issues,
       tasks: job.tasks
         .filter((t) => t.jobStage.id === stage.id)
@@ -695,7 +692,7 @@ export async function queryWorkstationWorkItems(
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
       const readinessInput = toTaskReadinessInput(task, {
-        requiresSignals: task.jobStage.requiresSignals,
+        requiresSignals: [],
         issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
       });
       const derivedState = deriveTaskState(readinessInput, liveSignals, {
@@ -721,8 +718,7 @@ export async function queryWorkstationWorkItems(
         isBlocked,
       }, role, now);
 
-      const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s))
-        .concat(task.jobStage.requiresSignals.filter(s => !liveSignals.includes(s)));
+      const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
 
       items.push({
         id: `task-${task.id}`,

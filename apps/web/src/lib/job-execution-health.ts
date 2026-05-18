@@ -92,7 +92,6 @@ export type JobExecutionContextTask = {
   recoveryFlowId: string | null;
   recoveryFlowIssueId: string | null;
   issues: TaskIssueRef[];
-  stageRequiresSignals: string[];
   stageIssues: TaskIssueRef[];
 };
 
@@ -141,7 +140,7 @@ function analyzeTasks(ctx: JobExecutionContext): AnalyzedTask[] {
     const isRecovery = Boolean(task.recoveryFlowId);
     const isMainPath = !isRecovery && !isRecoveryStageTitle(task.stageTitle);
     const readinessInput = toTaskReadinessInput(task, {
-      requiresSignals: task.stageRequiresSignals,
+      requiresSignals: [],
       issues: task.stageIssues,
     });
     const derivedState = deriveTaskState(readinessInput, ctx.liveSignals, {
@@ -600,7 +599,6 @@ export type BuildJobExecutionContextJobInput = {
     title: string;
     sortOrder: number;
     stageId: string | null;
-    requiresSignals: string[];
     issues: TaskIssueRef[];
     tasks: Array<{
       id: string;
@@ -675,7 +673,6 @@ export function buildJobExecutionContextFromJob(
         recoveryFlowId: task.recoveryFlowId,
         recoveryFlowIssueId: task.recoveryFlow?.jobIssueId ?? null,
         issues: task.issues,
-        stageRequiresSignals: stage.requiresSignals,
         stageIssues: stage.issues,
       });
     }

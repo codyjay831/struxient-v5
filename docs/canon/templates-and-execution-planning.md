@@ -106,7 +106,7 @@ Use this sentence when a feature, prompt, or design discussion needs to settle t
 | Concept | Role in MVP execution planning |
 |---------|--------------------------------|
 | **Line item** | What was sold / scoped — the commercial anchor. |
-| **Stage** | Lightweight default **container / preset** that groups tasks for legibility. May act as a **Gate** via signals. |
+| **Stage** | Lightweight default **container / preset** that groups tasks for legibility. In v5 MVP, signal gating is task-scoped; stage-level signal gates are deferred. |
 | **Task** | The real **executable detail** — ownership, state, and **Signal-based readiness**. |
 
 ### Default MVP stage preset — **Standard Project**
@@ -138,7 +138,7 @@ Stages **must not** become the main power layer. The real operational power in v
 - **Daily logs**
 - **Customer / job changes**
 
-Features that would push expressive depth into stages (custom workflow designers, stage-level dependencies, kanban-style stage operations, placement semantics) **must not** ship in MVP. Stage-level signals are allowed for gating.
+Features that would push expressive depth into stages (custom workflow designers, stage-level dependencies, kanban-style stage operations, placement semantics) **must not** ship in MVP. Stage-level signal gates are deferred in MVP runtime canon.
 
 ### MVP rules (do / do not)
 

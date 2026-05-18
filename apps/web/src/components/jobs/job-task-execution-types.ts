@@ -53,7 +53,6 @@ export type JobTaskExecutionPayload = {
   jobId: string;
   jobStageId: string;
   stageTitle: string;
-  stageRequiresSignals: string[];
   stageIssues: TaskIssueRef[];
   paymentHold: TaskPaymentHold;
   jobContextLabel: string;

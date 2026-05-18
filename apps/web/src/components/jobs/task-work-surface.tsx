@@ -76,7 +76,6 @@ export function TaskWorkSurface({
   jobId,
   jobStageId,
   stageTitle,
-  stageRequiresSignals,
   stageIssues,
   paymentHold,
   jobContextLabel,
@@ -164,7 +163,7 @@ export function TaskWorkSurface({
   }, [clearWorkstationSelectionOnComplete, pathname, router, searchParams]);
 
   const readinessInput = toTaskReadinessInput(task, {
-    requiresSignals: stageRequiresSignals,
+    requiresSignals: [],
     issues: stageIssues,
   });
   const derivedState = deriveTaskState(readinessInput, liveSignals, {
@@ -190,7 +189,6 @@ export function TaskWorkSurface({
 
   const missingSignals = [
     ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
-    ...stageRequiresSignals.filter((s) => !liveSignals.includes(s)),
   ];
 
   const handleComplete = () => {

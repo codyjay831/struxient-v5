@@ -169,7 +169,7 @@ The **default MVP stage preset** is **Standard Project**: **Pre-Construction →
 
 - **Must:** treat stages as **lightweight default containers / presets** that group tasks for legibility; depth and ordering live on **tasks** (via signals), not on stages.  
 - **Must:** keep the implementation **preset-flexible**—presets must be able to be **renamed, hidden, merged, specialized, or selected** per real contractor usage.
-- **Must:** support **Stage Gates** where a stage can require or provide signals.
+- **Must:** keep runtime signal dependencies **task-scoped** in v5 MVP; stage-level signal gates are deferred and not runtime canon.
 - **Must not:** introduce **kanban** language (no “board / column / swimlane” framing for stages).  
 - **Must not:** introduce **placement** language (stages do not “place” line items or tasks).  
 - **Must not:** force users into a single rigid stage model; the **Stage** table is the source of truth.

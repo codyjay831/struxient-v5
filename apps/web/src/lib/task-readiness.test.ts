@@ -50,7 +50,7 @@ test("deriveTaskState: READY when task requirement met", () => {
   assert.equal(state, "READY");
 });
 
-test("deriveTaskState: BLOCKED_BY_SIGNAL when stage requirement missing", () => {
+test("deriveTaskState: ignores stage signal requirements in v5 MVP", () => {
   const state = deriveTaskState({
     status: JobTaskStatus.TODO,
     completedAt: null,
@@ -61,7 +61,7 @@ test("deriveTaskState: BLOCKED_BY_SIGNAL when stage requirement missing", () => 
     issues: [],
     stage: { requiresSignals: ["stage-signal"], issues: [] }
   }, []);
-  assert.equal(state, "BLOCKED_BY_SIGNAL");
+  assert.equal(state, "READY");
 });
 
 test("deriveTaskState: BLOCKED_BY_ISSUE when task has blocking issue", () => {
@@ -153,7 +153,7 @@ test("deriveStageState: READY when all tasks ready", () => {
   assert.equal(state, "READY");
 });
 
-test("deriveStageState: BLOCKED_BY_SIGNAL when stage requirement missing", () => {
+test("deriveStageState: READY when stage requirement missing (stage gates deferred)", () => {
   const state = deriveStageState({
     requiresSignals: ["signal-a"],
     issues: [],
@@ -169,7 +169,7 @@ test("deriveStageState: BLOCKED_BY_SIGNAL when stage requirement missing", () =>
       }
     ]
   }, []);
-  assert.equal(state, "BLOCKED_BY_SIGNAL");
+  assert.equal(state, "READY");
 });
 
 test("toTaskReadinessInput: maps jobStage issues into stage context", () => {

@@ -368,7 +368,6 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
         select: {
           id: true,
           sortOrder: true,
-          requiresSignals: true,
           issues: {
             where: {
               status: JobIssueStatus.OPEN,
@@ -405,7 +404,6 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
             select: {
               id: true,
               sortOrder: true,
-              requiresSignals: true,
             },
           },
         },
@@ -432,7 +430,7 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
 
   const nextReadyTask = sortedTasks.find((task) => {
     const readinessInput = toTaskReadinessInput(task, {
-      requiresSignals: task.jobStage.requiresSignals,
+      requiresSignals: [],
       issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
     });
     const state = deriveTaskState(readinessInput, liveSignals, {

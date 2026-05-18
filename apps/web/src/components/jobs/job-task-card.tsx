@@ -27,7 +27,6 @@ export function JobTaskCard({
   leadEditHref,
   task,
   liveSignals,
-  stageRequiresSignals,
   stageIssues,
   paymentHold = null,
 }: {
@@ -40,7 +39,6 @@ export function JobTaskCard({
   leadEditHref: string | null;
   task: Task;
   liveSignals: string[];
-  stageRequiresSignals: string[];
   stageIssues: TaskIssueRef[];
   paymentHold?: TaskPaymentHold;
 }) {
@@ -48,7 +46,7 @@ export function JobTaskCard({
   const [surfaceOpen, setSurfaceOpen] = useState(false);
 
   const readinessInput = toTaskReadinessInput(task, {
-    requiresSignals: stageRequiresSignals,
+    requiresSignals: [],
     issues: stageIssues,
   });
   const derivedState = deriveTaskState(readinessInput, liveSignals, {
@@ -71,14 +69,12 @@ export function JobTaskCard({
   
   const missingSignals = [
     ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
-    ...stageRequiresSignals.filter((s) => !liveSignals.includes(s)),
   ];
 
   const payload = {
     jobId,
     jobStageId,
     stageTitle,
-    stageRequiresSignals,
     stageIssues,
     paymentHold,
     jobContextLabel,
