@@ -22,7 +22,15 @@ import {
   copyLeadToQuoteNotesWorkspaceAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
-import { generateQuoteLineExecutionPlanAction } from "@/app/(workspace)/quotes/quote-line-execution-actions";
+import {
+  generateQuoteLineExecutionAIProposalAction,
+  applyQuoteLineExecutionAIProposalAction,
+} from "@/app/(workspace)/quotes/quote-line-execution-actions";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
+import { AILibraryProposalReviewPanel } from "@/components/scope-library/ai-library-proposal-review-panel";
 import { 
   QUOTE_FIELD_LIMITS,
   QUOTE_LINE_FIELD_LIMITS 
@@ -621,29 +629,63 @@ export function QuoteAuthoringSurface({
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [autoFocusAdd, setAutoFocusAdd] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
+  const [aiProposal, setAiProposal] = useState<AILibraryProposal | null>(null);
+  const [aiProposalLineId, setAiProposalLineId] = useState<string | null>(null);
+  const [aiProposalGeneration, setAiProposalGeneration] =
+    useState<AILibraryProposalGenerationMeta | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showRawIntake, setShowRawIntake] = useState(false);
 
   const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead?.notes ?? null);
 
   const handleGeneratePlan = async (lineId: string) => {
+    if (aiProposal) {
+      return;
+    }
     setIsGenerating(lineId);
     try {
-      const result = await generateQuoteLineExecutionPlanAction(quoteId, lineId);
+      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId);
       if (result.error) {
         toast.error(result.error);
-      } else {
-        if (result.warnings?.length) {
-          result.warnings.forEach((w) => toast.warning(w));
-        }
-        toast.success("AI execution plan generated.");
-        onMutated();
+        setAiProposal(null);
+        setAiProposalLineId(null);
+        setAiProposalGeneration(null);
+      } else if (result.proposal) {
+        setAiProposal(result.proposal);
+        setAiProposalLineId(lineId);
+        setAiProposalGeneration(result.generation ?? null);
       }
-    } catch {
-      toast.error("Failed to generate AI plan.");
+    } catch (e) {
+      console.error(e);
+      toast.error(getAiActionErrorMessage(e, "Failed to generate AI proposal."));
     } finally {
       setIsGenerating(null);
     }
+  };
+
+  const handleApplyAiProposal = async (approvedProposal: AILibraryProposal) => {
+    if (!aiProposalLineId) {
+      return;
+    }
+    const result = await applyQuoteLineExecutionAIProposalAction(
+      quoteId,
+      aiProposalLineId,
+      approvedProposal,
+      aiProposalGeneration ?? undefined,
+    );
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    if (result.warnings?.length) {
+      result.warnings.forEach((w) => toast.warning(w));
+    }
+    onMutated();
+  };
+
+  const closeAiProposal = () => {
+    setAiProposal(null);
+    setAiProposalLineId(null);
+    setAiProposalGeneration(null);
   };
 
   useEffect(() => {
@@ -818,7 +860,7 @@ export function QuoteAuthoringSurface({
                             {(draftTasksByLineId[line.id]?.length ?? 0) === 0 && (
                               <button
                                 type="button"
-                                disabled={isGenerating === line.id}
+                                disabled={isGenerating === line.id || aiProposal !== null}
                                 onClick={() => handleGeneratePlan(line.id)}
                                 className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
                               >
@@ -953,6 +995,16 @@ export function QuoteAuthoringSurface({
           </div>
         </div>
       </div>
+
+      {aiProposal && (
+        <AILibraryProposalReviewPanel
+          proposal={aiProposal}
+          generation={aiProposalGeneration ?? undefined}
+          stages={getStagesForAiExecutionPlanning(stages)}
+          onClose={closeAiProposal}
+          onApply={handleApplyAiProposal}
+        />
+      )}
     </div>
   );
 }

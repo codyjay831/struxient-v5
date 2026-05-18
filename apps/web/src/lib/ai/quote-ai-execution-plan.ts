@@ -3,6 +3,8 @@ import type { AllowedStage } from "./map-ai-stage";
 import {
   canApplySimulatedExecutionPlans,
   isSimulatedExecutionProposal,
+  resolveGenerationMetaForApply,
+  type AILibraryProposalGenerationMeta,
 } from "./ai-execution-plan-generation";
 import {
   isTaskOnCorrectionsStage,
@@ -21,19 +23,41 @@ export type QuoteAiPlanValidationResult =
     };
 
 /**
- * Validates an AI proposal before persisting quote-line execution tasks.
- * Blocks the entire generate when any task lacks a mapped stageId.
+ * Validates an AI proposal before persisting quote-line execution tasks (apply boundary).
  */
-export function validateQuoteAiExecutionPlanForPersist(
+export function validateQuoteAiExecutionPlanForApply(
   proposal: AILibraryProposal,
   allowedStages: AllowedStage[],
+  generation?: AILibraryProposalGenerationMeta,
 ): QuoteAiPlanValidationResult {
   if (allowedStages.length === 0) {
     return {
       ok: false,
       error:
-        "Add execution stages in Scope Library settings before generating an AI execution plan.",
+        "Add execution stages in Scope Library settings before applying an AI execution plan.",
       unmappedTaskTitles: proposal.tasks.map((t) => t.title),
+    };
+  }
+
+  const meta = resolveGenerationMetaForApply(proposal, generation);
+
+  if (meta.isSimulated && !canApplySimulatedExecutionPlans()) {
+    return {
+      ok: false,
+      error:
+        meta.applyBlockedReason ??
+        "This is demo AI output and cannot be applied in this environment.",
+      unmappedTaskTitles: [],
+    };
+  }
+
+  if (!meta.canApply) {
+    return {
+      ok: false,
+      error:
+        meta.applyBlockedReason ??
+        "This AI execution plan cannot be applied. Generate a new plan and try again.",
+      unmappedTaskTitles: [],
     };
   }
 
@@ -45,11 +69,18 @@ export function validateQuoteAiExecutionPlanForPersist(
     };
   }
 
+  if (proposal.tasks.length === 0) {
+    return {
+      ok: false,
+      error: "Add at least one task before applying.",
+      unmappedTaskTitles: [],
+    };
+  }
+
   const unmappedTaskTitles: string[] = [];
   const correctionsTaskTitles: string[] = [];
   const warnings: string[] = [];
 
-  // Carry over Corrections warning if it was already added during generation filtering
   if (proposal.warnings.includes(CORRECTIONS_CONDITIONAL_WORK_WARNING)) {
     warnings.push(CORRECTIONS_CONDITIONAL_WORK_WARNING);
   }
@@ -93,10 +124,18 @@ export function validateQuoteAiExecutionPlanForPersist(
     return {
       ok: false,
       error:
-        "AI could not assign a stage to every task. Add or rename stages in Scope Library, then try again.",
+        "Every execution task must have a stage before applying—assign a stage for each task in the review panel.",
       unmappedTaskTitles,
     };
   }
 
   return { ok: true, warnings: [...new Set(warnings)] };
+}
+
+/** @deprecated Use validateQuoteAiExecutionPlanForApply at the apply boundary. */
+export function validateQuoteAiExecutionPlanForPersist(
+  proposal: AILibraryProposal,
+  allowedStages: AllowedStage[],
+): QuoteAiPlanValidationResult {
+  return validateQuoteAiExecutionPlanForApply(proposal, allowedStages);
 }

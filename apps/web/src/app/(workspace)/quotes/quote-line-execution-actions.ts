@@ -3,7 +3,10 @@
 import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
 import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
-import { validateQuoteAiExecutionPlanForPersist } from "@/lib/ai/quote-ai-execution-plan";
+import { validateQuoteAiExecutionPlanForApply } from "@/lib/ai/quote-ai-execution-plan";
+import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import { AILibraryProposalSchema } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
@@ -611,10 +614,54 @@ export async function deleteQuoteLineExecutionTaskAction(
   return {};
 }
 
-export async function generateQuoteLineExecutionPlanAction(
+async function createQuoteLineExecutionTasksFromProposal(
+  tx: ExtendedTransactionClient,
+  quoteLineItemId: string,
+  proposal: AILibraryProposal,
+) {
+  for (const gTask of proposal.tasks) {
+    const sortOrder = await nextSortOrderInStage(tx, quoteLineItemId, gTask.stageId ?? null);
+
+    await tx.quoteLineExecutionTask.create({
+      data: {
+        quoteLineItemId,
+        sourceType: gTask.sourceTaskTemplateId
+          ? LineItemTemplateTaskSource.TASK_TEMPLATE
+          : LineItemTemplateTaskSource.CUSTOM,
+        sourceTaskTemplateId: gTask.sourceTaskTemplateId ?? null,
+        title: gTask.title,
+        category: gTask.category,
+        instructions: gTask.instructions,
+        stageId: gTask.stageId,
+        providesSignals: gTask.providesSignals,
+        requiresSignals: gTask.requiresSignals,
+        hardSignal: false,
+        requirementsJson: {
+          checklist: gTask.checklist.map((c) => ({
+            id: crypto.randomUUID(),
+            label: c.label,
+          })),
+        } as Prisma.InputJsonValue,
+        partsRequiredJson: {
+          resources: gTask.resources.map((r) => ({
+            id: crypto.randomUUID(),
+            ...r,
+          })),
+        } as Prisma.InputJsonValue,
+        sortOrder,
+      },
+    });
+  }
+}
+
+export async function generateQuoteLineExecutionAIProposalAction(
   quoteId: string,
   lineItemId: string,
-): Promise<QuoteLineExecutionFormState> {
+): Promise<{
+  error?: string;
+  proposal?: AILibraryProposal;
+  generation?: AILibraryProposalGenerationMeta;
+}> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
@@ -628,7 +675,11 @@ export async function generateQuoteLineExecutionPlanAction(
       where: {
         id: lid,
         quoteId: qid,
-        quote: { organizationId: ctx.organizationId },
+        quote: {
+          organizationId: ctx.organizationId,
+          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+          job: { is: null },
+        },
       },
       include: {
         quote: { select: { organizationId: true } },
@@ -637,7 +688,7 @@ export async function generateQuoteLineExecutionPlanAction(
     });
 
     if (!line) {
-      return { error: "Line item not found." };
+      return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
     }
 
     const stages = await db.stage.findMany({
@@ -654,16 +705,40 @@ export async function generateQuoteLineExecutionPlanAction(
       stages,
     );
 
-    if (!generated.generation.canApply) {
-      return {
-        error:
-          generated.generation.applyBlockedReason ??
-          "This AI execution plan cannot be applied.",
-      };
-    }
+    return { proposal: generated.proposal, generation: generated.generation };
+  } catch (e) {
+    console.error("Failed to generate AI execution proposal", e);
+    return { error: getAiActionErrorMessage(e) };
+  }
+}
 
-    const plan = generated.proposal;
-    const validation = validateQuoteAiExecutionPlanForPersist(plan, stages);
+export async function applyQuoteLineExecutionAIProposalAction(
+  quoteId: string,
+  lineItemId: string,
+  proposal: AILibraryProposal,
+  generation?: AILibraryProposalGenerationMeta,
+): Promise<{ error?: string; success?: boolean; warnings?: string[] }> {
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  try {
+    const parsedProposal = AILibraryProposalSchema.parse(proposal);
+
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+    });
+
+    const validation = validateQuoteAiExecutionPlanForApply(
+      parsedProposal,
+      stages,
+      generation,
+    );
     if (!validation.ok) {
       const detail =
         validation.unmappedTaskTitles.length > 0
@@ -673,48 +748,40 @@ export async function generateQuoteLineExecutionPlanAction(
     }
 
     await db.$transaction(async (tx) => {
-      for (let i = 0; i < plan.tasks.length; i++) {
-        const gTask = plan.tasks[i];
-        const sortOrder = await nextSortOrderInStage(tx, lid, gTask.stageId ?? null);
-
-        await tx.quoteLineExecutionTask.create({
-          data: {
-            quoteLineItemId: lid,
-            sourceType: gTask.sourceTaskTemplateId
-              ? LineItemTemplateTaskSource.TASK_TEMPLATE
-              : LineItemTemplateTaskSource.CUSTOM,
-            sourceTaskTemplateId: gTask.sourceTaskTemplateId ?? null,
-            title: gTask.title,
-            category: gTask.category,
-            instructions: gTask.instructions,
-            stageId: gTask.stageId,
-            providesSignals: gTask.providesSignals,
-            requiresSignals: gTask.requiresSignals,
-            hardSignal: false,
-            requirementsJson: {
-              checklist: gTask.checklist.map((c: { label: string }) => ({
-                id: crypto.randomUUID(),
-                label: c.label,
-              })),
-            } as Prisma.InputJsonValue,
-            partsRequiredJson: {
-              resources: gTask.resources.map((r: { name: string; quantity: number; isEquipment: boolean }) => ({
-                id: crypto.randomUUID(),
-                ...r,
-              })),
-            } as Prisma.InputJsonValue,
-            sortOrder,
-          },
-        });
+      const line = await assertDraftQuoteLine(tx, qid, lid, ctx.organizationId);
+      if (!line) {
+        throw new Error("LINE_LOCKED");
       }
 
+      const existingTaskCount = await tx.quoteLineExecutionTask.count({
+        where: { quoteLineItemId: lid },
+      });
+      if (existingTaskCount > 0) {
+        throw new Error("LINE_NOT_EMPTY");
+      }
+
+      await createQuoteLineExecutionTasksFromProposal(tx, lid, parsedProposal);
       await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     });
 
     revalidatePath(`/quotes/${qid}`);
-    return { warnings: validation.warnings.length > 0 ? validation.warnings : undefined };
+    return {
+      success: true,
+      warnings: validation.warnings.length > 0 ? validation.warnings : undefined,
+    };
   } catch (e) {
-    console.error("Failed to generate execution plan", e);
-    return { error: getAiActionErrorMessage(e) };
+    if (e instanceof Error) {
+      if (e.message === "LINE_LOCKED") {
+        return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+      }
+      if (e.message === "LINE_NOT_EMPTY") {
+        return {
+          error:
+            "This line already has execution tasks. Remove them before applying an AI plan.",
+        };
+      }
+    }
+    console.error("Failed to apply AI execution plan", e);
+    return { error: "Failed to apply AI execution plan." };
   }
 }

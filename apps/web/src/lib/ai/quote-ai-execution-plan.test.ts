@@ -3,7 +3,7 @@ import test from "node:test";
 import { TaskTemplateCategory } from "@prisma/client";
 import { QuoteStatus } from "@prisma/client";
 import { evaluateQuoteJobActivationReadiness } from "../quote-job-activation-readiness";
-import { validateQuoteAiExecutionPlanForPersist } from "./quote-ai-execution-plan";
+import { validateQuoteAiExecutionPlanForApply, validateQuoteAiExecutionPlanForPersist } from "./quote-ai-execution-plan";
 import type { AILibraryProposal } from "./library-proposal-schema";
 import { CORRECTIONS_STAGE_NAME } from "@/lib/job-payment-readiness";
 import { CORRECTIONS_CONDITIONAL_WORK_WARNING } from "./ai-execution-plan-corrections";
@@ -37,6 +37,38 @@ const mappedTask = {
   resources: [],
   confidence: 1,
 };
+
+test("validateQuoteAiExecutionPlanForApply blocks when generation.canApply is false", () => {
+  const result = validateQuoteAiExecutionPlanForApply(
+    proposal([mappedTask]),
+    stages,
+    {
+      canApply: false,
+      isSimulated: false,
+      applyBlockedReason: "Provider returned invalid output.",
+    },
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error, "Provider returned invalid output.");
+  }
+});
+
+test("validateQuoteAiExecutionPlanForApply blocks empty task list", () => {
+  const result = validateQuoteAiExecutionPlanForApply(proposal([]), stages);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /at least one task/i);
+  }
+});
+
+test("validateQuoteAiExecutionPlanForApply passes when all tasks mapped", () => {
+  const result = validateQuoteAiExecutionPlanForApply(proposal([mappedTask]), stages);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.warnings.length, 0);
+  }
+});
 
 test("validateQuoteAiExecutionPlanForPersist passes when all tasks mapped", () => {
   const result = validateQuoteAiExecutionPlanForPersist(proposal([mappedTask]), stages);
@@ -95,7 +127,7 @@ test("validateQuoteAiExecutionPlanForPersist blocks simulated proposals without 
   const result = validateQuoteAiExecutionPlanForPersist(simulated, stages);
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.error, /demo ai execution output/i);
+    assert.match(result.error, /demo ai output/i);
   }
 
   if (previous !== undefined) {
