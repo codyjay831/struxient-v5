@@ -75,7 +75,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 **v5 app (current slice):** persisted `QuoteStatus` uses **`DRAFT`**, **`SENT`**, **`APPROVED`**, **`ARCHIVED`**. Commercial checkpoints use **`SEND`** (proposal as sent) and **`APPROVAL`** (commercial acceptance proof; staff-recorded until e-sign). Declined / expired / superseded are not separate statuses yet.
 
-**v5 app (Job runtime V1):** persisted **`JobStatus`** uses **`ACTIVE`**, **`ARCHIVED`**. **One job per quote** (`Job.quoteId` unique). **`JobStage.blockType`** = **`SHARED`** | **`SEPARATE_LINE_ITEM`**. **`JobTaskStatus`** = **`TODO`** | **`IN_PROGRESS`** | **`DONE`**. Scheduled / on hold / complete / closed / cancelled per the table above are not separate statuses yet.
+**v5 app (Job runtime V1):** persisted **`JobStatus`** uses **`ACTIVE`**, **`ARCHIVED`**. **One job per quote** (`Job.quoteId` unique). **`JobStage.blockType`** = **`SHARED`** | **`SEPARATE_LINE_ITEM`**. **`JobTaskStatus`** = **`TODO`** | **`DONE`** (binary in MVP; no `IN_PROGRESS`). Scheduled / on hold / complete / closed / cancelled per the table above are not separate statuses yet.
 
 ---
 
@@ -170,9 +170,9 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | **job** | Required once job exists; on pre-job quote phase, **optional** with link to quote. |
 | **owner** | Defaults to creator; **reassignable**. |
 
-### Default “spawn tasks” behavior
+### Default follow-up suggestions (non-blocking issue handling)
 
-| Type | Suggested auto-tasks (user can cancel) |
+| Type | Suggested follow-up tasks (user can cancel) |
 |------|----------------------------------------|
 | `inspection_fail` | “Re-inspection schedule”; “Document corrective work” |
 | `payment_block` | “Follow up payment” (Office assignee) |
@@ -180,7 +180,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | `customer_change` | “Draft change order” (Office) |
 | `other` / generic | Single “Triage issue” task |
 
-**Canon:** every **blocks_work** issue **must** surface on **Workstation** blocked/next logic (already I16–I17 family).
+**Canon:** every **blocks_work** issue **must** surface on **Workstation** blocked/next logic (already I16–I17 family). For `BLOCKS_WORK` mitigation, canonical flow is **RecoveryFlow-only** (see [issue-recovery-canon.md](./issue-recovery-canon.md)); do not treat follow-up tasks as an alternate blocker-clearing path.
 
 ### Issue lifecycle (MVP; aligns with experience canon)
 
@@ -209,7 +209,7 @@ Default states: **open** → **triaged** or **in_progress** → **resolved**; op
 | **AI Secretary** | AI suggests signals and dependencies during template authoring and quote planning; never acts without human confirmation. |
 | **Soft Dependencies** | Required signals without a provider are auto-satisfied at activation to prevent deadlocks. |
 | **Hard Signals** | Explicitly marked signals that **must** have a provider; activation blocks if orphans exist. |
-| **Events** | Synthetic tasks that hijack signals to pause work; unblock by resolving the event. |
+| **Issues & Recovery** | Open `BLOCKS_WORK` issues mute readiness until resolved; mitigation is RecoveryFlow-based, not event-hijack workflows. |
 
 ---
 
@@ -242,3 +242,4 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 *Canon update (2026-05-05): Initial v1 locks for RBAC, lifecycles, accounting boundary, intake, calendar depth, tenancy, CO, payments, portal, construction issues, Workstation, second wave, and edge statement. §11 — added **Product surface** row (Workstation as destination / role-aware action-discovery; tabs/lenses as views inside the surface).*  
 *Canon update (2026-05-05): §10 — MVP construction issue lifecycle + anchoring + task vs issue closure clarification.*  
 *Canon update (2026-05-06): §2 quote `sent` row + §7 — aligned **approved truth** language with **checkpoint** model and [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); “administrative revision” → **administrative correction**.*
+*Canon update (2026-05-19): §2 updated runtime `JobTaskStatus` to binary `TODO`/`DONE`; §10 clarified follow-up-task wording vs RecoveryFlow-only blocker mitigation; §14 replaced event-hijack row with issue/recovery wording aligned to execution-engine canon.*

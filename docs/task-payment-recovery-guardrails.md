@@ -119,7 +119,7 @@ The string `"Corrections"` is used for recovery staging. Import `CORRECTIONS_STA
 
 For `BLOCKS_WORK` issues, mitigation is **RecoveryFlow-only**:
 
-- Draft/activate recovery flow on the issue
+- Create and activate the recovery flow **atomically** on submit
 - Execute recovery tasks (`JobTask` rows with `recoveryFlowId`)
 - Resume or force-resolve via canonical issue resolution actions
 

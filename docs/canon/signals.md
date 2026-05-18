@@ -27,7 +27,7 @@ A **Signal** is a named string (e.g., `roof-sealed`, `permit-approved`, `payment
 A task's state is derived from the Signal Bus:
 1. **COMPLETED**: The task is already done.
 2. **BLOCKED_BY_ISSUE**: An open issue is explicitly "muting" this task or its stage.
-3. **WAITING_ON_SIGNAL**: One or more `Requires` signals are missing from the Signal Bus.
+3. **BLOCKED_BY_SIGNAL**: One or more `Requires` signals are missing from the Signal Bus.
 4. **READY**: All `Requires` signals are present, and no issues are blocking it.
 
 ## The AI Secretary
@@ -43,11 +43,12 @@ At job activation, the system reviews all `Requires` signals:
 - **Soft Orphans**: If a required signal has no provider in the job (e.g., a "Skylight" without a "Roof"), the system **auto-satisfies** the signal so the task isn't permanently stuck.
 - **Hard Signals**: If a signal is marked as **Hard** (e.g., `permit-approved`), activation is **blocked** until a provider is found or the requirement is removed.
 
-## Events & Field Recovery
+## Issues, Recovery, and Signals
 
-When surprises happen in the field, users can add **Events**:
-- An Event is a dynamic task that can "hijack" the Signal Bus.
-- Example: A failed inspection creates an Event that publishes `inspection-failed`. Downstream tasks are updated to `Require` a new `inspection-passed` signal, effectively pausing work until the Event is resolved.
+When surprises happen in the field, users create **JobIssue** records and use **RecoveryFlow** for blocker mitigation:
+- Open `BLOCKS_WORK` issues mute related task readiness/signal liveness.
+- Recovery tasks are normal job tasks and may bypass the parent issue blocker for that specific issue.
+- Recovery completion does not auto-resolve the issue; resume/resolve flows remain explicit.
 
 ## Note on Commercial Tiers (Good/Better/Best)
 
@@ -57,3 +58,4 @@ The Signal Engine manages operational readiness and task dependencies. Commercia
 
 *Canon update (2026-05-13): Initial version of the Signal-Based Readiness Engine canon.*  
 *Canon update (2026-05-19): v5 MVP signals are task-scoped; stage-level signal gates are deferred and not runtime canon. Stage issue blocking remains in force.*
+*Canon update (2026-05-19): readiness terminology aligned to `BLOCKED_BY_SIGNAL`; replaced event-hijack wording with JobIssue/RecoveryFlow integration language.*

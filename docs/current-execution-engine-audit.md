@@ -1,10 +1,12 @@
 # Current Execution Engine Audit
 
-> **Mode:** Read-only / current-state. Code is treated as source of truth; docs are referenced only to flag potential drift.
+> **Mode:** Read-only / current-state snapshot from 2026-05-18. Code was treated as source of truth at audit time; docs were referenced only to flag potential drift.
 >
 > **Generated:** 2026-05-18 (Cursor Ask-mode audit).
 >
 > **Scope:** Quote line items → execution review → activation → job tasks/stages → readiness/blocking → issues → recovery → payments → workstation → AI execution generation → activity/logs.
+>
+> **Historical note (2026-05-19):** This file is a historical snapshot and is **not** product authority. Where it conflicts with [`docs/canon/execution-engine-canon.md`](./canon/execution-engine-canon.md), the canon doc wins. Known superseded areas include: quote-line AI now follows generate→review→apply boundaries, follow-up issue tasks are deprecated for blocker mitigation, recovery submit is canonically atomic, and runtime task state language is binary `TODO`/`DONE` with derived readiness states (`BLOCKED_BY_SIGNAL`, etc.).
 
 ---
 
