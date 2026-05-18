@@ -1,0 +1,291 @@
+# Execution Engine Canon (Struxient v5)
+
+> **Status:** Locked (post stabilization passes, May 2026)  
+> **Scope:** Runtime execution contract from commercial scope on the quote through job activation, task/stage/signal execution, issues/recovery, payments, and Workstation attention.  
+> **Implementation map:** [`docs/source-of-truth-map.md`](../source-of-truth-map.md)  
+> **Historical audit:** [`docs/current-execution-engine-audit.md`](../current-execution-engine-audit.md) (read-only snapshot; this document is product authority)
+
+---
+
+## Golden rule
+
+> **Line items define scope. Tasks drive execution. Stages organize work. Issues/recovery/payments control safety and accountability. Workstation surfaces the next right action.**
+
+---
+
+## Domain spine
+
+Struxient v5 execution flows from commercial authoring on the quote to runtime truth on the job. Checkpoints prove commercial commitment; activation materializes operational work.
+
+```mermaid
+flowchart LR
+  Lead --> Quote
+  Quote --> QuoteLineItem
+  QuoteLineItem --> QuoteLineExecutionTask
+  Quote --> Activation
+  Activation --> Job
+  Job --> JobStage
+  JobStage --> JobTask
+  Job --> JobPaymentRequirement
+  Job --> JobSignal
+```
+
+**Copy-on-activate.** After activation, edits to the working quote do not mutate materialized `JobStage`, `JobTask`, or `JobPaymentRequirement` rows. The job is the execution record.
+
+**One job per quote.** Enforced by `Job.quoteId` uniqueness.
+
+**Approval before activation.** Quote must be `APPROVED` with an approval checkpoint before activation runs.
+
+See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [templates-and-execution-planning.md](./templates-and-execution-planning.md).
+
+---
+
+## 1. Line items
+
+**Canon**
+
+- `QuoteLineItem` is the **commercial and scope front door** for sold work: pricing, customer-facing text, and internal notes hang off the line.
+- Lines define **what work exists commercially** on the quote.
+- Draft operational detail for a line lives in `QuoteLineExecutionTask` rows—not on the line row itself.
+- Lines do not carry stages directly; each draft task references an org `Stage` via `stageId`.
+- Line totals roll up on every mutation (`recalculateQuoteRollupsInTx`).
+
+**Key models:** `Quote`, `QuoteLineItem`, `QuoteLineExecutionTask`
+
+**Canonical code:** `quote-line-item-template-apply-tx.ts`, `getQuoteReadiness()` in `quote-readiness.ts`
+
+---
+
+## 2. Draft execution tasks
+
+**Canon**
+
+- `QuoteLineExecutionTask` is **pre-activation planned work** attached to a quote line.
+- Draft tasks are the plan that **will** materialize into `JobTask` rows at activation—not runtime truth until then.
+- Draft tasks may come from:
+  - **Templates** — `LineItemTemplateTask` copied on apply (`performApplyLineItemTemplateToQuoteTx`)
+  - **Reusable library** — `TaskTemplate` via add-from-reusable actions
+  - **Custom user entry**
+  - **AI proposals** — only after human **review and apply** (see §10)
+- Preserve source lineage when available: `sourceTaskTemplateId`, `sourceType`, and linkage back to template/library rows.
+- Activation readiness rejects lines whose tasks lack a `stageId` (`TASK_MISSING_STAGE`).
+
+**Key models:** `QuoteLineExecutionTask`, `LineItemTemplateTask`, `TaskTemplate`
+
+**Canonical code:** `quote-line-execution-actions.ts`, `line-item-template-execution-actions.ts`, `evaluateQuoteJobActivationReadiness()` in `quote-job-activation-readiness.ts`
+
+---
+
+## 3. Activation
+
+**Canon**
+
+- **Activation** is the boundary where approved quote scope becomes runtime job execution.
+- Activation runs in a **single transaction** and creates:
+  - `Job` (one per quote)
+  - `JobStage` (per distinct org `Stage` used by draft tasks)
+  - `JobTask` (copied from `QuoteLineExecutionTask` with lineage fields)
+  - `JobPaymentRequirement` (from `PaymentScheduleItem`)
+  - Initial **Signal Bus** facts (soft orphan auto-satisfy; hard-signal orphans block)
+- **Runtime job records are execution truth** after activation.
+- **Readiness gate:** `evaluateQuoteJobActivationReadiness()` is used by both UI and server (`quote-job-activation-actions.ts`). Do not duplicate activation rules in components.
+- **Deterministic task ordering:** `assignJobTaskSortOrdersAtActivation()` / `buildJobTaskSortOrderMap()` renumber `JobTask.sortOrder` uniquely within each `JobStage` using: line sort → line id → draft task sort → draft task id.
+- **Proof of activation:** `Job.activatedAt` in v1; no separate execution-confirmation checkpoint yet.
+
+**Key models:** `Job`, `JobStage`, `JobTask`, `JobPaymentRequirement`, `JobSignal`
+
+**Canonical code:** `quote-job-activation-actions.ts`, `quote-job-activation-task-order.ts`, `payment-schedule-materialization.ts`
+
+---
+
+## 4. Stages
+
+**Canon**
+
+- Org-level `Stage` is a **reusable named container** (Scope Library): name, sort order, archive flag—nothing more.
+- `JobStage` is a **per-job materialization** of that preset for display, ordering, and payment anchors.
+- Stages answer **“where does this task belong?”** They organize work and may anchor payments.
+- Stages are **not** workflow nodes. They do not dictate progression like a graph engine.
+- **Stage-level signal gates are not runtime canon in v5 MVP.** Schema may retain `JobStage.requiresSignals` / `providesSignals`, but readiness helpers intentionally pass empty stage signal requirements (`toTaskReadinessInput`); `deriveStageState()` considers issues and task completion only—not stage signals.
+- **Stage-level issue blocking remains valid.** Open `BLOCKS_WORK` issues on a stage block tasks in that stage (unless recovery bypass applies).
+- **Corrections** is a reserved stage name, lazily created for recovery work. It is excluded from normal AI execution planning and from main-path payment completion logic.
+
+**Key models:** `Stage`, `JobStage`
+
+**Canonical code:** `task-readiness.ts` (`deriveStageState`, `toTaskReadinessInput`), `job-payment-readiness.ts` (`CORRECTIONS_STAGE_NAME`)
+
+---
+
+## 5. Tasks
+
+**Canon**
+
+- `JobTask` is the **runtime unit of work**. Every task belongs to a `JobStage` and a `Job`.
+- **Status is binary:** `TODO` or `DONE` only. No `IN_PROGRESS` in v5 MVP.
+- Tasks carry execution logic: proof requirements (`completionRequirementsJson`), dependencies (`requiresSignals` / `providesSignals`), checklist, instructions, category, and lineage (`sourceQuoteLineItemId`, `sourceQuoteLineExecutionTaskId`, `sourceTaskTemplateId`, `recoveryFlowId`, etc.).
+- **Task readiness is derived**, not invented in UI. Use `deriveTaskState()` via `toTaskReadinessInput()` everywhere.
+- **Completion** must go through `completeJobTaskAction` (or audited override). Gates: open `BLOCKS_WORK` issues (with recovery bypass for recovery tasks), missing signals, proof requirements.
+- **Checklist proof:** marking checklist items **done** is blocked while the task is `BLOCKED_BY_ISSUE`; unchecking remains allowed (`assertCanToggleTaskChecklistItem`).
+- **Revert DONE → TODO:** use `updateJobTaskStatusAction` (internal path). It **retracts task-sourced signals** when safe—blocked if completed downstream work still depends on those signals (`assertCanRevertJobTaskToTodo`, `retractSignal`). Direct DONE completion via status update is rejected.
+- **Manager override:** `overrideJobTaskReadinessAction` bypasses signal and proof gates but **not** open `BLOCKS_WORK` issues; still publishes signals and promotes payments like normal completion.
+- **Recovery tasks** are normal `JobTask` rows with `recoveryFlowId` set; they bypass the parent issue blocker for that specific issue only.
+
+**Derived states:** `COMPLETED`, `BLOCKED_BY_ISSUE`, `BLOCKED_BY_SIGNAL`, `NEEDS_PROOF`, `READY`
+
+**Canonical code:** `task-readiness.ts`, `job-task-actions.ts`, `job-task-checklist-guard.ts`, `job-task-revert.ts`, `job-task-override-guard.ts`
+
+---
+
+## 6. Signals
+
+**Canon**
+
+- **Task-level** `requiresSignals` and `providesSignals` are the v5 signal canon.
+- **Stage-level signal gates are not runtime canon in MVP** (see §4). Do not wire stage signals at activation or teach operators they gate work today.
+- Signals are **facts on the per-job Signal Bus** (`JobSignal`), managed by `publishSignal` / `retractSignal` / `getLiveSignals`.
+- Completing a task publishes its `providesSignals` with `sourceJobTaskId` attribution.
+- Published signals may unlock dependent task readiness when all `requiresSignals` are live.
+- **Signal retraction** on task revert removes signals this task sourced, unless downstream DONE tasks still require them.
+- **Open `BLOCKS_WORK` issues** on the source task or stage mute related signals (signal liveness respects issue state).
+- **At activation:** required signals without a provider are **auto-satisfied** (soft orphans) unless any requiring task marks the signal as **hard** (`hardSignal`)—hard orphans block activation.
+
+**Canonical code:** `signal-bus.ts`, [signals.md](./signals.md)
+
+---
+
+## 7. Issues and recovery
+
+**Canon**
+
+- `JobIssue` represents a discovered problem on the job (optionally scoped to stage or task).
+- **`BLOCKS_WORK` issues stop unsafe work** until resolved or legitimately overridden.
+- **`RecoveryFlow` is the only canonical mitigation path** for `BLOCKS_WORK` issues. See [issue-recovery-canon.md](./issue-recovery-canon.md).
+- Recovery tasks are normal `JobTask` rows with `recoveryFlowId` (and `recoveryFlowOrder` for ordering within the flow). They live in the **Corrections** `JobStage`.
+- **Recovery creation is atomic** for UI submit: `createAndActivateRecoveryFlowWithTasksAction` → `materializeRecoveryFlowWithTasksInTx` creates an **ACTIVE** flow and all tasks in one transaction. Do not reintroduce multi-request partial creation from the client.
+- **Completing recovery tasks does not automatically resolve the issue.** The user resumes the original path via `resolveIssueAndResumeAction` (`mode: "resume"`) after recovery work is done.
+- **Force-resolve** is an audited override: requires a **non-empty** human `resolutionNote`; cancels an open recovery flow.
+- **Follow-up issue tasks are deprecated and non-canonical.** `createFollowUpTaskFromIssueAction` throws; do not build alternate blocker-mitigation paths.
+
+**Resolution core:** `resolveJobIssueWithRecoveryHandling()` — modes: `standard`, `resume`, `force`.
+
+**Canonical code:** `resolve-job-issue-core.ts`, `recovery-flow-materialize.ts`, `recovery-actions.ts`
+
+---
+
+## 8. Payments
+
+**Canon**
+
+- `PaymentScheduleItem` is **commercial setup on the quote** (deposit, milestone, final balance).
+- `JobPaymentRequirement` is **runtime payment truth after activation**.
+- **Percentage schedule items** materialize to concrete cents at activation via `materializePaymentScheduleForActivation()` (half-up rounding against `quote.totalCents`).
+- **`FINAL_BALANCE`** uses remainder logic after fixed/percentage milestones are allocated.
+- `JobPaymentRequirement.status` is an **audit fact** (`PENDING`, `DUE`, `PAID`, etc.). **Effective due-ness is derived** via `isPaymentEffectivelyDue()` from status, anchors, and main-path stage completion.
+- `promotePendingPaymentsToDue()` runs on task completion and override completion when anchor conditions are met.
+- **Payment holds** on tasks are **display-derived** (`deriveTaskPaymentHold`)—they inform attention; server completion is not blocked by payment hold alone.
+- Workstation and job surfaces should rely on **runtime payment requirements**, not re-derive commercial schedule from the quote post-activation.
+
+**Canonical code:** `job-payment-readiness.ts`, `payment-schedule-materialization.ts`, `quote-job-activation-actions.ts`
+
+---
+
+## 9. Workstation
+
+**Canon**
+
+- **Workstation is an attention and priority surface, not source of truth.** See [workstation-canon.md](./workstation-canon.md).
+- It reads **derived** execution health, task readiness, issue/payment state, and schedule signals—never invent parallel execution logic.
+- **Single emission point:** `queryWorkstationWorkItems()`; **single ranker:** `rank()` in `workstation/rank.ts`.
+- **Job-level blocked state** aligns with execution health via `isJobExecutionBlockedForWorkstation(deriveJobExecutionHealth(...))`—do not maintain a separate ad-hoc `isJobBlocked` definition.
+- Workstation surfaces what deserves attention (blocked work, ready tasks, payments, recovery staleness, health warnings) without becoming a second workflow engine.
+- No persisted priority ranks. No fake KPIs in the shell.
+
+**Canonical code:** `workstation-query.ts`, `job-execution-health.ts`
+
+---
+
+## 10. AI
+
+**Canon**
+
+- AI **may propose** execution plans (library defaults, quote-line draft tasks, recovery suggestions).
+- AI **must not silently persist** execution work. Pattern: **generate → human review → apply**.
+- **Quote-line path:**
+  - `generateQuoteLineExecutionAIProposalAction` — returns proposal only (no DB writes)
+  - `applyQuoteLineExecutionAIProposalAction` — validates and persists in a transaction
+- **Library path:** same review-then-apply pattern via library execution review UI.
+- **Simulated / demo AI output** must not be applied unless `AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS=1` (dev-only). Validators belt-and-brace with `resolveGenerationMetaForApply` and `isSimulatedExecutionProposal`.
+- **Corrections-stage tasks** must not appear in normal execution planning; filtered at generation and apply validation.
+- **Preserve lineage on apply:** set `sourceTaskTemplateId` when the proposal selected a reusable template (`createQuoteLineExecutionTasksFromProposal`).
+- **Recovery AI** (`suggestRecoveryPathAction`) returns ephemeral proposals only; materialization still goes through atomic recovery apply.
+- **No DB-backed AI proposal storage** in v5 MVP—proposals are ephemeral until applied.
+
+**Canonical code:** `ai-service.ts`, `quote-ai-execution-plan.ts`, `ai-execution-plan-corrections.ts`, `quote-line-execution-actions.ts`
+
+---
+
+## 11. Stored vs derived truth
+
+**Rule:** Store runtime **facts**. Derive readiness, blocked state, job health, Workstation urgency, and payment due-ness. Do not duplicate business logic across UI surfaces.
+
+| Concept | Stored (facts) | Derived (helpers) |
+|---------|----------------|-------------------|
+| Task done? | `JobTask.status`, `completedAt`, proof JSON | `deriveTaskState()` |
+| Task ready / blocked? | Issues, signals, proof fields on task | `deriveTaskState()` |
+| Payment due? | `JobPaymentRequirement.status` | `isPaymentEffectivelyDue()` |
+| Job blocked / health? | Task/issue/payment facts | `deriveJobExecutionHealth()` |
+| Work queue | — | `queryWorkstationWorkItems()`, `rank()` |
+| Quote can activate? | Quote status, lines, draft tasks, schedule | `evaluateQuoteJobActivationReadiness()` |
+| Live signals | `JobSignal` rows | `getLiveSignals()` |
+
+Full implementation table: [`docs/source-of-truth-map.md`](../source-of-truth-map.md).
+
+---
+
+## 12. Explicit non-canon / deferred
+
+Do **not** treat the following as v5 MVP execution canon unless explicitly re-approved:
+
+- **Stage signal gates** as runtime readiness inputs (authoring, activation copy, UX, and `deriveStageState` signal checks)
+- **Node-like workflow control** through stages (graph engines, automatic stage advancement rules)
+- **Follow-up issue tasks** as blocker mitigation (`sourceJobIssueId` one-off tasks without a recovery flow)
+- **DB-backed AI proposal storage** (persistent proposal tables without review-then-apply)
+- **`IN_PROGRESS` task state** (binary TODO/DONE only)
+- **Project / admin task model** outside job execution
+- **Broad Workstation ranking redesign** (multi-primary-task, crew assignment model)—deferred; current per-job primary-task focus is acceptable for v1
+- **Schema cleanup for legacy columns** (`JobStage` signal arrays, unused recovery source fields, deprecated enums) until separately approved per schema policy
+
+---
+
+## Do not build
+
+Future Cursor/AI agents and contributors must **not** reintroduce:
+
+1. **Nodes or workflow engines on stages** — stages organize; tasks and signals execute.
+2. **Stage-level signal gates as MVP runtime canon** — do not write stage signals at activation or gate readiness on them without a full vNext design.
+3. **Hidden workflow control** — no shadow state machines in UI that bypass `deriveTaskState`, issue rules, or payment helpers.
+4. **Direct AI persistence** — no `generate*` action that writes `QuoteLineExecutionTask` or `JobTask` rows without an apply boundary and human review.
+5. **Non-atomic recovery creation** — no client-side sequences of create-flow → add-task → activate that can leave partial state.
+6. **Parallel blocker mitigation** — no new “follow-up task fixes the issue” paths; use RecoveryFlow.
+7. **Duplicate readiness / blocked / due logic** in components, routes, or Workstation-only helpers.
+8. **Schema columns for derived state** (ready flags, blocked booleans, computed due flags) without explicit approval.
+9. **Fake Workstation metrics** — no hardcoded KPIs presented as real operational data.
+
+When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface the result in UI.
+
+---
+
+## Related canon
+
+| Document | Topic |
+|----------|--------|
+| [issue-recovery-canon.md](./issue-recovery-canon.md) | RecoveryFlow-only mitigation |
+| [signals.md](./signals.md) | Signal bus and task-scoped readiness |
+| [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | Working quote vs job vs checkpoints |
+| [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes and quote-time planning |
+| [workstation-canon.md](./workstation-canon.md) | Cockpit role and attention rules |
+| [../source-of-truth-map.md](../source-of-truth-map.md) | Stored vs derived implementation map |
+
+---
+
+*Canon created 2026-05-19 — post execution-engine stabilization; supersedes audit §10 “recommended locked canon” as product authority.*

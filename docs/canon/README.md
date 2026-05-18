@@ -24,6 +24,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [conceptual-model.md](./conceptual-model.md) | Entities, relationships, lifecycle intent, data gravity, **auth vs permissions** |
 | [domains-and-boundaries.md](./domains-and-boundaries.md) | Domains, seams, internal vs portal, template vs instance |
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes (line-only vs line+stages+tasks), quote-time vs post-sign planning, maturity curve |
+| [execution-engine-canon.md](./execution-engine-canon.md) | **Runtime execution engine**: line items → draft tasks → activation → stages/tasks/signals → issues/recovery → payments → Workstation attention |
 | [lineage-and-prior-art.md](./lineage-and-prior-art.md) | Full_Cursor (genesis) + v2–v4: what to salvage; failure modes; Jobber-simple + execution-strong positioning |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | Full experience requirements: lead → workstation |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
@@ -39,6 +40,6 @@ Struxient v5 is a **construction management** product for **trades and service**
 
 1. `overview.md` + `lineage-and-prior-art.md` (context from earlier repos)  
 2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `quote-truth-and-checkpoints.md`  
-3. `conceptual-model.md` + `domains-and-boundaries.md` + `templates-and-execution-planning.md`  
+3. `conceptual-model.md` + `domains-and-boundaries.md` + `templates-and-execution-planning.md` + `execution-engine-canon.md`  
 4. `experience-canon-lead-to-workstation.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  
 5. `glossary.md` as reference  
