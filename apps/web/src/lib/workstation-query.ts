@@ -28,6 +28,7 @@ import { deriveTaskState, taskStateLabel, toTaskReadinessInput } from "./task-re
 import {
   buildJobExecutionContextFromJob,
   deriveJobExecutionHealth,
+  isJobExecutionBlockedForWorkstation,
   type ExecutionHealthPrimaryState,
 } from "./job-execution-health";
 import { getLiveSignals } from "./signal-bus";
@@ -454,16 +455,6 @@ export async function queryWorkstationWorkItems(
       job.paymentRequirements,
       jobPaymentScheduleAnchors,
     );
-    const paymentDueContext = buildPaymentDueContextFromJob({
-      status: job.status,
-      stages: job.stages,
-      paymentRequirements: enrichedPaymentRequirements,
-    });
-    const effectivelyDuePayments = getUnsettledEffectivelyDueRequirements(
-      enrichedPaymentRequirements,
-      paymentDueContext,
-    );
-    const isJobBlocked = job.issues.length > 0 || effectivelyDuePayments.length > 0;
     const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
     const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
@@ -509,6 +500,7 @@ export async function queryWorkstationWorkItems(
         liveSignals,
       ),
     );
+    const isJobExecutionBlocked = isJobExecutionBlockedForWorkstation(executionHealth);
 
     const healthWarningStates: ExecutionHealthPrimaryState[] = [
       "NO_NEXT_ACTION",
@@ -627,7 +619,7 @@ export async function queryWorkstationWorkItems(
       });
     }
 
-    if (!hasFutureVisit && job.status === JobStatus.ACTIVE && !isJobBlocked) {
+    if (!hasFutureVisit && job.status === JobStatus.ACTIVE && !isJobExecutionBlocked) {
       // Only signal unscheduled if there are tasks to do
       const hasOpenTasks = job.tasks.length > 0;
       if (hasOpenTasks) {
@@ -691,12 +683,13 @@ export async function queryWorkstationWorkItems(
       const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
       const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
-      const readinessInput = toTaskReadinessInput(task, {
+      const { jobStage, recoveryFlow, ...readinessTask } = task;
+      const readinessInput = toTaskReadinessInput(readinessTask, {
         requiresSignals: [],
-        issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
+        issues: stageIssuesByJobStageId.get(jobStage.id) ?? [],
       });
       const derivedState = deriveTaskState(readinessInput, liveSignals, {
-        recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
+        recoveryFlowIssueId: recoveryFlow?.jobIssueId,
       });
 
       let priority: WorkstationWorkItemPriority = derivedState === "READY" ? "high" : "medium";
@@ -758,7 +751,7 @@ export async function queryWorkstationWorkItems(
         priority: "medium",
         group: "investigate",
         updatedAt: job.updatedAt,
-        isBlocked: isJobBlocked,
+        isBlocked: isJobExecutionBlocked,
       }, role, now);
 
       items.push({
@@ -780,7 +773,9 @@ export async function queryWorkstationWorkItems(
         parentLabel: primaryJobIdentity,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
-        isBlocked: isJobBlocked,
+        isBlocked: isJobExecutionBlocked,
+        executionHealthState: executionHealth.primaryState,
+        executionHealthHeadline: executionHealth.headline,
       });
     }
   }

@@ -124,6 +124,13 @@ type AnalyzedTask = JobExecutionContextTask & {
   isRecovery: boolean;
 };
 
+/** Whether Workstation should treat a job as execution-blocked (suppress unscheduled, empty-job badge). */
+export function isJobExecutionBlockedForWorkstation(
+  health: ExecutionHealthResult,
+): boolean {
+  return health.severity === "blocker";
+}
+
 /** Feature-flagged job detail banner (production off unless EXECUTION_HEALTH_BANNER=1). */
 export function isExecutionHealthBannerEnabled(): boolean {
   if (process.env.EXECUTION_HEALTH_BANNER === "1") return true;

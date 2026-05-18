@@ -429,12 +429,13 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
   });
 
   const nextReadyTask = sortedTasks.find((task) => {
-    const readinessInput = toTaskReadinessInput(task, {
+    const { jobStage, recoveryFlow, ...readinessTask } = task;
+    const readinessInput = toTaskReadinessInput(readinessTask, {
       requiresSignals: [],
-      issues: stageIssuesByJobStageId.get(task.jobStage.id) ?? [],
+      issues: stageIssuesByJobStageId.get(jobStage.id) ?? [],
     });
     const state = deriveTaskState(readinessInput, liveSignals, {
-      recoveryFlowIssueId: task.recoveryFlow?.jobIssueId,
+      recoveryFlowIssueId: recoveryFlow?.jobIssueId,
     });
     return state === "READY";
   });
