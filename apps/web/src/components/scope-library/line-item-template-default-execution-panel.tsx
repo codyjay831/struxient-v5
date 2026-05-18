@@ -34,6 +34,8 @@ import { ClipboardList, Sparkles } from "lucide-react";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
 import { AILibraryProposalReviewPanel } from "./ai-library-proposal-review-panel";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
 import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -446,6 +448,8 @@ export function LineItemTemplateDefaultExecutionPanel({
   stages: { id: string, name: string }[];
 }) {
   const [proposal, setProposal] = useState<AILibraryProposal | null>(null);
+  const [proposalGeneration, setProposalGeneration] =
+    useState<AILibraryProposalGenerationMeta | null>(null);
   const [aiGenerating, setAiGenerating] = useState(false);
   const totalTasks = stagesWithTasks.reduce((n, s) => n + s.tasks.length, 0);
 
@@ -455,8 +459,11 @@ export function LineItemTemplateDefaultExecutionPanel({
       const result = await generateLineItemTemplateAIProposalAction(lineItemTemplateId);
       if (result.error) {
         toast.error(result.error);
+        setProposal(null);
+        setProposalGeneration(null);
       } else if (result.proposal) {
         setProposal(result.proposal);
+        setProposalGeneration(result.generation ?? null);
       }
     } catch (e) {
       console.error(e);
@@ -467,7 +474,11 @@ export function LineItemTemplateDefaultExecutionPanel({
   };
 
   const handleApplyProposal = async (approvedProposal: AILibraryProposal) => {
-    const result = await applyLineItemTemplateAIProposalAction(lineItemTemplateId, approvedProposal);
+    const result = await applyLineItemTemplateAIProposalAction(
+      lineItemTemplateId,
+      approvedProposal,
+      proposalGeneration ?? undefined,
+    );
     if (result.error) {
       throw new Error(result.error);
     }
@@ -500,8 +511,12 @@ export function LineItemTemplateDefaultExecutionPanel({
       {proposal && (
         <AILibraryProposalReviewPanel 
           proposal={proposal}
-          stages={stages}
-          onClose={() => setProposal(null)}
+          generation={proposalGeneration ?? undefined}
+          stages={getStagesForAiExecutionPlanning(stages)}
+          onClose={() => {
+            setProposal(null);
+            setProposalGeneration(null);
+          }}
           onApply={handleApplyProposal}
         />
       )}

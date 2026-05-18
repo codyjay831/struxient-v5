@@ -2,6 +2,8 @@
  * User-safe handling for transient Gemini / Google AI provider failures.
  */
 
+import { AI_INVALID_EXECUTION_PLAN_MESSAGE } from "./ai-execution-plan-generation";
+
 export const AI_TEMPORARILY_UNAVAILABLE_MESSAGE =
   "AI is temporarily unavailable. Try again in a few minutes. No changes were saved.";
 
@@ -9,6 +11,13 @@ export class AiProviderTemporarilyUnavailableError extends Error {
   constructor(message: string = AI_TEMPORARILY_UNAVAILABLE_MESSAGE) {
     super(message);
     this.name = "AiProviderTemporarilyUnavailableError";
+  }
+}
+
+export class AiExecutionPlanInvalidError extends Error {
+  constructor(message: string = AI_INVALID_EXECUTION_PLAN_MESSAGE) {
+    super(message);
+    this.name = "AiExecutionPlanInvalidError";
   }
 }
 
@@ -101,6 +110,10 @@ export function getAiActionErrorMessage(
   error: unknown,
   fallback = "Failed to generate AI execution plan.",
 ): string {
+  if (error instanceof AiExecutionPlanInvalidError) {
+    return error.message;
+  }
+
   if (isAiProviderTemporarilyUnavailable(error)) {
     return AI_TEMPORARILY_UNAVAILABLE_MESSAGE;
   }

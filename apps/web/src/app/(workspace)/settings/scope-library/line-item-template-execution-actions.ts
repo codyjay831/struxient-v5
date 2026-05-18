@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/library-ai-execution-plan";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
@@ -544,7 +545,11 @@ export async function moveLineItemTemplateTaskAction(
 export async function generateLineItemTemplateAIProposalAction(
   lineItemTemplateId: string,
   userInstructions?: string,
-): Promise<{ error?: string; proposal?: AILibraryProposal }> {
+): Promise<{
+  error?: string;
+  proposal?: AILibraryProposal;
+  generation?: AILibraryProposalGenerationMeta;
+}> {
   const tid = lineItemTemplateId.trim();
   if (!tid) {
     return { error: "Missing saved line item." };
@@ -574,7 +579,7 @@ export async function generateLineItemTemplateAIProposalAction(
     // TODO: Fetch existing signals for vocabulary normalization
     const existingSignals: string[] = [];
 
-    const proposal = await AIService.generateLibraryExecutionPlan({
+    const generated = await AIService.generateLibraryExecutionPlan({
       organizationId: ctx.organizationId,
       templateId: tid,
       description: preset.description,
@@ -585,7 +590,7 @@ export async function generateLineItemTemplateAIProposalAction(
       userInstructions,
     });
 
-    return { proposal };
+    return { proposal: generated.proposal, generation: generated.generation };
   } catch (e) {
     console.error("Failed to generate AI execution plan", e);
     return { error: getAiActionErrorMessage(e) };
@@ -595,6 +600,7 @@ export async function generateLineItemTemplateAIProposalAction(
 export async function applyLineItemTemplateAIProposalAction(
   lineItemTemplateId: string,
   proposal: AILibraryProposal,
+  generation?: AILibraryProposalGenerationMeta,
 ): Promise<{ error?: string; success?: boolean }> {
   const tid = lineItemTemplateId.trim();
   if (!tid) {
@@ -604,7 +610,12 @@ export async function applyLineItemTemplateAIProposalAction(
   const ctx = await getRequestContextOrThrow();
 
   try {
-    const applyValidation = validateLibraryDefaultExecutionProposalForApply(proposal);
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+    });
+
+    const applyValidation = validateLibraryDefaultExecutionProposalForApply(proposal, generation, stages);
     if (!applyValidation.ok) {
       const detail =
         applyValidation.unmappedTaskTitles.length > 0

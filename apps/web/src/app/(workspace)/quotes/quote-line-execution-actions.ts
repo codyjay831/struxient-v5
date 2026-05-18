@@ -647,13 +647,22 @@ export async function generateQuoteLineExecutionPlanAction(
     });
 
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
-    const plan = await AIService.generateExecutionPlan(
+    const generated = await AIService.generateExecutionPlan(
       line.description,
       line.quote.organizationId,
       tags,
       stages,
     );
 
+    if (!generated.generation.canApply) {
+      return {
+        error:
+          generated.generation.applyBlockedReason ??
+          "This AI execution plan cannot be applied.",
+      };
+    }
+
+    const plan = generated.proposal;
     const validation = validateQuoteAiExecutionPlanForPersist(plan, stages);
     if (!validation.ok) {
       const detail =

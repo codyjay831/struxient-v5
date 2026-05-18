@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { AI_INVALID_EXECUTION_PLAN_MESSAGE } from "./ai-execution-plan-generation";
 import {
   AI_TEMPORARILY_UNAVAILABLE_MESSAGE,
+  AiExecutionPlanInvalidError,
   AiProviderTemporarilyUnavailableError,
   getAiActionErrorMessage,
   isAiProviderTemporarilyUnavailable,
@@ -47,4 +49,9 @@ test("AiProviderTemporarilyUnavailableError is detected", () => {
   const err = new AiProviderTemporarilyUnavailableError();
   assert.equal(isAiProviderTemporarilyUnavailable(err), true);
   assert.equal(getAiActionErrorMessage(err), AI_TEMPORARILY_UNAVAILABLE_MESSAGE);
+});
+
+test("AiExecutionPlanInvalidError returns user-safe invalid plan copy", () => {
+  const err = new AiExecutionPlanInvalidError();
+  assert.equal(getAiActionErrorMessage(err), AI_INVALID_EXECUTION_PLAN_MESSAGE);
 });

@@ -1,10 +1,25 @@
 import { TaskTemplateCategory, JobIssueType, JobIssueSeverity } from "@prisma/client";
-import { AILibraryProposal, AILibraryProposalSchema } from "./library-proposal-schema";
 import {
+  AILibraryProposal,
+  AILibraryProposalSchema,
+  AILibraryProposedTaskSchema,
+} from "./library-proposal-schema";
+import {
+  buildSimulatedGenerationMeta,
+  buildValidGenerationMeta,
+  isAiSimulatedExecutionPlansEnabled,
+  type AILibraryProposalGenerationResult,
+} from "./ai-execution-plan-generation";
+import {
+  AiExecutionPlanInvalidError,
   AiProviderTemporarilyUnavailableError,
   isAiProviderTemporarilyUnavailable,
 } from "./ai-provider-errors";
 import { mapAiStageToStageId, parseStageIntent, type StageIntent } from "./map-ai-stage";
+import { 
+  getStagesForAiExecutionPlanning, 
+  filterCorrectionsStageTasksFromAiProposal 
+} from "./ai-execution-plan-corrections";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
@@ -149,22 +164,48 @@ export class AIService {
     throw lastError;
   }
 
-  /** Converts a thrown error into a short, user-friendly warning string. */
-  private static friendlyErrorMessage(error: unknown): string {
+  private static logInvalidExecutionPlanDetails(error: unknown): void {
     if (error instanceof z.ZodError) {
-      const count = error.issues.length;
-      const firstFew = error.issues
-        .slice(0, 3)
-        .map((i) => i.path.join(".") || "(root)")
-        .join(", ");
-      const suffix = count > 3 ? `, and ${count - 3} more` : "";
-      return `The AI returned ${count} invalid field${count === 1 ? "" : "s"} (${firstFew}${suffix}). The plan was partially salvaged — please review before applying.`;
+      console.error(
+        "AI execution plan validation failed",
+        error.issues.map((i) => ({
+          path: i.path.join(".") || "(root)",
+          code: i.code,
+          message: i.message,
+        })),
+      );
+      return;
     }
-    if (error instanceof Error) {
-      // Strip noisy SDK preambles like "[GoogleGenerativeAI Error]: "
-      return error.message.replace(/^\[[^\]]+\]:\s*/, "").trim() || "Unknown AI provider error.";
+    console.error("AI execution plan generation failed", error);
+  }
+
+  private static assertValidProposedTasks(
+    tasks: Record<string, unknown>[],
+  ): Record<string, unknown>[] {
+    const rejected: { index: number; issues: z.ZodIssue[] }[] = [];
+
+    for (let index = 0; index < tasks.length; index++) {
+      const parsed = AILibraryProposedTaskSchema.safeParse(tasks[index]);
+      if (!parsed.success) {
+        rejected.push({ index, issues: parsed.error.issues });
+      }
     }
-    return "Unknown AI provider error.";
+
+    if (rejected.length > 0) {
+      console.error(
+        "AI execution plan rejected invalid tasks",
+        rejected.map((r) => ({
+          taskIndex: r.index + 1,
+          issues: r.issues.map((i) => ({
+            path: i.path.join(".") || "(root)",
+            message: i.message,
+          })),
+        })),
+      );
+      throw new AiExecutionPlanInvalidError();
+    }
+
+    return tasks;
   }
 
   /**
@@ -172,14 +213,19 @@ export class AIService {
    */
   static async generateLibraryExecutionPlan(
     context: AIExecutionPlanContext
-  ): Promise<AILibraryProposal> {
+  ): Promise<AILibraryProposalGenerationResult> {
     const gemini = this.getGeminiClient();
 
     if (!gemini) {
-      console.warn("GEMINI_API_KEY missing. Falling back to simulated output.");
-      return this.simulateLibraryExecutionPlan(context, {
-        reason: "GEMINI_API_KEY is missing.",
-      });
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        console.warn("GEMINI_API_KEY missing. Returning simulated demo output (dev flag enabled).");
+        const proposal = await this.simulateLibraryExecutionPlan(context, {
+          reason: "GEMINI_API_KEY is missing.",
+        });
+        return { proposal, generation: buildSimulatedGenerationMeta() };
+      }
+      console.error("GEMINI_API_KEY missing; refusing simulated execution plan fallback.");
+      throw new AiProviderTemporarilyUnavailableError();
     }
 
     // Fetch reusable tasks that match the line item tags
@@ -192,11 +238,13 @@ export class AIService {
       include: { stage: { select: { name: true } }, tags: { select: { name: true } } },
     });
 
+    const planningStages = getStagesForAiExecutionPlanning(context.existingStages);
+
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
       const model = gemini.getGenerativeModel({ model: modelName });
       
-      const prompt = this.buildContractorRealismPrompt(context, reusableTasks);
+      const prompt = this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
 
       const result = await this.retryWithBackoff(() => model.generateContent(prompt));
       const response = await result.response;
@@ -228,7 +276,7 @@ export class AIService {
             stageName: t?.stageName as string | undefined,
             stageKey: t?.stageKey as string | undefined,
             stageIntent: parseStageIntent(t?.stageIntent),
-            allowedStages: context.existingStages,
+            allowedStages: planningStages,
           });
 
           if (stageMapping.warning) {
@@ -246,7 +294,7 @@ export class AIService {
             stageId: stageMapping.stageId,
             stageName:
               stageMapping.stageId != null
-                ? context.existingStages.find((s) => s.id === stageMapping.stageId)?.name ??
+                ? planningStages.find((s) => s.id === stageMapping.stageId)?.name ??
                   (t?.stageName as string | undefined)
                 : (t?.stageName as string | undefined),
           };
@@ -256,37 +304,62 @@ export class AIService {
       const baseAssumptions = Array.isArray(rawProposal.assumptions) ? rawProposal.assumptions : [];
       const baseWarnings = Array.isArray(rawProposal.warnings) ? rawProposal.warnings : [];
 
+      const validatedTasks = this.assertValidProposedTasks(normalizedTasks);
+
       const proposal = {
         ...rawProposal,
         templateId: context.templateId,
         sourceContext: context.description,
         assumptions: baseAssumptions,
         warnings: [...baseWarnings, ...normalizationWarnings, ...stageMappingWarnings],
-        tasks: normalizedTasks,
+        tasks: validatedTasks,
       };
 
-      return AILibraryProposalSchema.parse(proposal);
+      const { proposal: filteredProposal } = filterCorrectionsStageTasksFromAiProposal(
+        proposal,
+        context.existingStages
+      );
+
+      const parsedProposal = AILibraryProposalSchema.parse(filteredProposal);
+      return { proposal: parsedProposal, generation: buildValidGenerationMeta() };
     } catch (e) {
-      console.error("Gemini generation failed", e);
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
       }
-      return this.simulateLibraryExecutionPlan(context, {
-        reason: this.friendlyErrorMessage(e),
-      });
+
+      if (e instanceof AiExecutionPlanInvalidError) {
+        throw e;
+      }
+
+      this.logInvalidExecutionPlanDetails(e);
+
+      if (e instanceof z.ZodError || e instanceof SyntaxError) {
+        throw new AiExecutionPlanInvalidError();
+      }
+
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        console.warn("Gemini generation failed; returning simulated demo output (dev flag enabled).", e);
+        const proposal = await this.simulateLibraryExecutionPlan(context, {
+          reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+        });
+        return { proposal, generation: buildSimulatedGenerationMeta() };
+      }
+
+      throw new AiProviderTemporarilyUnavailableError();
     }
   }
 
   private static buildContractorRealismPrompt(
     context: AIExecutionPlanContext,
+    planningStages: { id: string; name: string }[],
     reusableTasks: { id: string; title: string; category: string; stage?: { name: string } | null; tags: { name: string }[] }[] = []
   ): string {
     const stageListJson = JSON.stringify(
-      context.existingStages.map((s) => ({ name: s.name })),
+      planningStages.map((s) => ({ name: s.name })),
       null,
       2,
     );
-    const stageNames = context.existingStages.map(s => s.name).join(", ");
+    const stageNames = planningStages.map(s => s.name).join(", ");
     const signalNames = context.existingSignals.join(", ");
     const allowedCategories = Object.values(TaskTemplateCategory).join(", ");
 
@@ -330,12 +403,13 @@ RULES:
 1. SELECT FROM REUSABLE TASKS FIRST. If an available reusable task fits the need, use its ID and title exactly.
 2. ONLY GENERATE NEW TASKS for gaps not covered by the library.
 3. Group tasks by STAGE. Each task's "stageName" MUST be copied exactly from EXISTING STAGES above — do not invent new stage names.
-4. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
-5. Mark critical blockers as "hardSignal: true".
-6. Include a checklist for each task.
-7. List required resources/equipment.
-8. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
-9. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
+4. Do NOT assign tasks to the "Corrections" stage; correction work is created later from failed inspections, walkthrough findings, punch-list items, or job issues.
+5. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
+6. Mark critical blockers as "hardSignal: true".
+7. Include a checklist for each task.
+8. List required resources/equipment.
+9. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
+10. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this structure:
@@ -370,8 +444,8 @@ Return ONLY a valid JSON object matching this structure:
     tags: string[] = [],
     existingStages: { id: string; name: string }[] = [],
     existingSignals: string[] = [],
-  ) {
-    const proposal = await this.generateLibraryExecutionPlan({
+  ): Promise<AILibraryProposalGenerationResult> {
+    return this.generateLibraryExecutionPlan({
       templateId: "compat",
       description,
       organizationId,
@@ -379,7 +453,6 @@ Return ONLY a valid JSON object matching this structure:
       existingStages,
       existingSignals,
     });
-    return proposal;
   }
 
   /**
@@ -631,20 +704,24 @@ Return ONLY a valid JSON object:
 
     const { templateId, description, existingStages } = context;
     const d = description.toLowerCase();
+    const planningStages = getStagesForAiExecutionPlanning(existingStages);
     
     const proposal: AILibraryProposal = {
       templateId,
       sourceContext: description,
       assumptions: [
         "Simulated: Assumed standard residential safety protocols apply.",
-        "Simulated: Assumed typical crew size of 2-4 people."
+        "Simulated: Assumed typical crew size of 2-4 people.",
       ],
-      warnings: [options.reason || "This is a simulated response."],
+      warnings: [
+        "Demo AI output — not from the live provider. Apply is disabled unless demo apply is explicitly enabled.",
+        ...(options.reason ? [`Simulated fallback reason: ${options.reason}`] : []),
+      ],
       tasks: [],
     };
 
     const mapSimStage = (stageName: string, intent?: StageIntent) =>
-      mapAiStageToStageId({ stageName, stageIntent: intent, allowedStages: existingStages });
+      mapAiStageToStageId({ stageName, stageIntent: intent, allowedStages: planningStages });
 
     if (d.includes("roof") || d.includes("shingle")) {
       const prepStage = mapSimStage("Preparation", "SITE_PREP");
@@ -656,7 +733,7 @@ Return ONLY a valid JSON object:
           category: TaskTemplateCategory.MATERIAL,
           instructions: "Ensure shingles are distributed across the ridge for weight balance.",
           stageName: prepStage.stageId
-            ? existingStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
+            ? planningStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
             : "Preparation",
           stageId: prepStage.stageId,
           providesSignals: ["materials-on-site"],
@@ -676,7 +753,7 @@ Return ONLY a valid JSON object:
           category: TaskTemplateCategory.GENERAL,
           instructions: "Remove existing shingles down to the wood deck. Report any rot immediately.",
           stageName: roughStage.stageId
-            ? existingStages.find((s) => s.id === roughStage.stageId)?.name ?? "Rough-in"
+            ? planningStages.find((s) => s.id === roughStage.stageId)?.name ?? "Rough-in"
             : "Rough-in",
           stageId: roughStage.stageId,
           providesSignals: ["demo-complete"],
@@ -700,7 +777,7 @@ Return ONLY a valid JSON object:
           title: `Setup for ${description}`,
           category: TaskTemplateCategory.GENERAL,
           stageName: prepStage.stageId
-            ? existingStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
+            ? planningStages.find((s) => s.id === prepStage.stageId)?.name ?? "Preparation"
             : "Preparation",
           stageId: prepStage.stageId,
           providesSignals: ["setup-complete"],
@@ -716,7 +793,7 @@ Return ONLY a valid JSON object:
           title: `Execute ${description}`,
           category: TaskTemplateCategory.GENERAL,
           stageName: installStage.stageId
-            ? existingStages.find((s) => s.id === installStage.stageId)?.name ?? "Installation"
+            ? planningStages.find((s) => s.id === installStage.stageId)?.name ?? "Installation"
             : "Installation",
           stageId: installStage.stageId,
           providesSignals: ["execution-complete"],
@@ -730,6 +807,11 @@ Return ONLY a valid JSON object:
       ];
     }
 
-    return AILibraryProposalSchema.parse(proposal);
+    const { proposal: filteredProposal } = filterCorrectionsStageTasksFromAiProposal(
+      proposal,
+      existingStages
+    );
+
+    return AILibraryProposalSchema.parse(filteredProposal);
   }
 }

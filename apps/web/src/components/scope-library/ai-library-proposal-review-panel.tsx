@@ -16,6 +16,7 @@ import {
   Plus
 } from "lucide-react";
 import { AILibraryProposal, AILibraryProposedTask } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { TaskTemplateCategory } from "@prisma/client";
 import { getTaskTemplateCategoryLabel, taskTemplateCategorySelectOptions } from "@/lib/task-template-category";
 
@@ -34,7 +35,7 @@ function sanitizeWarning(raw: string): string {
     (text.includes('"code"') || text.includes('"path"') || text.includes('"message"'));
 
   if (looksLikeJsonBlob) {
-    return "The AI provider returned a structured error. The plan was partially salvaged — please review tasks before applying.";
+    return "The AI provider returned a structured error. This plan cannot be applied.";
   }
 
   if (text.length > MAX_WARNING_CHARS) {
@@ -59,11 +60,13 @@ const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 
 export function AILibraryProposalReviewPanel({
   proposal,
+  generation,
   stages,
   onApply,
   onClose,
 }: {
   proposal: AILibraryProposal;
+  generation?: AILibraryProposalGenerationMeta;
   stages: { id: string, name: string }[];
   onApply: (approvedProposal: AILibraryProposal) => Promise<void>;
   onClose: () => void;
@@ -94,17 +97,21 @@ export function AILibraryProposalReviewPanel({
   };
 
   const unmappedStageCount = editedProposal.tasks.filter((t) => !t.stageId).length;
-  const canApply = editedProposal.tasks.length > 0 && unmappedStageCount === 0;
+  const generationAllowsApply = generation?.canApply !== false;
+  const applyBlockedReason = generation?.applyBlockedReason;
+  const isDemoOutput = generation?.isSimulated === true;
+  const canApply =
+    generationAllowsApply &&
+    editedProposal.tasks.length > 0 &&
+    unmappedStageCount === 0;
 
   const handleApply = async () => {
-    if (editedProposal.tasks.length === 0) {
-      toast.error("Add at least one task before applying.");
+    if (!canApply) {
+      toast.error(applyBlockedReason ?? "This AI execution plan cannot be applied.");
       return;
     }
-    if (unmappedStageCount > 0) {
-      toast.error(
-        `${unmappedStageCount} ${unmappedStageCount === 1 ? "task needs" : "tasks need"} a stage before applying.`,
-      );
+    if (editedProposal.tasks.length === 0) {
+      toast.error("Add at least one task before applying.");
       return;
     }
     setApplying(true);
@@ -156,6 +163,23 @@ export function AILibraryProposalReviewPanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {isDemoOutput ? (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-warning-strong mb-2">
+                <AlertTriangle className="size-3.5" />
+                Demo AI output
+              </div>
+              <p className="text-sm text-warning-strong">
+                This plan was generated in demo mode, not by the live AI provider. Apply is disabled
+                unless demo apply is explicitly enabled for this environment.
+              </p>
+            </div>
+          ) : null}
+          {!generationAllowsApply && applyBlockedReason ? (
+            <div className="rounded-lg border border-danger/20 bg-danger/5 p-4">
+              <p className="text-sm text-danger-strong">{applyBlockedReason}</p>
+            </div>
+          ) : null}
           {/* Insights Section */}
           {(editedProposal.assumptions.length > 0 || editedProposal.warnings.length > 0) && (
             <div className="space-y-4">
@@ -388,7 +412,12 @@ export function AILibraryProposalReviewPanel({
             </button>
           </div>
           <p className="mt-4 text-center text-[10px] text-foreground-subtle">
-            Applying will create {editedProposal.tasks.length} default execution tasks for this template.
+            {canApply
+              ? `Applying will create ${editedProposal.tasks.length} default execution tasks for this template.`
+              : applyBlockedReason ??
+                (unmappedStageCount > 0
+                  ? "Assign a stage to every task before applying."
+                  : "This plan cannot be applied.")}
           </p>
         </div>
       </div>

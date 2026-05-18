@@ -1,5 +1,9 @@
 import type { AILibraryProposal } from "./library-proposal-schema";
 import type { AllowedStage } from "./map-ai-stage";
+import { 
+  isTaskOnCorrectionsStage, 
+  CORRECTIONS_CONDITIONAL_WORK_WARNING 
+} from "./ai-execution-plan-corrections";
 
 export type QuoteAiPlanValidationResult =
   | {
@@ -30,9 +34,20 @@ export function validateQuoteAiExecutionPlanForPersist(
   }
 
   const unmappedTaskTitles: string[] = [];
+  const correctionsTaskTitles: string[] = [];
   const warnings: string[] = [];
 
+  // Carry over Corrections warning if it was already added during generation filtering
+  if (proposal.warnings.includes(CORRECTIONS_CONDITIONAL_WORK_WARNING)) {
+    warnings.push(CORRECTIONS_CONDITIONAL_WORK_WARNING);
+  }
+
   for (const task of proposal.tasks) {
+    if (isTaskOnCorrectionsStage(task, allowedStages)) {
+      correctionsTaskTitles.push(task.title);
+      continue;
+    }
+
     if (!task.stageId) {
       unmappedTaskTitles.push(task.title);
       continue;
@@ -52,6 +67,14 @@ export function validateQuoteAiExecutionPlanForPersist(
         warnings.push(aliasWarning);
       }
     }
+  }
+
+  if (correctionsTaskTitles.length > 0) {
+    return {
+      ok: false,
+      error: CORRECTIONS_CONDITIONAL_WORK_WARNING,
+      unmappedTaskTitles: correctionsTaskTitles,
+    };
   }
 
   if (unmappedTaskTitles.length > 0) {

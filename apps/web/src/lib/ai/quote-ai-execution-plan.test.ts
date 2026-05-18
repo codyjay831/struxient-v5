@@ -5,18 +5,21 @@ import { QuoteStatus } from "@prisma/client";
 import { evaluateQuoteJobActivationReadiness } from "../quote-job-activation-readiness";
 import { validateQuoteAiExecutionPlanForPersist } from "./quote-ai-execution-plan";
 import type { AILibraryProposal } from "./library-proposal-schema";
+import { CORRECTIONS_STAGE_NAME } from "@/lib/job-payment-readiness";
+import { CORRECTIONS_CONDITIONAL_WORK_WARNING } from "./ai-execution-plan-corrections";
 
 const stages = [
   { id: "s1", name: "Site Prep" },
   { id: "s2", name: "Rough-In" },
+  { id: "s3", name: CORRECTIONS_STAGE_NAME },
 ];
 
-function proposal(tasks: AILibraryProposal["tasks"]): AILibraryProposal {
+function proposal(tasks: AILibraryProposal["tasks"], warnings: string[] = []): AILibraryProposal {
   return {
     templateId: "compat",
     sourceContext: "Test",
     assumptions: [],
-    warnings: [],
+    warnings,
     tasks,
   };
 }
@@ -51,6 +54,29 @@ test("validateQuoteAiExecutionPlanForPersist blocks unmapped tasks", () => {
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.deepEqual(result.unmappedTaskTitles, ["Install flashing"]);
+  }
+});
+
+test("validateQuoteAiExecutionPlanForPersist blocks Corrections tasks", () => {
+  const result = validateQuoteAiExecutionPlanForPersist(
+    proposal([{ ...mappedTask, stageId: "s3", stageName: CORRECTIONS_STAGE_NAME }]),
+    stages,
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.error.includes("Correction work is created later"));
+    assert.deepEqual(result.unmappedTaskTitles, ["Install flashing"]);
+  }
+});
+
+test("validateQuoteAiExecutionPlanForPersist surfaces Corrections warning from generation", () => {
+  const result = validateQuoteAiExecutionPlanForPersist(
+    proposal([mappedTask], [CORRECTIONS_CONDITIONAL_WORK_WARNING]),
+    stages,
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.ok(result.warnings.includes(CORRECTIONS_CONDITIONAL_WORK_WARNING));
   }
 });
 
