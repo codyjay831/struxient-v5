@@ -183,20 +183,42 @@ function createMockTx() {
   return tx;
 }
 
+const forceIssueFixture = {
+  id: "issue-1",
+  jobId: "job-1",
+  title: "Leak",
+  recoveryFlow: {
+    id: "flow-1",
+    status: JobRecoveryFlowStatus.ACTIVE,
+    tasks: [{ id: "t1", status: JobTaskStatus.TODO }],
+  },
+};
+
+test("resolveJobIssueWithRecoveryHandling: force rejects empty resolution note", async () => {
+  for (const resolutionNote of [undefined, "", "   "]) {
+    const tx = createMockTx();
+    await assert.rejects(
+      () =>
+        resolveJobIssueWithRecoveryHandling(tx as never, {
+          organizationId: "org-1",
+          issue: forceIssueFixture,
+          resolutionNote,
+          mode: "force",
+          actorUserId: "user-1",
+        }),
+      /resolution note is required when force resolving/i,
+    );
+    assert.equal(tx.jobIssueUpdates.length, 0);
+    assert.equal(tx.jobRecoveryFlowUpdates.length, 0);
+    assert.equal(tx.jobActivityCreates.length, 0);
+  }
+});
+
 test("resolveJobIssueWithRecoveryHandling: force cancels flow and records forced activity", async () => {
   const tx = createMockTx();
   await resolveJobIssueWithRecoveryHandling(tx as never, {
     organizationId: "org-1",
-    issue: {
-      id: "issue-1",
-      jobId: "job-1",
-      title: "Leak",
-      recoveryFlow: {
-        id: "flow-1",
-        status: JobRecoveryFlowStatus.ACTIVE,
-        tasks: [{ id: "t1", status: JobTaskStatus.TODO }],
-      },
-    },
+    issue: forceIssueFixture,
     resolutionNote: " Customer waived follow-up ",
     mode: "force",
     actorUserId: "user-1",
@@ -205,10 +227,11 @@ test("resolveJobIssueWithRecoveryHandling: force cancels flow and records forced
   assert.equal(tx.jobIssueUpdates.length, 1);
   const issueUpdate = tx.jobIssueUpdates[0] as {
     where: { id: string };
-    data: { status: JobIssueStatus };
+    data: { status: JobIssueStatus; resolutionNote: string };
   };
   assert.equal(issueUpdate.where.id, "issue-1");
   assert.equal(issueUpdate.data.status, JobIssueStatus.RESOLVED);
+  assert.equal(issueUpdate.data.resolutionNote, "Customer waived follow-up");
 
   assert.equal(tx.jobRecoveryFlowUpdates.length, 1);
   const flowUpdate = tx.jobRecoveryFlowUpdates[0] as {
@@ -221,7 +244,33 @@ test("resolveJobIssueWithRecoveryHandling: force cancels flow and records forced
   assert.equal(tx.jobActivityCreates.length, 1);
   const act = tx.jobActivityCreates[0] as { data: Record<string, unknown> };
   assert.equal(act.data.type, JobActivityType.ISSUE_RESOLVED);
+  assert.equal(act.data.details, "Customer waived follow-up");
   assert.equal(act.data.metadataJson && (act.data.metadataJson as { forced?: boolean }).forced, true);
+});
+
+test("resolveJobIssueWithRecoveryHandling: resume allows empty resolution note", async () => {
+  const tx = createMockTx();
+  await resolveJobIssueWithRecoveryHandling(tx as never, {
+    organizationId: "org-1",
+    issue: {
+      id: "issue-1",
+      jobId: "job-1",
+      title: "Leak",
+      recoveryFlow: {
+        id: "flow-1",
+        status: JobRecoveryFlowStatus.ACTIVE,
+        tasks: [{ id: "t1", status: JobTaskStatus.DONE }],
+      },
+    },
+    mode: "resume",
+    actorUserId: "user-1",
+  });
+
+  assert.equal(tx.jobIssueUpdates.length, 1);
+  const issueUpdate = tx.jobIssueUpdates[0] as {
+    data: { resolutionNote: string | null };
+  };
+  assert.equal(issueUpdate.data.resolutionNote, null);
 });
 
 test("resolveJobIssueWithRecoveryHandling: standard with complete recovery matches resume", async () => {

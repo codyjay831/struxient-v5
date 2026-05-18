@@ -207,7 +207,10 @@ function IssueCard({
     }
   };
 
+  const forceResolveNote = note.trim();
+
   const handleForceResolve = async () => {
+    if (!forceResolveNote) return;
     if (
       !confirm(
         "Force resolve will cancel the recovery flow without completing its steps. The issue will be marked resolved. Continue?",
@@ -217,7 +220,10 @@ function IssueCard({
     }
     setIsForceResolving(true);
     try {
-      await forceResolveJobIssueAction({ issueId: issue.id, resolutionNote: note || undefined });
+      await forceResolveJobIssueAction({
+        issueId: issue.id,
+        resolutionNote: forceResolveNote,
+      });
       setIsResolving(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to force resolve issue");
@@ -385,10 +391,15 @@ function IssueCard({
                     </button>
                   ) : (
                     <div className="flex flex-col gap-2">
+                      <label className="text-left text-[0.65rem] font-medium text-foreground-muted">
+                        Resolution note <span className="text-danger">*</span>
+                      </label>
                       <textarea
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="Why are you cancelling recovery?"
+                        required
+                        aria-required
                         className="w-48 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
                         rows={2}
                       />
@@ -401,7 +412,7 @@ function IssueCard({
                         </button>
                         <button
                           onClick={handleForceResolve}
-                          disabled={isPending || isForceResolving}
+                          disabled={isPending || isForceResolving || !forceResolveNote}
                           className="rounded bg-danger px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-background hover:bg-danger/90 disabled:opacity-50"
                         >
                           {isForceResolving ? "Saving..." : "Confirm force"}

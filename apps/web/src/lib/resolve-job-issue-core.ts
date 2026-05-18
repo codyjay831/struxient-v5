@@ -72,13 +72,20 @@ export async function resolveJobIssueWithRecoveryHandling(
 ): Promise<void> {
   const { organizationId, issue, resolutionNote, mode, actorUserId } = params;
 
+  const trimmedNote = resolutionNote?.trim() ?? "";
+  if (mode === "force" && !trimmedNote) {
+    throw new Error(
+      "A resolution note is required when force resolving an issue.",
+    );
+  }
+
   assertCanResolveIssue(issue, mode);
 
   await tx.jobIssue.update({
     where: { id: issue.id },
     data: {
       status: JobIssueStatus.RESOLVED,
-      resolutionNote: resolutionNote?.trim() || null,
+      resolutionNote: trimmedNote || null,
       resolvedAt: new Date(),
     },
   });
@@ -101,7 +108,7 @@ export async function resolveJobIssueWithRecoveryHandling(
         jobId: issue.jobId,
         type: JobActivityType.ISSUE_RESOLVED,
         title: `Issue force resolved: ${issue.title}`,
-        details: resolutionNote?.trim() || "Recovery flow cancelled; steps not completed.",
+        details: trimmedNote,
         entityType: "JobIssue",
         entityId: issue.id,
         actorUserId,
@@ -137,7 +144,7 @@ export async function resolveJobIssueWithRecoveryHandling(
         type: JobActivityType.RECOVERY_FLOW_COMPLETED,
         title: `Recovery complete — original path resumed: ${issue.title}`,
         details:
-          resolutionNote?.trim() ||
+          trimmedNote ||
           "Issue resolved; recovery flow completed; original execution path resumed.",
         entityType: "JobIssue",
         entityId: issue.id,
@@ -160,7 +167,7 @@ export async function resolveJobIssueWithRecoveryHandling(
       jobId: issue.jobId,
       type: JobActivityType.ISSUE_RESOLVED,
       title: `Issue resolved: ${issue.title}`,
-      details: resolutionNote?.trim() || undefined,
+      details: trimmedNote || undefined,
       entityType: "JobIssue",
       entityId: issue.id,
       actorUserId,
