@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { QuoteStatus } from "@prisma/client";
+import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
 import { quoteAllowsQuoteLineExecutionPlanning } from "@/lib/quote-status-workflow";
 import {
   QuoteExecutionReviewPreviewView,
@@ -34,7 +34,7 @@ export default async function QuoteExecutionReviewPreviewPage({
 
   const ctx = await getRequestContextOrThrow();
 
-  const [row, stages] = await Promise.all([
+  const [row, stages, approvalCheckpoint] = await Promise.all([
     db.quote.findFirst({
       where: { id: qid, organizationId: ctx.organizationId },
       select: {
@@ -87,6 +87,15 @@ export default async function QuoteExecutionReviewPreviewPage({
       where: { organizationId: ctx.organizationId, archivedAt: null },
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
+    }),
+    db.quoteCheckpoint.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        quoteId: qid,
+        kind: QuoteCheckpointKind.APPROVAL,
+      },
+      orderBy: { sequence: "desc" },
+      select: { id: true },
     }),
   ]);
 
@@ -165,6 +174,7 @@ export default async function QuoteExecutionReviewPreviewPage({
   } else {
     const readiness = evaluateQuoteJobActivationReadiness({
       status: row.status,
+      hasApprovalCheckpoint: Boolean(approvalCheckpoint),
       lines: row.lineItems.map((l) => ({
         id: l.id,
         description: l.description,

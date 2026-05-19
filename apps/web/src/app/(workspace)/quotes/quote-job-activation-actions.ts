@@ -144,6 +144,7 @@ async function performActivateQuoteJob(
 
       const readiness = evaluateQuoteJobActivationReadiness({
         status: quote.status,
+        hasApprovalCheckpoint: Boolean(approvalCheckpoint),
         lines: readinessLines,
         quoteTotalCents: quote.totalCents,
         paymentSchedule: quote.paymentSchedule.map((item) => ({

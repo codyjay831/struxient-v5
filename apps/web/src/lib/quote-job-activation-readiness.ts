@@ -29,6 +29,8 @@ export type QuoteActivationPaymentScheduleItemInput = {
 
 export type QuoteActivationReadinessInput = {
   status: QuoteStatus;
+  /** Whether an APPROVAL checkpoint exists for this quote. */
+  hasApprovalCheckpoint: boolean;
   lines: QuoteActivationLineInput[];
   quoteTotalCents: number;
   paymentSchedule: QuoteActivationPaymentScheduleItemInput[];
@@ -39,6 +41,7 @@ export type QuoteActivationReadinessInput = {
  */
 export type QuoteActivationBlockReasonCode =
   | "QUOTE_NOT_APPROVED"
+  | "APPROVAL_CHECKPOINT_MISSING"
   | "QUOTE_HAS_NO_LINES"
   | "NO_EXECUTION_TASKS"
   | "TASK_MISSING_STAGE"
@@ -73,6 +76,13 @@ export function evaluateQuoteJobActivationReadiness(
     reasons.push({
       code: "QUOTE_NOT_APPROVED",
       message: "Approve the quote before activation.",
+    });
+  }
+
+  if (input.status === QuoteStatus.APPROVED && !input.hasApprovalCheckpoint) {
+    reasons.push({
+      code: "APPROVAL_CHECKPOINT_MISSING",
+      message: "Record customer acceptance with an approval checkpoint before activating.",
     });
   }
 

@@ -263,6 +263,7 @@ export async function queryWorkstationWorkItems(
 
     const activationReadiness = evaluateQuoteJobActivationReadiness({
       status: quote.status,
+      hasApprovalCheckpoint: quote.checkpoints.length > 0,
       lines: quote.lineItems.map((l) => ({
         id: l.id,
         description: l.description,

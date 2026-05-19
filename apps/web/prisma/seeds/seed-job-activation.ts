@@ -100,6 +100,7 @@ export async function activateQuoteJobForSeed(
 
   const readiness = evaluateQuoteJobActivationReadiness({
     status: quote.status,
+    hasApprovalCheckpoint: Boolean(approvalCheckpoint),
     lines: quote.lineItems.map((l) => ({
       id: l.id,
       description: l.description,

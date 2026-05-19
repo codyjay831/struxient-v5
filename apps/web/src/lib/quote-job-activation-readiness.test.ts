@@ -44,9 +44,53 @@ function readinessInput(
   return {
     quoteTotalCents: 0,
     paymentSchedule: [],
+    hasApprovalCheckpoint: overrides.status === QuoteStatus.APPROVED,
     ...overrides,
   };
 }
+
+test("evaluateQuoteJobActivationReadiness blocks when approved quote has no approval checkpoint", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      hasApprovalCheckpoint: false,
+      lines: [line()],
+    }),
+  );
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.blockReasons[0]?.code, "APPROVAL_CHECKPOINT_MISSING");
+  assert.equal(quoteActivationOnlyBlockedByApproval(readiness), false);
+});
+
+test("evaluateQuoteJobActivationReadiness is ready when approved quote has approval checkpoint", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      hasApprovalCheckpoint: true,
+      lines: [line()],
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+});
+
+test("evaluateQuoteJobActivationReadiness does not emit checkpoint missing for sent quote", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.SENT,
+      hasApprovalCheckpoint: false,
+      lines: [line()],
+    }),
+  );
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.blockReasons[0]?.code, "QUOTE_NOT_APPROVED");
+  assert.equal(
+    readiness.blockReasons.some((r) => r.code === "APPROVAL_CHECKPOINT_MISSING"),
+    false,
+  );
+});
 
 test("evaluateQuoteJobActivationReadiness is ready for approved quote with executable tasks", () => {
   const readiness = evaluateQuoteJobActivationReadiness(
@@ -198,4 +242,22 @@ test("evaluateQuoteJobActivationReadiness blocks milestone missing amount and pe
 
   assert.equal(readiness.ready, false);
   assert.equal(readiness.blockReasons[0]?.code, "PAYMENT_MILESTONE_MISSING_AMOUNT");
+});
+
+test("activation readiness parity: approved without checkpoint blocks same gate server enforces", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      hasApprovalCheckpoint: false,
+      lines: [line()],
+      quoteTotalCents: 1_000_000,
+      paymentSchedule: [],
+    }),
+  );
+
+  assert.equal(readiness.ready, false);
+  assert.ok(
+    readiness.blockReasons.some((r) => r.code === "APPROVAL_CHECKPOINT_MISSING"),
+    "UI readiness must block before server-only checkpoint gate would reject",
+  );
 });

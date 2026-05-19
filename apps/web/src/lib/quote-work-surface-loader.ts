@@ -190,30 +190,6 @@ export async function loadQuoteWorkSurface(
       ? { id: row.job.id, status: row.job.status }
       : null;
 
-  const activationReadiness = evaluateQuoteJobActivationReadiness({
-    status: row.status,
-    lines: row.lineItems.map((l) => ({
-      id: l.id,
-      description: l.description,
-      tasks: l.draftExecutionTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        stageId: t.stageId,
-        providesSignals: t.providesSignals,
-        requiresSignals: t.requiresSignals,
-        hardSignal: t.hardSignal,
-      })),
-    })),
-    quoteTotalCents: row.totalCents,
-    paymentSchedule: row.paymentSchedule.map((item) => ({
-      id: item.id,
-      title: item.title,
-      anchorType: item.anchorType,
-      amountCents: item.amountCents,
-      percentage: item.percentage,
-    })),
-  });
-
   const [sendCheckpointRows, approvalCheckpointRows, latestCommercialProof, stages, organization] =
     await Promise.all([
       db.quoteCheckpoint.findMany({
@@ -275,6 +251,31 @@ export async function loadQuoteWorkSurface(
   const latestSend = sendCheckpointRows[sendCheckpointRows.length - 1] ?? null;
   const latestApproval =
     approvalCheckpointRows[approvalCheckpointRows.length - 1] ?? null;
+
+  const activationReadiness = evaluateQuoteJobActivationReadiness({
+    status: row.status,
+    hasApprovalCheckpoint: approvalCheckpointRows.length > 0,
+    lines: row.lineItems.map((l) => ({
+      id: l.id,
+      description: l.description,
+      tasks: l.draftExecutionTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        stageId: t.stageId,
+        providesSignals: t.providesSignals,
+        requiresSignals: t.requiresSignals,
+        hardSignal: t.hardSignal,
+      })),
+    })),
+    quoteTotalCents: row.totalCents,
+    paymentSchedule: row.paymentSchedule.map((item) => ({
+      id: item.id,
+      title: item.title,
+      anchorType: item.anchorType,
+      amountCents: item.amountCents,
+      percentage: item.percentage,
+    })),
+  });
 
   const readiness = getQuoteReadiness({
     quote: {
