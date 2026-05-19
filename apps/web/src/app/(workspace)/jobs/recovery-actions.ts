@@ -16,11 +16,9 @@ import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-cor
 import {
   materializeRecoveryFlowWithTasksInTx,
   validateRecoveryFlowTasksInput,
-  type RecoveryFlowTaskInput,
 } from "@/lib/recovery-flow-materialize";
+import type { RecoveryFlowTaskInput } from "@/lib/recovery-flow-materialize";
 import { AIService } from "@/lib/ai/ai-service";
-
-export type { RecoveryFlowTaskInput };
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
 
