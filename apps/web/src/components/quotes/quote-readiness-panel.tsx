@@ -183,7 +183,7 @@ export function QuoteReadinessPanel({
             signals.needsExecutionReviewLineCount > 0
               ? `${signals.needsExecutionReviewLineCount} lines need review`
               : signals.activationTaskCount > 0
-                ? "Ready for activation"
+                ? "Ready to create job"
                 : "No tasks yet"
           }
           icon={Wrench}
@@ -192,7 +192,7 @@ export function QuoteReadinessPanel({
         <SignalCard
           label="Job"
           value={signals.activatedJobId ? "Active" : "—"}
-          hint={signals.activatedJobId ? "Job is running" : "Not activated"}
+          hint={signals.activatedJobId ? "Job is active" : "Not created yet"}
           icon={Briefcase}
           tone={signals.activatedJobId ? "success" : "neutral"}
         />

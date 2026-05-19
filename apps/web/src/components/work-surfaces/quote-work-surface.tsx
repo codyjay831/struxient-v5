@@ -350,7 +350,7 @@ function QuoteExecutionPreviewEmbedded({
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-8 text-center">
         <p className="text-sm text-foreground-muted">
-          No draft execution tasks have been added to this quote yet.
+          No planned tasks have been added to this quote yet.
         </p>
       </div>
     );
@@ -360,8 +360,8 @@ function QuoteExecutionPreviewEmbedded({
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
         <SectionHeading
-          title="Signal handshake preview"
-          description="How tasks unlock each other once the job is activated."
+          title="Task dependencies preview"
+          description="How tasks unlock each other once the job is created."
         />
         <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-border bg-surface px-3 py-2">
@@ -373,16 +373,16 @@ function QuoteExecutionPreviewEmbedded({
             <dd className="mt-0.5 text-sm font-medium text-foreground">{summary.totalTasks}</dd>
           </div>
           <div className="rounded-lg border border-border bg-surface px-3 py-2">
-            <dt className={sectionLabelClass}>Handshakes</dt>
+            <dt className={sectionLabelClass}>Dependencies</dt>
             <dd className="mt-0.5 text-sm font-medium text-foreground">{handshakes.length}</dd>
           </div>
           <div className="rounded-lg border border-border bg-surface px-3 py-2">
-            <dt className={sectionLabelClass}>Orphans</dt>
+            <dt className={sectionLabelClass}>Dependency gaps</dt>
             <dd className="mt-0.5 text-sm font-medium text-foreground">
               {summary.orphanCount}
               {summary.hardOrphanCount > 0 ? (
                 <span className="ml-1 text-xs text-danger">
-                  ({summary.hardOrphanCount} hard)
+                  ({summary.hardOrphanCount} required)
                 </span>
               ) : null}
             </dd>
@@ -393,8 +393,8 @@ function QuoteExecutionPreviewEmbedded({
       {handshakes.length > 0 && (
         <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <SectionHeading
-            title="Wired handshakes"
-            description="Required signals that already have a provider in this quote."
+            title="Connected dependencies"
+            description="Dependencies that already have an upstream task in this quote."
           />
           <ul className="mt-4 space-y-2">
             {handshakes.map((h, idx) => (
@@ -422,8 +422,8 @@ function QuoteExecutionPreviewEmbedded({
       {orphans.length > 0 && (
         <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <SectionHeading
-            title="Orphan signals"
-            description="Required signals with no provider. Soft orphans auto-satisfy at activation; hard orphans block activation."
+            title="Dependency gaps"
+            description="Dependencies with no upstream task yet. Auto-resolved gaps are handled at job creation; required gaps block job creation."
           />
           <ul className="mt-4 space-y-2">
             {orphans.map((o, idx) => (
@@ -437,11 +437,11 @@ function QuoteExecutionPreviewEmbedded({
                   </p>
                   {o.isHard ? (
                     <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider text-danger">
-                      Hard
+                      Required
                     </span>
                   ) : (
                     <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[0.55rem] font-medium uppercase tracking-wider text-foreground-subtle">
-                      Soft (auto-satisfied)
+                      Auto-resolved
                     </span>
                   )}
                 </div>
@@ -461,7 +461,7 @@ function QuoteExecutionPreviewEmbedded({
         <div className="rounded-xl border border-border bg-background p-5 shadow-sm">
           <SectionHeading
             title="Per-line readiness"
-            description="Signal footprint of each quote line."
+            description="Task outputs and dependencies for each quote line."
           />
           <ul className="mt-4 space-y-3">
             {lineReadiness.map((l) => (
@@ -482,7 +482,7 @@ function QuoteExecutionPreviewEmbedded({
                       <span
                         key={`p-${s}`}
                         className="rounded bg-accent/10 px-1.5 py-0.5 text-[0.55rem] font-mono font-bold text-accent"
-                        title="Provides"
+                        title="Outputs"
                       >
                         ↑ {s}
                       </span>
@@ -491,7 +491,7 @@ function QuoteExecutionPreviewEmbedded({
                       <span
                         key={`r-${s}`}
                         className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[0.55rem] font-mono font-bold text-foreground-muted"
-                        title="Requires"
+                        title="Dependencies"
                       >
                         ↓ {s}
                       </span>
@@ -1621,9 +1621,10 @@ function EmbeddedActivateJobButton({
   if (showConfirm) {
     return (
       <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-4">
-        <p className="text-xs font-bold text-foreground">Activate this job?</p>
+        <p className="text-xs font-bold text-foreground">Create job from this approved quote?</p>
         <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-          This will create a runtime job and copy all execution tasks. This action cannot be undone.
+          This will create an active job using the approved quote and reviewed work plan.
+          Planned tasks and readiness checks will be copied into the job for your team to manage.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
@@ -1632,7 +1633,7 @@ function EmbeddedActivateJobButton({
             disabled={isPending}
             className={primaryBtnClass}
           >
-            {isPending ? "Activating…" : "Yes, activate job"}
+            {isPending ? "Creating…" : "Create Job"}
           </button>
           <button
             type="button"
@@ -1658,9 +1659,9 @@ function EmbeddedActivateJobButton({
 
   return (
     <div className="rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
-      <p className="text-xs font-medium text-foreground">Activate job</p>
+      <p className="text-xs font-medium text-foreground">Create job</p>
       <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-        Activate to start work on this approved quote.
+        Create a job from this approved quote to start managing work.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
@@ -1669,7 +1670,7 @@ function EmbeddedActivateJobButton({
           className={primaryBtnClass}
         >
           <Briefcase className="size-3.5" strokeWidth={1.5} />
-          Activate job
+          Create job
         </button>
       </div>
     </div>
@@ -1882,11 +1883,10 @@ function SendAcceptTab({
         {!isArchived && isApproved ? (
           <div className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
             <p className="text-xs font-medium text-foreground">
-              Next: review execution before activation
+              Next: review job plan before creation
             </p>
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              Commercial terms are approved. Review the internal draft execution
-              and activate the job when planning is ready.
+              Commercial terms are approved. Review the job plan and create the job when the work setup is ready.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -1895,13 +1895,13 @@ function SendAcceptTab({
                 className={secondaryBtnClass}
               >
                 <Wrench className="size-3.5 mr-1.5" strokeWidth={1.5} />
-                Review execution
+                Review job plan
               </button>
               <Link
                 href={quote.executionReviewHref}
                 className={mutedFooterLinkClass}
               >
-                Open full review page
+                Open full job-plan review page
                 <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
               </Link>
             </div>

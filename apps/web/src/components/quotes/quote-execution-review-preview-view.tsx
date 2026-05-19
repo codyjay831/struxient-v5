@@ -53,8 +53,8 @@ export function QuoteExecutionReviewPreviewView({
         <WorkspacePanel>
           <EmptyState
             icon={ClipboardList}
-            title="Add line items before reviewing execution"
-            description="This quote does not have any scope rows yet. Return to the quote and add lines, then open this preview again."
+            title="Add line items before reviewing the job plan"
+            description="This quote does not have any scope rows yet. Return to the quote, add line items, then review the job plan again."
           >
             <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
               ← Back to quote
@@ -65,21 +65,21 @@ export function QuoteExecutionReviewPreviewView({
         <>
           <WorkspacePanel>
             <SectionHeading
-              title="Execution readiness"
-              description={`Quote “${quoteTitle}”. Review the signal handshake between tasks across all line items. Signals drive when work becomes ready in the field.`}
+              title="Readiness checks"
+              description={`Quote “${quoteTitle}”. Review task dependencies across line items so the team has a clear path to start and continue work.`}
             />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <SignalCard label="Line items" value={String(summary.totalLines)} hint="Commercial scope rows." />
               <SignalCard label="Total tasks" value={String(summary.totalTasks)} hint="Total execution steps." />
-              <SignalCard label="Handshakes" value={String(handshakes.length)} hint="Wired dependencies." />
+              <SignalCard label="Dependencies" value={String(handshakes.length)} hint="Connected task dependencies." />
               <SignalCard 
-                label="Orphans" 
+                label="Dependency gaps" 
                 value={String(summary.orphanCount)} 
                 tone={summary.hardOrphanCount > 0 ? "danger" : summary.orphanCount > 0 ? "warning" : "neutral"}
-                hint="Signals without a provider." 
+                hint="Dependencies without an upstream task." 
               />
-              <SignalCard label="Provided signals" value={String(summary.providedSignalCount)} hint="Unique facts published." />
-              <SignalCard label="Required signals" value={String(summary.requiredSignalCount)} hint="Unique facts needed." />
+              <SignalCard label="Outputs" value={String(summary.providedSignalCount)} hint="Unique completion outputs." />
+              <SignalCard label="Dependencies needed" value={String(summary.requiredSignalCount)} hint="Unique prerequisites across tasks." />
             </div>
           </WorkspacePanel>
 
@@ -88,18 +88,18 @@ export function QuoteExecutionReviewPreviewView({
               <div className="flex gap-3">
                 <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" />
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Signal Orphans</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Dependency gaps</h3>
                   <p className="mt-1 text-xs text-foreground-muted leading-relaxed">
-                    These signals are required by tasks but have no provider in this quote. 
-                    <strong> Soft orphans</strong> will be auto-satisfied at activation. 
-                    <strong> Hard signals</strong> will block activation.
+                    These task dependencies are required but do not yet have an upstream task in this quote.
+                    <strong> Auto-resolved gaps</strong> are handled during job creation.
+                    <strong> Required gaps</strong> must be resolved before creating the job.
                   </p>
                   <ul className="mt-4 space-y-3">
                     {orphans.map((o, i) => (
                       <li key={i} className="rounded-lg border border-border bg-background/50 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${o.isHard ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'}`}>
-                            {o.isHard ? 'Hard signal' : 'Soft orphan'}
+                            {o.isHard ? 'Required gap' : 'Auto-resolved gap'}
                           </span>
                           <span className="font-mono text-[10px] text-foreground-subtle">{o.signal}</span>
                         </div>
@@ -116,14 +116,14 @@ export function QuoteExecutionReviewPreviewView({
           {handshakes.length > 0 && (
             <WorkspacePanel>
               <SectionHeading
-                title="Signal Handshakes"
-                description="How tasks communicate readiness across lines. When the provider is done, the consumer hears the signal."
+                title="Task dependencies"
+                description="How work unlocks across line items. When the upstream task is complete, downstream work can become ready."
               />
               <ul className="mt-4 space-y-4">
                 {handshakes.map((h, i) => (
                   <li key={i} className="relative flex items-center gap-4 rounded-xl border border-border bg-surface p-4">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Provider</p>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Upstream</p>
                       <p className="mt-1 truncate text-sm font-medium text-foreground">{h.providerTaskTitle}</p>
                       <p className="truncate text-[10px] text-foreground-muted">{h.providerLineDescription}</p>
                     </div>
@@ -136,7 +136,7 @@ export function QuoteExecutionReviewPreviewView({
                       <div className="h-px w-8 bg-border" />
                     </div>
                     <div className="flex-1 min-w-0 text-right">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Consumer</p>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Downstream</p>
                       <p className="mt-1 truncate text-sm font-medium text-foreground">{h.consumerTaskTitle}</p>
                       <p className="truncate text-[10px] text-foreground-muted">{h.consumerLineDescription}</p>
                     </div>
@@ -202,7 +202,7 @@ export function QuoteExecutionReviewPreviewView({
           <WorkspacePanel>
             <SectionHeading
               title="Line breakdown"
-              description="Review signals provided and required by each line item."
+              description="Review task outputs and dependencies for each line item."
             />
             <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
               {lineReadiness.map((row) => {
@@ -234,7 +234,7 @@ export function QuoteExecutionReviewPreviewView({
                           <div className="mt-3 flex flex-wrap gap-3">
                             {row.providesSignals.length > 0 && (
                               <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Provides</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Outputs</p>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   {row.providesSignals.map(s => (
                                     <span key={s} className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-mono text-success">{s}</span>
@@ -244,7 +244,7 @@ export function QuoteExecutionReviewPreviewView({
                             )}
                             {row.requiresSignals.length > 0 && (
                               <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Requires</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Dependencies</p>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   {row.requiresSignals.map(s => (
                                     <span key={s} className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono text-accent">{s}</span>
@@ -282,9 +282,9 @@ export function QuoteExecutionReviewPreviewView({
         <div className="flex gap-2">
           <Info className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <p className="text-xs leading-relaxed text-foreground-muted">
-            Internal planning view. Activation copies these signals and tasks into a runtime job. 
-            <strong> Soft orphans</strong> are automatically satisfied at activation to prevent deadlocks. 
-            <strong> Hard signals</strong> must have a provider to activate.
+            Review this work plan before creating the job from the approved quote.
+            Planned tasks, dependencies, and payment requirements move into the active job at creation.
+            Required dependency gaps must be resolved before job creation.
           </p>
         </div>
       </WorkspacePanel>
@@ -304,7 +304,7 @@ function ActivationPanel({
       <WorkspacePanel className="border-l-[3px] border-l-success/60 bg-success/[0.04]">
         <SectionHeading
           title="Job created from approved quote"
-          description="Runtime job already exists for this quote. Editing draft execution here does not change tasks already on the job."
+          description="An active job already exists for this quote. Changes made here do not update the existing job plan."
         />
         <div className="flex flex-wrap items-center gap-3">
           <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden />
@@ -325,20 +325,20 @@ function ActivationPanel({
     return (
       <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
         <SectionHeading
-          title="Activate this approved quote"
-          description="Creates one job from this quote. All tasks and signals will be copied into the job Signal Bus. Soft orphans will be auto-satisfied."
+          title="Create job from this approved quote"
+          description="Create one active job from this quote using the reviewed work plan, payment requirements, and readiness checks."
         />
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           <SignalCard
             label="Tasks to activate"
             value={String(r.totalTasksToActivate)}
-            hint="Tasks copied into the job."
+            hint="Planned tasks copied into the job."
           />
           <SignalCard
             label="Readiness"
             value="Ready"
             tone="success"
-            hint="No blocking hard orphans."
+            hint="No blocking dependency gaps."
           />
         </div>
         <div className="flex items-start gap-3">
@@ -355,11 +355,11 @@ function ActivationPanel({
   return (
     <WorkspacePanel className="border-l-[3px] border-l-accent/70 bg-accent/[0.04]">
       <SectionHeading
-        title="Activation not ready"
+        title="Needs review before job creation"
         description={
           activation.quoteIsApproved
-            ? "Resolve the items below to activate this approved quote into a job."
-            : "Activate is available after the quote is approved. Resolve any planning gaps below now so it is ready when acceptance is recorded."
+            ? "Resolve the items below before creating the job from this approved quote."
+            : "Job creation is available after quote approval. Resolve any planning gaps now so it is ready once approval is recorded."
         }
       />
       <ul className="space-y-3">

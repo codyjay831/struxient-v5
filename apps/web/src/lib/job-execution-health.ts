@@ -424,7 +424,7 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       nextActionableRecoveryTaskId,
       recommendedNextAction: {
         type: "review_health",
-        label: "Review execution status",
+        label: "Review job setup",
       },
       blockers: [],
       warnings,
@@ -551,12 +551,12 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       nextActionableRecoveryTaskId,
       recommendedNextAction: {
         type: "review_health",
-        label: "Review execution status",
+        label: "Review job setup",
       },
       blockers: [],
       warnings,
-      headline: "No clear next step",
-      detail: "This job has incomplete work without an actionable next task. Review tasks and blockers.",
+      headline: "Needs setup review",
+      detail: "No next action is ready. Review blockers, schedule, or task setup.",
       incompleteMain: incompleteWork,
     });
   }

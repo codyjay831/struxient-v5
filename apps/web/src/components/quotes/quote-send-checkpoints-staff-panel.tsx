@@ -65,8 +65,8 @@ export function QuoteSendCheckpointsStaffPanel({
         <div className="mb-6 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
           <p className="text-xs font-medium text-foreground">Customer accepted commercially</p>
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            This quote is Sent. When the customer has agreed to scope and price, record approval here. Internal draft
-            execution can still be edited afterward until activation exists.
+            This quote is Sent. When the customer has agreed to scope and price, record approval here.
+            The work plan can still be updated before the job is created.
           </p>
           <div className="mt-3">
             <QuoteMarkApprovedForm quoteId={quoteId} />
@@ -76,14 +76,13 @@ export function QuoteSendCheckpointsStaffPanel({
 
       {!isArchived && isApproved ? (
         <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
-          <p className="text-xs font-medium text-foreground">Next: review execution before activation</p>
+          <p className="text-xs font-medium text-foreground">Next: review job plan before creation</p>
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            Commercial terms are approved. Review the internal draft execution on this quote and activate it into a
-            job when planning is ready.
+            Commercial terms are approved. Review the job plan on this quote, then create the job when setup is ready.
           </p>
           <div className="mt-3">
             <Link href={quoteExecutionReviewPreviewPath(quoteId)} className={listLinkClass}>
-              Review execution
+              Review job plan
             </Link>
           </div>
         </div>

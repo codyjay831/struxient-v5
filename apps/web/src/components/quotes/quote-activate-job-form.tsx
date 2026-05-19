@@ -26,7 +26,7 @@ function FormError({ message }: { message: string }) {
 }
 
 /**
- * Activates an APPROVED quote into a runtime job (one job per quote).
+ * Activates an APPROVED quote into an active job (one job per quote).
  * Server validates org scope, status, and execution readiness inside the transaction.
  */
 export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
@@ -75,11 +75,11 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
                 <Zap className="size-3" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-foreground">Suggested Handshake</p>
+                <p className="text-xs font-bold text-foreground">Suggested dependency</p>
                 <p className="mt-1 text-xs text-foreground-muted">
-                  Make <span className="font-semibold text-foreground">“{s.taskTitle}”</span> wait for the 
+                  Make <span className="font-semibold text-foreground">“{s.taskTitle}”</span> wait for the
                   <span className="mx-1 rounded bg-accent/10 px-1 py-0.5 font-mono text-[10px] font-bold text-accent">{s.signal}</span> 
-                  signal from the Roofing line.
+                  prerequisite from the Roofing line.
                 </p>
               </div>
               <button 
@@ -105,7 +105,7 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
             }}
             className={primaryButtonClass}
           >
-            Continue to Activation
+            Continue to job creation
           </button>
           <button
             type="button"
@@ -122,15 +122,15 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
   if (showConfirm) {
     return (
       <div className="rounded-xl border border-accent/30 bg-accent/5 p-6">
-        <h3 className="text-lg font-semibold text-foreground">Activate this job?</h3>
+        <h3 className="text-lg font-semibold text-foreground">Create job from this approved quote?</h3>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          This will create a runtime job and copy all execution tasks and signals from the current quote draft. 
-          <strong> Soft orphans</strong> will be automatically satisfied in the job Signal Bus. 
-          This action cannot be undone.
+          This will create an active job using the approved quote and reviewed work plan.
+          Planned tasks, payment requirements, and readiness checks will be copied into the job so your team can begin managing the work.
+          After activation, future changes should be handled from the job through tasks, issues, activity, and approved changes.
         </p>
         <form action={formAction} className="mt-6 flex flex-wrap items-center gap-3">
           <button type="submit" className={primaryButtonClass} disabled={isPending}>
-            {isPending ? "Activating…" : "Yes, activate job"}
+            {isPending ? "Creating…" : "Create Job"}
           </button>
           <button
             type="button"
@@ -154,7 +154,7 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setShowConfirm(true)} className={primaryButtonClass}>
-          Activate job
+          Create job
         </button>
         <button 
           type="button" 
@@ -167,8 +167,8 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
         </button>
       </div>
       <p className="text-[0.7rem] leading-relaxed text-foreground-subtle">
-        Creates one job from this approved quote. All tasks and signals will be copied into the job Signal Bus. 
-        Later quote edits do not change tasks already on the job.
+        Create one active job from this approved quote using the reviewed work plan and readiness checks.
+        Later quote changes do not automatically update tasks already on the job.
       </p>
     </div>
   );

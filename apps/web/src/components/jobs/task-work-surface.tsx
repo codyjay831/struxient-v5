@@ -605,9 +605,9 @@ export function TaskWorkSurface({
              <div className="flex gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
               <Zap className="mt-0.5 size-5 shrink-0 text-accent" />
               <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-bold text-foreground">Waiting on Signals</h4>
+                <h4 className="text-sm font-bold text-foreground">Waiting on prior work</h4>
                 <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                  Waiting on: {missingSignals.join(", ")}
+                  Waiting on prerequisites: {missingSignals.join(", ")}
                 </p>
               </div>
             </div>
@@ -622,7 +622,7 @@ export function TaskWorkSurface({
             ) : (
               <>
                 <p className="mb-3 text-[10px] leading-relaxed text-foreground-muted">
-                  If this work is actually ready despite the blockers above, a manager can override the engine.
+                  If this work is ready despite the blockers above, a manager can override readiness checks.
                   This action is audited.
                 </p>
                 <button

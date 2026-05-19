@@ -5,10 +5,10 @@ export function buildQuoteLineExecutionPlanningSummaryLine(params: {
   executionSummaryLine: string | null;
 }): string {
   if (params.taskCount === 0) {
-    return "Needs execution review";
+    return "Needs job plan review";
   }
 
-  return `Draft execution · ${params.taskCount} tasks${
+  return `Planned work · ${params.taskCount} tasks${
     params.executionSummaryLine ? ` · ${params.executionSummaryLine}` : ""
   }`;
 }

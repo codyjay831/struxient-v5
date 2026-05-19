@@ -116,8 +116,8 @@ const STATE_LABEL: Record<QuoteReadinessState, string> = {
   EMPTY_DRAFT: "Empty draft",
   DRAFT_IN_PROGRESS: "Draft in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
-  APPROVED_NEEDS_EXECUTION_REVIEW: "Needs execution review",
-  APPROVED_READY_TO_ACTIVATE: "Ready to activate",
+  APPROVED_NEEDS_EXECUTION_REVIEW: "Needs job plan review",
+  APPROVED_READY_TO_ACTIVATE: "Ready to create job",
   JOB_ACTIVE: "Job active",
   ARCHIVED: "Archived",
 };
@@ -145,9 +145,9 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
     return {
       state: "JOB_ACTIVE",
       label: STATE_LABEL.JOB_ACTIVE,
-      description: "A runtime job has been activated from this approved quote.",
+      description: "An active job has been created from this approved quote.",
       primaryAction: { kind: "OPEN_JOB", label: "Open job", targetJobId: job.id },
-      secondaryAction: { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" },
+      secondaryAction: { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
       stepIndex: STATE_STEP_INDEX.JOB_ACTIVE,
       totalSteps: TOTAL_STEPS,
       isTerminal: false,
@@ -168,15 +168,15 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
       description: input.revisionDriftSinceLastProof
         ? driftDescription
         : isReady
-          ? "Commercial terms are approved and execution planning is ready. Activate the job to begin work."
-          : "Commercial terms are approved. Resolve planning gaps in execution review to activate the job.",
+          ? "Commercial terms are approved and the work plan is ready. Create the job to begin work."
+          : "Commercial terms are approved. Resolve planning gaps in the job-plan review before creating the job.",
       primaryAction: isReady
-        ? { kind: "ACTIVATE_JOB", label: "Activate job" }
-        : { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" },
+        ? { kind: "ACTIVATE_JOB", label: "Create job" }
+        : { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
       secondaryAction: input.revisionDriftSinceLastProof
         ? { kind: "RESTORE_TO_DRAFT", label: "Restore to draft" }
         : isReady
-          ? { kind: "OPEN_EXECUTION_REVIEW", label: "Open execution review" }
+          ? { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" }
           : null,
       stepIndex: STATE_STEP_INDEX[state],
       totalSteps: TOTAL_STEPS,

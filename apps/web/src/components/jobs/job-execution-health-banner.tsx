@@ -21,7 +21,7 @@ export function JobExecutionHealthBanner({ health }: JobExecutionHealthBannerPro
       data-health-state={health.primaryState}
     >
       <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-        Execution health (preview)
+        Job Status
       </p>
       <p className="mt-1 text-sm font-semibold">{health.headline}</p>
       <p className="mt-0.5 text-xs text-foreground-muted">{health.detail}</p>
@@ -32,7 +32,7 @@ export function JobExecutionHealthBanner({ health }: JobExecutionHealthBannerPro
       )}
       {!health.invariantSatisfied && (
         <p className="mt-2 text-xs font-medium text-danger">
-          Attention: execution invariant not satisfied — review tasks and blockers.
+          Needs review: no clear valid next action was identified. Check blockers, schedule, or task setup.
         </p>
       )}
     </div>

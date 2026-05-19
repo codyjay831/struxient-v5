@@ -258,7 +258,7 @@ export function taskStateLabel(state: TaskDerivedState): string {
     case "BLOCKED_BY_ISSUE":
       return "Blocked by issue";
     case "BLOCKED_BY_SIGNAL":
-      return "Waiting on signal";
+      return "Waiting on prior work";
     case "NEEDS_PROOF":
       return "Needs proof";
     case "READY":

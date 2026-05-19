@@ -141,7 +141,7 @@ export function JobTaskCard({
                 {isBlockedBySignal && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-accent">
                     <Zap className="size-3 shrink-0" />
-                    Waiting on: {missingSignals.join(", ")}
+                    Waiting on prior work: {missingSignals.join(", ")}
                   </p>
                 )}
               </div>

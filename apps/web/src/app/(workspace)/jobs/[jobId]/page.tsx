@@ -365,15 +365,15 @@ export default async function JobDetailPage({
         eyebrow={
           secondaryIdentity ? (
             <span className="flex items-center gap-2">
-              <span>Runtime job</span>
+              <span>Active job</span>
               <span className="text-foreground-subtle/50">·</span>
               <span className="text-foreground-subtle">Job title: {secondaryIdentity}</span>
             </span>
           ) : (
-            "Runtime job"
+            "Active job"
           )
         }
-        description="Stages and tasks were copied from the source quote at activation. Signals drive readiness across the job."
+        description="This job was created from the approved quote. Manage the work plan, blockers, payments, schedule, and job activity from here."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
             <JobEventButton 
@@ -451,18 +451,18 @@ export default async function JobDetailPage({
 
       <section className="mb-8">
         <SectionHeading
-          title="Signal Bus"
-          description="The live facts driving task readiness. Signals from completed tasks unblock downstream work."
+          title="Readiness checks"
+          description="Completed work unlocks upcoming tasks. Use this view to see which readiness checks are currently active."
         />
         <div className="grid gap-4 sm:grid-cols-4">
           <div className="col-span-1">
-            <SignalCard label="Live Signals" value={String(liveSignals.length)} hint="Active facts on the bus." />
+            <SignalCard label="Active checks" value={String(liveSignals.length)} hint="Current readiness checks on this job." />
           </div>
           <div className="col-span-3">
             <div className="rounded-xl border border-border bg-surface p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle mb-2">Active Signals</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle mb-2">Active readiness checks</p>
               {liveSignals.length === 0 ? (
-                <p className="text-xs text-foreground-muted italic">No signals published yet.</p>
+                <p className="text-xs text-foreground-muted italic">No readiness checks are active yet.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {liveSignals.map(s => (
@@ -521,7 +521,7 @@ export default async function JobDetailPage({
         <WorkspacePanel className="mb-6">
           <SectionHeading
             title="Execution stages"
-            description="Tasks grouped by stage. Readiness is derived from the Signal Bus and open issues."
+            description="Tasks grouped by stage. Readiness is based on completed prerequisite work and open blockers."
           />
           <div className="space-y-8">
             {job.stages.map((stage) => (

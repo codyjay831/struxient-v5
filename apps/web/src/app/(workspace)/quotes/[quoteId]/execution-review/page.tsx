@@ -211,18 +211,18 @@ export default async function QuoteExecutionReviewPreviewPage({
         items={[
           { label: "Sales", href: "/leads" },
           { label: row.title, href: `/quotes/${qid}` },
-          { label: "Execution preview" },
+          { label: "Review job plan" },
         ]}
       />
       <PageHeader
-        eyebrow="Sales · Internal planning"
-        title="Execution preview"
+        eyebrow="Sales to production handoff"
+        title="Review job plan"
         description={
           activation.state === "activated"
-            ? `Job already exists for “${row.title}”. Internal planning here does not change tasks already on the job.`
+            ? `Job already exists for “${row.title}”. Changes on this quote no longer update the active job plan.`
             : row.status === QuoteStatus.APPROVED
-              ? `Review internal draft execution for “${row.title}” before activating a job. Commercial terms are already approved; activation copies these stages and signals into a runtime job.`
-              : `Preview how draft execution on “${row.title}” would become a job plan after activation. Activation is enabled once the quote is approved.`
+              ? `Review the work plan for “${row.title}” before creating the job. Commercial terms are approved; creating the job copies planned stages, tasks, payments, and readiness checks into the active job.`
+              : `Review how this quote's work plan for “${row.title}” will become an active job after approval.`
         }
         actions={
           <Link href={`/quotes/${qid}`} className={listLinkClass}>
