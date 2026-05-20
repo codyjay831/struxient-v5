@@ -1,6 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+
+function subscribeNoop() {
+  return () => {};
+}
+
+function useIsClientMounted() {
+  return useSyncExternalStore(subscribeNoop, () => true, () => false);
+}
 import { 
   Sparkles, 
   X, 
@@ -71,6 +80,7 @@ export function AILibraryProposalReviewPanel({
   onApply: (approvedProposal: AILibraryProposal) => Promise<void>;
   onClose: () => void;
 }) {
+  const mounted = useIsClientMounted();
   const [editedProposal, setEditedProposal] = useState<AILibraryProposal>(proposal);
   const [applying, setApplying] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
@@ -135,8 +145,8 @@ export function AILibraryProposalReviewPanel({
     tasksByStage[stageName].push(task);
   });
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+  const panel = (
+    <div className="fixed inset-0 z-[100] flex justify-end bg-black/40 backdrop-blur-sm">
       <div className="flex h-full w-full max-w-2xl flex-col bg-surface shadow-2xl animate-in slide-in-from-right duration-300">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -423,4 +433,10 @@ export function AILibraryProposalReviewPanel({
       </div>
     </div>
   );
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(panel, document.body);
 }

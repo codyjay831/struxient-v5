@@ -46,6 +46,8 @@ export type AIExecutionPlanContext = {
 
 export class AIService {
   private static readonly DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+  /** Per-attempt ceiling so server actions do not hang until the client gives up. */
+  private static readonly GEMINI_REQUEST_TIMEOUT_MS = 90_000;
 
   private static getGeminiClient() {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -132,6 +134,29 @@ export class AIService {
       msg.includes("socket hang up") ||
       msg.includes("und_err")
     );
+  }
+
+  private static async withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    message = "AI took too long to respond. Try again in a moment.",
+  ): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new AiProviderTemporarilyUnavailableError(message)),
+            ms,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 
   /**
@@ -246,7 +271,9 @@ export class AIService {
       
       const prompt = this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
 
-      const result = await this.retryWithBackoff(() => model.generateContent(prompt));
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
       const response = await result.response;
       const text = response.text();
       
@@ -444,12 +471,14 @@ Return ONLY a valid JSON object matching this structure:
     tags: string[] = [],
     existingStages: { id: string; name: string }[] = [],
     existingSignals: string[] = [],
+    organizationName?: string,
   ): Promise<AILibraryProposalGenerationResult> {
     return this.generateLibraryExecutionPlan({
       templateId: "compat",
       description,
       organizationId,
       tags,
+      organizationName,
       existingStages,
       existingSignals,
     });

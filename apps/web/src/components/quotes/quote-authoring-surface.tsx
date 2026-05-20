@@ -59,6 +59,7 @@ import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-l
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { QuoteWorkspaceLead } from "@/lib/quote-workspace-payload";
 import { toast } from "sonner";
+
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
@@ -639,25 +640,31 @@ export function QuoteAuthoringSurface({
   const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead?.notes ?? null);
 
   const handleGeneratePlan = async (lineId: string) => {
-    if (aiProposal) {
+    if (aiProposal && aiProposalLineId === lineId) {
       return;
+    }
+    if (aiProposal) {
+      closeAiProposal();
     }
     setIsGenerating(lineId);
     try {
       const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId);
       if (result.error) {
         toast.error(result.error);
-        setAiProposal(null);
-        setAiProposalLineId(null);
-        setAiProposalGeneration(null);
+        closeAiProposal();
       } else if (result.proposal) {
         setAiProposal(result.proposal);
         setAiProposalLineId(lineId);
         setAiProposalGeneration(result.generation ?? null);
+        toast.success("Review the AI execution plan in the panel on the right.");
+      } else {
+        toast.error("AI returned no execution plan. Try again.");
+        closeAiProposal();
       }
     } catch (e) {
       console.error(e);
       toast.error(getAiActionErrorMessage(e, "Failed to generate AI proposal."));
+      closeAiProposal();
     } finally {
       setIsGenerating(null);
     }
@@ -857,21 +864,19 @@ export function QuoteAuthoringSurface({
                                 onSuccess={onMutated}
                               />
                             </div>
-                            {(draftTasksByLineId[line.id]?.length ?? 0) === 0 && (
-                              <button
-                                type="button"
-                                disabled={isGenerating === line.id || aiProposal !== null}
-                                onClick={() => handleGeneratePlan(line.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                              >
-                                {isGenerating === line.id ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : (
-                                  <Sparkles className="size-3" />
-                                )}
-                                {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              disabled={isGenerating === line.id || aiProposal !== null}
+                              onClick={() => handleGeneratePlan(line.id)}
+                              className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                            >
+                              {isGenerating === line.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="size-3" />
+                              )}
+                              {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
+                            </button>
                           </div>
                         )}
                       </div>

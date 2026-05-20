@@ -635,7 +635,7 @@ async function createQuoteLineExecutionTasksFromProposal(
         stageId: gTask.stageId,
         providesSignals: gTask.providesSignals,
         requiresSignals: gTask.requiresSignals,
-        hardSignal: false,
+        hardSignal: gTask.hardSignal,
         requirementsJson: {
           checklist: gTask.checklist.map((c) => ({
             id: crypto.randomUUID(),
@@ -669,8 +669,11 @@ export async function generateQuoteLineExecutionAIProposalAction(
   }
 
   const ctx = await getRequestContextOrThrow();
+  const startedAt = Date.now();
 
   try {
+    console.info("[quote-ai] generate start", { quoteId: qid, lineItemId: lid });
+
     const line = await db.quoteLineItem.findFirst({
       where: {
         id: lid,
@@ -688,6 +691,11 @@ export async function generateQuoteLineExecutionAIProposalAction(
     });
 
     if (!line) {
+      console.warn("[quote-ai] generate locked", {
+        quoteId: qid,
+        lineItemId: lid,
+        durationMs: Date.now() - startedAt,
+      });
       return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
     }
 
@@ -703,11 +711,26 @@ export async function generateQuoteLineExecutionAIProposalAction(
       line.quote.organizationId,
       tags,
       stages,
+      [],
+      ctx.organizationName,
     );
+
+    console.info("[quote-ai] generate ok", {
+      quoteId: qid,
+      lineItemId: lid,
+      durationMs: Date.now() - startedAt,
+      taskCount: generated.proposal.tasks.length,
+      isSimulated: generated.generation.isSimulated,
+    });
 
     return { proposal: generated.proposal, generation: generated.generation };
   } catch (e) {
-    console.error("Failed to generate AI execution proposal", e);
+    console.error("[quote-ai] generate failed", {
+      quoteId: qid,
+      lineItemId: lid,
+      durationMs: Date.now() - startedAt,
+      error: e,
+    });
     return { error: getAiActionErrorMessage(e) };
   }
 }
@@ -753,13 +776,6 @@ export async function applyQuoteLineExecutionAIProposalAction(
         throw new Error("LINE_LOCKED");
       }
 
-      const existingTaskCount = await tx.quoteLineExecutionTask.count({
-        where: { quoteLineItemId: lid },
-      });
-      if (existingTaskCount > 0) {
-        throw new Error("LINE_NOT_EMPTY");
-      }
-
       await createQuoteLineExecutionTasksFromProposal(tx, lid, parsedProposal);
       await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     });
@@ -773,12 +789,6 @@ export async function applyQuoteLineExecutionAIProposalAction(
     if (e instanceof Error) {
       if (e.message === "LINE_LOCKED") {
         return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
-      }
-      if (e.message === "LINE_NOT_EMPTY") {
-        return {
-          error:
-            "This line already has execution tasks. Remove them before applying an AI plan.",
-        };
       }
     }
     console.error("Failed to apply AI execution plan", e);
