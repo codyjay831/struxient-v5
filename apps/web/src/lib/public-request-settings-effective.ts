@@ -18,6 +18,7 @@ export type EffectivePublicRequestSettings = {
   introMessage: string | null;
   emergencyWarningText: string | null;
   submitButtonText: string;
+  /** Legacy org-level options; public runtime uses per-form triageRules via resolvePublicFormRequestTypeOptions. */
   requestTypeOptions: PublicRequestTypeOption[];
   instantQuoteConfig: Record<string, string[]>;
   instantQuoteEnabled: boolean;
@@ -87,13 +88,12 @@ export function effectivePublicRequestSettingsFromRow(
   };
 }
 
-/** Serializable props for the public intake form (no org ids). */
+/** Serializable page copy for the public request page (no org ids). Request types come from the resolved form. */
 export type PublicIntakeFormViewModel = {
   formTitle: string;
   introMessage: string | null;
   emergencyWarningText: string | null;
   submitButtonText: string;
-  requestTypeOptions: PublicRequestTypeOption[];
   instantQuoteConfig: Record<string, string[]>;
   instantQuoteEnabled: boolean;
   showInstantQuoteDetails: boolean;
@@ -108,7 +108,6 @@ export function toPublicIntakeFormViewModel(
     introMessage: effective.introMessage,
     emergencyWarningText: effective.emergencyWarningText,
     submitButtonText: effective.submitButtonText,
-    requestTypeOptions: effective.requestTypeOptions,
     instantQuoteConfig: effective.instantQuoteConfig,
     instantQuoteEnabled: effective.instantQuoteEnabled,
     showInstantQuoteDetails: effective.showInstantQuoteDetails,

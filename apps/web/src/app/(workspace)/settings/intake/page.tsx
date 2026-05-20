@@ -66,7 +66,7 @@ export default async function IntakeSettingsHubPage() {
       />
       <PageHeader
         title="Customer intake"
-        description="One intake engine with separate form definitions for customer requests and office new leads. Editing one surface does not change the other."
+        description="Default-first intake setup. Start with one standard public request form, then use Advanced forms only when you need extra public slugs."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
@@ -86,7 +86,7 @@ export default async function IntakeSettingsHubPage() {
         <WorkspacePanel>
           <SectionHeading
             title="Public customer request"
-            description="Customer-facing request page — copy, request type labels, and public form definitions."
+            description="Primary customer path — one default public request form, plus optional advanced public forms when needed."
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge
@@ -100,16 +100,16 @@ export default async function IntakeSettingsHubPage() {
             ) : null}
           </div>
           <p className="mt-3 text-sm text-foreground-muted">
-            Structural fields come from your default public form and optional custom public slugs.
-            Does not affect office intake at <span className="font-medium text-foreground">/leads/new</span>.
+            Public forms define customer-facing fields. Public request page settings control link/status
+            and page copy. Does not affect office intake at{" "}
+            <span className="font-medium text-foreground">/leads/new</span>.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={INTAKE_PUBLIC_COPY_PATH} className={cardLinkClass}>
-              Edit public copy & request types
+              Public request page settings
             </Link>
             <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
-              Advanced public forms
-              {publicCustomFormCount > 0 ? ` (${publicCustomFormCount})` : ""}
+              Advanced: additional public forms ({publicCustomFormCount})
             </Link>
           </div>
         </WorkspacePanel>

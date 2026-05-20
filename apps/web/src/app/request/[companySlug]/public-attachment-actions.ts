@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { AttachmentStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
+import { headers } from "next/headers";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export type PublicUploadAttachmentState = {
   error?: string;
@@ -12,6 +14,9 @@ export type PublicUploadAttachmentState = {
   uploadUrl?: string;
   storageProvider?: "local" | "gcs";
 };
+
+const ATTACHMENT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const ATTACHMENT_MAX_REQUESTS_PER_WINDOW = 15;
 
 export async function getPublicLeadAttachmentUploadUrlAction(
   companySlug: string,
@@ -22,6 +27,19 @@ export async function getPublicLeadAttachmentUploadUrlAction(
   const normalizedSlug = companySlug.trim().toLowerCase();
   if (!isValidPublicCompanySlugSegment(normalizedSlug)) {
     return { error: "Invalid request." };
+  }
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limiterKey = `${normalizedSlug}:${ip}`;
+  if (
+    !(await checkRateLimit(limiterKey, {
+      windowMs: ATTACHMENT_RATE_LIMIT_WINDOW_MS,
+      max: ATTACHMENT_MAX_REQUESTS_PER_WINDOW,
+      keyPrefix: "public-intake-attachments",
+    }))
+  ) {
+    return { error: "Too many upload attempts. Please try again in a little while." };
   }
 
   const org = await db.organization.findFirst({
@@ -46,6 +64,8 @@ export async function getPublicLeadAttachmentUploadUrlAction(
   }
 
   try {
+    // Follow-up policy: stale PENDING public attachments should be cleaned by a
+    // scheduled maintenance task once a repo-level maintenance runner exists.
     // Create the attachment record first to get a real ID
     // Note: No leadId yet, it will be associated during lead submission
     const attachment = await db.attachment.create({

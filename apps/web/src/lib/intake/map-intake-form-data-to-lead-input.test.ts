@@ -63,3 +63,24 @@ test("mapIntakeFormDataToLeadInput maps staff intake internal details", () => {
   assert.equal(mapped.input.notes, "VIP referral");
   assert.equal(mapped.input.sourceDetail, "Front desk call");
 });
+
+test("mapIntakeFormDataToLeadInput rejects empty public request type", () => {
+  const formData = new FormData();
+  formData.set("contactName", "Pat");
+  formData.set("email", "pat@example.com");
+  formData.set("requestDetails", "Need help");
+  formData.set("serviceAddress", "123 Main St");
+  formData.set("requestType", "");
+
+  const mapped = mapIntakeFormDataToLeadInput({
+    formData,
+    surfaceMode: "public",
+    fallbackChannel: LeadChannel.WEB_FORM,
+    requestTypeOptions: [{ value: "repair", label: "Repair" }],
+    requireRequestTypeMatch: true,
+  });
+
+  assert.equal(mapped.ok, false);
+  if (mapped.ok) return;
+  assert.equal(mapped.error, "Please select what you need help with.");
+});

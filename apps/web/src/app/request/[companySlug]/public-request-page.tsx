@@ -45,7 +45,7 @@ export function PublicRequestPageContent({ bundle }: { bundle: PublicRequestInta
             companySlug={bundle.companySlug}
             organizationDisplayName={bundle.organizationDisplayName}
             googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
-            requestTypeOptions={view.requestTypeOptions}
+            requestTypeOptions={bundle.requestTypeOptions}
             submitButtonLabel={view.submitButtonText}
           />
         </div>

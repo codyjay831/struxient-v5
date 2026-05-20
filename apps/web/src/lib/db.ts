@@ -9,6 +9,8 @@ import {
   PUBLIC_INTAKE_FORM_WHERE,
   toIntakeFormDefinitionShape,
 } from "@/lib/intake/intake-form-surface";
+import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
+import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -260,6 +262,8 @@ export type PublicRequestIntakeBundle = {
    * organizations that have not customized their public request form.
    */
   formDefinition: IntakeFormDefinitionShape;
+  /** Resolved from form `triageRules`, with legacy settings/default fallback. */
+  requestTypeOptions: PublicRequestTypeOption[];
 };
 
 /**
@@ -320,7 +324,7 @@ export async function getPublicRequestIntakeBundle(
 
   const published = await db.intakeFormDefinition.findFirst({
     where: formWhere,
-    select: INTAKE_FORM_DEFINITION_SELECT,
+    select: { ...INTAKE_FORM_DEFINITION_SELECT, triageRules: true },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -344,12 +348,18 @@ export async function getPublicRequestIntakeBundle(
     }
   }
 
+  const requestTypeOptions = resolvePublicFormRequestTypeOptions(
+    published?.triageRules,
+    org.publicRequestSettings?.requestTypeOptionsJson,
+  );
+
   return {
     organizationId: org.id,
     organizationDisplayName: org.name,
     companySlug: org.slug,
     intake,
     formDefinition,
+    requestTypeOptions,
   };
 }
 

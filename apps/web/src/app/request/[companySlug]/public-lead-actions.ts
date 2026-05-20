@@ -61,6 +61,7 @@ function isPublicIntakeClientKeyConstraintViolation(e: unknown): boolean {
 import { isSyntheticIntakeFormDefinitionId } from "@/lib/intake/default-intake-form";
 import { ingestLead } from "@/lib/lead/ingest-lead";
 import { mapIntakeFormDataToLeadInput } from "@/lib/intake/map-intake-form-data-to-lead-input";
+import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
 
 export async function submitPublicLeadAction(
   companySlug: string,
@@ -144,6 +145,34 @@ export async function submitPublicLeadAction(
     return { error: "We could not send your request. Please check the link and try again." };
   }
 
+  let submitTriageRules: unknown = null;
+  if (formDefinitionId && !isSyntheticIntakeFormDefinitionId(formDefinitionId)) {
+    const formForTypes = await db.intakeFormDefinition.findFirst({
+      where: {
+        id: formDefinitionId,
+        organizationId: record.id,
+        archivedAt: null,
+        channel: LeadChannel.WEB_FORM,
+        isPublic: true,
+      },
+      select: { triageRules: true },
+    });
+    if (!formForTypes) {
+      return { error: "We could not send your request. Please check the link and try again." };
+    }
+    submitTriageRules = formForTypes.triageRules;
+  }
+
+  const requestTypeOptions = resolvePublicFormRequestTypeOptions(
+    submitTriageRules,
+    record.publicRequestSettings?.requestTypeOptionsJson,
+  );
+
+  const requestTypeRaw = trimOrEmpty(formData.get("requestType"));
+  if (!requestTypeRaw) {
+    return { error: "Please select what you need help with." };
+  }
+
   const parsedClientKey = parsePublicIntakeClientKey(publicIntakeClientKey);
 
   if (parsedClientKey) {
@@ -163,7 +192,7 @@ export async function submitPublicLeadAction(
     formData,
     surfaceMode: "public",
     fallbackChannel: LeadChannel.WEB_FORM,
-    requestTypeOptions: effective.requestTypeOptions,
+    requestTypeOptions,
     requireRequestTypeMatch: true,
     publicClientKey: parsedClientKey,
   });

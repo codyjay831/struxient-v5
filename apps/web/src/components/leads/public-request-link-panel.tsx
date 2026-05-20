@@ -43,10 +43,9 @@ export function PublicRequestLinkPanel({
         </p>
       ) : null}
       <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-        Your <span className="text-foreground">Public Intake Form</span> is a controlled
-        customer-facing door — not a generic form builder.{" "}
-        <span className="text-foreground">Intake Requirements</span> stay fixed in this version so
-        every submission creates a proper lead in Struxient.
+        Your default <span className="text-foreground">Public Request Form</span> is the primary
+        customer entry point. Additional public forms are an advanced setup option — not required
+        for day-one intake.
       </p>
 
       {!slug ? (

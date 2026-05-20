@@ -2,8 +2,8 @@ import { db } from "@/lib/db";
 import {
   DEFAULT_OFFICE_INTAKE_FORM_DEFINITION,
   parseOfficeRequestTypeOptionsFromTriageRules,
-  type IntakeRequestTypeOptionLike,
 } from "@/lib/intake/default-office-intake-form";
+import type { IntakeRequestTypeOptionLike } from "@/lib/intake/map-intake-form-data-to-lead-input";
 import type { IntakeFormDefinitionShape } from "@/lib/intake/default-intake-form";
 import { ensureDefaultOfficeIntakeFormDefinition } from "@/lib/intake/ensure-default-office-intake-form";
 import {

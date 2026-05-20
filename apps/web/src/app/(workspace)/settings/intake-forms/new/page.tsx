@@ -2,7 +2,6 @@
 
 import { useActionState, useState } from "react";
 import { createIntakeFormAction } from "../intake-form-actions";
-import { LeadChannel } from "@prisma/client";
 import Link from "next/link";
 import { ChevronLeft, Loader2, Sparkles } from "lucide-react";
 import { TradeTemplatePicker } from "@/components/intake/trade-template-picker";
@@ -30,13 +29,13 @@ export default function NewIntakeFormPage() {
         items={[
           { label: "Settings", href: "/settings" },
           { label: "Customer intake", href: "/settings/intake" },
-          { label: "Custom forms", href: "/settings/intake-forms" },
+          { label: "Public intake forms", href: "/settings/intake-forms" },
           { label: "New" },
         ]}
       />
       <PageHeader
-        title="Create Intake Form"
-        description="Start from a trade template or build your own from scratch."
+        title="Create Advanced Public Form"
+        description="Create an additional public form/slug for advanced scenarios. Your default public form remains the primary customer path."
         actions={
           <Link
             href="/settings/intake-forms"
@@ -99,33 +98,17 @@ export default function NewIntakeFormPage() {
             </label>
           </div>
 
-          <div>
+          <div className="sm:col-span-2">
             <label className="block">
               <span className={fieldLabelClass}>Channel</span>
-              <select name="channel" className={controlClass} defaultValue={LeadChannel.WEB_FORM}>
-                {Object.values(LeadChannel).map((channel) => (
-                  <option key={channel} value={channel}>
-                    {channel}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                disabled
+                value="Public web form (fixed)"
+                className={`${controlClass} opacity-70`}
+              />
             </label>
           </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-foreground/[0.01] p-4">
-          <label className="flex cursor-pointer items-center gap-3">
-            <input
-              type="checkbox"
-              name="isPublic"
-              defaultChecked
-              className="size-4 rounded border-border text-accent focus:ring-accent"
-            />
-            <div>
-              <p className="text-sm font-bold text-foreground">Make this form public</p>
-              <p className="text-xs text-foreground-muted">Anyone with the link can submit this form.</p>
-            </div>
-          </label>
         </div>
 
         <div className="pt-4 border-t border-border flex justify-end">

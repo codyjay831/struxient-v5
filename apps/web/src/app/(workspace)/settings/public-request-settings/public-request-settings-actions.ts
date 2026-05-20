@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
-import { validateRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
 export type PublicRequestSettingsFormState = {
   error?: string;
   success?: boolean;
@@ -98,24 +97,6 @@ export async function updatePublicRequestSettingsAction(
     return submitErr;
   }
 
-  const jsonRaw = trimOrEmpty(formData.get("requestTypesJson"));
-  if (!jsonRaw) {
-    return { error: "Request type options are required." };
-  }
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(jsonRaw) as unknown;
-  } catch {
-    return { error: "Request type options must be valid JSON." };
-  }
-  const typesResult = validateRequestTypeOptionsJson(parsedJson);
-  if (!typesResult.ok) {
-    return { error: typesResult.error };
-  }
-  if (typesResult.options.length < 1) {
-    return { error: "Add at least one request type." };
-  }
-
   const offeringsRaw = trimOrEmpty(formData.get("offerings"));
   const offerings = offeringsRaw ? offeringsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
 
@@ -129,7 +110,6 @@ export async function updatePublicRequestSettingsAction(
         introMessage,
         emergencyWarningText,
         submitButtonText,
-        requestTypeOptionsJson: typesResult.options,
         instantQuoteEnabled,
         showInstantQuoteDetails,
         offerings,
@@ -140,7 +120,6 @@ export async function updatePublicRequestSettingsAction(
         introMessage,
         emergencyWarningText,
         submitButtonText,
-        requestTypeOptionsJson: typesResult.options,
         instantQuoteEnabled,
         showInstantQuoteDetails,
         offerings,

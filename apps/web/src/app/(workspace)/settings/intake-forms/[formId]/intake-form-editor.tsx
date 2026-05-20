@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { updateIntakeFormAction } from "../intake-form-actions";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import type {
@@ -13,6 +13,8 @@ import Link from "next/link";
 import { ChevronLeft, Loader2, Save, Plus, Trash2, GripVertical, Info, Lock } from "lucide-react";
 import { buildPublicIntakeUrl } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
+import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
+import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -20,6 +22,8 @@ const controlClass =
   "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const primaryButtonClass =
   "inline-flex w-full items-center justify-center rounded-lg border border-border bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto";
+const secondaryButtonClass =
+  "inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 type IntakeFormEditorDefinition = {
   id: string;
@@ -31,12 +35,16 @@ type IntakeFormEditorDefinition = {
   schema: IntakeFormSchema;
 };
 
-export function IntakeFormEditor({ 
+export function IntakeFormEditor({
   formDefinition,
+  isPublicIntakeForm,
+  initialRequestTypeOptions,
   organizationSlug,
   baseUrl,
-}: { 
+}: {
   formDefinition: IntakeFormEditorDefinition;
+  isPublicIntakeForm: boolean;
+  initialRequestTypeOptions: PublicRequestTypeOption[];
   organizationSlug: string | null;
   baseUrl: string;
 }) {
@@ -47,6 +55,29 @@ export function IntakeFormEditor({
   const [name, setName] = useState(formDefinition.name);
   const [isPublic, setIsPublic] = useState(formDefinition.isPublic);
   const [isDefault, setIsDefault] = useState(formDefinition.isDefault);
+  const [requestTypes, setRequestTypes] = useState<PublicRequestTypeOption[]>(
+    initialRequestTypeOptions,
+  );
+  const requestTypesJson = useMemo(() => JSON.stringify(requestTypes), [requestTypes]);
+
+  function addRequestType() {
+    setRequestTypes((prev) => {
+      if (prev.length >= PUBLIC_REQUEST_SETTINGS_LIMITS.maxRequestTypeOptions) {
+        return prev;
+      }
+      return [...prev, { value: "", label: "" }];
+    });
+  }
+
+  function removeRequestType(index: number) {
+    setRequestTypes((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateRequestType(index: number, patch: Partial<PublicRequestTypeOption>) {
+    setRequestTypes((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  }
 
   const handleAddSection = () => {
     const newSection: IntakeFormSection = {
@@ -97,7 +128,7 @@ export function IntakeFormEditor({
             className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground mb-4 transition-colors"
           >
             <ChevronLeft className="mr-1 size-3" />
-            Back to custom forms
+            Back to public intake forms
           </Link>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Configure Form</h1>
         </div>
@@ -257,6 +288,61 @@ export function IntakeFormEditor({
               </div>
             </div>
           </div>
+
+          {isPublicIntakeForm ? (
+            <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+              <h2 className="text-sm font-bold text-foreground mb-2 uppercase tracking-wider">
+                Request type options
+              </h2>
+              <p className="mb-4 text-xs text-foreground-muted">
+                Customer-facing labels for this form only. Other public forms can use different
+                options.
+              </p>
+              <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
+              <div className="space-y-3">
+                {requestTypes.map((row, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col gap-3 rounded-lg border border-border bg-foreground/[0.02] p-3 sm:flex-row sm:items-end"
+                  >
+                    <label className="block flex-1">
+                      <span className={fieldLabelClass}>Value (internal key)</span>
+                      <input
+                        type="text"
+                        value={row.value}
+                        onChange={(e) => updateRequestType(index, { value: e.target.value })}
+                        maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeValue}
+                        autoComplete="off"
+                        className={controlClass}
+                      />
+                    </label>
+                    <label className="block flex-[2]">
+                      <span className={fieldLabelClass}>Label (customer-facing)</span>
+                      <input
+                        type="text"
+                        value={row.label}
+                        onChange={(e) => updateRequestType(index, { label: e.target.value })}
+                        maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeLabel}
+                        autoComplete="off"
+                        className={controlClass}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={`${secondaryButtonClass} shrink-0`}
+                      onClick={() => removeRequestType(index)}
+                      disabled={requestTypes.length <= 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className={`${secondaryButtonClass} mt-3`} onClick={addRequestType}>
+                Add request type
+              </button>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-border bg-foreground/[0.01] p-6">
             <h2 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider">

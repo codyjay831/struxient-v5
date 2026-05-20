@@ -41,6 +41,9 @@ export type IntakeSubmitState = {
 export type IntakeSurfaceMode = "public" | "staff";
 export type IntakeLayoutMode = "progressive" | "compact";
 
+const PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE =
+  "Please select what you need help with.";
+
 export type IntakeFormRendererProps = {
   formDefinition: IntakeFormDefinitionShape;
   organizationDisplayName: string;
@@ -87,6 +90,7 @@ export function IntakeFormRenderer({
   const headingId = useId();
 
   const [step, setStep] = useState(1);
+  const [stepError, setStepError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({});
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -100,22 +104,112 @@ export function IntakeFormRenderer({
   const sections: IntakeFormSection[] = formDefinition.schema.sections ?? [];
   const isProgressive = layoutMode === "progressive" && sections.length > 1;
 
+  const isVisible = (field: IntakeFormFieldRef) => {
+    if (!field.visibleIf) return true;
+    const { fieldKey, equals, in: inValues, notEmpty } = field.visibleIf;
+    const val = fieldValues[fieldKey];
+
+    if (equals !== undefined) return val === equals;
+    if (inValues !== undefined)
+      return Array.isArray(inValues) && inValues.includes(val as string | number | boolean);
+    if (notEmpty) return val !== undefined && val !== null && val !== "";
+
+    return true;
+  };
+
+  const sectionHasVisibleRequestType = (sectionIndex: number): boolean => {
+    const section = sections[sectionIndex];
+    if (!section?.fields) {
+      return false;
+    }
+    return section.fields.some((field) => field.key === "request.type" && isVisible(field));
+  };
+
+  const readRequestTypeValue = (): string => {
+    const tracked = fieldValues["request.type"];
+    if (typeof tracked === "string" && tracked.trim().length > 0) {
+      return tracked.trim();
+    }
+    const form = formRef.current;
+    if (!form) {
+      return "";
+    }
+    const el = form.elements.namedItem("requestType");
+    if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
+      return el.value.trim();
+    }
+    return "";
+  };
+
+  const schemaIncludesRequestType = sections.some((section) =>
+    section.fields?.some((field) => field.key === "request.type"),
+  );
+
+  /** Public progressive: block Next when the active step includes request.type and it is empty. */
+  const validatePublicRequestTypeForStep = (stepIndex: number): string | null => {
+    if (surfaceMode !== "public" || !isProgressive) {
+      return null;
+    }
+    if (!sectionHasVisibleRequestType(stepIndex - 1)) {
+      return null;
+    }
+    if (readRequestTypeValue().length === 0) {
+      return PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE;
+    }
+    return null;
+  };
+
+  /** Public forms: block submit when schema includes request.type and it is empty. */
+  const validatePublicRequestTypeBeforeSubmit = (): string | null => {
+    if (surfaceMode !== "public" || !schemaIncludesRequestType) {
+      return null;
+    }
+    if (readRequestTypeValue().length === 0) {
+      return PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE;
+    }
+    return null;
+  };
+
   const handleNext = (e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.preventDefault();
+    const validationError = validatePublicRequestTypeForStep(step);
+    if (validationError) {
+      setStepError(validationError);
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    setStepError(null);
     if (step < sections.length) {
       setStep(step + 1);
-      // Scroll to top of form when moving to next step
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
   const handleBack = (e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.preventDefault();
+    setStepError(null);
     if (step > 1) {
       setStep(step - 1);
-      // Scroll to top of form when moving back
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    const validationError = validatePublicRequestTypeBeforeSubmit();
+    if (!validationError) {
+      return;
+    }
+    e.preventDefault();
+    setStepError(validationError);
+    if (isProgressive) {
+      const requestTypeStepIndex = sections.findIndex((section) =>
+        section.fields?.some((field) => field.key === "request.type"),
+      );
+      if (requestTypeStepIndex >= 0) {
+        setStep(requestTypeStepIndex + 1);
+      }
+    }
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -145,18 +239,9 @@ export function IntakeFormRenderer({
 
   const updateFieldValue = (key: string, value: unknown) => {
     setFieldValues((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const isVisible = (field: IntakeFormFieldRef) => {
-    if (!field.visibleIf) return true;
-    const { fieldKey, equals, in: inValues, notEmpty } = field.visibleIf;
-    const val = fieldValues[fieldKey];
-
-    if (equals !== undefined) return val === equals;
-    if (inValues !== undefined) return Array.isArray(inValues) && inValues.includes(val as string | number | boolean);
-    if (notEmpty) return val !== undefined && val !== null && val !== "";
-
-    return true;
+    if (key === "request.type" && stepError) {
+      setStepError(null);
+    }
   };
 
   if (state.success && surfaceMode === "public") {
@@ -180,6 +265,7 @@ export function IntakeFormRenderer({
       className="space-y-6"
       aria-labelledby={headingId}
       onKeyDown={isProgressive ? handleKeyDown : undefined}
+      onSubmit={surfaceMode === "public" ? handleFormSubmit : undefined}
     >
       <h2 id={headingId} className="sr-only">
         {formDefinition.name} for {organizationDisplayName}
@@ -234,6 +320,16 @@ export function IntakeFormRenderer({
           </div>
         </div>
       )}
+
+      {stepError ? (
+        <p
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+          role="alert"
+          aria-live="polite"
+        >
+          {stepError}
+        </p>
+      ) : null}
 
       {state.error ? (
         <p
@@ -409,9 +505,12 @@ export function IntakeFormRenderer({
                           <select
                             name="requestType"
                             className={controlClass}
-                            defaultValue={fieldValues[field.key] as string ?? requestTypeOptions[0]?.value ?? ""}
+                            defaultValue={fieldValues[field.key] as string ?? ""}
                             onChange={(e) => updateFieldValue(field.key, e.target.value)}
                           >
+                            {surfaceMode === "public" ? (
+                              <option value="">Select what you need help with</option>
+                            ) : null}
                             {requestTypeOptions.map((opt) => (
                               <option key={opt.value} value={opt.value}>
                                 {opt.label}

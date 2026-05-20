@@ -1,4 +1,5 @@
 import { LeadChannel, Prisma } from "@prisma/client";
+import type { ExtendedTransactionClient } from "@/lib/db";
 import type { IntakeFormDefinitionShape, IntakeFormSchema } from "@/lib/intake/default-intake-form";
 
 /** Public customer request forms: `/request/...` and public custom slugs. */
@@ -64,7 +65,7 @@ export { INTAKE_FORM_DEFINITION_SELECT };
  * Clears `isDefault` on other forms in the same surface family (channel + isPublic).
  */
 export async function clearOtherDefaultsForIntakeSurface(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   organizationId: string,
   surface: IntakeFormSurface,
   exceptFormId: string,

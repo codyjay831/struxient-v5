@@ -56,6 +56,8 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
 
   const compact = entryPoint === "workstation";
   const editHref = `/leads/${lead.id}/edit`;
+  const callablePhone = lead.phone.trim();
+  const emailableAddress = lead.email.trim();
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
@@ -106,6 +108,35 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                 {formatLeadChannel(lead.channel)} · Received{" "}
                 {lead.createdAt.toLocaleDateString()}
               </p>
+              {callablePhone || emailableAddress ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {callablePhone ? (
+                    <a
+                      href={`tel:${callablePhone}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                    >
+                      <Phone className="size-3" />
+                      Call
+                    </a>
+                  ) : null}
+                  {emailableAddress ? (
+                    <a
+                      href={`mailto:${emailableAddress}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                    >
+                      <Mail className="size-3" />
+                      Email
+                    </a>
+                  ) : null}
+                  <Link
+                    href={editHref}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                  >
+                    <Pencil className="size-3" />
+                    Request more info
+                  </Link>
+                </div>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
               <span className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">

@@ -235,6 +235,10 @@ export function mapIntakeFormDataToLeadInput({
   const lockInInstantQuote = formData.get("lockInInstantQuote") === "on";
   const formDefinitionId = trimOrNull(formData.get("formDefinitionId"));
 
+  if (surfaceMode === "public" && requestTypeValue.length === 0) {
+    return { ok: false, error: "Please select what you need help with." };
+  }
+
   const typeMap = mapRequestType(
     requestTypeValue,
     requestTypeOptions,

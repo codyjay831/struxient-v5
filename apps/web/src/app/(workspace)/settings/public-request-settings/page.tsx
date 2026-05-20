@@ -9,7 +9,6 @@ import {
   DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
 } from "@/lib/public-request-settings-defaults";
-import { parseStoredRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
 import {
   PublicRequestSettingsForm,
   type PublicRequestSettingsFormInitial,
@@ -43,7 +42,6 @@ export default async function PublicRequestSettingsPage() {
     introMessage: introFieldValue,
     emergencyWarningText: row?.emergencyWarningText ?? "",
     submitButtonText: row?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-    requestTypes: parseStoredRequestTypeOptionsJson(row?.requestTypeOptionsJson),
     instantQuoteEnabled: row?.instantQuoteEnabled ?? true,
     showInstantQuoteDetails: row?.showInstantQuoteDetails ?? true,
     offerings: row?.offerings ?? [],
@@ -55,12 +53,12 @@ export default async function PublicRequestSettingsPage() {
         items={[
           { label: "Settings", href: "/settings" },
           { label: "Customer intake", href: "/settings/intake" },
-          { label: "Public copy" },
+          { label: "Public request page settings" },
         ]}
       />
       <PageHeader
-        title="Public copy & request types"
-        description="Presentation policy for your public request page — not the structural form schema. Structural fields come from the default intake definition."
+        title="Public request page settings"
+        description="Controls your public link status and page copy for the default customer request flow. Advanced form fields and request type options are managed per form under Public intake forms."
         actions={
           <Link href="/settings/intake" className={listLinkClass}>
             ← Customer intake
