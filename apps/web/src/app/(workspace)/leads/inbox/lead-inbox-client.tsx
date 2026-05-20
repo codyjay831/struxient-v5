@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import type {
   LeadContactJson,
@@ -49,6 +50,22 @@ export function LeadInboxClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [payload, setPayload] = useState<LeadCommercialSurfacePayload | null>(null);
   const [isLoadingPayload, setIsLoadingPayload] = useState(false);
+  const router = useRouter();
+
+  const reloadSurface = useCallback(async () => {
+    if (!selectedLeadId) return;
+    const result = await loadLeadCommercialSurfaceAction(selectedLeadId);
+    if (result.ok) {
+      setPayload(result.payload);
+    } else {
+      console.error(result.error);
+    }
+  }, [selectedLeadId]);
+
+  const handleMutationSuccess = useCallback(() => {
+    void reloadSurface();
+    router.refresh();
+  }, [reloadSurface, router]);
 
   const allInboxLeads = useMemo(() => [...openLeads, ...recentLeads], [openLeads, recentLeads]);
   
@@ -206,6 +223,7 @@ export function LeadInboxClient({
               key={selectedLeadId}
               payload={payload}
               entryPoint="record"
+              onMutationSuccess={handleMutationSuccess}
             />
           </div>
         ) : (

@@ -217,11 +217,6 @@ export function buildLeadRecordActionState(input: {
   }
 
   switch (progress.state) {
-    case "ADD_CONTACT_INFO":
-      if (missingRequirements.length === 0 && progress.primaryAction?.kind === "QUALIFY_INTAKE") {
-        requiredItems.push("Review intake details on the lead record.");
-      }
-      break;
     case "NEEDS_CUSTOMER":
       requiredItems.push("Link an existing customer or start a quote to auto-create one.");
       break;
@@ -251,23 +246,14 @@ export function buildLeadRecordActionState(input: {
   const primary = progress.primaryAction;
   const secondary = progress.secondaryAction;
 
-  let canCompleteInWorkstation = false;
-  if (progress.state === "READY_FOR_QUOTE") {
-    canCompleteInWorkstation = true;
-  }
-  if (primary?.kind === "QUALIFY_INTAKE") {
-    canCompleteInWorkstation = true;
-  }
+  const canCompleteInWorkstation = progress.state === "READY_FOR_QUOTE";
   const nextAction: NextActionModel | null = primary
     ? {
         type: primary.kind,
         label: primary.label,
         description: progress.description,
-        surface: primary.kind === "QUALIFY_INTAKE" ? "workstation-inline" : "full-record",
-        href:
-          primary.kind === "QUALIFY_INTAKE"
-            ? undefined
-            : resolveLeadCommercialProgressActionHref(primary, { leadId }),
+        surface: "full-record",
+        href: resolveLeadCommercialProgressActionHref(primary, { leadId }),
       }
     : null;
 

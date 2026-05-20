@@ -42,14 +42,21 @@ import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
   entryPoint?: "workstation" | "record";
+  /** When set, called after in-place mutations (e.g. customer attach) instead of only `router.refresh()`. */
+  onMutationSuccess?: () => void;
 }
 
 const sectionTitleClass =
   "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
 
-export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCommercialSurfaceProps) {
+export function LeadCommercialSurface({
+  payload,
+  entryPoint = "record",
+  onMutationSuccess,
+}: LeadCommercialSurfaceProps) {
   const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel } = payload;
   const router = useRouter();
+  const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
   const [isPending, startTransition] = useTransition();
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
@@ -82,7 +89,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
     startTransition(async () => {
       const result = await archiveLeadInboxAction(lead.id);
       if (result.success) {
-        router.refresh();
+        notifyMutationSuccess();
       } else {
         alert(result.error);
       }
@@ -376,7 +383,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                                 formData,
                               );
                               if (result.success) {
-                                router.refresh();
+                                notifyMutationSuccess();
                               } else {
                                 alert(result.error);
                               }
@@ -425,7 +432,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                       jobsiteAddressLine: lead.jobsiteAddressLine,
                     }}
                     editLeadHref={editHref}
-                    onSuccess={() => router.refresh()}
+                    onSuccess={notifyMutationSuccess}
                   />
                 </div>
               </section>

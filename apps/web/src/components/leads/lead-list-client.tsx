@@ -11,6 +11,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowUpRight, Users, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -89,8 +90,23 @@ function WorkspaceContent({
   leadId: string;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [payload, setPayload] = useState<LeadCommercialSurfacePayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const reloadSurface = useCallback(async () => {
+    const result = await loadLeadCommercialSurfaceAction(leadId);
+    if (result.ok) {
+      setPayload(result.payload);
+    } else {
+      console.error(result.error);
+    }
+  }, [leadId]);
+
+  const handleMutationSuccess = useCallback(() => {
+    void reloadSurface();
+    router.refresh();
+  }, [reloadSurface, router]);
 
   useEffect(() => {
     let active = true;
@@ -131,6 +147,7 @@ function WorkspaceContent({
           <LeadCommercialSurface
             payload={payload}
             entryPoint="record"
+            onMutationSuccess={handleMutationSuccess}
           />
         </div>
       ) : (

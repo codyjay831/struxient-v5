@@ -52,9 +52,6 @@ function ProgressActionControl({
     case "EDIT_CONTACT_INFO":
       title = "Complete the identity, contact, and location details to move toward a quote.";
       break;
-    case "QUALIFY_INTAKE":
-      title = "Review the intake details and qualify this lead.";
-      break;
     case "OPEN_DRAFT_QUOTE":
       title = "Open the current draft quote.";
       break;

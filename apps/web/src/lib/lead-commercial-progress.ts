@@ -31,7 +31,6 @@ export type LeadCommercialProgressActionKind =
   | "ATTACH_OR_CREATE_CUSTOMER"
   | "RESOLVE_CUSTOMER_CONFLICT"
   | "START_QUOTE"
-  | "QUALIFY_INTAKE"
   | "OPEN_DRAFT_QUOTE"
   | "OPEN_QUOTE"
   | "OPEN_EXECUTION_REVIEW"
@@ -444,8 +443,8 @@ export function getLeadCommercialProgress(
       state: "ADD_CONTACT_INFO",
       label: "New intake — review details",
       description: "Review the intake details and complete the 4 requirements to start a quote.",
-      primaryAction: { kind: "QUALIFY_INTAKE", label: "Qualify intake" },
-      secondaryAction: { kind: "EDIT_CONTACT_INFO", label: "Complete details" },
+      primaryAction: { kind: "EDIT_CONTACT_INFO", label: "Complete missing details" },
+      secondaryAction: null,
       activeQuote: null,
       activeJob: null,
       stepIndex: 0,
@@ -513,8 +512,6 @@ export function resolveLeadCommercialProgressActionHref(
       return `/leads/${ctx.leadId}#customer-link`;
     case "RESOLVE_CUSTOMER_CONFLICT":
       return `/leads/${ctx.leadId}#customer-link`;
-    case "QUALIFY_INTAKE":
-      return `/leads/${ctx.leadId}`;
     case "START_QUOTE":
       return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
     case "OPEN_DRAFT_QUOTE":
