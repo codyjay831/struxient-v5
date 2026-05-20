@@ -1,10 +1,14 @@
-import { LeadChannel, PrismaClient, StaffRole, type Prisma } from "@prisma/client";
+import { PrismaClient, StaffRole, type Prisma } from "@prisma/client";
 import {
   DEFAULT_INTAKE_FORM_DEFINITION,
   type IntakeFormDefinitionShape,
-  type IntakeFormSchema,
 } from "@/lib/intake/default-intake-form";
 import { ensureDefaultPublicIntakeFormDefinition } from "@/lib/intake/ensure-default-public-intake-form";
+import {
+  INTAKE_FORM_DEFINITION_SELECT,
+  PUBLIC_INTAKE_FORM_WHERE,
+  toIntakeFormDefinitionShape,
+} from "@/lib/intake/intake-form-surface";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -304,8 +308,7 @@ export async function getPublicRequestIntakeBundle(
   // When omitted, load the org's default public WEB_FORM form.
   const formWhere: Prisma.IntakeFormDefinitionWhereInput = {
     organizationId: org.id,
-    channel: LeadChannel.WEB_FORM,
-    isPublic: true,
+    ...PUBLIC_INTAKE_FORM_WHERE,
     archivedAt: null,
   };
 
@@ -317,29 +320,14 @@ export async function getPublicRequestIntakeBundle(
 
   const published = await db.intakeFormDefinition.findFirst({
     where: formWhere,
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      channel: true,
-      isPublic: true,
-      isDefault: true,
-      schema: true,
-    },
+    select: INTAKE_FORM_DEFINITION_SELECT,
     orderBy: { updatedAt: "desc" },
   });
 
   let formDefinition: IntakeFormDefinitionShape;
-  if (published && published.schema && typeof published.schema === "object") {
-    formDefinition = {
-      id: published.id,
-      name: published.name,
-      slug: published.slug,
-      channel: published.channel,
-      isPublic: published.isPublic,
-      isDefault: published.isDefault,
-      schema: published.schema as unknown as IntakeFormSchema,
-    };
+  const shaped = published ? toIntakeFormDefinitionShape(published) : null;
+  if (shaped) {
+    formDefinition = shaped;
   } else {
     if (formSlug) {
       return null;

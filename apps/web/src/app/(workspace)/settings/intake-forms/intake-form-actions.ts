@@ -6,6 +6,10 @@ import { LeadChannel, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
+import {
+  clearOtherDefaultsForIntakeSurface,
+  formBelongsToIntakeSurface,
+} from "@/lib/intake/intake-form-surface";
 
 export type IntakeFormState = {
   error?: string;
@@ -99,22 +103,35 @@ export async function updateIntakeFormAction(
       data.schema = JSON.parse(schemaJson) as Prisma.InputJsonValue;
     }
 
-    await db.intakeFormDefinition.update({
+    const existing = await db.intakeFormDefinition.findFirst({
       where: { id: formId, organizationId: ctx.organizationId },
-      data,
+      select: { channel: true, isPublic: true },
     });
-
-    if (isDefault) {
-      // Unset other defaults
-      await db.intakeFormDefinition.updateMany({
-        where: {
-          organizationId: ctx.organizationId,
-          id: { not: formId },
-          isDefault: true,
-        },
-        data: { isDefault: false },
-      });
+    if (!existing) {
+      return { error: "Form not found." };
     }
+
+    const surface = formBelongsToIntakeSurface(existing, "public")
+      ? ("public" as const)
+      : formBelongsToIntakeSurface(existing, "office")
+        ? ("office" as const)
+        : null;
+
+    await db.$transaction(async (tx) => {
+      await tx.intakeFormDefinition.update({
+        where: { id: formId, organizationId: ctx.organizationId },
+        data,
+      });
+
+      if (isDefault && surface) {
+        await clearOtherDefaultsForIntakeSurface(
+          tx,
+          ctx.organizationId,
+          surface,
+          formId,
+        );
+      }
+    });
 
     revalidatePath("/settings/intake-forms");
     revalidatePath(`/settings/intake-forms/${formId}`);

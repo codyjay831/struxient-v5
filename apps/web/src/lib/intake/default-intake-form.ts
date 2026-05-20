@@ -1,4 +1,5 @@
 import { LeadChannel } from "@prisma/client";
+import { isSyntheticDefaultOfficeIntakeFormDefinitionId } from "@/lib/intake/default-office-intake-form";
 
 /**
  * Default Intake Form Definition.
@@ -92,6 +93,14 @@ export const SYNTHETIC_DEFAULT_INTAKE_FORM_ID = "__default__";
 
 export function isSyntheticDefaultIntakeFormDefinitionId(id: string): boolean {
   return id === SYNTHETIC_DEFAULT_INTAKE_FORM_ID;
+}
+
+/** True for any in-memory fallback form id (public or office). */
+export function isSyntheticIntakeFormDefinitionId(id: string): boolean {
+  return (
+    isSyntheticDefaultIntakeFormDefinitionId(id) ||
+    isSyntheticDefaultOfficeIntakeFormDefinitionId(id)
+  );
 }
 
 export const DEFAULT_INTAKE_FORM_DEFINITION: IntakeFormDefinitionShape = {

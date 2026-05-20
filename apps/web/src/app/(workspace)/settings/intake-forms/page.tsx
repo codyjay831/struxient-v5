@@ -8,13 +8,18 @@ import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-reque
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 
 export default async function IntakeFormsPage() {
   const ctx = await getRequestContextOrThrow();
 
   const [forms, organization] = await Promise.all([
     db.intakeFormDefinition.findMany({
-      where: { organizationId: ctx.organizationId, archivedAt: null },
+      where: {
+        organizationId: ctx.organizationId,
+        archivedAt: null,
+        ...PUBLIC_INTAKE_FORM_WHERE,
+      },
       orderBy: { createdAt: "desc" },
     }),
     db.organization.findUnique({
@@ -41,13 +46,16 @@ export default async function IntakeFormsPage() {
           <a href="/settings/intake" className="text-accent hover:underline">
             customer intake settings
           </a>
-          . Custom forms change field layout and public slugs — not required for Lead Review or quote
-          handoff.
+          . These are public customer forms only — office intake is configured separately under{" "}
+          <a href="/settings/intake/office" className="text-accent hover:underline">
+            Office intake form
+          </a>
+          .
         </p>
       </WorkspacePanel>
       <PageHeader
         title="Custom intake forms"
-        description="Optional alternate public forms. Default intake on your main request link does not require a custom form."
+        description="Optional alternate public customer forms (WEB_FORM). Does not include the office /leads/new form."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link

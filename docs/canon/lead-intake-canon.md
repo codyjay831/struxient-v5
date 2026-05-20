@@ -60,7 +60,7 @@ Slice 1 may only stabilize **Universal Intake** capture and submit invariants. I
 ### Intake submission
 
 - Event producing/augmenting a Lead via **`ingestLead`** only.
-- Channel adapters (`WebFormAdapter`, `ManualAdapter`) normalize to `LeadInput`; public vs manual differ by UX, not truth model.
+- Staff and public intake share **`mapIntakeFormDataToLeadInput`** → **`ingestLead`**. Surface differences are handled by `surfaceMode` (public vs staff) and staff-only internal details — not a separate manual adapter.
 
 ### Intake path / type (product modes)
 

@@ -1,15 +1,9 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { LeadChannel, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { effectivePublicRequestSettingsFromRow } from "@/lib/public-request-settings-effective";
-import { requestTypeLabelByValue } from "@/lib/public-request-settings-validation";
-import {
-  buildManualPublicIntakeSnapshotFromFreeText,
-  sanitizePublicIntakeServiceLocationFromClient,
-  type PublicIntakeServiceLocationV1,
-} from "@/lib/public-lead-service-location";
 import { headers } from "next/headers";
 
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -64,68 +58,38 @@ function isPublicIntakeClientKeyConstraintViolation(e: unknown): boolean {
  * Creates a lead for the organization resolved from `companySlug` (re-resolved server-side).
  * `companySlug` must be bound from the server-rendered route param — never from a hidden form field.
  */
-import { isSyntheticDefaultIntakeFormDefinitionId } from "@/lib/intake/default-intake-form";
+import { isSyntheticIntakeFormDefinitionId } from "@/lib/intake/default-intake-form";
 import { ingestLead } from "@/lib/lead/ingest-lead";
-import { WebFormAdapter } from "@/lib/lead/channels/web-form-adapter";
+import { mapIntakeFormDataToLeadInput } from "@/lib/intake/map-intake-form-data-to-lead-input";
 
 export async function submitPublicLeadAction(
   companySlug: string,
   _prevState: PublicLeadState,
   formData: FormData,
 ): Promise<PublicLeadState> {
-  const contactName = trimOrEmpty(formData.get("contactName"));
-  const email = trimOrEmpty(formData.get("email"));
-  const phone = trimOrEmpty(formData.get("phone"));
   const publicIntakeClientKey = trimOrEmpty(formData.get("publicIntakeClientKey"));
-
-  const attachmentIdsRaw = trimOrEmpty(formData.get("attachmentIds"));
-  const attachmentIds = attachmentIdsRaw
-    ? attachmentIdsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
-
-  const requestedDateRaw = trimOrNull(formData.get("requestedVisitDate"));
-  const requestedWindow = trimOrNull(formData.get("requestedVisitWindow"));
-  const visitNotes = trimOrNull(formData.get("requestedVisitNotes"));
-  const lockInInstantQuote = formData.get("lockInInstantQuote") === "on";
   const formDefinitionId = trimOrNull(formData.get("formDefinitionId"));
 
   let validatedFormDefOrgId: string | null = null;
 
   // 1. Validate formDefinitionId if present (skip synthetic in-memory fallback id)
-  if (formDefinitionId && !isSyntheticDefaultIntakeFormDefinitionId(formDefinitionId)) {
+  if (formDefinitionId && !isSyntheticIntakeFormDefinitionId(formDefinitionId)) {
     const formDef = await db.intakeFormDefinition.findFirst({
       where: {
         id: formDefinitionId,
-        isPublic: true,
         archivedAt: null,
+        channel: "WEB_FORM",
+        isPublic: true,
       },
       select: { organizationId: true },
     });
 
     if (!formDef) {
-      console.error(`[submitPublicLeadAction] Invalid formDefinitionId: ${formDefinitionId}`);
+      console.error(`[submitPublicLeadAction] Invalid public formDefinitionId: ${formDefinitionId}`);
       return { error: "We could not send your request. Please check the link and try again." };
     }
 
-    // We'll verify organizationId matches the resolved record later.
-    // Store it for the final check.
     validatedFormDefOrgId = formDef.organizationId;
-  }
-
-  const customFields: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("customField_") || typeof value !== "string") {
-      continue;
-    }
-    const trimmed = value.trim();
-    if (!trimmed) continue;
-    const fieldDefId = key.slice("customField_".length);
-    if (fieldDefId) {
-      customFields[fieldDefId] = trimmed;
-    }
   }
 
   const headerList = await headers();
@@ -180,20 +144,6 @@ export async function submitPublicLeadAction(
     return { error: "We could not send your request. Please check the link and try again." };
   }
 
-  const serviceAddress = trimOrEmpty(formData.get("serviceAddress"));
-  const preferredTiming = trimOrEmpty(formData.get("preferredTiming"));
-  const requestDetails = trimOrEmpty(formData.get("requestDetails"));
-  const requestTypeValue = trimOrEmpty(formData.get("requestType"));
-  const rawLocationJson = trimOrEmpty(formData.get("publicIntakeServiceLocation"));
-  const neededByBucketRaw = trimOrEmpty(formData.get("neededByBucket"));
-  const neededByDateRaw = trimOrEmpty(formData.get("neededByDate"));
-
-  const requestTypeLabel = requestTypeLabelByValue(effective.requestTypeOptions, requestTypeValue);
-  if (requestTypeLabel == null) {
-    console.error(`[submitPublicLeadAction] Invalid requestType: ${requestTypeValue}`);
-    return { error: "Please choose a valid request type." };
-  }
-
   const parsedClientKey = parsePublicIntakeClientKey(publicIntakeClientKey);
 
   if (parsedClientKey) {
@@ -209,56 +159,30 @@ export async function submitPublicLeadAction(
     }
   }
 
-  const requestTypeKey = requestTypeValue.trim().toLowerCase();
-  const instantQuoteTemplateIds = lockInInstantQuote && effective.instantQuoteEnabled 
-    ? effective.instantQuoteConfig[requestTypeKey] 
-    : undefined;
-
-  let publicIntakeServiceLocation: PublicIntakeServiceLocationV1 | null = null;
-  if (rawLocationJson.length > 0) {
-    try {
-      const parsed: unknown = JSON.parse(rawLocationJson);
-      const sanitized = sanitizePublicIntakeServiceLocationFromClient(parsed);
-      if (sanitized) {
-        publicIntakeServiceLocation = sanitized;
-      }
-    } catch {}
-  }
-  if (!publicIntakeServiceLocation) {
-    publicIntakeServiceLocation = buildManualPublicIntakeSnapshotFromFreeText(serviceAddress);
-  }
-
-  const adapter = new WebFormAdapter();
-  const input = adapter.parse({
-    contactName,
-    email,
-    phone,
-    serviceAddress,
-    preferredTiming,
-    requestDetails,
-    requestTypeLabel,
-    publicIntakeServiceLocation,
-    neededByBucket: neededByBucketRaw,
-    neededByDate: neededByDateRaw,
-    publicIntakeClientKey: parsedClientKey,
-    attachmentIds,
-    requestedVisitDate: requestedDateRaw,
-    requestedVisitWindow: requestedWindow,
-    requestedVisitNotes: visitNotes,
-    lockInInstantQuote,
-    instantQuoteTemplateIds,
+  const mapped = mapIntakeFormDataToLeadInput({
+    formData,
+    surfaceMode: "public",
+    fallbackChannel: LeadChannel.WEB_FORM,
+    requestTypeOptions: effective.requestTypeOptions,
+    requireRequestTypeMatch: true,
+    publicClientKey: parsedClientKey,
   });
-
-  if (Object.keys(customFields).length > 0) {
-    input.customFields = customFields;
+  if (!mapped.ok) {
+    return { error: mapped.error };
   }
+  const instantQuoteTemplateIds =
+    mapped.lockInInstantQuote && effective.instantQuoteEnabled
+      ? effective.instantQuoteConfig[mapped.requestTypeValue]
+      : undefined;
+  mapped.input.request.instantQuoteTemplateIds = instantQuoteTemplateIds;
 
   try {
-    await ingestLead(input, {
+    await ingestLead(mapped.input, {
       organizationId: record.id,
       formSnapshot:
-        formDefinitionId && !isSyntheticDefaultIntakeFormDefinitionId(formDefinitionId)
-          ? { formDefinitionId, capturedAt: new Date().toISOString() }
+        mapped.formDefinitionId &&
+        !isSyntheticIntakeFormDefinitionId(mapped.formDefinitionId)
+          ? { formDefinitionId: mapped.formDefinitionId, capturedAt: new Date().toISOString() }
           : undefined,
     });
     return { success: true };

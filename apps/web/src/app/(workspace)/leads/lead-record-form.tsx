@@ -6,7 +6,7 @@ import { useActionState, useState } from "react";
 import { ServiceAddressCaptureField } from "@/components/forms/service-address-capture-field";
 import { LEAD_SOURCE_FORM_OPTIONS } from "@/lib/lead-display";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
-import { createLeadAction, type LeadFormState } from "./lead-form-actions";
+import { type LeadFormState } from "./lead-form-actions";
 import { ChevronRight } from "lucide-react";
 import { MultiFilePicker } from "@/components/forms/multi-file-picker";
 import { getLeadAttachmentUploadUrlAction } from "./lead-attachment-actions";
@@ -31,78 +31,51 @@ const NEEDED_BY_BUCKET_OPTIONS: { value: NeededByBucket; label: string }[] = [
   { value: "SPECIFIC_DATE", label: "Specific date" },
 ];
 
-export type LeadRecordFormProps =
-  | {
-      mode: "create";
-      cancelHref: string;
-      googleMapsApiKey: string;
-      availableTemplates: LineItemTemplatePickerRow[];
-      customFieldDefs: CustomFieldDefPayload[];
-    }
-  | {
-      mode: "edit";
-      cancelHref: string;
-      googleMapsApiKey: string;
-      availableTemplates: LineItemTemplatePickerRow[];
-      customFieldDefs: CustomFieldDefPayload[];
-      /** Server-bound `updateLeadAction.bind(null, lead.id)` — record id is not taken from editable form fields. */
-      updateFormAction: (
-        prevState: LeadFormState,
-        formData: FormData,
-      ) => Promise<LeadFormState>;
-      initial: {
-        title: string;
-        contactName: string | null;
-        companyName: string | null;
-        email: string | null;
-        phone: string | null;
-        requestType: string | null;
-        neededByBucket: NeededByBucket | null;
-        neededByDate: Date | null;
-        scopeSummary: string | null;
-        source: LeadChannel;
-        sourceDetail: string | null;
-        notes: string | null;
-        suggestedTemplateIds: string[];
-        customFieldValues: CustomFieldValuePayload[];
-      };
-      initialVisitRequest?: {
-        requestedDate: Date | null;
-        requestedWindow: string | null;
-        notes: string | null;
-      };
-      /** Prefill structured service address when editing. */
-      serviceLocationDefaults?: {
-        defaultDisplayAddress: string;
-        initialStructuredJson: string;
-      };
+export type LeadRecordFormProps = {
+    cancelHref: string;
+    googleMapsApiKey: string;
+    availableTemplates: LineItemTemplatePickerRow[];
+    customFieldDefs: CustomFieldDefPayload[];
+    /** Server-bound `updateLeadAction.bind(null, lead.id)` — record id is not taken from editable form fields. */
+    updateFormAction: (
+      prevState: LeadFormState,
+      formData: FormData,
+    ) => Promise<LeadFormState>;
+    initial: {
+      title: string;
+      contactName: string | null;
+      companyName: string | null;
+      email: string | null;
+      phone: string | null;
+      requestType: string | null;
+      neededByBucket: NeededByBucket | null;
+      neededByDate: Date | null;
+      scopeSummary: string | null;
+      source: LeadChannel;
+      sourceDetail: string | null;
+      notes: string | null;
+      suggestedTemplateIds: string[];
+      customFieldValues: CustomFieldValuePayload[];
     };
+    initialVisitRequest?: {
+      requestedDate: Date | null;
+      requestedWindow: string | null;
+      notes: string | null;
+    };
+    /** Prefill structured service address when editing. */
+    serviceLocationDefaults?: {
+      defaultDisplayAddress: string;
+      initialStructuredJson: string;
+    };
+};
 
 const initialActionState: LeadFormState = {};
 
 export function LeadRecordForm(props: LeadRecordFormProps) {
-  const action =
-    props.mode === "create" ? createLeadAction : props.updateFormAction;
+  const action = props.updateFormAction;
   const [state, formAction, isPending] = useActionState(action, initialActionState);
 
-  const defaults =
-    props.mode === "edit"
-      ? props.initial
-      : {
-        title: "",
-        contactName: null as string | null,
-        companyName: null as string | null,
-        email: null as string | null,
-          phone: null as string | null,
-          requestType: null as string | null,
-          neededByBucket: null as NeededByBucket | null,
-          neededByDate: null as Date | null,
-          scopeSummary: null as string | null,
-          source: LeadChannel.MANUAL,
-          sourceDetail: null as string | null,
-          notes: null as string | null,
-          suggestedTemplateIds: [] as string[],
-        };
+  const defaults = props.initial;
 
   const [neededByBucket, setNeededByBucket] = useState<NeededByBucket | "">(
     defaults.neededByBucket ?? "",
@@ -114,9 +87,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
 
   const [isCommercial, setIsCommercial] = useState(Boolean(defaults.companyName));
 
-  const [requestVisit, setRequestVisit] = useState(
-    Boolean(props.mode === "edit" && props.initialVisitRequest)
-  );
+  const [requestVisit, setRequestVisit] = useState(Boolean(props.initialVisitRequest));
 
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -159,8 +130,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
     setIsUploading(false);
   };
 
-  const serviceLocationDefaults =
-    props.mode === "edit" ? props.serviceLocationDefaults : undefined;
+  const serviceLocationDefaults = props.serviceLocationDefaults;
 
   return (
     <form action={formAction} className="space-y-5">
@@ -281,7 +251,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
       <div className="rounded-xl border border-border bg-foreground/[0.01] p-4">
         <p className={`${fieldLabelClass} mb-4`}>Address</p>
         <ServiceAddressCaptureField
-          key={props.mode === "edit" ? "lead-svc-edit" : "lead-svc-create"}
+          key="lead-svc-edit"
           googleMapsApiKey={props.googleMapsApiKey}
           fieldLabelClass={fieldLabelClass}
           controlClass={controlClass}
@@ -358,7 +328,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
           <p className={`${fieldLabelClass} mb-4`}>Additional Information</p>
           <CustomFieldsForm
             fields={props.customFieldDefs}
-            initialValues={props.mode === "edit" ? props.initial.customFieldValues : []}
+            initialValues={props.initial.customFieldValues}
             fieldLabelClass={fieldLabelClass}
             controlClass={controlClass}
           />
@@ -429,7 +399,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
                   <input
                     name="requestedVisitDate"
                     type="date"
-                    defaultValue={props.mode === "edit" && props.initialVisitRequest?.requestedDate ? new Date(props.initialVisitRequest.requestedDate).toISOString().split('T')[0] : ""}
+                    defaultValue={props.initialVisitRequest?.requestedDate ? new Date(props.initialVisitRequest.requestedDate).toISOString().split('T')[0] : ""}
                     className={controlClass}
                   />
                 </label>
@@ -439,7 +409,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
                   <span className={fieldLabelClass}>Preferred window</span>
                   <select
                     name="requestedVisitWindow"
-                    defaultValue={props.mode === "edit" && props.initialVisitRequest?.requestedWindow ? props.initialVisitRequest.requestedWindow : "ANYTIME"}
+                    defaultValue={props.initialVisitRequest?.requestedWindow ? props.initialVisitRequest.requestedWindow : "ANYTIME"}
                     className={controlClass}
                   >
                     <option value="ANYTIME">Anytime</option>
@@ -457,7 +427,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
                   name="requestedVisitNotes"
                   type="text"
                   placeholder="e.g. gate code, park in driveway"
-                  defaultValue={props.mode === "edit" && props.initialVisitRequest?.notes ? props.initialVisitRequest.notes : ""}
+                  defaultValue={props.initialVisitRequest?.notes ? props.initialVisitRequest.notes : ""}
                   className={controlClass}
                 />
               </label>
@@ -532,7 +502,7 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
           disabled={isPending || isUploading}
           className={primaryButtonClass}
         >
-          {isPending ? "Saving…" : isUploading ? "Uploading..." : props.mode === "create" ? "Create Opportunity" : "Save changes"}
+          {isPending ? "Saving…" : isUploading ? "Uploading..." : "Save changes"}
         </button>
         <Link href={props.cancelHref} className={mutedLinkClass}>
           Cancel

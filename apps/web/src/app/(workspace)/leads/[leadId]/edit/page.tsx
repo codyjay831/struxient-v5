@@ -122,7 +122,6 @@ export default async function EditLeadPage({
           description="Title is required. Leave optional fields blank to clear stored values. Empty optional values normalize to null on the server."
         />
         <LeadRecordForm
-          mode="edit"
           updateFormAction={updateLeadAction.bind(null, lead.id)}
           cancelHref={`/leads/${lead.id}`}
           googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}

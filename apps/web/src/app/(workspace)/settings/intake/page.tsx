@@ -10,8 +10,10 @@ import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   INTAKE_CUSTOM_FORMS_PATH,
+  INTAKE_OFFICE_FORM_PATH,
   INTAKE_PUBLIC_COPY_PATH,
 } from "@/lib/intake-settings-hierarchy";
+import { OFFICE_INTAKE_FORM_WHERE, PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +25,34 @@ const mutedLinkClass =
 
 export default async function IntakeSettingsHubPage() {
   const ctx = await getRequestContextOrThrow();
-  const [publicSettings, organization, customFormCount] = await Promise.all([
-    db.publicRequestSettings.findUnique({
-      where: { organizationId: ctx.organizationId },
-      select: { enabled: true, formTitle: true },
-    }),
-    db.organization.findUnique({
-      where: { id: ctx.organizationId },
-      select: { name: true, slug: true },
-    }),
-    db.intakeFormDefinition.count({
-      where: { organizationId: ctx.organizationId, archivedAt: null },
-    }),
-  ]);
+  const [publicSettings, organization, publicCustomFormCount, officeDefaultForm] =
+    await Promise.all([
+      db.publicRequestSettings.findUnique({
+        where: { organizationId: ctx.organizationId },
+        select: { enabled: true, formTitle: true },
+      }),
+      db.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { name: true, slug: true },
+      }),
+      db.intakeFormDefinition.count({
+        where: {
+          organizationId: ctx.organizationId,
+          archivedAt: null,
+          ...PUBLIC_INTAKE_FORM_WHERE,
+          isDefault: false,
+        },
+      }),
+      db.intakeFormDefinition.findFirst({
+        where: {
+          organizationId: ctx.organizationId,
+          archivedAt: null,
+          ...OFFICE_INTAKE_FORM_WHERE,
+          isDefault: true,
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
 
   const publicLive = publicSettings?.enabled ?? true;
 
@@ -49,7 +66,7 @@ export default async function IntakeSettingsHubPage() {
       />
       <PageHeader
         title="Customer intake"
-        description="Configure how new requests enter Struxient. Start with your public link and copy; advanced form structure is optional."
+        description="One intake engine with separate form definitions for customer requests and office new leads. Editing one surface does not change the other."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
@@ -68,8 +85,8 @@ export default async function IntakeSettingsHubPage() {
       <div className="space-y-6">
         <WorkspacePanel>
           <SectionHeading
-            title="Public request"
-            description="Presentation policy for your customer-facing request page — title, intro, submit button, and request type labels."
+            title="Public customer request"
+            description="Customer-facing request page — copy, request type labels, and public form definitions."
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge
@@ -82,25 +99,46 @@ export default async function IntakeSettingsHubPage() {
               </span>
             ) : null}
           </div>
-          <div className="mt-4">
+          <p className="mt-3 text-sm text-foreground-muted">
+            Structural fields come from your default public form and optional custom public slugs.
+            Does not affect office intake at <span className="font-medium text-foreground">/leads/new</span>.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
             <Link href={INTAKE_PUBLIC_COPY_PATH} className={cardLinkClass}>
               Edit public copy & request types
+            </Link>
+            <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
+              Advanced public forms
+              {publicCustomFormCount > 0 ? ` (${publicCustomFormCount})` : ""}
             </Link>
           </div>
         </WorkspacePanel>
 
         <WorkspacePanel>
           <SectionHeading
-            title="Default intake"
-            description="Every organization gets a working public intake without setup. Custom forms are optional."
+            title="Office new lead form"
+            description="Form used by staff at /leads/new — separate from public customer forms."
           />
-          <p className="mt-3 text-sm text-foreground-muted">
-            Your public request link uses the built-in default form when you have not published a
-            custom default form. Core fields (contact, location, request type, scope, timing) are
-            always collected for Lead Review.
-          </p>
-          <div className="mt-3">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge label="Always on" tone="approved" />
+            {officeDefaultForm?.name ? (
+              <span className="text-xs text-foreground-muted truncate max-w-md">
+                Default: {officeDefaultForm.name}
+              </span>
+            ) : (
+              <span className="text-xs text-foreground-muted">
+                Default form is created on first office intake use
+              </span>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-foreground-muted">
+            Staff-only details (source channel, internal notes, template helper) stay outside the
+            form schema. Changing public forms does not change this surface.
+          </p>
+          <div className="mt-4">
+            <Link href={INTAKE_OFFICE_FORM_PATH} className={cardLinkClass}>
+              Edit office intake form
+            </Link>
           </div>
         </WorkspacePanel>
 
@@ -111,23 +149,6 @@ export default async function IntakeSettingsHubPage() {
           />
           <div className="mt-4">
             <IntakePathPresetsPanel />
-          </div>
-        </WorkspacePanel>
-
-        <WorkspacePanel>
-          <SectionHeading
-            title="Advanced"
-            description="Power settings for custom form definitions. Not required for most contractors."
-          />
-          <p className="mt-3 text-sm text-foreground-muted">
-            Atom-level form editing stays internal. Use custom forms only when you need alternate
-            public slugs or non-default field layouts.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
-              Custom intake forms
-              {customFormCount > 0 ? ` (${customFormCount})` : ""}
-            </Link>
           </div>
         </WorkspacePanel>
       </div>

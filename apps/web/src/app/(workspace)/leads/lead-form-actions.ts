@@ -70,20 +70,9 @@ const LEAD_SOURCE_SET = new Set<string>(Object.values(LeadChannel));
 
 const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
 
-function parseLeadChannel(raw: FormDataEntryValue | null): LeadChannel {
-  if (raw == null || typeof raw !== "string") {
-    return LeadChannel.MANUAL;
-  }
-  const v = raw.trim();
-  if (!v || !LEAD_SOURCE_SET.has(v)) {
-    return LeadChannel.MANUAL;
-  }
-  return v as LeadChannel;
-}
-
 /**
  * On update, missing or invalid `source` values keep the stored enum — safer than forcing
- * MANUAL when the field is absent or tampered with (create still defaults to MANUAL).
+ * MANUAL when the field is absent or tampered with.
  */
 function parseLeadChannelForUpdate(
   raw: FormDataEntryValue | null,
@@ -97,84 +86,6 @@ function parseLeadChannelForUpdate(
     return previous;
   }
   return v as LeadChannel;
-}
-
-import { ingestLead } from "@/lib/lead/ingest-lead";
-import { ManualAdapter } from "@/lib/lead/channels/manual-adapter";
-
-export async function createLeadAction(
-  _prevState: LeadFormState,
-  formData: FormData,
-): Promise<LeadFormState> {
-  const ctx = await getRequestContextOrThrow();
-
-  const title = trimRequired(formData.get("title"));
-  const contactName = trimOrNull(formData.get("contactName"));
-  const companyName = trimOrNull(formData.get("companyName"));
-  const email = trimOrNull(formData.get("email"));
-  const phone = trimOrNull(formData.get("phone"));
-  const requestType = trimOrNull(formData.get("requestType"));
-  const neededByBucketRaw = trimOrNull(formData.get("neededByBucket"));
-  const neededByDateRaw = trimOrNull(formData.get("neededByDate"));
-  const scopeSummary = trimOrNull(formData.get("scopeSummary"));
-  const suggestedTemplateIdsRaw = trimOrEmpty(formData.get("suggestedTemplateIds"));
-  const suggestedTemplateIds = suggestedTemplateIdsRaw ? suggestedTemplateIdsRaw.split(",") : [];
-  const sourceDetail = trimOrNull(formData.get("sourceDetail"));
-
-  const requestedDateRaw = trimOrNull(formData.get("requestedVisitDate"));
-  const requestedWindow = trimOrNull(formData.get("requestedVisitWindow"));
-  const visitNotes = trimOrNull(formData.get("requestedVisitNotes"));
-
-  const customFields: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    if (key.startsWith("customField_") && typeof value === "string") {
-      const fieldDefId = key.replace("customField_", "");
-      customFields[fieldDefId] = value;
-    }
-  }
-  const notes = trimOrNull(formData.get("notes"));
-  const channel = parseLeadChannel(formData.get("source"));
-
-  const attachmentIdsRaw = trimOrEmpty(formData.get("attachmentIds"));
-  const attachmentIds = attachmentIdsRaw ? attachmentIdsRaw.split(",") : [];
-
-  const { snapshot } = resolveServiceLocationSnapshotFromFormData(formData);
-
-  const adapter = new ManualAdapter();
-  const input = adapter.parse({
-    title,
-    contactName,
-    companyName,
-    email,
-    phone,
-    requestType,
-    neededByBucket: neededByBucketRaw,
-    neededByDate: neededByDateRaw,
-    scopeSummary,
-    suggestedTemplateIds,
-    sourceDetail,
-    notes,
-    channel,
-    attachmentIds,
-    addressSnapshot: snapshot,
-    requestedVisitDate: requestedDateRaw,
-    requestedVisitWindow: requestedWindow,
-    requestedVisitNotes: visitNotes,
-    customFields,
-  });
-
-  try {
-    const lead = await ingestLead(input, {
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-    });
-    redirect(`/leads/${lead.id}`);
-  } catch (e) {
-    if (e instanceof Error) {
-      return { error: e.message };
-    }
-    return { error: "An unexpected error occurred." };
-  }
 }
 
 /**

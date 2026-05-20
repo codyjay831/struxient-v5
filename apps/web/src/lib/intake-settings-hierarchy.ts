@@ -40,4 +40,5 @@ export const INTAKE_PATH_PRESETS: readonly IntakePathPreset[] = [
 
 export const INTAKE_SETTINGS_HUB_PATH = "/settings/intake";
 export const INTAKE_PUBLIC_COPY_PATH = "/settings/public-request-settings";
+export const INTAKE_OFFICE_FORM_PATH = "/settings/intake/office";
 export const INTAKE_CUSTOM_FORMS_PATH = "/settings/intake-forms";

@@ -2,7 +2,7 @@
 
 import { ServiceAddressCaptureField } from "@/components/forms/service-address-capture-field";
 
-type PublicIntakeServiceAddressFieldProps = {
+type IntakeServiceAddressFieldProps = {
   googleMapsApiKey: string;
   fieldLabelClass: string;
   controlClass: string;
@@ -13,8 +13,7 @@ type PublicIntakeServiceAddressFieldProps = {
   onStructuredJsonChange?: (value: string) => void;
 };
 
-/** Public intake wrapper — address is required for homeowners submitting the request form. */
-export function PublicIntakeServiceAddressField(props: PublicIntakeServiceAddressFieldProps) {
+export function IntakeServiceAddressField(props: IntakeServiceAddressFieldProps) {
   return (
     <ServiceAddressCaptureField
       googleMapsApiKey={props.googleMapsApiKey}

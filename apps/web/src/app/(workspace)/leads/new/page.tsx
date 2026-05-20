@@ -3,10 +3,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { LeadRecordForm } from "../lead-record-form";
+import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { loadAvailableLineItemTemplates } from "@/lib/line-item-template-loader";
-import { loadLeadCustomFieldDefs } from "@/lib/lead-custom-field-loader";
+import { getOfficeIntakeFormBundle } from "@/lib/intake/load-office-intake-form";
+import { StaffIntakeClient } from "./staff-intake-client";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,13 @@ const listLinkClass =
 
 export default async function NewLeadPage() {
   const ctx = await getRequestContextOrThrow();
-  const [availableTemplates, customFieldDefs] = await Promise.all([
+  const [availableTemplates, officeBundle, organization] = await Promise.all([
     loadAvailableLineItemTemplates(ctx.organizationId),
-    loadLeadCustomFieldDefs(ctx.organizationId),
+    getOfficeIntakeFormBundle(ctx.organizationId),
+    db.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: { name: true },
+    }),
   ]);
 
   return (
@@ -41,14 +46,14 @@ export default async function NewLeadPage() {
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Intake record"
-          description="Source and contact fields are optional. Organization scope is applied on the server."
+          description="Office intake uses its own form definition. Changes to public customer forms do not affect this page."
         />
-        <LeadRecordForm
-          mode="create"
-          cancelHref="/leads"
+        <StaffIntakeClient
+          formDefinition={officeBundle.formDefinition}
+          organizationDisplayName={organization?.name ?? "your organization"}
           googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
+          requestTypeOptions={officeBundle.requestTypeOptions}
           availableTemplates={availableTemplates}
-          customFieldDefs={customFieldDefs}
         />
       </WorkspacePanel>
     </div>

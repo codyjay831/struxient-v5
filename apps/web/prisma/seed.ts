@@ -20,6 +20,7 @@ import { LeadChannel, Prisma, PrismaClient, StaffRole } from "@prisma/client";
 import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedJourneyFixtures } from "./seeds/journey-fixtures";
 import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
+import { DEFAULT_OFFICE_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-office-intake-form";
 
 const prisma = new PrismaClient();
 
@@ -94,6 +95,39 @@ async function seedDefaultIntakeFormDefinition() {
   });
 }
 
+async function seedDefaultOfficeIntakeFormDefinition() {
+  const slug = "office-default";
+  const existing = await prisma.intakeFormDefinition.findUnique({
+    where: { organizationId_slug: { organizationId: DEV_ORG_ID, slug } },
+    select: { id: true },
+  });
+  if (existing) {
+    await prisma.intakeFormDefinition.update({
+      where: { id: existing.id },
+      data: {
+        name: "Office intake",
+        channel: LeadChannel.MANUAL,
+        isPublic: false,
+        isDefault: true,
+        archivedAt: null,
+        schema: DEFAULT_OFFICE_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return;
+  }
+  await prisma.intakeFormDefinition.create({
+    data: {
+      organizationId: DEV_ORG_ID,
+      slug,
+      name: "Office intake",
+      channel: LeadChannel.MANUAL,
+      isPublic: false,
+      isDefault: true,
+      schema: DEFAULT_OFFICE_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
+    },
+  });
+}
+
 async function seedDevOwnerUserAndMembership() {
   await prisma.user.upsert({
     where: { id: DEV_USER_ID },
@@ -142,9 +176,10 @@ async function main() {
   await seedDevOwnerUserAndMembership();
   await seedLegacyStages();
 
-  console.log("Seeding public request settings + default intake form definition…");
+  console.log("Seeding public request settings + intake form definitions…");
   await seedPublicRequestSettings();
   await seedDefaultIntakeFormDefinition();
+  await seedDefaultOfficeIntakeFormDefinition();
 
   console.log("Seeding trade-contractor Scope Library presets…");
   const presets = await seedTradeLineItemPresets(prisma, DEV_ORG_ID);

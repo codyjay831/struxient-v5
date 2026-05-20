@@ -66,13 +66,14 @@ export function PublicIntakeClient({
   return (
     <IntakeFormRenderer
       formDefinition={formDefinition}
-      companySlug={companySlug}
       organizationDisplayName={organizationDisplayName}
       submitAction={boundSubmit}
       googleMapsApiKey={googleMapsApiKey}
       onFilesSelected={handleFilesSelected}
       requestTypeOptions={requestTypeOptions}
       submitButtonLabel={submitButtonLabel}
+      surfaceMode="public"
+      layoutMode="progressive"
     />
   );
 }

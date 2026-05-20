@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState, useId, useMemo, useRef, useState } from "react";
+import { useActionState, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
-import { PublicIntakeServiceAddressField } from "@/app/request/[companySlug]/public-intake-service-address-field";
+import { IntakeServiceAddressField } from "@/components/intake/intake-service-address-field";
 import { NeededByBucket } from "@prisma/client";
 import { MultiFilePicker } from "@/components/forms/multi-file-picker";
 import { Check, ChevronLeft, ChevronRight, Loader2, Calendar, Clock } from "lucide-react";
 import {
-  isSyntheticDefaultIntakeFormDefinitionId,
+  isSyntheticIntakeFormDefinitionId,
   type IntakeFormDefinitionShape,
   type IntakeFormFieldRef,
   type IntakeFormSection,
@@ -38,9 +38,11 @@ export type IntakeSubmitState = {
   success?: boolean;
 };
 
+export type IntakeSurfaceMode = "public" | "staff";
+export type IntakeLayoutMode = "progressive" | "compact";
+
 export type IntakeFormRendererProps = {
   formDefinition: IntakeFormDefinitionShape;
-  companySlug: string;
   organizationDisplayName: string;
   submitAction: (
     prevState: IntakeSubmitState,
@@ -60,6 +62,9 @@ export type IntakeFormRendererProps = {
   requestTypeOptions?: IntakeRequestTypeOption[];
   /** Public request settings submit label; defaults to "Submit Request". */
   submitButtonLabel?: string;
+  surfaceMode?: IntakeSurfaceMode;
+  layoutMode?: IntakeLayoutMode;
+  internalDetailsSlot?: ReactNode;
 };
 
 export function IntakeFormRenderer({
@@ -70,6 +75,9 @@ export function IntakeFormRenderer({
   onFilesSelected,
   requestTypeOptions,
   submitButtonLabel = "Submit Request",
+  surfaceMode = "public",
+  layoutMode = "progressive",
+  internalDetailsSlot,
 }: IntakeFormRendererProps) {
   const [state, formAction, isPending] = useActionState<IntakeSubmitState, FormData>(
     submitAction,
@@ -90,7 +98,7 @@ export function IntakeFormRenderer({
   );
 
   const sections: IntakeFormSection[] = formDefinition.schema.sections ?? [];
-  const currentSection = sections[step - 1];
+  const isProgressive = layoutMode === "progressive" && sections.length > 1;
 
   const handleNext = (e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.preventDefault();
@@ -117,7 +125,7 @@ export function IntakeFormRenderer({
       const target = e.target as HTMLElement;
       if (target.tagName === "TEXTAREA") return;
 
-      if (step < sections.length) {
+      if (isProgressive && step < sections.length) {
         e.preventDefault();
         handleNext();
       }
@@ -151,7 +159,7 @@ export function IntakeFormRenderer({
     return true;
   };
 
-  if (state.success) {
+  if (state.success && surfaceMode === "public") {
     return (
       <div className="rounded-xl border border-border bg-surface px-5 py-12 text-center shadow-sm animate-in fade-in zoom-in-95 duration-300">
         <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-success text-success-contrast mb-6">
@@ -171,32 +179,36 @@ export function IntakeFormRenderer({
       action={formAction}
       className="space-y-6"
       aria-labelledby={headingId}
-      onKeyDown={handleKeyDown}
+      onKeyDown={isProgressive ? handleKeyDown : undefined}
     >
       <h2 id={headingId} className="sr-only">
         {formDefinition.name} for {organizationDisplayName}
       </h2>
 
-      {/* Honeypot — bots fill it in, humans never see it. */}
-      <div aria-hidden className="hidden">
-        <label>
-          Company website
-          <input type="text" name="companyWebsite" tabIndex={-1} autoComplete="off" />
-        </label>
-      </div>
+      {surfaceMode === "public" ? (
+        <>
+          {/* Honeypot — bots fill it in, humans never see it. */}
+          <div aria-hidden className="hidden">
+            <label>
+              Company website
+              <input type="text" name="companyWebsite" tabIndex={-1} autoComplete="off" />
+            </label>
+          </div>
 
-      {/* Idempotency key — server uses this to dedupe accidental double submits. */}
-      <input type="hidden" name="publicIntakeClientKey" value={publicIntakeClientKey} />
+          {/* Idempotency key — server uses this to dedupe accidental double submits. */}
+          <input type="hidden" name="publicIntakeClientKey" value={publicIntakeClientKey} />
+        </>
+      ) : null}
 
       {/* Immutable proof of which IntakeFormDefinition this submit was rendered against. */}
-      {!isSyntheticDefaultIntakeFormDefinitionId(formDefinition.id) ? (
+      {!isSyntheticIntakeFormDefinitionId(formDefinition.id) ? (
         <input type="hidden" name="formDefinitionId" value={formDefinition.id} />
       ) : null}
 
       {/* Persisted attachment ids (from object-storage upload). */}
       <input type="hidden" name="attachmentIds" value={attachmentIds.join(",")} />
 
-      {sections.length > 1 && (
+      {isProgressive && (
         <div className="mb-10">
           <div className="flex items-center justify-between mb-2 px-1">
             {sections.map((section, idx) => (
@@ -233,12 +245,18 @@ export function IntakeFormRenderer({
       ) : null}
 
       {sections.map((section, sIdx) => {
-        const isStepActive = sIdx + 1 === step;
+        const isStepActive = isProgressive ? sIdx + 1 === step : true;
 
         return (
           <div
             key={section.key}
-            className={`space-y-5 ${isStepActive ? "animate-in fade-in slide-in-from-right-4 duration-300" : "hidden"}`}
+            className={`space-y-5 ${
+              isStepActive
+                ? isProgressive
+                  ? "animate-in fade-in slide-in-from-right-4 duration-300"
+                  : ""
+                : "hidden"
+            }`}
           >
             <div className="mb-6">
               <h3 className="text-lg font-bold text-foreground tracking-tight">
@@ -306,7 +324,7 @@ export function IntakeFormRenderer({
                 case "address.service":
                   return (
                     <div key={field.key}>
-                      <PublicIntakeServiceAddressField
+                      <IntakeServiceAddressField
                         googleMapsApiKey={googleMapsApiKey}
                         fieldLabelClass={fieldLabelClass}
                         controlClass={controlClass}
@@ -414,6 +432,9 @@ export function IntakeFormRenderer({
                     </div>
                   );
                 case "consent.terms":
+                  if (surfaceMode !== "public") {
+                    return null;
+                  }
                   return (
                     <div key={field.key} className="flex items-start gap-3 mt-2">
                       <input
@@ -511,9 +532,11 @@ export function IntakeFormRenderer({
         );
       })}
 
+      {internalDetailsSlot ? <div>{internalDetailsSlot}</div> : null}
+
       {sections.length > 0 && (
         <div className="flex flex-col gap-3 sm:flex-row pt-4">
-          {step > 1 && (
+          {isProgressive && step > 1 && (
             <button
               key="back-button"
               type="button"
@@ -524,7 +547,7 @@ export function IntakeFormRenderer({
               Back
             </button>
           )}
-          {step < sections.length && (
+          {isProgressive && step < sections.length && (
             <button
               key="next-button"
               type="button"
@@ -535,7 +558,7 @@ export function IntakeFormRenderer({
               <ChevronRight className="ml-2 size-4" />
             </button>
           )}
-          {step === sections.length && (
+          {(!isProgressive || step === sections.length) && (
             <button
               key="submit-button"
               type="submit"
