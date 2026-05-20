@@ -37,8 +37,12 @@ export async function updatePublicRequestSettingsAction(
   const ctx = await getRequestContextOrThrow();
 
   const enabled = formData.get("publicRequestEnabled") === "on";
-  const instantQuoteEnabled = formData.get("instantQuoteEnabled") === "on";
-  const showInstantQuoteDetails = formData.get("showInstantQuoteDetails") === "on";
+  const instantQuoteEnabled =
+    formData.get("instantQuoteEnabled") === "on" ||
+    formData.get("instantQuoteEnabled") === "true";
+  const showInstantQuoteDetails =
+    formData.get("showInstantQuoteDetails") === "on" ||
+    formData.get("showInstantQuoteDetails") === "true";
 
   const formTitle = trimOrEmpty(formData.get("formTitle"));
   if (!formTitle) {
@@ -148,6 +152,7 @@ export async function updatePublicRequestSettingsAction(
 
   revalidatePath("/leads");
   revalidatePath("/settings/public-request-settings");
+  revalidatePath("/settings/intake");
 
   return { success: true };
 }

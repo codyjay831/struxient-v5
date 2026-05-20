@@ -26,6 +26,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes (line-only vs line+stages+tasks), quote-time vs post-sign planning, maturity curve |
 | [execution-engine-canon.md](./execution-engine-canon.md) | **Runtime execution engine**: line items → draft tasks → activation → stages/tasks/signals → issues/recovery → payments → Workstation attention |
 | [lineage-and-prior-art.md](./lineage-and-prior-art.md) | Full_Cursor (genesis) + v2–v4: what to salvage; failure modes; Jobber-simple + execution-strong positioning |
+| [lead-intake-canon.md](./lead-intake-canon.md) | **Lead intake / public intake / Lead Review / Lead→Quote handoff** — source-of-truth, 5 slices, future intake chain guardrail |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | Full experience requirements: lead → workstation |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
 | [workstation-canon.md](./workstation-canon.md) | Workstation as **action-discovery destination**; cockpit / “what’s next” deep rules |

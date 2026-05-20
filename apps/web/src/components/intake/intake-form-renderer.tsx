@@ -6,10 +6,11 @@ import { PublicIntakeServiceAddressField } from "@/app/request/[companySlug]/pub
 import { NeededByBucket } from "@prisma/client";
 import { MultiFilePicker } from "@/components/forms/multi-file-picker";
 import { Check, ChevronLeft, ChevronRight, Loader2, Calendar, Clock } from "lucide-react";
-import type {
-  IntakeFormDefinitionShape,
-  IntakeFormFieldRef,
-  IntakeFormSection,
+import {
+  isSyntheticDefaultIntakeFormDefinitionId,
+  type IntakeFormDefinitionShape,
+  type IntakeFormFieldRef,
+  type IntakeFormSection,
 } from "@/lib/intake/default-intake-form";
 
 const fieldLabelClass =
@@ -57,6 +58,8 @@ export type IntakeFormRendererProps = {
    * machine key as `requestType`. Falls back to a free text input when omitted.
    */
   requestTypeOptions?: IntakeRequestTypeOption[];
+  /** Public request settings submit label; defaults to "Submit Request". */
+  submitButtonLabel?: string;
 };
 
 export function IntakeFormRenderer({
@@ -66,6 +69,7 @@ export function IntakeFormRenderer({
   googleMapsApiKey = "",
   onFilesSelected,
   requestTypeOptions,
+  submitButtonLabel = "Submit Request",
 }: IntakeFormRendererProps) {
   const [state, formAction, isPending] = useActionState<IntakeSubmitState, FormData>(
     submitAction,
@@ -185,7 +189,9 @@ export function IntakeFormRenderer({
       <input type="hidden" name="publicIntakeClientKey" value={publicIntakeClientKey} />
 
       {/* Immutable proof of which IntakeFormDefinition this submit was rendered against. */}
-      <input type="hidden" name="formDefinitionId" value={formDefinition.id} />
+      {!isSyntheticDefaultIntakeFormDefinitionId(formDefinition.id) ? (
+        <input type="hidden" name="formDefinitionId" value={formDefinition.id} />
+      ) : null}
 
       {/* Persisted attachment ids (from object-storage upload). */}
       <input type="hidden" name="attachmentIds" value={attachmentIds.join(",")} />
@@ -537,7 +543,7 @@ export function IntakeFormRenderer({
               disabled={isPending || isUploading}
             >
               {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              {isUploading ? "Uploading..." : "Submit Request"}
+              {isUploading ? "Uploading..." : submitButtonLabel}
             </button>
           )}
         </div>

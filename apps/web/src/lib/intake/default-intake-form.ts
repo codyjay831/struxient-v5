@@ -87,8 +87,15 @@ export const DEFAULT_INTAKE_FORM_SCHEMA: IntakeFormSchema = {
   ],
 };
 
+/** Synthetic id for in-memory fallback only — never POST to submit validation. */
+export const SYNTHETIC_DEFAULT_INTAKE_FORM_ID = "__default__";
+
+export function isSyntheticDefaultIntakeFormDefinitionId(id: string): boolean {
+  return id === SYNTHETIC_DEFAULT_INTAKE_FORM_ID;
+}
+
 export const DEFAULT_INTAKE_FORM_DEFINITION: IntakeFormDefinitionShape = {
-  id: "__default__",
+  id: SYNTHETIC_DEFAULT_INTAKE_FORM_ID,
   name: "Service Request",
   slug: "default",
   channel: LeadChannel.WEB_FORM,

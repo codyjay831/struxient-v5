@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { performCreateQuoteDraftFromLead } from "../quote-form-actions";
 import { QuoteDraftForm } from "../quote-draft-form";
 import { parseIntakeNotes } from "@/lib/lead-display";
 
@@ -39,6 +41,7 @@ export default async function NewQuotePage({
   const rawCustomer = firstString(sp.customerId);
 
   let paramWarning: string | null = null;
+  let leadOnlyPromoteError: string | null = null;
   let validatedLeadId: string | null = null;
   let validatedCustomerId: string | null = null;
   const contextLines: { label: string; value: string }[] = [];
@@ -53,6 +56,14 @@ export default async function NewQuotePage({
   if (rawLead && !lead) {
     paramWarning =
       "The opportunity id in the link was not found in your organization—it was ignored. You can still create a title-only draft or return to Sales.";
+  }
+
+  if (lead && !rawCustomer) {
+    const promoted = await performCreateQuoteDraftFromLead(lead.id);
+    if (promoted.ok) {
+      redirect(`/quotes/${promoted.quoteId}`);
+    }
+    leadOnlyPromoteError = promoted.error;
   }
 
   const customer = rawCustomer
@@ -91,7 +102,7 @@ export default async function NewQuotePage({
         contextLines.push({ label: field.label, value: field.value });
       });
     }
-  } else if (lead && !rawCustomer) {
+  } else if (lead && !rawCustomer && !leadOnlyPromoteError) {
     validatedLeadId = lead.id;
     contextLines.push({ label: "Opportunity", value: lead.title });
     
@@ -157,17 +168,32 @@ export default async function NewQuotePage({
       />
 
       <WorkspacePanel className="mb-6">
-        <SectionHeading
-          title="Draft quote"
-        />
-        <QuoteDraftForm
-          cancelHref="/leads"
-          defaultTitle={defaultTitle}
-          validatedLeadId={validatedLeadId}
-          validatedCustomerId={validatedCustomerId}
-          contextLines={contextLines}
-          paramWarning={paramWarning}
-        />
+        {leadOnlyPromoteError && lead ? (
+          <div className="space-y-4">
+            <SectionHeading title="Could not start quote" />
+            <p
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+              role="alert"
+            >
+              {leadOnlyPromoteError}
+            </p>
+            <Link href={`/leads/${lead.id}`} className={listLinkClass}>
+              ← Back to lead review
+            </Link>
+          </div>
+        ) : (
+          <>
+            <SectionHeading title="Draft quote" />
+            <QuoteDraftForm
+              cancelHref="/leads"
+              defaultTitle={defaultTitle}
+              validatedLeadId={validatedLeadId}
+              validatedCustomerId={validatedCustomerId}
+              contextLines={contextLines}
+              paramWarning={paramWarning}
+            />
+          </>
+        )}
       </WorkspacePanel>
     </div>
   );

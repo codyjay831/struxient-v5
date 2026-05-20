@@ -41,19 +41,19 @@ export default function SettingsPage() {
 
       <section className="mb-10">
         <SectionHeading
-          title="Commercial Configuration"
-          description="Manage intake forms and reusable line item templates for your organization."
+          title="Commercial configuration"
+          description="Customer intake and reusable quote scope for your organization."
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Link href="/settings/intake-forms" className={cardLinkClass}>
+          <Link href="/settings/intake" className={cardLinkClass}>
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              Intake Forms
+              Customer intake
             </p>
             <p className="mt-2 text-sm font-medium text-foreground group-hover:underline">
-              Configure public and internal intake forms
+              Public request link, copy, and intake paths
             </p>
             <p className="mt-2 text-xs text-foreground-muted">
-              Manage form fields, request types, and public link settings →
+              Default-first setup — custom forms tucked under Advanced →
             </p>
           </Link>
           <Link href="/settings/scope-library" className={cardLinkClass}>

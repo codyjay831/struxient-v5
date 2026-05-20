@@ -97,7 +97,7 @@ export function IntakeFormEditor({
             className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground mb-4 transition-colors"
           >
             <ChevronLeft className="mr-1 size-3" />
-            Back to Forms
+            Back to custom forms
           </Link>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Configure Form</h1>
         </div>

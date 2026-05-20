@@ -93,6 +93,55 @@ export function formatLeadChannel(source: LeadChannel): string {
   return SOURCE_LABELS[source];
 }
 
+const NEEDED_BY_BUCKET_LABELS: Record<NeededByBucket, string> = {
+  ASAP: "ASAP",
+  THIS_WEEK: "This week",
+  THIS_MONTH: "This month",
+  FLEXIBLE: "Flexible",
+  SPECIFIC_DATE: "Specific date",
+};
+
+export function formatNeededByBucket(bucket: NeededByBucket | null | undefined): string | null {
+  if (!bucket) return null;
+  return NEEDED_BY_BUCKET_LABELS[bucket] ?? bucket.replaceAll("_", " ").toLowerCase();
+}
+
+export function formatNeededByTiming(
+  bucket: NeededByBucket | null | undefined,
+  neededByDate: Date | string | null | undefined,
+): string | null {
+  const bucketLabel = formatNeededByBucket(bucket);
+  if (bucket === "SPECIFIC_DATE" && neededByDate) {
+    const d = neededByDate instanceof Date ? neededByDate : new Date(neededByDate);
+    if (!Number.isNaN(d.getTime())) {
+      return `Specific date: ${d.toLocaleDateString()}`;
+    }
+  }
+  return bucketLabel;
+}
+
+export function formatLeadUrgencyHint(
+  hint: "LOW" | "MEDIUM" | "HIGH" | undefined | null,
+): string | null {
+  if (!hint) return null;
+  switch (hint) {
+    case "HIGH":
+      return "High — respond soon";
+    case "MEDIUM":
+      return "Medium";
+    case "LOW":
+      return "Low";
+    default:
+      return null;
+  }
+}
+
+export function formatAttachmentFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function leadStatusBadgeTone(status: LeadStatus): StatusBadgeTone {
   switch (status) {
     case "CONVERTED":

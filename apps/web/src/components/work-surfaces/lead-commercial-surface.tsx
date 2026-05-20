@@ -1,56 +1,61 @@
 "use client";
 
 import { LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
-import { formatLeadChannel, formatLeadStatus, leadStatusBadgeTone, parseIntakeNotes } from "@/lib/lead-display";
+import {
+  formatAttachmentFileSize,
+  formatLeadChannel,
+  formatLeadStatus,
+  leadStatusBadgeTone,
+} from "@/lib/lead-display";
 import { LeadStatus, QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
-import { resolveLeadCommercialProgressActionHref } from "@/lib/lead-commercial-progress";
 import { StatusBadge, StatusBadgeTone } from "@/components/ui/status-badge";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  FileText, 
-  ArrowRight, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  FileText,
   CheckCircle2,
   CircleAlert,
   Search,
   ExternalLink,
   Archive,
   Pencil,
-  X,
   ChevronRight,
   Loader2,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  Paperclip,
+  History,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { archiveLeadInboxAction, linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { LeadCustomerAttachCard } from "@/components/leads/lead-customer-attach-card";
+import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-progress-panel";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
   entryPoint?: "workstation" | "record";
 }
 
-/**
- * Shared work surface for lead commercial actions.
- * 
- * No mode/variant props. Adapts to container width.
- */
+const sectionTitleClass =
+  "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
+
 export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCommercialSurfaceProps) {
-  const { lead, customer, linkedQuotes, progress, matchHints } = payload;
+  const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel } = payload;
   const router = useRouter();
-  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
-  const [showRawNotes, setShowRawNotes] = useState(false);
+  const [showLegacyNotes, setShowLegacyNotes] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
 
-  const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead.notes);
+  const compact = entryPoint === "workstation";
+  const editHref = `/leads/${lead.id}/edit`;
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
@@ -71,7 +76,7 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
 
   const handleArchive = async () => {
     if (!confirm("Are you sure you want to archive this opportunity?")) return;
-    
+
     startTransition(async () => {
       const result = await archiveLeadInboxAction(lead.id);
       if (result.success) {
@@ -86,104 +91,235 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
 
   return (
     <div className="@container h-full">
-      <div className="flex flex-col gap-6 p-6 @lg:flex-row">
-        {/* Left Column: Job Party & Request */}
-        <div className="flex-1 space-y-8">
-          {/* Job Party Block */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Job Party
+      <div className="flex flex-col gap-6 p-4 sm:p-6">
+        {/* Decision header */}
+        <header className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                Lead review
+              </p>
+              <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
+                {lead.title}
+              </h2>
+              <p className="text-sm text-foreground-muted">
+                {formatLeadChannel(lead.channel)} · Received{" "}
+                {lead.createdAt.toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <span className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                Pipeline tag
+              </span>
+              <StatusBadge
+                label={formatLeadStatus(lead.status as LeadStatus)}
+                tone={leadStatusBadgeTone(lead.status as LeadStatus) as StatusBadgeTone}
+              />
+            </div>
+          </div>
+
+          <LeadCommercialProgressPanel progress={progress} leadId={lead.id} compact={compact} />
+        </header>
+
+        <div className="flex flex-col gap-8 @lg:flex-row">
+          <div className="flex-1 min-w-0 space-y-8">
+            {/* Request summary */}
+            <section className="space-y-3" aria-labelledby="lead-review-request">
+              <h3 id="lead-review-request" className={sectionTitleClass}>
+                What they need
+              </h3>
+              <div className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
+                {reviewViewModel.requestFields.length > 0 ? (
+                  <dl className="grid gap-4 sm:grid-cols-2">
+                    {reviewViewModel.requestFields.map((field) => (
+                      <div key={field.label} className="space-y-1">
+                        <dt className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                          {field.label}
+                        </dt>
+                        <dd className="text-sm font-medium leading-snug text-foreground">
+                          {field.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="text-sm text-foreground-muted">No request details captured yet.</p>
+                )}
+
+                {reviewViewModel.scopeText &&
+                !reviewViewModel.requestFields.some((f) => f.label === "What they need") ? (
+                  <p className="text-sm leading-relaxed text-foreground border-t border-border pt-3">
+                    {reviewViewModel.scopeText}
+                  </p>
+                ) : null}
+
+                {reviewViewModel.visits.length > 0 ? (
+                  <div className="border-t border-border pt-3 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle flex items-center gap-1">
+                      <Clock className="size-3" /> Site visit
+                    </p>
+                    {reviewViewModel.visits.map((v) => (
+                      <div key={v.id} className="text-sm text-foreground-muted">
+                        <span className="font-medium text-foreground">{v.summary}</span>
+                        {v.notes ? (
+                          <span className="block text-xs mt-0.5">{v.notes}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {reviewViewModel.showLegacyNotes ? (
+                  <div className="border-t border-border pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLegacyNotes(!showLegacyNotes)}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground transition-colors"
+                    >
+                      <ChevronDown
+                        className={`size-3 transition-transform ${showLegacyNotes ? "rotate-180" : ""}`}
+                      />
+                      {showLegacyNotes ? "Hide raw intake" : "View raw intake"}
+                    </button>
+                    {showLegacyNotes && reviewViewModel.legacyNotesPreview ? (
+                      <p className="mt-2 text-xs text-foreground-muted leading-relaxed italic">
+                        {reviewViewModel.legacyNotesPreview}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            {/* Missing info */}
+            <section className="space-y-3" aria-labelledby="lead-review-missing">
+              <div className="flex items-center justify-between gap-2">
+                <h3 id="lead-review-missing" className={sectionTitleClass}>
+                  Ready for quote
                 </h3>
-                <Link 
-                  href={`/leads/${lead.id}/edit`}
+                <Link
+                  href={editHref}
+                  className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
+                >
+                  Edit details
+                </Link>
+              </div>
+              <ul className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-2">
+                {reviewViewModel.requirements.map((req) => (
+                  <li key={req.key} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2">
+                      {req.satisfied ? (
+                        <CheckCircle2 className="size-4 text-success shrink-0" aria-hidden />
+                      ) : (
+                        <XCircle className="size-4 text-danger shrink-0" aria-hidden />
+                      )}
+                      <span className={req.satisfied ? "text-foreground-muted" : "font-medium text-foreground"}>
+                        {req.label}
+                      </span>
+                    </span>
+                    {!req.satisfied ? (
+                      <Link
+                        href={req.fixHref}
+                        className="text-xs font-medium text-accent hover:underline shrink-0"
+                      >
+                        Add
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {reviewViewModel.allRequirementsMet ? (
+                <p className="text-xs text-success font-medium">
+                  All requirements met — you can start a quote when ready.
+                </p>
+              ) : (
+                <p className="text-xs text-foreground-muted">
+                  Complete missing items before starting a quote.
+                </p>
+              )}
+            </section>
+
+            {/* Contact + location */}
+            <section className="space-y-3" aria-labelledby="lead-review-contact">
+              <div className="flex items-center justify-between">
+                <h3 id="lead-review-contact" className={sectionTitleClass}>
+                  Who &amp; where
+                </h3>
+                <Link
+                  href={editHref}
                   className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
                 >
                   <Pencil className="size-2.5" /> Edit
                 </Link>
               </div>
-              <StatusBadge 
-                label={formatLeadStatus(lead.status as LeadStatus)} 
-                tone={leadStatusBadgeTone(lead.status as LeadStatus) as StatusBadgeTone} 
-              />
-            </div>
 
-            <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="mt-1 rounded-full bg-foreground/5 p-2">
-                  <User className="size-4 text-foreground-subtle" />
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 rounded-full bg-foreground/5 p-2">
+                    <User className="size-4 text-foreground-subtle" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold">{lead.contactName || "Unknown contact"}</h4>
+                    {lead.companyName ? (
+                      <p className="text-sm text-foreground-muted">{lead.companyName}</p>
+                    ) : null}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-lg font-bold">{lead.contactName}</h4>
-                  {lead.title !== lead.contactName && (
-                    <p className="text-sm text-foreground-muted">{lead.title}</p>
-                  )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="size-4 text-foreground-subtle shrink-0" />
+                    <span className="truncate">{lead.email || "No email"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="size-4 text-foreground-subtle shrink-0" />
+                    <span>{lead.phone || "No phone"}</span>
+                  </div>
                 </div>
+
+                <div className="flex items-start gap-2 border-t border-border pt-4 text-sm">
+                  <MapPin className="size-4 shrink-0 mt-0.5 text-foreground-subtle" />
+                  <div>
+                    <p className="font-medium">{lead.jobsiteAddressLine || "No address provided"}</p>
+                    {lead.isAddressVerified ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-success">
+                        Verified
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {customer ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-foreground/[0.02] p-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                    <CheckCircle2 className="size-3 text-success" />
+                    Linked: {customer.displayName}
+                    <Link
+                      href={customer.href}
+                      className="ml-auto flex items-center gap-1 hover:text-foreground"
+                    >
+                      View <ExternalLink className="size-2.5" />
+                    </Link>
+                  </div>
+                ) : null}
               </div>
+            </section>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <Mail className="size-4 text-foreground-subtle" />
-                  <span className="truncate">{lead.email || "No email"}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Phone className="size-4 text-foreground-subtle" />
-                  <span>{lead.phone || "No phone"}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2 border-t border-border pt-4 text-sm">
-                <MapPin className="size-4 shrink-0 mt-0.5 text-foreground-subtle" />
-                <div>
-                  <p className="font-medium">{lead.jobsiteAddressLine || "No address provided"}</p>
-                  {lead.isAddressVerified && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-success">
-                      Verified
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {customer && (
-                <div className="flex items-center gap-2 rounded-lg bg-foreground/[0.02] p-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
-                  <CheckCircle2 className="size-3 text-success" />
-                  Linked to customer: {customer.displayName}
-                  <Link href={customer.href} className="ml-auto flex items-center gap-1 hover:text-foreground">
-                    View <ExternalLink className="size-2.5" />
-                  </Link>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {!customer && (
-            <section 
-              id="customer-link" 
-              ref={customerSectionRef}
-              tabIndex={-1}
-              className="space-y-4 scroll-mt-24 outline-none"
-            >
-              <div className="flex items-center gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                  Customer
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-sm text-foreground-muted leading-relaxed">
-                  {progress.description}
-                </p>
+            {!customer && (
+              <section
+                id="customer-link"
+                ref={customerSectionRef}
+                tabIndex={-1}
+                className="space-y-4 scroll-mt-24 outline-none"
+              >
+                <h3 className={sectionTitleClass}>Customer</h3>
 
                 {progress.state === "CONFLICT_WITH_EXISTING_CUSTOMER" && (
                   <div className="rounded-xl border border-warning/30 bg-warning/[0.03] p-4 flex gap-3">
                     <CircleAlert className="size-5 text-warning shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-bold text-foreground">
-                        {progress.label}
-                      </p>
+                      <p className="text-sm font-bold text-foreground">{progress.label}</p>
                       <p className="text-xs text-foreground-muted mt-1">
-                        One or more existing customers match this lead&apos;s contact info. Link to an existing record to avoid duplicates.
+                        Link to an existing customer before starting a quote to avoid duplicates.
                       </p>
                     </div>
                   </div>
@@ -192,17 +328,22 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                 {matches.length > 0 && (
                   <div className="space-y-3">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
-                      Suggested Matches ({matches.length})
+                      Suggested matches ({matches.length})
                     </p>
                     <div className="grid gap-2">
                       {matches.map((candidate) => (
                         <button
                           key={candidate.id}
+                          type="button"
                           onClick={async () => {
                             startTransition(async () => {
                               const formData = new FormData();
                               formData.append("customerId", candidate.id);
-                              const result = await linkLeadToCustomerWorkspaceAction(lead.id, {}, formData);
+                              const result = await linkLeadToCustomerWorkspaceAction(
+                                lead.id,
+                                {},
+                                formData,
+                              );
                               if (result.success) {
                                 router.refresh();
                               } else {
@@ -220,25 +361,12 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                             {isPending ? (
                               <Loader2 className="size-3.5 animate-spin text-accent" />
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle bg-foreground/[0.04] px-1.5 py-0.5 rounded">
-                                  Match: {candidate.matchOn}
-                                </span>
-                                <ChevronRight className="size-3.5 text-foreground-subtle" />
-                              </div>
+                              <ChevronRight className="size-3.5 text-foreground-subtle" />
                             )}
                           </div>
-                          <div className="flex flex-wrap gap-x-3 gap-y-1">
-                            {candidate.email && (
-                              <p className="text-xs text-foreground-muted flex items-center gap-1">
-                                <Mail className="size-3" /> {candidate.email}
-                              </p>
-                            )}
-                            {candidate.phone && (
-                              <p className="text-xs text-foreground-muted flex items-center gap-1">
-                                <Phone className="size-3" /> {candidate.phone}
-                              </p>
-                            )}
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-foreground-muted">
+                            {candidate.email ? <span>{candidate.email}</span> : null}
+                            {candidate.phone ? <span>{candidate.phone}</span> : null}
                           </div>
                         </button>
                       ))}
@@ -265,146 +393,126 @@ export function LeadCommercialSurface({ payload, entryPoint = "record" }: LeadCo
                       source: lead.channel,
                       jobsiteAddressLine: lead.jobsiteAddressLine,
                     }}
-                    editLeadHref={`/leads/${lead.id}/edit`}
+                    editLeadHref={editHref}
                     onSuccess={() => router.refresh()}
                   />
                 </div>
-              </div>
+              </section>
+            )}
+
+            {/* Files */}
+            <section className="space-y-3" aria-labelledby="lead-review-files">
+              <h3 id="lead-review-files" className={sectionTitleClass}>
+                Photos &amp; files
+              </h3>
+              {reviewViewModel.attachments.length > 0 ? (
+                <ul className="rounded-xl border border-border bg-surface divide-y divide-border shadow-sm">
+                  {reviewViewModel.attachments.map((att) => (
+                    <li key={att.id}>
+                      <a
+                        href={att.downloadHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-foreground/[0.02] transition-colors"
+                      >
+                        <Paperclip className="size-4 text-foreground-subtle shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                          {att.fileName}
+                        </span>
+                        <span className="text-xs text-foreground-muted shrink-0">
+                          {formatAttachmentFileSize(att.fileSize)}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-foreground-muted rounded-xl border border-dashed border-border px-4 py-6 text-center">
+                  No files attached to this request.
+                </p>
+              )}
             </section>
-          )}
 
-          {/* Request Snapshot */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-              Request Snapshot
-            </h3>
-            <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <FileText className="size-4 text-foreground-subtle" />
-                Source: {formatLeadChannel(lead.channel)}
-              </div>
+            {/* Activity */}
+            <section className="space-y-3" aria-labelledby="lead-review-activity">
+              <h3 id="lead-review-activity" className={sectionTitleClass}>
+                Activity
+              </h3>
+              {reviewViewModel.activity.length > 0 ? (
+                <ol className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
+                  {reviewViewModel.activity.map((item) => (
+                    <li key={item.id} className="flex gap-3">
+                      <History className="size-4 text-foreground-subtle shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{item.label}</p>
+                        {item.detail ? (
+                          <p className="text-xs text-foreground-muted mt-0.5">{item.detail}</p>
+                        ) : null}
+                        <p className="text-[10px] text-foreground-subtle mt-1">
+                          {item.createdAt.toLocaleString()}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-foreground-muted">No activity recorded yet.</p>
+              )}
+            </section>
+          </div>
 
-              {isPublicIntake ? (
-                <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
-                  {parsedFields.map((field) => (
-                    <div key={field.label} className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-                        {field.label}
-                      </p>
-                      <p className="text-sm font-medium leading-tight text-foreground">
-                        {field.value}
-                      </p>
-                    </div>
+          {/* Sidebar: quotes + archive only */}
+          <aside className="w-full space-y-6 @lg:w-72 shrink-0">
+            {linkedQuotes.length > 0 ? (
+              <section className="space-y-3">
+                <h3 className={sectionTitleClass}>Quotes ({linkedQuotes.length})</h3>
+                <div className="space-y-2">
+                  {linkedQuotes.map((quote) => (
+                    <Link
+                      key={quote.id}
+                      href={`/quotes/${quote.id}`}
+                      className="block rounded-xl border border-border bg-surface p-3 hover:border-border-strong transition-colors shadow-sm"
+                    >
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <span className="text-xs font-bold truncate text-foreground">
+                          {quote.title}
+                        </span>
+                        <StatusBadge
+                          label={formatQuoteStatus(quote.status as QuoteStatus)}
+                          tone={quoteStatusBadgeTone(quote.status as QuoteStatus) as StatusBadgeTone}
+                          className="text-[10px] px-1.5 py-0 shrink-0"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-foreground-muted">
+                        <span>{quote._count.lineItems} items</span>
+                        <span className="font-mono">
+                          {new Intl.NumberFormat("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          }).format(quote.totalCents / 100)}
+                        </span>
+                      </div>
+                    </Link>
                   ))}
                 </div>
-              ) : lead.notes && (
-                <div className="rounded-lg bg-foreground/[0.02] p-3 text-sm italic text-foreground-muted">
-                  &ldquo;{lead.notes}&rdquo;
-                </div>
-              )}
+              </section>
+            ) : null}
 
-              {isPublicIntake && (
-                <div className="border-t border-border pt-2">
-                  <button
-                    onClick={() => setShowRawNotes(!showRawNotes)}
-                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground transition-colors"
-                  >
-                    <ChevronDown className={`size-3 transition-transform ${showRawNotes ? "rotate-180" : ""}`} />
-                    {showRawNotes ? "Hide raw intake" : "View raw intake"}
-                  </button>
-                  {showRawNotes && (
-                    <div className="mt-3 rounded-lg bg-foreground/[0.02] p-3 text-xs italic text-foreground-muted leading-relaxed">
-                      &ldquo;{cleanNotes}&rdquo;
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column: Next Actions & Quotes */}
-        <div className="w-full space-y-8 @lg:w-80 shrink-0">
-          <section className="space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-              Next Action
-            </h3>
-            <div className="space-y-2">
-              {progress.primaryAction ? (
-                <Link 
-                  href={resolveLeadCommercialProgressActionHref(progress.primaryAction, { leadId: lead.id })}
-                  title={
-                    progress.state === "CONFLICT_WITH_EXISTING_CUSTOMER"
-                      ? "Resolve the matching customer conflict before starting a quote."
-                      : progress.primaryAction.label
-                  }
-                  className="flex w-full items-center justify-between rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-opacity hover:opacity-90 group"
-                >
-                  {progress.primaryAction.label}
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                </Link>
+            <button
+              type="button"
+              onClick={handleArchive}
+              disabled={isPending}
+              title="Archive this opportunity"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
+            >
+              {isPending ? (
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <p className="text-sm text-foreground-muted italic">No immediate action required.</p>
+                <Archive className="size-4" />
               )}
-              
-              {!customer && (
-                <div className="flex flex-col gap-2">
-                  <Link 
-                    href={`/leads/${lead.id}#customer-link`}
-                    title="Link this opportunity to an existing customer record or create a new one."
-                    onClick={(e) => {
-                      if (pathname === `/leads/${lead.id}`) {
-                        e.preventDefault();
-                        customerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        customerSectionRef.current?.focus();
-                      }
-                    }}
-                    className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-bold transition-colors hover:bg-foreground/[0.02]"
-                  >
-                    Link to Customer
-                  </Link>
-                </div>
-              )}
-
-              <button
-                onClick={handleArchive}
-                disabled={isPending}
-                title="Archive this opportunity to remove it from the active pipeline."
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
-              >
-                {isPending ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
-                Archive Opportunity
-              </button>
-            </div>
-          </section>
-
-          {linkedQuotes.length > 0 && (
-            <section className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                Quotes ({linkedQuotes.length})
-              </h3>
-              <div className="space-y-2">
-                {linkedQuotes.map((quote) => (
-                  <div key={quote.id} className="rounded-xl border border-border bg-surface p-3 hover:border-border-strong transition-colors shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold truncate pr-2">{quote.title}</span>
-                      <StatusBadge 
-                        label={formatQuoteStatus(quote.status as QuoteStatus)} 
-                        tone={quoteStatusBadgeTone(quote.status as QuoteStatus) as StatusBadgeTone}
-                        className="text-[10px] px-1.5 py-0"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-foreground-muted">
-                      <span>{quote._count.lineItems} items</span>
-                      <span className="font-mono">
-                        {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(quote.totalCents / 100)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+              Archive
+            </button>
+          </aside>
         </div>
       </div>
     </div>

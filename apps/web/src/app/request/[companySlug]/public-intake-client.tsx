@@ -15,6 +15,7 @@ export type PublicIntakeClientProps = {
   organizationDisplayName: string;
   googleMapsApiKey: string;
   requestTypeOptions: IntakeRequestTypeOption[];
+  submitButtonLabel: string;
 };
 
 export function PublicIntakeClient({
@@ -23,6 +24,7 @@ export function PublicIntakeClient({
   organizationDisplayName,
   googleMapsApiKey,
   requestTypeOptions,
+  submitButtonLabel,
 }: PublicIntakeClientProps) {
   const boundSubmit = async (
     prevState: IntakeSubmitState,
@@ -70,6 +72,7 @@ export function PublicIntakeClient({
       googleMapsApiKey={googleMapsApiKey}
       onFilesSelected={handleFilesSelected}
       requestTypeOptions={requestTypeOptions}
+      submitButtonLabel={submitButtonLabel}
     />
   );
 }

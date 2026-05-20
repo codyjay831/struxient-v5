@@ -7,6 +7,7 @@ import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-reque
 
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
+import { WorkspacePanel } from "@/components/ui/workspace-panel";
 
 export default async function IntakeFormsPage() {
   const ctx = await getRequestContextOrThrow();
@@ -29,19 +30,31 @@ export default async function IntakeFormsPage() {
       <WorkspaceBreadcrumb
         items={[
           { label: "Settings", href: "/settings" },
-          { label: "Intake Forms" },
+          { label: "Customer intake", href: "/settings/intake" },
+          { label: "Custom forms" },
         ]}
       />
+      <WorkspacePanel padding="compact" className="mb-6">
+        <p className="text-sm text-foreground-muted">
+          <span className="font-medium text-foreground">Advanced.</span> Most organizations only
+          need the default public intake and{" "}
+          <a href="/settings/intake" className="text-accent hover:underline">
+            customer intake settings
+          </a>
+          . Custom forms change field layout and public slugs — not required for Lead Review or quote
+          handoff.
+        </p>
+      </WorkspacePanel>
       <PageHeader
-        title="Intake Forms"
-        description="Configure how you capture leads from your website and internal staff."
+        title="Custom intake forms"
+        description="Optional alternate public forms. Default intake on your main request link does not require a custom form."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
-              href="/settings/public-request-settings"
+              href="/settings/intake"
               className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
             >
-              Public request settings
+              ← Customer intake
             </Link>
             <Link
               href="/settings/intake-forms/new"

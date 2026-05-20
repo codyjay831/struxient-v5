@@ -1,7 +1,5 @@
 "use server";
 
-// TODO: Add server-side rate limiting (per IP / per slug) when traffic warrants it.
-
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
@@ -66,6 +64,7 @@ function isPublicIntakeClientKeyConstraintViolation(e: unknown): boolean {
  * Creates a lead for the organization resolved from `companySlug` (re-resolved server-side).
  * `companySlug` must be bound from the server-rendered route param — never from a hidden form field.
  */
+import { isSyntheticDefaultIntakeFormDefinitionId } from "@/lib/intake/default-intake-form";
 import { ingestLead } from "@/lib/lead/ingest-lead";
 import { WebFormAdapter } from "@/lib/lead/channels/web-form-adapter";
 
@@ -78,14 +77,6 @@ export async function submitPublicLeadAction(
   const email = trimOrEmpty(formData.get("email"));
   const phone = trimOrEmpty(formData.get("phone"));
   const publicIntakeClientKey = trimOrEmpty(formData.get("publicIntakeClientKey"));
-
-  console.log(`[submitPublicLeadAction] Received submission for ${companySlug}`, {
-    contactName,
-    email,
-    phone,
-    publicIntakeClientKey,
-    formDefinitionId: formData.get("formDefinitionId"),
-  });
 
   const attachmentIdsRaw = trimOrEmpty(formData.get("attachmentIds"));
   const attachmentIds = attachmentIdsRaw
@@ -103,8 +94,8 @@ export async function submitPublicLeadAction(
 
   let validatedFormDefOrgId: string | null = null;
 
-  // 1. Validate formDefinitionId if present
-  if (formDefinitionId) {
+  // 1. Validate formDefinitionId if present (skip synthetic in-memory fallback id)
+  if (formDefinitionId && !isSyntheticDefaultIntakeFormDefinitionId(formDefinitionId)) {
     const formDef = await db.intakeFormDefinition.findFirst({
       where: {
         id: formDefinitionId,
@@ -265,9 +256,10 @@ export async function submitPublicLeadAction(
   try {
     await ingestLead(input, {
       organizationId: record.id,
-      formSnapshot: formDefinitionId
-        ? { formDefinitionId, capturedAt: new Date().toISOString() }
-        : undefined,
+      formSnapshot:
+        formDefinitionId && !isSyntheticDefaultIntakeFormDefinitionId(formDefinitionId)
+          ? { formDefinitionId, capturedAt: new Date().toISOString() }
+          : undefined,
     });
     return { success: true };
   } catch (e) {

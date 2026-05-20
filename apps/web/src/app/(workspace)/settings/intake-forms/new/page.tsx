@@ -29,7 +29,8 @@ export default function NewIntakeFormPage() {
       <WorkspaceBreadcrumb
         items={[
           { label: "Settings", href: "/settings" },
-          { label: "Intake Forms", href: "/settings/intake-forms" },
+          { label: "Customer intake", href: "/settings/intake" },
+          { label: "Custom forms", href: "/settings/intake-forms" },
           { label: "New" },
         ]}
       />

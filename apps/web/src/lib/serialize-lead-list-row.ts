@@ -61,7 +61,7 @@ export type SerializedLeadRow = {
   quotes: SerializedQuoteSummary[];
   /** /leads/[id] */
   leadHref: string;
-  /** /quotes/new?leadId=[id] */
+  /** Canonical lead handoff URL (auto-promotes on GET). */
   newQuoteHref: string;
   /** Jobsite / project address when known from this lead. */
   jobsiteAddressLine: string | null;

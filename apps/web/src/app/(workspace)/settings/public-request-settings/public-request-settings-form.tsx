@@ -111,68 +111,63 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
         </label>
       </section>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Instant Quote</h2>
-          <p className="mt-1 text-sm text-foreground-muted">
-            Configure how instant estimates are presented to customers.
+      <details className="group rounded-lg border border-border bg-foreground/[0.02]">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            Advanced — instant pricing & trust badges
+            <span className="text-xs font-normal text-foreground-subtle">Optional</span>
+          </span>
+        </summary>
+        <div className="space-y-6 border-t border-border px-4 py-4">
+          <p className="text-sm text-foreground-muted">
+            Instant pricing automation is not expanded in this release. These controls are preserved
+            for a future update and do not change canonical lead → quote handoff today.
           </p>
-        </div>
-        <div className="space-y-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              name="instantQuoteEnabled"
-              value="on"
-              defaultChecked={initial.instantQuoteEnabled}
-              className="mt-1 size-4 rounded border-border text-accent focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <span>
-              <span className={fieldLabelClass}>Instant Quote enabled</span>
-              <span className="mt-1 block text-sm text-foreground-muted">
-                Show starting estimates based on request type.
+          <input
+            type="hidden"
+            name="instantQuoteEnabled"
+            value={initial.instantQuoteEnabled ? "on" : "off"}
+          />
+          <input
+            type="hidden"
+            name="showInstantQuoteDetails"
+            value={initial.showInstantQuoteDetails ? "on" : "off"}
+          />
+          <div className="space-y-3 rounded-lg border border-border bg-surface px-3 py-3 text-sm text-foreground-muted">
+            <p>
+              <span className={fieldLabelClass}>Instant quote</span>
+              <span className="mt-1 block">
+                {initial.instantQuoteEnabled ? "Enabled in stored settings" : "Disabled in stored settings"}
+                {" — "}
+                not shown to customers until this feature ships.
               </span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              name="showInstantQuoteDetails"
-              value="on"
-              defaultChecked={initial.showInstantQuoteDetails}
-              className="mt-1 size-4 rounded border-border text-accent focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <span>
-              <span className={fieldLabelClass}>Show line item details</span>
-              <span className="mt-1 block text-sm text-foreground-muted">
-                Show individual line items and prices to customers. If off, only the total estimate is shown.
+            </p>
+            <p>
+              <span className={fieldLabelClass}>Line item details on estimate</span>
+              <span className="mt-1 block">
+                {initial.showInstantQuoteDetails ? "Would show line detail" : "Total only"}
+                {" (preserved, not editable here)."}
               </span>
-            </span>
-          </label>
+            </p>
+          </div>
+          <div>
+            <label className="block">
+              <span className={fieldLabelClass}>Offerings (comma separated)</span>
+              <input
+                name="offerings"
+                type="text"
+                value={offerings.join(", ")}
+                onChange={(e) => setOfferings(e.target.value.split(",").map((s) => s.trim()))}
+                placeholder="e.g. Licensed, Insured, 24/7 Emergency"
+                className={controlClass}
+              />
+            </label>
+            <p className="mt-1.5 text-xs text-foreground-subtle">
+              Trust badges on the public page when configured.
+            </p>
+          </div>
         </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Offerings & Capability Tags</h2>
-        <p className="mt-1 text-sm text-foreground-muted">
-          Service badges shown on your public intake form to build trust (e.g., &quot;Licensed&quot;, &quot;Insured&quot;, &quot;24/7&quot;).
-        </p>
-        </div>
-        <div>
-          <label className="block">
-            <span className={fieldLabelClass}>Offerings (comma separated)</span>
-            <input
-              name="offerings"
-              type="text"
-              value={offerings.join(", ")}
-              onChange={(e) => setOfferings(e.target.value.split(",").map(s => s.trim()))}
-              placeholder="e.g. Licensed, Insured, 24/7 Emergency"
-              className={controlClass}
-            />
-          </label>
-        </div>
-      </section>
+      </details>
 
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Form copy</h2>

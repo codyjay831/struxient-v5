@@ -203,24 +203,33 @@ export function buildLeadRecordActionState(input: {
     );
   }
 
+  const missingRequirements = progress.requiredItems.filter(
+    (item) => !progress.satisfiedItems.includes(item),
+  );
+
+  if (missingRequirements.length > 0) {
+    for (const item of progress.satisfiedItems) {
+      satisfiedItems.push(`${item} — complete.`);
+    }
+    for (const item of missingRequirements) {
+      requiredItems.push(`Add ${item.toLowerCase()} before starting a quote.`);
+    }
+  }
+
   switch (progress.state) {
     case "ADD_CONTACT_INFO":
-      if (progress.primaryAction?.kind === "QUALIFY_INTAKE") {
-        requiredItems.push(
-          "Complete the 4 requirements (Identity, Email, Phone, Address) to start a quote.",
-        );
-      } else {
-        requiredItems.push("Missing required details (Identity, Email, Phone, or Address).");
+      if (missingRequirements.length === 0 && progress.primaryAction?.kind === "QUALIFY_INTAKE") {
+        requiredItems.push("Review intake details on the lead record.");
       }
       break;
     case "NEEDS_CUSTOMER":
-      // This state is now mostly bypassed by the single-click promotion, 
-      // but kept for back-compat with existing derived states.
       requiredItems.push("Link an existing customer or start a quote to auto-create one.");
       break;
     case "READY_FOR_QUOTE":
-      satisfiedItems.push("All 4 requirements met — ready for promotion.");
-      requiredItems.push("Start a quote to automatically create the customer and draft.");
+      if (missingRequirements.length === 0) {
+        satisfiedItems.push("Identity, email, phone, and location are complete.");
+      }
+      requiredItems.push("Start a quote when scope is clear enough to price.");
       break;
     case "QUOTE_IN_PROGRESS":
       satisfiedItems.push("Customer and draft quote created.");
@@ -254,13 +263,8 @@ export function buildLeadRecordActionState(input: {
         type: primary.kind,
         label: primary.label,
         description: progress.description,
-        surface:
-          primary.kind === "START_QUOTE" ||
-          primary.kind === "QUALIFY_INTAKE"
-            ? "workstation-inline"
-            : "full-record",
+        surface: primary.kind === "QUALIFY_INTAKE" ? "workstation-inline" : "full-record",
         href:
-          primary.kind === "START_QUOTE" ||
           primary.kind === "QUALIFY_INTAKE"
             ? undefined
             : resolveLeadCommercialProgressActionHref(primary, { leadId }),

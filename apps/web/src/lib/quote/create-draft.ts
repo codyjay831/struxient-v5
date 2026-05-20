@@ -10,7 +10,8 @@ export interface CreateQuoteDraftResult {
 }
 
 /**
- * Creates a new draft quote.
+ * Creates a new draft quote for manual (non-lead-promotion) flows.
+ * Lead-origin quote starts must use {@link promoteLeadToQuote} instead — do not pass `leadId`.
  */
 export async function createQuoteDraft(input: QuoteShell): Promise<CreateQuoteDraftResult> {
   const ctx = await getRequestContextOrThrow();
@@ -33,16 +34,6 @@ export async function createQuoteDraft(input: QuoteShell): Promise<CreateQuoteDr
           totalCents: 0,
         },
       });
-
-      if (validated.leadId) {
-        await tx.lead.update({
-          where: { id: validated.leadId, organizationId: ctx.organizationId },
-          data: {
-            status: "CONVERTED",
-            convertedAt: new Date(),
-          },
-        });
-      }
 
       return quote;
     });

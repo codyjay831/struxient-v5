@@ -382,6 +382,19 @@ export async function performCreateQuoteDraftFromLead(
   };
 }
 
+/**
+ * Canonical staff handoff: promote lead → quote and redirect to the quote record.
+ */
+export async function startQuoteFromLeadAction(leadId: string): Promise<void> {
+  const result = await performCreateQuoteDraftFromLead(leadId);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/quotes/${result.quoteId}`);
+  redirect(`/quotes/${result.quoteId}`);
+}
+
 import { createQuoteDraft } from "@/lib/quote/create-draft";
 import { sendQuote } from "@/lib/quote/send";
 import { approveQuote } from "@/lib/quote/approve";
@@ -412,10 +425,19 @@ export async function createQuoteDraftAction(
     return { error: resolved.error };
   }
 
+  if (formLeadId) {
+    const promoted = await performCreateQuoteDraftFromLead(formLeadId);
+    if (!promoted.ok) {
+      return { error: promoted.error };
+    }
+    revalidatePath("/leads");
+    redirect(`/quotes/${promoted.quoteId}`);
+  }
+
   const result = await createQuoteDraft({
     title: resolved.data.title,
     customerId: resolved.data.customerId,
-    leadId: resolved.data.leadId,
+    leadId: null,
     internalNotes: resolved.data.internalNotes,
   });
 

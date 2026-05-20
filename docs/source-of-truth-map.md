@@ -48,7 +48,10 @@
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
 | Lead lifecycle status | **Stored** | `Lead.status` | Confusing manual status with commercial progress |
+| Lead intake / public submit | **Stored** (+ derived readiness) | `ingestLead()` in `ingest-lead.ts`; canon in [lead-intake-canon.md](./canon/lead-intake-canon.md) | Parallel intake paths or AI/notes as truth |
 | Lead commercial progress | **Derived** | `getLeadCommercialProgress()` in `lead-commercial-progress.ts` | Persisting progress enum on Lead |
+| Lead intake projection (AI-ready DTO) | **Derived** | `buildLeadIntakeProjection()` in `lead-intake-projection.ts` | Duplicating readiness/progress in prompt strings |
+| Lead→Quote handoff | **Stored writes via canonical promotion** | `promoteLeadToQuote()` in `promote-to-quote.ts` | `createQuoteDraft` bypass for lead-origin flows |
 | Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
 | Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` | One-off checks in activation action |
 | Quote totals | **Stored** | `Quote.totalCents`, line items | Different totals in UI vs PDF vs checkpoint |

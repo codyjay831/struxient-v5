@@ -33,7 +33,7 @@ export default async function LeadDetailPage({
         />
         <PageHeader
           eyebrow="Sales"
-          title="Opportunity"
+          title="Lead review"
           description="No record exists for this id in the current organization. Links only resolve within your tenant scope—not across organizations."
           actions={
             <Link href="/leads" className={listLinkClass}>
@@ -67,6 +67,11 @@ export default async function LeadDetailPage({
           { label: "Sales", href: "/leads" },
           { label: payload.lead.title },
         ]}
+      />
+      <PageHeader
+        eyebrow="Lead review"
+        title={payload.lead.title}
+        description="Triage this request, complete missing details, and take the next commercial step."
       />
       <LeadCommercialSurface payload={payload} entryPoint="record" />
     </div>

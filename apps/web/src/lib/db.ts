@@ -4,6 +4,7 @@ import {
   type IntakeFormDefinitionShape,
   type IntakeFormSchema,
 } from "@/lib/intake/default-intake-form";
+import { ensureDefaultPublicIntakeFormDefinition } from "@/lib/intake/ensure-default-public-intake-form";
 import {
   DEV_ORGANIZATION_ID,
   DEV_ORGANIZATION_NAME,
@@ -340,11 +341,19 @@ export async function getPublicRequestIntakeBundle(
       schema: published.schema as unknown as IntakeFormSchema,
     };
   } else {
-    // Fallback only for the default route if no default form is found in DB.
     if (formSlug) {
       return null;
     }
-    formDefinition = DEFAULT_INTAKE_FORM_DEFINITION;
+    // Default route: provision a real IntakeFormDefinition so submit/provenance stay consistent.
+    try {
+      formDefinition = await ensureDefaultPublicIntakeFormDefinition(org.id);
+    } catch (error) {
+      console.error(
+        "[getPublicRequestIntakeBundle] ensureDefaultPublicIntakeFormDefinition failed; using synthetic fallback",
+        { organizationId: org.id, companySlug: normalizedCompany, error },
+      );
+      formDefinition = DEFAULT_INTAKE_FORM_DEFINITION;
+    }
   }
 
   return {

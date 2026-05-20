@@ -13,6 +13,7 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
+import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 const primaryActionClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
@@ -23,7 +24,7 @@ const secondaryActionClass =
 const cardLinkClass =
   "block rounded-lg border border-border bg-foreground/[0.02] px-3 py-3 transition-colors hover:border-border-strong hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
-function ActionLink({
+function ProgressActionControl({
   action,
   leadId,
   variant,
@@ -32,8 +33,14 @@ function ActionLink({
   leadId: string;
   variant: "primary" | "secondary";
 }) {
+  if (action.kind === "START_QUOTE") {
+    return (
+      <StartQuoteFromLeadButton leadId={leadId} label={action.label} variant={variant} />
+    );
+  }
+
   const href = resolveLeadCommercialProgressActionHref(action, { leadId });
-  
+
   let title = action.label;
   switch (action.kind) {
     case "RESOLVE_CUSTOMER_CONFLICT":
@@ -44,9 +51,6 @@ function ActionLink({
       break;
     case "EDIT_CONTACT_INFO":
       title = "Complete the identity, contact, and location details to move toward a quote.";
-      break;
-    case "START_QUOTE":
-      title = "Start a new quote draft for this opportunity.";
       break;
     case "QUALIFY_INTAKE":
       title = "Review the intake details and qualify this lead.";
@@ -219,29 +223,38 @@ function ActiveJobCard({
 export function LeadCommercialProgressPanel({
   progress,
   leadId,
+  compact = false,
 }: {
   progress: LeadCommercialProgress;
   leadId: string;
+  /** Narrow drawer / workstation embed — tighter spacing, no heavy chrome. */
+  compact?: boolean;
 }) {
   const hasCards = progress.activeQuote != null || progress.activeJob != null;
 
   return (
     <WorkspacePanel
-      padding="comfortable"
-      className="mb-5 border-border-strong shadow-md ring-1 ring-ring/30"
+      padding={compact ? "compact" : "comfortable"}
+      className={
+        compact
+          ? "border-border bg-surface-elevated/50"
+          : "mb-5 border-border-strong shadow-md ring-1 ring-ring/30"
+      }
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Lead progress
+          {compact ? "Next steps" : "Commercial progress"}
         </h2>
         <StatusBadge label={progress.label} tone={progress.badgeTone} />
       </div>
 
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+      <p
+        className={`max-w-2xl text-sm leading-relaxed text-foreground-muted ${compact ? "mt-2" : "mt-3"}`}
+      >
         {progress.description}
       </p>
 
-      <div className="mt-5">
+      <div className={compact ? "mt-3" : "mt-5"}>
         <StepIndicator
           stepIndex={progress.stepIndex}
           totalSteps={progress.totalSteps}
@@ -250,7 +263,7 @@ export function LeadCommercialProgressPanel({
       </div>
 
       {hasCards ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className={`grid gap-3 sm:grid-cols-2 ${compact ? "mt-3" : "mt-5"}`}>
           {progress.activeQuote ? (
             <ActiveQuoteCard
               quote={progress.activeQuote}
@@ -262,19 +275,21 @@ export function LeadCommercialProgressPanel({
       ) : null}
 
       {progress.primaryAction || progress.secondaryAction ? (
-        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+        <div
+          className={`flex flex-wrap items-center gap-2 border-t border-border ${compact ? "mt-4 pt-3" : "mt-6 pt-4"}`}
+        >
           <span className="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
             Next
           </span>
           {progress.primaryAction ? (
-            <ActionLink
+            <ProgressActionControl
               action={progress.primaryAction}
               leadId={leadId}
               variant="primary"
             />
           ) : null}
           {progress.secondaryAction ? (
-            <ActionLink
+            <ProgressActionControl
               action={progress.secondaryAction}
               leadId={leadId}
               variant="secondary"

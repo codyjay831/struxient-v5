@@ -32,14 +32,14 @@ export function PublicRequestLinkPanel({
       </p>
       <p className="mt-2 text-sm font-medium text-foreground">Request Settings</p>
       <p className="mt-3">
-        <Link href="/settings/public-request-settings" className={handoffMutedLinkClass}>
-          Manage Public Request Settings
+        <Link href="/settings/intake" className={handoffMutedLinkClass}>
+          Customer intake settings
         </Link>
       </p>
       {!publicRequestLive ? (
         <p className="mt-3 text-xs leading-relaxed text-danger">
           Public request is turned off. Customers who open your Public Request Link see an
-          unavailable message until you turn it back on in Public Request Settings.
+          unavailable message until you turn it back on in customer intake settings.
         </p>
       ) : null}
       <p className="mt-2 text-sm leading-relaxed text-foreground-muted">

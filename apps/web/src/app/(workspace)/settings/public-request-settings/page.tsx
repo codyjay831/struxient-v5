@@ -52,17 +52,18 @@ export default async function PublicRequestSettingsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <WorkspaceBreadcrumb
-          items={[
-            { label: "Settings", href: "/settings" },
-            { label: "Public Request Settings" },
-          ]}
+        items={[
+          { label: "Settings", href: "/settings" },
+          { label: "Customer intake", href: "/settings/intake" },
+          { label: "Public copy" },
+        ]}
       />
       <PageHeader
-        title="Public Request Settings"
-        description="Configure your Public Request Link and Public Intake Form copy. These settings apply to the public-facing intake surface for this organization."
+        title="Public copy & request types"
+        description="Presentation policy for your public request page — not the structural form schema. Structural fields come from the default intake definition."
         actions={
-          <Link href="/settings" className={listLinkClass}>
-            ← Back to Settings
+          <Link href="/settings/intake" className={listLinkClass}>
+            ← Customer intake
           </Link>
         }
       />

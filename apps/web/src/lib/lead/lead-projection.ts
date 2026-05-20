@@ -186,7 +186,7 @@ export type LeadProjection = {
   signals: LeadSignalsJson;
 };
 
-type ProjectableLeadRow = {
+export type ProjectableLeadRow = {
   id: string;
   status: LeadStatus;
   channel: LeadChannel;

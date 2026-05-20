@@ -83,9 +83,9 @@ function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string | null) 
 }
 
 /**
- * Creates (or reuses) the org-scoped active draft quote for a lead — same rules
- * as `/quotes/new?leadId=…` without redirecting. Caller should `router.refresh()`
- * and reload the active quote payload for the embedded {@link QuoteWorkSurface}.
+ * Creates (or reuses) the org-scoped active draft quote via {@link promoteLeadToQuote}.
+ * Same invariants as `/quotes/new?leadId=…` (auto-promote) without redirecting.
+ * Caller should `router.push` to the quote and `router.refresh()` when done.
  *
  * `leadId` must be supplied from a trusted server-rendered surface (bound in
  * the client), never from an arbitrary org id.
