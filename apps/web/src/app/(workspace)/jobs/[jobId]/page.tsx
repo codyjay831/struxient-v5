@@ -30,6 +30,7 @@ import { getLiveSignals } from "@/lib/signal-bus";
 import {
   attachScheduleAnchorsToRequirements,
   buildPaymentDueContextFromJob,
+  CORRECTIONS_STAGE_NAME,
   deriveTaskPaymentHold,
   getUnsettledEffectivelyDueRequirements,
   loadScheduleAnchorsByIds,
@@ -193,6 +194,7 @@ export default async function JobDetailPage({
                         tasks: {
                           select: {
                             id: true,
+                            title: true,
                             status: true,
                           },
                         },
@@ -535,14 +537,44 @@ export default async function JobDetailPage({
                   <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
                 ) : (
                   <ul className="space-y-3">
-                    {stage.tasks.map((task) => {
+                    {stage.tasks.map((task, taskIndex) => {
                       const paymentHold = deriveTaskPaymentHold(
                         stage.id,
                         paymentRequirementsWithAnchors,
                         paymentDueContext,
                       );
+                      const issueForRecovery = task.recoveryFlow?.jobIssueId
+                        ? job.issues.find((i) => i.id === task.recoveryFlow?.jobIssueId)
+                        : null;
+                      const showRecoveryFallbackLabels =
+                        stage.title === CORRECTIONS_STAGE_NAME && !!issueForRecovery;
+                      const totalRecoveryTasks =
+                        issueForRecovery?.recoveryFlow?.tasks.length ?? 0;
+                      const stepNumber = showRecoveryFallbackLabels
+                        ? issueForRecovery!.recoveryFlow!.tasks.findIndex((t) => t.id === task.id) + 1
+                        : 0;
                       return (
-                        <li key={task.id}>
+                        <li key={task.id} id={`task-${task.id}`}>
+                          {showRecoveryFallbackLabels && (
+                            <div className="mb-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-[10px] text-foreground-muted">
+                              <p>
+                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Recovery for:</span>{" "}
+                                <span className="font-medium text-foreground">
+                                  {issueForRecovery?.jobTask?.title ?? issueForRecovery?.jobStage?.title ?? "Blocked task"}
+                                </span>
+                              </p>
+                              <p className="mt-0.5">
+                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Issue:</span>{" "}
+                                <span className="font-medium text-foreground">{issueForRecovery?.title}</span>
+                              </p>
+                              <p className="mt-0.5">
+                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Step:</span>{" "}
+                                <span className="font-medium text-foreground">
+                                  {`Step ${stepNumber > 0 ? stepNumber : taskIndex + 1} of ${totalRecoveryTasks > 0 ? totalRecoveryTasks : stage.tasks.length}`}
+                                </span>
+                              </p>
+                            </div>
+                          )}
                           <JobTaskCard
                             jobId={job.id}
                             jobStageId={stage.id}

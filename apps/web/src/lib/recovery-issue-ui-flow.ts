@@ -29,9 +29,10 @@ export function shouldShowReviewRecoveryPlanAffordance(params: {
   showRecoveryBuilder: boolean;
 }): boolean {
   if (params.showRecoveryBuilder) return false;
-  if (params.issue.recoveryFlow) return false;
   if (params.issue.status !== JobIssueStatus.OPEN) return false;
-  return params.issue.severity === JobIssueSeverity.BLOCKS_WORK;
+  if (params.issue.severity !== JobIssueSeverity.BLOCKS_WORK) return false;
+  if (!params.issue.recoveryFlow) return true;
+  return params.issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT;
 }
 
 export function isRecoveryFlowInProgress(

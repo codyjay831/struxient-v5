@@ -37,6 +37,7 @@ export type JobTaskExecutionTask = {
       status: string;
       tasks: {
         id: string;
+        title: string;
         status: JobTaskStatus;
       }[];
     } | null;

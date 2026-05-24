@@ -18,6 +18,16 @@ import {
 import { Sparkles } from "lucide-react";
 import { AIRecoveryProposal, AIRecoveryProposedTask } from "@/lib/ai/recovery-proposal-schema";
 
+export type RecoveryBuilderContext = {
+  sourceTaskTitle?: string | null;
+  issueTitle?: string | null;
+  issueSeverityLabel?: string | null;
+  issueTypeLabel?: string | null;
+  recoveryGoal?: string | null;
+  jobContextLabel?: string | null;
+  stageTitle?: string | null;
+};
+
 type RecoveryTaskDraft = {
   id: string; // temporary local id
   title: string;
@@ -53,11 +63,13 @@ function toRecoveryPlanErrorMessage(error: unknown): string {
 
 export function RecoveryFlowBuilder({
   issueId,
+  context,
   onSuccess,
   onCancel,
 }: {
   issueId: string;
   jobId: string;
+  context?: RecoveryBuilderContext;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -81,10 +93,13 @@ export function RecoveryFlowBuilder({
     },
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [selectionMessage, setSelectionMessage] = useState<string | null>(null);
+  const hasUnaddedSelections = !!proposal && selectedSuggestionIds.size > 0;
 
   const handleSuggest = async () => {
     setIsSuggesting(true);
     setError(null);
+    setSelectionMessage(null);
     try {
       const res = await suggestRecoveryPathAction(issueId);
       setProposal(res.proposal);
@@ -138,6 +153,8 @@ export function RecoveryFlowBuilder({
       setTasks([...tasks, ...selectedTasks]);
     }
     setProposal(null);
+    setSelectedSuggestionIds(new Set());
+    setSelectionMessage(`Added ${selectedTasks.length} AI task${selectedTasks.length === 1 ? "" : "s"} to the plan.`);
   };
 
   const addTask = () => {
@@ -179,6 +196,12 @@ export function RecoveryFlowBuilder({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSelectionMessage(null);
+
+    if (hasUnaddedSelections) {
+      setError("Add selected AI suggestions before activating the recovery plan.");
+      return;
+    }
 
     if (tasks.some((t) => !t.title.trim())) {
       setError("All tasks must have a title.");
@@ -215,6 +238,51 @@ export function RecoveryFlowBuilder({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-3">
+        <div className="rounded-xl border border-border bg-surface/50 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-foreground-subtle">
+            <span>Recovery context</span>
+            {context?.issueSeverityLabel ? (
+              <span className="rounded-full bg-danger/10 px-2 py-0.5 text-danger">
+                {context.issueSeverityLabel}
+              </span>
+            ) : null}
+            {context?.issueTypeLabel ? (
+              <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-foreground-subtle">
+                {context.issueTypeLabel}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-2 space-y-1 text-xs text-foreground-muted">
+            {context?.sourceTaskTitle ? (
+              <p>
+                <span className="font-semibold text-foreground">Source task:</span> {context.sourceTaskTitle}
+              </p>
+            ) : null}
+            {context?.issueTitle ? (
+              <p>
+                <span className="font-semibold text-foreground">Issue:</span> {context.issueTitle}
+              </p>
+            ) : null}
+            {context?.recoveryGoal ? (
+              <p>
+                <span className="font-semibold text-foreground">Goal:</span> {context.recoveryGoal}
+              </p>
+            ) : null}
+            {(context?.jobContextLabel || context?.stageTitle) && (
+              <p>
+                <span className="font-semibold text-foreground">Job context:</span>{" "}
+                {context?.jobContextLabel}
+                {context?.stageTitle ? ` · ${context.stageTitle}` : ""}
+              </p>
+            )}
+            <p className="font-semibold text-foreground-muted">
+              No recovery tasks are created until you activate this plan.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h3 className="text-sm font-bold text-foreground">Build Recovery Plan</h3>
@@ -247,7 +315,10 @@ export function RecoveryFlowBuilder({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setProposal(null)}
+                onClick={() => {
+                  setProposal(null);
+                  setSelectedSuggestionIds(new Set());
+                }}
                 disabled={isPending}
                 className="text-[10px] font-bold text-foreground-muted hover:text-foreground"
               >
@@ -318,6 +389,9 @@ export function RecoveryFlowBuilder({
               Add Selected Tasks ({selectedSuggestionIds.size})
             </button>
           </div>
+          <p className="mt-2 text-[10px] text-foreground-muted">
+            Selected AI suggestions are not part of this plan until you add them.
+          </p>
         </div>
       )}
 
@@ -537,6 +611,12 @@ export function RecoveryFlowBuilder({
           {error}
         </div>
       )}
+      {selectionMessage && !error && (
+        <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm font-medium text-success">
+          <Check className="size-4" />
+          {selectionMessage}
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-3 border-t border-border pt-6">
         <button
@@ -547,10 +627,25 @@ export function RecoveryFlowBuilder({
         >
           Cancel
         </button>
+        {hasUnaddedSelections && (
+          <button
+            type="button"
+            onClick={addSelectedSuggestions}
+            disabled={isPending}
+            className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            Add selected tasks ({selectedSuggestionIds.size})
+          </button>
+        )}
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || hasUnaddedSelections}
           className="inline-flex items-center gap-2 rounded-lg bg-foreground px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+          title={
+            hasUnaddedSelections
+              ? "Add selected AI tasks before activating."
+              : undefined
+          }
         >
           {isPending ? (
             <>
@@ -560,7 +655,9 @@ export function RecoveryFlowBuilder({
           ) : (
             <>
               <Check className="size-3.5" />
-              Activate Recovery Plan
+              {hasUnaddedSelections
+                ? "Add selected tasks before activating"
+                : "Activate Recovery Plan"}
             </>
           )}
         </button>

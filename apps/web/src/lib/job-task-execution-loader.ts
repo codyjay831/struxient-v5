@@ -129,6 +129,7 @@ export async function loadJobTaskExecutionPayload(
               tasks: {
                 select: {
                   id: true,
+                  title: true,
                   status: true,
                 },
               },

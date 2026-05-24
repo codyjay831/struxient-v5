@@ -745,7 +745,7 @@ export async function queryWorkstationWorkItems(
         withinLaneRank,
         filterCategory: "tasks",
         reason: derivedState === "BLOCKED_BY_ISSUE" ? "Blocked by an open issue." :
-                derivedState === "BLOCKED_BY_SIGNAL" ? `Waiting on signal: ${missingSignals.join(", ")}` :
+                derivedState === "BLOCKED_BY_SIGNAL" ? "Waiting for prior required work to complete." :
                 derivedState === "NEEDS_PROOF" ? "Task needs completion proof." :
                 "Task is ready to complete.",
         nextStep: isBlocked ? "Resolve blocker." : "Complete the task.",

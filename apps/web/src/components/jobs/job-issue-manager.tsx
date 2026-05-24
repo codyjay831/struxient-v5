@@ -33,7 +33,7 @@ import { formatJobTaskStatus, jobTaskStatusBadgeTone } from "@/lib/job-display";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { RecoveryFlowBuilder } from "./recovery-flow-builder";
+import { RecoveryFlowBuilder, type RecoveryBuilderContext } from "./recovery-flow-builder";
 
 type Issue = {
   id: string;
@@ -181,6 +181,13 @@ function IssueCard({
   const [note, setNote] = useState("");
   const [isResuming, setIsResuming] = useState(false);
   const [isForceResolving, setIsForceResolving] = useState(false);
+  const recoveryContext: RecoveryBuilderContext = {
+    sourceTaskTitle: issue.jobTask?.title ?? issue.jobStage?.title ?? null,
+    issueTitle: issue.title,
+    issueSeverityLabel: formatJobIssueSeverity(issue.severity),
+    issueTypeLabel: formatJobIssueType(issue.type),
+    recoveryGoal: `Resolve "${issue.title}" and resume the blocked path.`,
+  };
 
   const hasRecoveryFlow = !!issue.recoveryFlow;
   const recoveryTasks = issue.recoveryFlow?.tasks || [];
@@ -357,6 +364,7 @@ function IssueCard({
               <RecoveryFlowBuilder
                 issueId={issue.id}
                 jobId={jobId}
+                context={recoveryContext}
                 onSuccess={() => setIsBuildingFlow(false)}
                 onCancel={() => setIsBuildingFlow(false)}
               />

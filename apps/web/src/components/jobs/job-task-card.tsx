@@ -60,6 +60,7 @@ export function JobTaskCard({
   const issuesWithRecovery = task.issues.filter(
     (i) => i.recoveryFlow && i.recoveryFlow.status === "ACTIVE"
   );
+  const primaryBlockingIssue = task.issues[0];
   const hasActiveRecovery = issuesWithRecovery.length > 0;
   const primaryRecoveryIssue = issuesWithRecovery[0];
   const recoveryTasks = primaryRecoveryIssue?.recoveryFlow?.tasks || [];
@@ -67,10 +68,6 @@ export function JobTaskCard({
   const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
   const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
   
-  const missingSignals = [
-    ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
-  ];
-
   const payload = {
     jobId,
     jobStageId,
@@ -126,10 +123,12 @@ export function JobTaskCard({
                 )}
                 {isBlockedByIssue && !paymentHold && (
                   <div className="space-y-1">
-                    <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
-                      <Lock className="size-3 shrink-0" />
-                      Blocked by issue
-                    </p>
+                    {primaryBlockingIssue?.title ? (
+                      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
+                        <Lock className="size-3 shrink-0" />
+                        Issue: {primaryBlockingIssue.title}
+                      </p>
+                    ) : null}
                     {hasActiveRecovery && (
                       <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-success">
                         <Zap className="size-3 shrink-0" />
@@ -141,7 +140,7 @@ export function JobTaskCard({
                 {isBlockedBySignal && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-accent">
                     <Zap className="size-3 shrink-0" />
-                    Waiting on prior work: {missingSignals.join(", ")}
+                    Waiting for: prior required work to complete
                   </p>
                 )}
               </div>
