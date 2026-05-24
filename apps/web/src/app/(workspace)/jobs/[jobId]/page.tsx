@@ -41,6 +41,7 @@ import {
   isExecutionHealthBannerEnabled,
 } from "@/lib/job-execution-health";
 import { JobExecutionHealthBanner } from "@/components/jobs/job-execution-health-banner";
+import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
 
 export const dynamic = "force-dynamic";
 
@@ -49,16 +50,20 @@ const listLinkClass =
 
 export default async function JobDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ jobId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { jobId } = await params;
+  const parsedSearchParams = await searchParams;
   const id = jobId.trim();
   if (!id) {
     notFound();
   }
 
   const ctx = await getRequestContextOrThrow();
+  const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
 
   const [job, liveSignals] = await Promise.all([
     db.job.findFirst({
@@ -484,6 +489,7 @@ export default async function JobDetailPage({
         jobId={job.id}
         initialIssues={job.issues}
         stages={job.stages}
+        createIssueIntent={createIssueIntent}
       />
 
       <JobPaymentManager

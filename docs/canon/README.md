@@ -21,6 +21,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | File | Contents |
 |------|----------|
 | [overview.md](./overview.md) | Mission, market, strategic edge, pillars, document map |
+| [product-philosophy.md](./product-philosophy.md) | Flow keeper thesis, execution-before-commodity phasing, opinionated automation, anti-patterns |
 | [conceptual-model.md](./conceptual-model.md) | Entities, relationships, lifecycle intent, data gravity, **auth vs permissions** |
 | [domains-and-boundaries.md](./domains-and-boundaries.md) | Domains, seams, internal vs portal, template vs instance |
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes (line-only vs line+stages+tasks), quote-time vs post-sign planning, maturity curve |
@@ -39,7 +40,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 
 ## Reading order (suggested)
 
-1. `overview.md` + `lineage-and-prior-art.md` (context from earlier repos)  
+1. `overview.md` + [product-philosophy.md](./product-philosophy.md) + `lineage-and-prior-art.md` (context from earlier repos)  
 2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `quote-truth-and-checkpoints.md`  
 3. `conceptual-model.md` + `domains-and-boundaries.md` + `templates-and-execution-planning.md` + `execution-engine-canon.md`  
 4. `experience-canon-lead-to-workstation.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  

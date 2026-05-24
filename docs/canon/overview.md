@@ -8,6 +8,8 @@ Struxient v5 is a **construction management product aimed primarily at trades an
 
 The product thesis: **the quote defines what was sold; tasks and workflow define what must happen; the Workstation tells people what to do next.** v5 intentionally connects **sales artifacts** (quotes, approvals, money expectations) to **execution artifacts** (jobs, tasks, dependencies, corrections) without collapsing them into a single rigid project-management paradigm.
 
+**Flow keeper (authoritative):** Struxient accepts **messy human input** and returns **clear execution flow**—office work (invoices, reminders, logs) as **automated side effects**, not a second job. Full philosophy: [product-philosophy.md](./product-philosophy.md).
+
 ## Strategic edge (v5)
 
 The differentiated corner of the product is **tasks and execution**, not generic CRM or document storage.
@@ -18,7 +20,7 @@ The differentiated corner of the product is **tasks and execution**, not generic
 
 ## Audience and posture
 
-- **Primary operators:** office and field roles at trade and service companies (estimators, CSRs, dispatch, leads, owners, technicians).
+- **Primary operators:** office and field roles at **trade and service companies**, with emphasis on **small crews** where the owner often sells and the same people execute (estimators, CSRs, dispatch, leads, owners, technicians).
 - **Secondary audience:** **customers** via a **portal** that exposes only what the company chooses—never the full internal operational graph by default.
 
 The system must scale **behavioral complexity** with company maturity: **simple paths stay fast**; **structured paths stay honest** (tasks, dependencies, ownership visible).
@@ -37,6 +39,7 @@ What to **salvage from which line** (and what v5 **rejects**) is summarized in [
 
 | Document | Use when you need… |
 |----------|-------------------|
+| [product-philosophy.md](./product-philosophy.md) | **Why** Struxient exists: flow keeper, phasing, automation posture, field intelligence intent |
 | [glossary.md](./glossary.md) | Shared language; internal vs customer-facing naming |
 | [conceptual-model.md](./conceptual-model.md) | Entities, relationships, lifecycle intent; authN vs authZ |
 | [domains-and-boundaries.md](./domains-and-boundaries.md) | Where responsibilities split; internal vs portal seams |
@@ -66,6 +69,7 @@ Struxient v5 should **connect quoting to execution without becoming overly rigid
 3. **Adaptive structure** — Dependencies and ordering exist where needed; detours, pauses, and return paths are supported without discarding intent.
 4. **Appropriate disclosure** — Internal richness (crew, parts, internal notes) coexists with customer-safe presentations.
 5. **Payment legibility** — Schedules and blockers are understandable internally and in the portal.
+6. **Forgiving capture, enforced flow** — Messy intake and field moments become structured facts; the engine keeps the job moving (see [product-philosophy.md](./product-philosophy.md)).
 
 ## Explicit non-scope of this canon
 

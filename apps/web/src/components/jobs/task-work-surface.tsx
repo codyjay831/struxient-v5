@@ -32,13 +32,14 @@ import {
 } from "@/app/(workspace)/jobs/attachment-actions";
 import { createJobIssueAction } from "@/app/(workspace)/jobs/job-issue-actions";
 import { resolveIssueAndResumeAction } from "@/app/(workspace)/jobs/recovery-actions";
+import { removeJobEventAction } from "@/app/(workspace)/jobs/job-event-actions";
 import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-display";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
-  shouldAutoOpenRecoveryPlanAfterIssueCreate,
   getRecoveryProgressMessage,
+  shouldAutoOpenRecoveryPlanAfterIssueCreate,
   shouldShowResumeOriginalPathAction,
   shouldShowReviewRecoveryPlanAffordance,
 } from "@/lib/recovery-issue-ui-flow";
@@ -63,6 +64,14 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import {
+  CANCEL_FIELD_HOLD_CONFIRM_BODY,
+  CANCEL_FIELD_HOLD_CONFIRM_TITLE,
+  FIELD_HOLD_BLOCKED_BY_ISSUE_COPY,
+  FIELD_HOLD_LIFECYCLE_COPY,
+  isFieldEventTaskTitle,
+  shouldShowCancelFieldHold,
+} from "@/lib/field-event-ui";
 
 export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
   /** When true, completing the task clears Workstation `selectedId` / `selectedKind` and refreshes. */
@@ -77,6 +86,18 @@ const addressPrimaryBtnClass =
 
 const actionBtnBaseClass =
   "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold transition-all disabled:opacity-50 sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs sm:font-semibold";
+
+function formatDependencyLabel(raw: string): string {
+  if (/^[A-Z0-9]{12,}$/.test(raw)) {
+    return "Required Prior Step";
+  }
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .trim();
+}
 
 export function TaskWorkSurface({
   jobId,
@@ -141,6 +162,8 @@ export function TaskWorkSurface({
   const [reportType, setReportType] = useState<JobIssueType>(JobIssueType.OTHER);
   const [reportSeverity, setReportSeverity] = useState<JobIssueSeverity>(JobIssueSeverity.BLOCKS_WORK);
   const [isReporting, setIsReporting] = useState(false);
+  const [showCancelHoldConfirm, setShowCancelHoldConfirm] = useState(false);
+  const isFieldHoldTask = isFieldEventTaskTitle(task.title);
 
   const refreshAfterMutation = useCallback(() => {
     router.refresh();
@@ -188,6 +211,7 @@ export function TaskWorkSurface({
   const isBlockedBySignal = derivedState === "BLOCKED_BY_SIGNAL";
   const isBlocked = isBlockedByIssue || isBlockedBySignal;
   const needsProof = derivedState === "NEEDS_PROOF";
+  const showCancelFieldHold = shouldShowCancelFieldHold({ isFieldHoldTask, isCompleted });
 
   const taskIssueRefs: TaskIssueRef[] = task.issues.map((issue) => ({
     id: issue.id,
@@ -366,6 +390,25 @@ export function TaskWorkSurface({
     }
   };
 
+  const handleCancelFieldHold = () => {
+    setActionMessage(null);
+    startTransition(async () => {
+      const result = await removeJobEventAction(jobId, task.id);
+      if (result.error) {
+        setActionMessage({ tone: "error", text: result.error });
+        setShowCancelHoldConfirm(false);
+        return;
+      }
+
+      setShowCancelHoldConfirm(false);
+      refreshAfterMutation();
+      if (clearWorkstationSelectionOnComplete) {
+        clearWorkstationSelection();
+      }
+      onClose?.();
+    });
+  };
+
   const handleToggleChecklist = (itemId: string, completed: boolean) => {
     startTransition(async () => {
       const result = await toggleJobTaskChecklistItemAction(task.id, itemId, completed);
@@ -383,6 +426,7 @@ export function TaskWorkSurface({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-bold tracking-tight text-foreground">{task.title}</h3>
+          {isFieldHoldTask ? <StatusBadge label="Field hold" tone="warning" /> : null}
           <StatusBadge label={taskStateLabel(derivedState)} tone={taskStateTone(derivedState)} />
         </div>
         {showCloseControl && onClose && (
@@ -471,6 +515,53 @@ export function TaskWorkSurface({
         </div>
       )}
 
+      {showCancelFieldHold && (
+        <div className="space-y-3 rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <p className="text-xs leading-relaxed text-foreground-muted">{FIELD_HOLD_LIFECYCLE_COPY}</p>
+          {isFieldHoldTask && isBlockedByIssue ? (
+            <p className="text-xs font-semibold text-danger-strong">{FIELD_HOLD_BLOCKED_BY_ISSUE_COPY}</p>
+          ) : null}
+          {!showCancelHoldConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowCancelHoldConfirm(true)}
+              disabled={isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-danger hover:bg-danger/5 disabled:opacity-50"
+            >
+              Cancel field hold
+            </button>
+          ) : (
+            <div className="space-y-3 rounded-lg border border-danger/20 bg-background/80 p-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">{CANCEL_FIELD_HOLD_CONFIRM_TITLE}</p>
+                <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                  {CANCEL_FIELD_HOLD_CONFIRM_BODY}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelHoldConfirm(false)}
+                  disabled={isPending}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelFieldHold}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-danger px-3 py-1.5 text-xs font-bold text-background hover:bg-danger/90 disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  {isPending ? "Cancelling…" : "Cancel field hold"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {requirements.checklist && requirements.checklist.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
@@ -535,6 +626,13 @@ export function TaskWorkSurface({
 
       {isBlocked && (
         <div className="space-y-4">
+          {isFieldHoldTask && isBlockedByIssue ? (
+            <div className="rounded-xl border border-danger/30 bg-danger/5 p-3">
+              <p className="text-xs font-semibold text-danger-strong">
+                {FIELD_HOLD_BLOCKED_BY_ISSUE_COPY}
+              </p>
+            </div>
+          ) : null}
           {task.issues.filter((i) => i.status === JobIssueStatus.OPEN).map((issue) => {
             const recoveryTasks = issue.recoveryFlow?.tasks || [];
             const totalRecoveryTasks = recoveryTasks.length;
@@ -694,7 +792,7 @@ export function TaskWorkSurface({
               <Zap className="mt-0.5 size-5 shrink-0 text-accent" />
               <div className="min-w-0 flex-1">
                 <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                  Waiting for: prior required work to complete.
+                  Waiting for: {missingSignals.map(formatDependencyLabel).join(", ")}
                 </p>
               </div>
             </div>

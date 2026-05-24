@@ -158,8 +158,20 @@ Features that would push expressive depth into stages (custom workflow designers
 
 ---
 
+## 7. Field-informed plan adjustment (post-activation)
+
+**Canon**
+
+- §4 already treats **post-activation ops edits** as normal. This section locks **why**: the field teaches what the plan should have been.
+- **On-the-job intelligence**—photos, checklist state, notes, daily logs, visits, issues, activity—is input to **understanding** and to **human-approved** adjustments on the job graph—not a separate “documentation only” silo.
+- **AI** may eventually propose additions or rewiring from that intel; **apply** boundaries match quote and recovery paths. See [execution-engine-canon.md](./execution-engine-canon.md) §12 and [product-philosophy.md](./product-philosophy.md) §7.
+- **Sold scope** still changes only through commercial control paths; internal plan edits are operational.
+
+---
+
 *Canon update (2026-05-05): Clarified template granularities (line-item-only vs line item + stages/tasks), quote-time vs post-sign execution planning, draft-vs-sold separation intent, and template maturity curve.*  
 *Canon update (2026-05-06): Execution Review as post-sign / pre-activation gate; commercial checkpoints vs future execution/activation proof; post-activation job edits remain normal operations.*  
 *Canon update (2026-05-06): After commercial **Approved**, internal quote-line execution planning may still be edited until **job activation**—per product rules; commercial checkpoints remain commercial-only.*  
 *Canon update (2026-05-06): Activation copies execution into `Job` / `JobStage` / `JobTask` runtime rows (one job per quote); later quote/template edits do not mutate already-activated job tasks. Templates remain copy-forward, never live-linked into runtime.*  
-*Canon update (2026-05-06): §6 — MVP stage-preset stance. Canon phrase: **“Stages are presets and containers. Tasks are the execution power layer.”** Default MVP preset **Standard Project** (Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout). Reserved future preset **Service Work** for smaller service execution (same core model; no separate task engine). Architecture must stay preset-flexible; no kanban or placement language; no workflow designer before users can quote or plan.*
+*Canon update (2026-05-06): §6 — MVP stage-preset stance. Canon phrase: **“Stages are presets and containers. Tasks are the execution power layer.”** Default MVP preset **Standard Project** (Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout). Reserved future preset **Service Work** for smaller service execution (same core model; no separate task engine). Architecture must stay preset-flexible; no kanban or placement language; no workflow designer before users can quote or plan.*  
+*Canon update (2026-05-25): §7 — field-informed plan adjustment post-activation; cross-ref [product-philosophy.md](./product-philosophy.md) and [execution-engine-canon.md](./execution-engine-canon.md) §12.*

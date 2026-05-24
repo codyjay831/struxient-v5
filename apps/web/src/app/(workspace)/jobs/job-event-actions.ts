@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { JobActivityType, JobTaskStatus, LineItemTemplateTaskSource } from "@prisma/client";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import {
+  getFieldEventSignal,
+  isRemovableFieldEventTask,
+  removeEventSignalFromRequires,
+} from "@/lib/field-event-ui";
 import { retractSignal } from "@/lib/signal-bus";
 import { revalidatePath } from "next/cache";
 
@@ -124,13 +129,17 @@ export async function removeJobEventAction(
 
     if (!task) return { error: "Event task not found." };
 
-    const eventSignal = task.providesSignals.find(s => s.startsWith("event:"));
+    if (!isRemovableFieldEventTask(task.title, task.providesSignals)) {
+      return { error: "Only active field hold tasks can be cancelled." };
+    }
+
+    const eventSignal = getFieldEventSignal(task.providesSignals);
 
     await db.$transaction(async (tx) => {
       // 1. Remove the requirement from all tasks in the job
       if (eventSignal) {
         const affectedTasks = await tx.jobTask.findMany({
-          where: { jobId, requiresSignals: { has: eventSignal } },
+          where: { jobId, job: { organizationId }, requiresSignals: { has: eventSignal } },
           select: { id: true, requiresSignals: true },
         });
 
@@ -138,7 +147,7 @@ export async function removeJobEventAction(
           await tx.jobTask.update({
             where: { id: t.id },
             data: {
-              requiresSignals: t.requiresSignals.filter(s => s !== eventSignal),
+              requiresSignals: removeEventSignalFromRequires(t.requiresSignals, eventSignal),
             },
           });
         }

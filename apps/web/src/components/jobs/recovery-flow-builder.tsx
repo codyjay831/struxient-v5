@@ -379,18 +379,11 @@ export function RecoveryFlowBuilder({
               </div>
             ))}
           </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={addSelectedSuggestions}
-              disabled={selectedSuggestionIds.size === 0 || isPending}
-              className="rounded bg-primary px-3 py-1.5 text-[10px] font-bold text-primary-contrast hover:opacity-90 disabled:opacity-50"
-            >
-              Add Selected Tasks ({selectedSuggestionIds.size})
-            </button>
-          </div>
           <p className="mt-2 text-[10px] text-foreground-muted">
             Selected AI suggestions are not part of this plan until you add them.
+          </p>
+          <p className="mt-1 text-[10px] text-foreground-subtle">
+            Review selections here, then use the footer action to add them to the plan.
           </p>
         </div>
       )}

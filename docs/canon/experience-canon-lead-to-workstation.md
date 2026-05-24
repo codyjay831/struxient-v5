@@ -217,6 +217,17 @@ Quotes and tasks create a **clear executable path** that survives real life.
 
 Support **Signals**, but avoid brittleness where normal change invalidates the plan. The posture: **enough structure** for clarity, **enough flexibility** for reality. AI acts as a "Secretary" to handle the boring manual wiring.
 
+### Flow keeper — forgiving capture, enforced flow
+
+Operators **dislike office work**; field capture is often **messy**—and that is expected. The product must:
+
+- Accept **low-friction input** (short descriptions, photos, voice-to-text future, half-filled lead forms).  
+- Convert capture into **engine facts** (tasks, issues, attachments, activity)—not orphan notes.  
+- Keep field interactions **short**; invoices, reminders, and log rollups are **side effects** of execution facts, controlled by **org settings**—not a user-built trigger system. See [product-philosophy.md](./product-philosophy.md) and [locked-decisions-v1.md](./locked-decisions-v1.md) §16.  
+- Surface **next action** on Workstation so nobody maintains a board for the system to work.
+
+**Anti-pattern:** Requiring clean data entry before the user gets value. **Anti-pattern:** Gallery software where photos never gate work or inform proposals.
+
 ---
 
 ## 7. Events, interruptions, and corrections
@@ -417,4 +428,5 @@ See [overview.md](./overview.md). This experience canon exists to keep planning 
 
 *Canon update (2026-05-05): System signals vs user tags (§2); construction issue MVP lifecycle (§7); activation MVP behavior (§10); payment schedule vs gate vs task (§12).*  
 *Canon update (2026-05-06): §10 activation — checkpoint proof vs CO / activity wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*
-*Canon update (2026-05-13): Signals recast as the primary readiness engine; AI Secretary introduced; Detours renamed to Events; Stages moved to org-scoped table.*
+*Canon update (2026-05-13): Signals recast as the primary readiness engine; AI Secretary introduced; Detours renamed to Events; Stages moved to org-scoped table.*  
+*Canon update (2026-05-25): §6 — flow keeper (forgiving capture, enforced flow); cross-ref [product-philosophy.md](./product-philosophy.md).*

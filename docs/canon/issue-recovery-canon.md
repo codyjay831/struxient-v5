@@ -28,3 +28,13 @@ Recovery tasks are normal `JobTask` rows and must carry `recoveryFlowId`.
 ## Scope notes
 
 This canon decision does not change schema by itself and does not redesign workstation ranking, task model, stage signals, or AI review flow.
+
+## Field Event vs Issue Recovery
+
+- **Field Event** is a lightweight signal dependency gate.
+- Field Event creates an `EVENT:` task and blocks selected tasks by signal dependency (`requiresSignals` / `providesSignals`).
+- **JobIssue + JobRecoveryFlow** is the durable problem/recovery lifecycle.
+- Use Field Event for simple holds where completing one hold task should unblock downstream work.
+- Use Issue Recovery when there is a problem, correction, failed work, failed inspection, field condition, customer change, material issue, or any multi-step recovery.
+- Field Event has activity audit (`EVENT_CREATED` / `EVENT_RESOLVED`), but it does not carry recovery lifecycle semantics.
+- Recovery-shaped events must funnel into `JobIssue` / `JobRecoveryFlow`, not `EVENT:` tasks.

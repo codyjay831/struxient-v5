@@ -96,7 +96,7 @@ When mining v4, copy **principles and scenarios** into v5 discussions; do **not*
 
 ## Product positioning sentence (v5)
 
-**Jobber-class simplicity** on everyday objects (customers, quotes, schedule-ish views, getting paid) **plus** a **meaningfully better execution path**: tasks, ownership, blockers, and **event-safe** corrections that always land back in the **Workstation** as **clear next actions**.
+**Jobber-class simplicity** on everyday objects (customers, quotes, schedule-ish views, getting paid) **plus** a **meaningfully better execution path**: tasks, ownership, blockers, and **event-safe** corrections that always land back in the **Workstation** as **clear next actions**—as the **flow keeper** for messy crews who hate office work ([product-philosophy.md](./product-philosophy.md)).
 
 ---
 
@@ -109,9 +109,11 @@ These are **explicit v5 priorities**, not generic startup goals:
 | Clear **quote → execution → workstation** path | `experience-canon-lead-to-workstation.md`, `conceptual-model.md`, `invariants-and-decision-rules.md` (I3, I14–I15) |
 | **Flexible** execution planning | `templates-and-execution-planning.md`, I14–I15 |
 | **Construction issues / events** without failure modes | `experience-canon-lead-to-workstation.md` §7, `invariants-and-decision-rules.md` I16 |
+| **Flow keeper / messy capture → enforced flow** | `product-philosophy.md`, `experience-canon-lead-to-workstation.md` §6 |
 
 ---
 
 *Canon update (2026-05-05): Added lineage guidance tying v5 priorities to prior Struxient folders and recorded v2 as preferred UI/UX baseline.*  
 *Canon update (2026-05-05): Clarified v2 baseline scope (UI/UX inspiration; not route/auth/schema mandate; v5 wins on conflict).*  
-*Canon update (2026-05-05): Named `Struxient_Full_Cursor` as the first (genesis) version; corrected folder naming in scope.*
+*Canon update (2026-05-05): Named `Struxient_Full_Cursor` as the first (genesis) version; corrected folder naming in scope.*  
+*Canon update (2026-05-25): Positioning sentence — flow keeper link; north-star row for product philosophy.*

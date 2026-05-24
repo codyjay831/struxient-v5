@@ -39,6 +39,13 @@ import {
   loadScheduleAnchorsByIds,
 } from "./job-payment-readiness";
 import { rank, WorkstationLane } from "./workstation/rank";
+import {
+  deriveBlockedTaskRecoveryRoute,
+  deriveIssueRecoveryRoute,
+  isRecoveryRelatedHealthAction,
+  mapHealthActionToWorkstationRoute,
+  type WorkstationRecoveryActionKind,
+} from "./workstation-recovery-routing";
 
 export type WorkstationWorkItemKind =
   | "lead"
@@ -103,6 +110,11 @@ export type WorkstationWorkItem = {
   /** Derived job execution health (Slice 5). */
   executionHealthState?: ExecutionHealthPrimaryState;
   executionHealthHeadline?: string;
+  /** Recovery routing (Slice 7A) — panel resolves via action* fields, not work item id. */
+  actionKind?: WorkstationRecoveryActionKind;
+  actionLabel?: string;
+  actionIssueId?: string;
+  actionTaskId?: string;
 };
 
 export type WorkstationSummary = {
@@ -113,6 +125,18 @@ export type WorkstationSummary = {
   scheduledTodayCount: number;
   dailyLogsToReviewCount: number;
 };
+
+function formatDependencyLabel(raw: string): string {
+  if (/^[A-Z0-9]{12,}$/.test(raw)) {
+    return "Required Prior Step";
+  }
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .trim();
+}
 
 export async function queryWorkstationWorkItems(
   organizationId: string,
@@ -416,11 +440,21 @@ export async function queryWorkstationWorkItems(
           status: true,
           severity: true,
           jobStageId: true,
+          jobTaskId: true,
+          createdAt: true,
           recoveryFlow: {
             select: {
               id: true,
               status: true,
-              tasks: { select: { id: true, status: true } },
+              tasks: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  recoveryFlowOrder: true,
+                },
+                orderBy: { recoveryFlowOrder: "asc" },
+              },
             },
           },
         },
@@ -526,10 +560,42 @@ export async function queryWorkstationWorkItems(
       "STALE_RECOVERY_FLOW",
       "BROKEN_REFERENCE",
     ];
+    const blockingIssueCandidates = job.issues.map((i) => ({
+      id: i.id,
+      jobTaskId: i.jobTaskId,
+      jobStageId: i.jobStageId,
+      createdAt: i.createdAt,
+      status: i.status,
+      severity: i.severity,
+      recoveryFlow: i.recoveryFlow
+        ? {
+            status: i.recoveryFlow.status,
+            tasks: i.recoveryFlow.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              recoveryFlowOrder: t.recoveryFlowOrder,
+            })),
+          }
+        : null,
+    }));
+
     if (
       healthWarningStates.includes(executionHealth.primaryState) ||
       !executionHealth.invariantSatisfied
     ) {
+      const recoveryIssueId =
+        executionHealth.blockers.find((b) => b.kind === "recovery")?.entityId ??
+        executionHealth.blockers.find((b) => b.kind === "issue")?.entityId;
+      const healthRoute = isRecoveryRelatedHealthAction(
+        executionHealth.recommendedNextAction.type,
+      )
+        ? mapHealthActionToWorkstationRoute(
+            executionHealth.recommendedNextAction,
+            recoveryIssueId,
+          )
+        : null;
+
       const { lane, withinLaneRank } = rank(
         {
           kind: "investigate",
@@ -554,7 +620,7 @@ export async function queryWorkstationWorkItems(
         withinLaneRank,
         filterCategory: "jobs",
         reason: executionHealth.detail,
-        nextStep: executionHealth.recommendedNextAction.label,
+        nextStep: healthRoute?.nextStep ?? executionHealth.recommendedNextAction.label,
         recordId: job.id,
         parentRecordId: job.customerId || job.leadId || undefined,
         parentLabel: primaryJobIdentity,
@@ -562,6 +628,10 @@ export async function queryWorkstationWorkItems(
         updatedAt: job.updatedAt,
         executionHealthState: executionHealth.primaryState,
         executionHealthHeadline: executionHealth.headline,
+        actionKind: healthRoute?.actionKind,
+        actionLabel: healthRoute?.actionLabel,
+        actionIssueId: healthRoute?.actionIssueId,
+        actionTaskId: healthRoute?.actionTaskId,
       });
     }
 
@@ -732,6 +802,11 @@ export async function queryWorkstationWorkItems(
 
       const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
 
+      const taskRecoveryRoute =
+        derivedState === "BLOCKED_BY_ISSUE"
+          ? deriveBlockedTaskRecoveryRoute(task.id, jobStage.id, blockingIssueCandidates)
+          : null;
+
       items.push({
         id: `task-${task.id}`,
         kind: "task",
@@ -745,10 +820,11 @@ export async function queryWorkstationWorkItems(
         withinLaneRank,
         filterCategory: "tasks",
         reason: derivedState === "BLOCKED_BY_ISSUE" ? "Blocked by an open issue." :
-                derivedState === "BLOCKED_BY_SIGNAL" ? "Waiting for prior required work to complete." :
+                derivedState === "BLOCKED_BY_SIGNAL" ? `Waiting for: ${missingSignals.map(formatDependencyLabel).join(", ")}` :
                 derivedState === "NEEDS_PROOF" ? "Task needs completion proof." :
                 "Task is ready to complete.",
-        nextStep: isBlocked ? "Resolve blocker." : "Complete the task.",
+        nextStep: taskRecoveryRoute?.nextStep ??
+          (isBlocked ? "Resolve blocker." : "Complete the task."),
         recordId: task.id,
         parentRecordId: job.id,
         parentLabel: primaryJobIdentity,
@@ -758,6 +834,10 @@ export async function queryWorkstationWorkItems(
         missingSignals: missingSignals.length > 0 ? missingSignals : undefined,
         executionHealthState: isPrimary ? executionHealth.primaryState : undefined,
         executionHealthHeadline: isPrimary ? executionHealth.headline : undefined,
+        actionKind: taskRecoveryRoute?.actionKind,
+        actionLabel: taskRecoveryRoute?.actionLabel,
+        actionIssueId: taskRecoveryRoute?.actionIssueId,
+        actionTaskId: taskRecoveryRoute?.actionTaskId,
       });
     }
 
@@ -814,17 +894,19 @@ export async function queryWorkstationWorkItems(
         },
       },
       recoveryFlow: {
-        include: {
+        select: {
+          status: true,
           tasks: {
             orderBy: { recoveryFlowOrder: "asc" },
             select: {
               id: true,
               title: true,
               status: true,
-            }
-          }
-        }
-      }
+              recoveryFlowOrder: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -834,25 +916,35 @@ export async function queryWorkstationWorkItems(
     const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
     const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
 
-    let nextStep = "Review and resolve issue.";
     let priority: WorkstationWorkItemPriority = "high";
+
+    const recoveryRoute = deriveIssueRecoveryRoute({
+      id: issue.id,
+      status: issue.status,
+      severity: issue.severity,
+      recoveryFlow: issue.recoveryFlow
+        ? {
+            status: issue.recoveryFlow.status,
+            tasks: issue.recoveryFlow.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              recoveryFlowOrder: t.recoveryFlowOrder,
+            })),
+          }
+        : null,
+    });
 
     if (issue.recoveryFlow) {
       const flow = issue.recoveryFlow;
       if (flow.status === JobRecoveryFlowStatus.DRAFT) {
-        nextStep = "Draft recovery plan needs review/activation.";
         priority = "critical";
-      } else if (flow.status === JobRecoveryFlowStatus.ACTIVE) {
-        const totalTasks = flow.tasks.length;
-        const completedTasks = flow.tasks.filter(t => t.status === JobTaskStatus.DONE).length;
-        const nextTask = flow.tasks.find(t => t.status !== JobTaskStatus.DONE);
-
-        if (nextTask) {
-          nextStep = `Recovery Step ${completedTasks + 1}/${totalTasks}: ${nextTask.title}`;
-        } else if (totalTasks > 0) {
-          nextStep = "Recovery complete. Resume original path.";
-          priority = "critical";
-        }
+      } else if (
+        flow.status === JobRecoveryFlowStatus.ACTIVE &&
+        flow.tasks.length > 0 &&
+        flow.tasks.every((t) => t.status === JobTaskStatus.DONE)
+      ) {
+        priority = "critical";
       }
     }
 
@@ -876,12 +968,16 @@ export async function queryWorkstationWorkItems(
       withinLaneRank,
       filterCategory: "issues",
       reason: issue.description || "Blocking issue needs resolution.",
-      nextStep,
+      nextStep: recoveryRoute.nextStep,
       recordId: issue.id,
       parentRecordId: issue.jobId,
       parentLabel: primaryJobIdentity,
-      href: `/jobs/${issue.jobId}`,
+      href: `/jobs/${issue.jobId}#job-issues`,
       updatedAt: issue.updatedAt,
+      actionKind: recoveryRoute.actionKind,
+      actionLabel: recoveryRoute.actionLabel,
+      actionIssueId: recoveryRoute.actionIssueId,
+      actionTaskId: recoveryRoute.actionTaskId,
     });
   }
 

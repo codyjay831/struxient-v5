@@ -5,11 +5,12 @@ Daily Job Logs are the official records of "what happened" on a job site for a s
 
 ## Core Principles
 1. **Truthful History**: A Daily Job Log records historical facts (activity, events, conditions).
-2. **Separation of Concerns**: 
+2. **Intelligence input**: Logs aggregate on-the-job facts for staff narrative today; future versions may inform **plan adjustment proposals** (human-approved). See [execution-engine-canon.md](./execution-engine-canon.md) §12 and [product-philosophy.md](./product-philosophy.md) §7.
+3. **Separation of Concerns**:
    - **Daily Job Log** = What happened (narrative).
    - **Signal Bus** = Operational state (readiness).
    - **Tasks / Blockers / Actions** = What must happen next.
-3. **Human Review**: Staff must review and approve logs before they are considered "official" (REVIEWED status).
+4. **Human Review**: Staff must review and approve logs before they are considered "official" (REVIEWED status).
 
 ## V1 Implementation (Deterministic)
 The V1 implementation is strictly deterministic and human-reviewed:
@@ -26,7 +27,7 @@ The V1 implementation is strictly deterministic and human-reviewed:
 ## Future Roadmap (Intelligence Layer)
 Future versions of Daily Job Logs will expand the Intelligence Layer:
 - **AI-Assisted Summarization**: Using LLMs to turn messy activity (notes, photos, call transcripts) into cohesive narratives.
-- **Suggested Operational Consequences**: The system may suggest "what's next" actions based on the log (e.g., "Inspection failed, suggest follow-up task").
+- **Suggested Operational Consequences**: The system may suggest "what's next" actions based on the log (e.g., "Inspection failed, suggest follow-up task")—**generate → review → apply**; same boundary as recovery and quote AI.
 - **Action Separation**: Suggested actions remain separate from the official log until approved by a human.
 - **Customer Transparency**: Selective sharing of reviewed logs with customers via the portal.
 - **Evidence Integration**: Direct linking of photos, documents, and measurements to log entries.
@@ -35,3 +36,7 @@ Future versions of Daily Job Logs will expand the Intelligence Layer:
 - Use truthful language: "Draft from recorded activity", "Review before marking official".
 - Avoid "coming soon" clutter.
 - Maintain a compact, professional interface that emphasizes the audit trail.
+
+---
+
+*Canon update (2026-05-25): Intelligence input principle; future plan-adjustment cross-refs to [product-philosophy.md](./product-philosophy.md) and [execution-engine-canon.md](./execution-engine-canon.md) §12.*

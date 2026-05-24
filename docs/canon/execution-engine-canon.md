@@ -219,6 +219,7 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
 - **Preserve lineage on apply:** set `sourceTaskTemplateId` when the proposal selected a reusable template (`createQuoteLineExecutionTasksFromProposal`).
 - **Recovery AI** (`suggestRecoveryPathAction`) returns ephemeral proposals only; materialization still goes through atomic recovery apply.
 - **No DB-backed AI proposal storage** in v5 MVP—proposals are ephemeral until applied.
+- **Field intelligence (canon intent):** future AI paths for job-time plan adjustment should consume on-the-job facts—attachments, checklist state, `JobActivity`, daily logs, visit records—not only issue text and task titles. Same **generate → review → apply** boundary. See §12 and [product-philosophy.md](./product-philosophy.md).
 
 **Canonical code:** `ai-service.ts`, `quote-ai-execution-plan.ts`, `ai-execution-plan-corrections.ts`, `quote-line-execution-actions.ts`
 
@@ -242,7 +243,22 @@ Full implementation table: [`docs/source-of-truth-map.md`](../source-of-truth-ma
 
 ---
 
-## 12. Explicit non-canon / deferred
+## 12. Execution plan adapts to job realities
+
+**Canon**
+
+- **Activation materializes a plan, not a contract with the field.** Quote-time and Execution Review planning are the best hypothesis at handoff. After activation, **job tasks and signals** remain the **operational home** for day-to-day work—editable for real-world ops without rewriting sold scope unless a **controlled commercial path** (change order, approved change record) applies. See [templates-and-execution-planning.md](./templates-and-execution-planning.md) §7 and [product-philosophy.md](./product-philosophy.md).
+- **On-the-job intelligence**—photos, files, checklist progress, completion notes, daily logs, visits, issues, and `JobActivity`—are **first-class inputs** to understanding progress and surprise. They are not decorative attachments or parallel note systems.
+- **Adjustment, not autopilot.** AI may **propose** job-level plan changes (new tasks, signal wiring, recovery paths, scope-realization work) informed by field intel. Humans **review and apply**. Same boundary as quote AI and recovery AI: **generate → review → apply**.
+- **Commercial boundary unchanged.** Adapting the **internal execution plan** does not change **sold scope** or customer-facing monetary truth without explicit change-order / checkpoint rules. Ops edits ≠ customer commitment.
+- **Stored facts, derived readiness.** New or edited tasks and signal changes are **facts**; readiness and blocking stay in `deriveTaskState()` and the signal bus—no shadow workflow engine in UI.
+- **Return paths stay explicit.** Surprises from issues use RecoveryFlow + resume; ad-hoc plan additions still respect signals, proof rules, and payment anchors.
+
+**Implementation note (honesty):** post-activation **generic job task CRUD**, **intel → AI → apply on job**, and **customer invoice send on task facts** are **canon intent** that may lag code. Track gaps in [../build-concerns-risks-and-gaps.md](../build-concerns-risks-and-gaps.md) §13—do not treat this section as “already shipped.”
+
+---
+
+## 13. Explicit non-canon / deferred
 
 Do **not** treat the following as v5 MVP execution canon unless explicitly re-approved:
 
@@ -284,8 +300,10 @@ When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface 
 | [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | Working quote vs job vs checkpoints |
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes and quote-time planning |
 | [workstation-canon.md](./workstation-canon.md) | Cockpit role and attention rules |
+| [product-philosophy.md](./product-philosophy.md) | Flow keeper thesis and phasing |
 | [../source-of-truth-map.md](../source-of-truth-map.md) | Stored vs derived implementation map |
 
 ---
 
-*Canon created 2026-05-19 — post execution-engine stabilization; supersedes audit §10 “recommended locked canon” as product authority.*
+*Canon created 2026-05-19 — post execution-engine stabilization; supersedes audit §10 “recommended locked canon” as product authority.*  
+*Canon update (2026-05-25): §12 — execution plan adapts to job realities (field intelligence, human-approved adjustment); §10 AI field-intel intent; renumbered former §12 to §13.*

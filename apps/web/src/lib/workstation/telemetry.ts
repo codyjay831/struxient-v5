@@ -16,4 +16,12 @@ export const workstationTelemetry = {
   trackBounceToRecord: (surface: string, id: string) => {
     console.log(`[Telemetry] Bounce to Record: surface=${surface}, id=${id}`);
   },
+  trackRecoveryActionOpened: (actionKind: string, issueId: string) => {
+    console.log(
+      `[Telemetry] recovery_action_opened: actionKind=${actionKind}, issueId=${issueId}`,
+    );
+  },
+  trackRecoveryResumeFromWs: (issueId: string) => {
+    console.log(`[Telemetry] recovery_resume_from_ws: issueId=${issueId}`);
+  },
 };

@@ -7,8 +7,7 @@ import {
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
-import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
-import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
+import { WorkstationPanelContent } from "@/components/workstation/workstation-panel-content";
 import {
   WorkstationQueueItem,
   WorkstationClearedState,
@@ -45,7 +44,7 @@ export default async function WorkstationTasksLensPage({
       {selectedItem && (
         <div id="selected-item-panel" className="scroll-mt-6">
           <WorkstationWorkPanel item={selectedItem}>
-            <TaskDetailWrapper taskId={selectedItem.recordId} />
+            <WorkstationPanelContent item={selectedItem} />
           </WorkstationWorkPanel>
         </div>
       )}
@@ -58,8 +57,8 @@ export default async function WorkstationTasksLensPage({
               item={{
                 ...item,
                 href: buildWorkstationUrl(urlState, {
-                  selected: { id: item.id, kind: item.kind }
-                })
+                  selected: { id: item.id, kind: item.kind },
+                }),
               }}
               isSelected={selectedId === item.id}
             />
@@ -70,28 +69,25 @@ export default async function WorkstationTasksLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <Link href="/leads" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        <Link
+          href="/leads"
+          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
+        >
           Browse Sales
         </Link>
-        <Link href="/jobs" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        <Link
+          href="/jobs"
+          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
+        >
           {WORKSTATION_COPY.continuation.openJobs}
         </Link>
-        <Link href="/workstation" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        <Link
+          href="/workstation"
+          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
+        >
           {WORKSTATION_COPY.continuation.backToToday}
         </Link>
       </div>
     </div>
   );
-}
-
-async function TaskDetailWrapper({ taskId }: { taskId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId);
-
-  if (!payload) return null;
-
-  const { getLiveSignals } = await import("@/lib/signal-bus");
-  const liveSignals = await getLiveSignals(payload.jobId);
-
-  return <TaskWorkSurface {...payload} liveSignals={liveSignals} clearWorkstationSelectionOnComplete />;
 }

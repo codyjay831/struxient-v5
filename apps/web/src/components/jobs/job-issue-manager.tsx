@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   JobIssueSeverity,
   JobIssueStatus,
@@ -34,6 +35,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { RecoveryFlowBuilder, type RecoveryBuilderContext } from "./recovery-flow-builder";
+import type { JobIssueCreateIntent } from "@/lib/job-issue-intent";
 
 type Issue = {
   id: string;
@@ -62,14 +64,41 @@ export function JobIssueManager({
   jobId,
   initialIssues,
   stages,
+  createIssueIntent,
 }: {
   jobId: string;
   initialIssues: Issue[];
   stages: { id: string; title: string; tasks: { id: string; title: string }[] }[];
+  createIssueIntent?: JobIssueCreateIntent;
 }) {
-  const [isAdding, setIsAdding] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isAddingManual, setIsAddingManual] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const isAdding = !!createIssueIntent?.isRequested || isAddingManual;
+
+  const clearCreateIssueIntent = (opts?: { routeToTask?: boolean }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const hadIntent = params.get("intent") === "create-issue";
+    if (!hadIntent) return;
+    const returnTaskId = params.get("returnTaskId");
+    params.delete("intent");
+    params.delete("prefillTitle");
+    params.delete("prefillDescription");
+    params.delete("prefillSeverity");
+    params.delete("prefillType");
+    params.delete("prefillJobTaskId");
+    params.delete("prefillJobStageId");
+    params.delete("returnTaskId");
+    const query = params.toString();
+    const hash =
+      opts?.routeToTask && returnTaskId ? `#task-${returnTaskId}` : "#job-issues";
+    router.replace(query ? `${pathname}?${query}${hash}` : `${pathname}${hash}`, {
+      scroll: false,
+    });
+  };
 
   const openIssues = initialIssues.filter((i) => i.status === JobIssueStatus.OPEN);
   const resolvedIssues = initialIssues.filter((i) => i.status !== JobIssueStatus.OPEN);
@@ -85,13 +114,20 @@ export function JobIssueManager({
   };
 
   return (
-    <section className="mb-8">
+    <section id="job-issues" className="mb-8">
       <SectionHeading
         title="Job Issues"
         description="Track and resolve construction blockers, delays, or site conditions."
         actions={
           <button
-            onClick={() => setIsAdding(!isAdding)}
+            onClick={() => {
+              if (isAdding) {
+                setIsAddingManual(false);
+                clearCreateIssueIntent({ routeToTask: true });
+              } else {
+                setIsAddingManual(true);
+              }
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
           >
             {isAdding ? (
@@ -110,10 +146,18 @@ export function JobIssueManager({
       {isAdding && (
         <WorkspacePanel className="mb-6 border-dashed border-border-strong bg-foreground/[0.01]">
           <CreateIssueForm
+            key={`intent-${createIssueIntent?.prefillJobTaskId ?? "none"}-${createIssueIntent?.prefillJobStageId ?? "none"}-${createIssueIntent?.prefillTitle ?? "none"}`}
             jobId={jobId}
             stages={stages}
-            onSuccess={() => setIsAdding(false)}
-            onCancel={() => setIsAdding(false)}
+            intent={createIssueIntent}
+            onSuccess={() => {
+              setIsAddingManual(false);
+              clearCreateIssueIntent();
+            }}
+            onCancel={() => {
+              setIsAddingManual(false);
+              clearCreateIssueIntent({ routeToTask: true });
+            }}
           />
         </WorkspacePanel>
       )}
@@ -482,11 +526,13 @@ function IssueCard({
 function CreateIssueForm({
   jobId,
   stages,
+  intent,
   onSuccess,
   onCancel,
 }: {
   jobId: string;
   stages: { id: string; title: string; tasks: { id: string; title: string }[] }[];
+  intent?: JobIssueCreateIntent;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -499,12 +545,12 @@ function CreateIssueForm({
     jobStageId: string;
     jobTaskId: string;
   }>({
-    title: "",
-    type: JobIssueType.OTHER,
-    severity: JobIssueSeverity.BLOCKS_WORK,
-    description: "",
-    jobStageId: "",
-    jobTaskId: "",
+    title: intent?.prefillTitle ?? "",
+    type: intent?.prefillType ?? JobIssueType.OTHER,
+    severity: intent?.prefillSeverity ?? JobIssueSeverity.BLOCKS_WORK,
+    description: intent?.prefillDescription ?? "",
+    jobStageId: intent?.prefillJobStageId ?? "",
+    jobTaskId: intent?.prefillJobTaskId ?? "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {

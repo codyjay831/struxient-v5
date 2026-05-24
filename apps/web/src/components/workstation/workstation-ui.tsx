@@ -165,7 +165,7 @@ export function WorkstationFocusCard({
                   Action
                 </p>
                 <p className="text-base font-bold leading-relaxed text-foreground">
-                  {item.nextStep}
+                  {item.actionLabel ?? item.nextStep}
                 </p>
               </div>
             </div>
@@ -233,7 +233,7 @@ export function WorkstationQueueItem({
             {item.title}
           </h4>
           <span className="shrink-0 text-xs font-semibold text-foreground">
-            {item.nextStep}
+            {item.actionLabel ?? item.nextStep}
           </span>
         </div>
         <p className="truncate text-xs italic text-foreground-muted">

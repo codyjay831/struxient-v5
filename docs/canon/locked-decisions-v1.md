@@ -5,7 +5,7 @@
 
 ## Competitive posture (why this stack is the edge)
 
-Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/scheduling; heavy **construction PM / ERP** tools optimize **control** and often burden small trades. **Struxient v5** intentionally occupies a **focused wedge**: **commercial line items** stay the anchor; **stages and tasks** carry execution; **templates** speed repeat work; **change orders** keep sold truth honest; **construction issues** (typed events) keep reality from derailing the board; the **Workstation** makes **next action** obvious. Other apps have **good** scheduling or **good** tasks; fewer tie **quote → job → events → cockpit** as one coherent spine **without** forcing a rigid pre-built workflow. This doc **locks v1 choices** that support that wedge.
+Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/scheduling; heavy **construction PM / ERP** tools optimize **control** and often burden small trades. **Struxient v5** intentionally occupies a **focused wedge**: **commercial line items** stay the anchor; **stages and tasks** carry execution; **templates** speed repeat work; **change orders** keep sold truth honest; **construction issues** (typed events) keep reality from derailing the board; the **Workstation** makes **next action** obvious. **Flow keeper** posture: [product-philosophy.md](./product-philosophy.md). Other apps have **good** scheduling or **good** tasks; fewer tie **quote → job → events → cockpit** as one coherent spine **without** forcing a rigid pre-built workflow. This doc **locks v1 choices** that support that wedge.
 
 ---
 
@@ -227,6 +227,21 @@ Default states: **open** → **triaged** or **in_progress** → **resolved**; op
 
 ---
 
+## 16. Product phasing and automation posture
+
+| Topic | v1 decision |
+|--------|-------------|
+| **Execution before commodity parity** | Ship and prove **quote → activate → task → signal → issue → recovery → Workstation** before chasing full Jobber-class CRM/calendar/marketing parity. |
+| **Minimum commercial hygiene** | Lead intake, quote authoring, payment schedule, approval checkpoint, and activation must remain usable for real jobs while execution depth grows. |
+| **No trigger builder** | v1 **does not** ship a general-purpose user-defined **trigger / action** automation product (no Zapier-style rule graphs for operators). |
+| **Opinionated toggles** | Side effects (invoice send on milestone, visit reminders, customer “on the way” SMS, etc.) are **org settings on/off** tied to **execution facts**—see [product-philosophy.md](./product-philosophy.md) §5. |
+| **Attribution** | Automated side effects must be **auditable** on the job (`JobActivity` or equivalent)—users see *what happened*, not a rules debugger. |
+| **Structure changes** | Anything that mutates **execution structure** (new job tasks, signal wiring, recovery activation) stays **human-gated**—never silent AI writes. |
+
+**Edge restatement:** v1 wins on **flow** and **execution truth**, not on being the best calendar or CRM in the market.
+
+---
+
 ## 13. Edge summary (locked)
 
 **v1 product edge =** **Line items** (commercial truth) **+** **stages** (grouping) **+** **tasks** (execution) **+** **templates** (speed) **+** **change orders** (honest sold scope) **+** **construction issues** (typed events → tasks/blockers) **+** **Workstation** (cockpit). Other tools may beat Struxient on **pure CRM** or **pure calendar**; v1 **does not** chase parity there at the expense of this spine.
@@ -242,4 +257,5 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 *Canon update (2026-05-05): Initial v1 locks for RBAC, lifecycles, accounting boundary, intake, calendar depth, tenancy, CO, payments, portal, construction issues, Workstation, second wave, and edge statement. §11 — added **Product surface** row (Workstation as destination / role-aware action-discovery; tabs/lenses as views inside the surface).*  
 *Canon update (2026-05-05): §10 — MVP construction issue lifecycle + anchoring + task vs issue closure clarification.*  
 *Canon update (2026-05-06): §2 quote `sent` row + §7 — aligned **approved truth** language with **checkpoint** model and [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); “administrative revision” → **administrative correction**.*
-*Canon update (2026-05-19): §2 updated runtime `JobTaskStatus` to binary `TODO`/`DONE`; §10 clarified follow-up-task wording vs RecoveryFlow-only blocker mitigation; §14 replaced event-hijack row with issue/recovery wording aligned to execution-engine canon.*
+*Canon update (2026-05-19): §2 updated runtime `JobTaskStatus` to binary `TODO`/`DONE`; §10 clarified follow-up-task wording vs RecoveryFlow-only blocker mitigation; §14 replaced event-hijack row with issue/recovery wording aligned to execution-engine canon.*  
+*Canon update (2026-05-25): §16 — product phasing (execution before commodity parity), no trigger builder, opinionated automation toggles; link [product-philosophy.md](./product-philosophy.md).*

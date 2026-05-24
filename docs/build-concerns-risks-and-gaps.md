@@ -156,6 +156,25 @@ Product canon: [domains-and-boundaries.md](./canon/domains-and-boundaries.md) (p
 
 ---
 
+## 13. Product philosophy canon vs implementation gaps
+
+Canon intent from [product-philosophy.md](./canon/product-philosophy.md) and [execution-engine-canon.md](./canon/execution-engine-canon.md) §12 may run ahead of code. Track honestly—do not market or build UI as if shipped.
+
+| Canon intent | Code status (2026-05-25) | Risk if ignored |
+|--------------|---------------------------|-----------------|
+| Post-activation **generic job task** add/edit/reorder | **Not built** — recovery + field-event tasks only | Canon lies; ops edits blocked in product |
+| **Task done → customer invoice** send (toggle) | **Not built** — internal `JobPaymentRequirement` only | Commodity promise without delivery |
+| **Schedule** + staff/customer **reminders** | **Placeholder** schedule page; `JobVisit` partial | Flow keeper story breaks on timing |
+| **“On the way”** customer SMS from navigation | **Not built** | — |
+| **Field intel → AI → apply** job plan adjustment | **Not built** — recovery AI text/graph only | Intelligence layer stays aspirational |
+| Quote → activate → signals → recovery → Workstation | **Largely built** | Core wedge intact |
+| Task **proof** (photo/checklist gates) | **Built** | — |
+| Opinionated automation (**no trigger builder**) | **Canon locked**; side-effect wiring minimal | Scope creep toward Zapier |
+
+**Next build priority (suggested):** post-activation job task CRUD → opinionated invoice/reminder toggles on execution facts → enrich recovery AI context (attachments, activity, logs).
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -168,3 +187,4 @@ Product canon: [domains-and-boundaries.md](./canon/domains-and-boundaries.md) (p
 | 2026-05-12 | §11 lifecycle status mapping (canon vs current enums); §12 payment schedule / gate / task implementation contract. |
 | 2026-05-13 | Added P5 (Signal Engine) and P6 (Payment signals); updated P4 (Construction issues) for signal muting. |
 | 2026-05-13 | Resolved P5 and P6; updated §11 for JobTaskStatus collapse. |
+| 2026-05-25 | §13 — product philosophy canon vs implementation gaps ([product-philosophy.md](./canon/product-philosophy.md), execution-engine §12). |

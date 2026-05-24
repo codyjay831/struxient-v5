@@ -5,7 +5,6 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { db } from "@/lib/db";
-import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import {
   queryWorkstationWorkItems,
   type WorkstationWorkItem,
@@ -15,13 +14,7 @@ import {
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
-import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
-import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
-import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
-import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
-import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
-import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
-import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
+import { WorkstationPanelContent } from "@/components/workstation/workstation-panel-content";
 import { 
   WorkstationFocusCard, 
   WorkstationQueueItem, 
@@ -309,18 +302,7 @@ export default async function WorkstationTodayLensPage({
       {selectedItem && (
         <div id="selected-item-panel" className="scroll-mt-6">
           <WorkstationWorkPanel item={selectedItem}>
-            {selectedItem.kind === "task" && (
-              <TaskDetailWrapper taskId={selectedItem.recordId} />
-            )}
-            {selectedItem.kind === "job" && (
-              <JobDetailWrapper jobId={selectedItem.recordId} />
-            )}
-            {selectedItem.kind === "lead" && (
-              <LeadDetailWrapper leadId={selectedItem.recordId} />
-            )}
-            {selectedItem.kind === "quote" && (
-              <QuoteDetailWrapper quoteId={selectedItem.recordId} />
-            )}
+            <WorkstationPanelContent item={selectedItem} />
           </WorkstationWorkPanel>
         </div>
       )}
@@ -343,141 +325,5 @@ export default async function WorkstationTodayLensPage({
         </WorkspacePanel>
       </div>
     </div>
-  );
-}
-
-async function TaskDetailWrapper({ taskId }: { taskId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId);
-
-  if (!payload) return null;
-
-  const { getLiveSignals } = await import("@/lib/signal-bus");
-  const liveSignals = await getLiveSignals(payload.jobId);
-
-  return <TaskWorkSurface {...payload} liveSignals={liveSignals} clearWorkstationSelectionOnComplete />;
-}
-
-async function JobDetailWrapper({ jobId }: { jobId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const job = await db.job.findFirst({
-    where: { id: jobId, organizationId: ctx.organizationId },
-    include: {
-      stages: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          id: true,
-          sortOrder: true,
-          issues: {
-            where: {
-              status: JobIssueStatus.OPEN,
-              severity: JobIssueSeverity.BLOCKS_WORK,
-            },
-            select: { id: true, status: true, severity: true },
-          },
-        },
-      },
-      tasks: {
-        where: { completedAt: null },
-        select: {
-          id: true,
-          title: true,
-          sortOrder: true,
-          status: true,
-          completedAt: true,
-          completionNote: true,
-          completionRequirementsJson: true,
-          requiresSignals: true,
-          attachments: {
-            where: { status: "READY" },
-            select: { id: true },
-          },
-          issues: {
-            where: {
-              status: JobIssueStatus.OPEN,
-              severity: JobIssueSeverity.BLOCKS_WORK,
-            },
-            select: { id: true, status: true, severity: true },
-          },
-          recoveryFlow: { select: { jobIssueId: true } },
-          jobStage: {
-            select: {
-              id: true,
-              sortOrder: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!job) return null;
-
-  const { getLiveSignals } = await import("@/lib/signal-bus");
-  const { deriveTaskState, toTaskReadinessInput } = await import("@/lib/task-readiness");
-  const liveSignals = await getLiveSignals(job.id);
-
-  const stageIssuesByJobStageId = new Map(
-    job.stages.map((s) => [s.id, s.issues] as const),
-  );
-
-  const sortedTasks = [...job.tasks].sort((a, b) => {
-    if (a.jobStage.sortOrder !== b.jobStage.sortOrder) {
-      return a.jobStage.sortOrder - b.jobStage.sortOrder;
-    }
-    return a.sortOrder - b.sortOrder;
-  });
-
-  const nextReadyTask = sortedTasks.find((task) => {
-    const { jobStage, recoveryFlow, ...readinessTask } = task;
-    const readinessInput = toTaskReadinessInput(readinessTask, {
-      requiresSignals: [],
-      issues: stageIssuesByJobStageId.get(jobStage.id) ?? [],
-    });
-    const state = deriveTaskState(readinessInput, liveSignals, {
-      recoveryFlowIssueId: recoveryFlow?.jobIssueId,
-    });
-    return state === "READY";
-  });
-
-  const stageCount = job.stages.length;
-  const activeTaskCount = await db.jobTask.count({
-    where: {
-      jobId: job.id,
-      completedAt: null,
-      job: { organizationId: ctx.organizationId },
-    },
-  });
-
-  return (
-    <WorkstationJobPanel
-      stageCount={stageCount}
-      taskCount={activeTaskCount}
-      nextTaskTitle={nextReadyTask?.title ?? sortedTasks[0]?.title}
-    />
-  );
-}
-
-async function LeadDetailWrapper({ leadId }: { leadId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const payload = await loadLeadCommercialSurface(leadId, ctx);
-
-  if (!payload) return null;
-
-  return <LeadCommercialSurface payload={payload} entryPoint="workstation" />;
-}
-
-async function QuoteDetailWrapper({ quoteId }: { quoteId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const result = await loadQuoteWorkSurface(quoteId, ctx.organizationId);
-
-  if (!result) return null;
-
-  return (
-    <QuoteWorkSurface
-      quote={result.quote}
-      readiness={result.readiness}
-      workspaceTabs={result.workspaceTabs}
-    />
   );
 }

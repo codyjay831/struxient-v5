@@ -7,6 +7,22 @@ import { type WorkstationWorkItem } from "@/lib/workstation-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReactNode } from "react";
 
+function isBlockedMainPathRecoveryRedirect(item: WorkstationWorkItem): boolean {
+  return (
+    item.kind === "task" &&
+    item.isBlocked === true &&
+    (item.actionKind === "do-recovery-task" || item.actionKind === "plan-recovery") &&
+    (item.actionKind === "plan-recovery" || item.actionTaskId !== item.recordId)
+  );
+}
+
+function blockedTaskRecoveryNotice(item: WorkstationWorkItem): string {
+  if (item.actionKind === "plan-recovery") {
+    return "This task is blocked. Plan recovery below to clear the blocker.";
+  }
+  return "This task is blocked. Complete the recovery step below to clear the blocker.";
+}
+
 export type WorkstationWorkPanelProps = {
   item: WorkstationWorkItem | null;
   children?: ReactNode;
@@ -93,13 +109,22 @@ export function WorkstationWorkPanel({
                       Recommended action
                     </h4>
                     <p className="text-lg font-bold leading-snug text-foreground">
-                      {item.nextStep}
+                      {item.actionLabel ?? item.nextStep}
                     </p>
                   </div>
                 </div>
               ) : null}
 
-              {children ? <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">{children}</div> : null}
+              {children ? (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6">
+                  {isBlockedMainPathRecoveryRedirect(item) && (
+                    <p className="rounded-lg border border-danger/20 bg-danger/[0.03] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
+                      {blockedTaskRecoveryNotice(item)}
+                    </p>
+                  )}
+                  {children}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -111,7 +136,13 @@ export function WorkstationWorkPanel({
                   href={item.href}
                   className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {item.kind === "quote" ? "Open quote record" : item.kind === "lead" ? "Open lead workspace" : "Open full record"}
+                  {item.filterCategory === "issues"
+                    ? "Open issue on job"
+                    : item.kind === "quote"
+                      ? "Open quote record"
+                      : item.kind === "lead"
+                        ? "Open lead workspace"
+                        : "Open full record"}
                   <ArrowRight className="size-4" />
                 </Link>
               )}

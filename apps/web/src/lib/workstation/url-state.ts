@@ -3,6 +3,7 @@ import { WorkstationLens, WorkstationFilterCategory, WorkstationWorkItemKind } f
 export interface WorkstationSelection {
   id: string;
   kind: WorkstationWorkItemKind;
+  /** Optional sub-step hint; panel resolves via work item action* fields in v1. */
   step?: string;
 }
 

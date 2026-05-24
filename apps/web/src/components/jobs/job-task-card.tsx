@@ -13,6 +13,7 @@ import {
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
 import type { TaskPaymentHold } from "@/lib/job-payment-readiness";
+import { getSignalBlockedWaitingCopy, isFieldEventTaskTitle } from "@/lib/field-event-ui";
 import { ChevronRight, Lock, Zap } from "lucide-react";
 
 type Task = JobTaskExecutionTask;
@@ -60,13 +61,20 @@ export function JobTaskCard({
   const issuesWithRecovery = task.issues.filter(
     (i) => i.recoveryFlow && i.recoveryFlow.status === "ACTIVE"
   );
-  const primaryBlockingIssue = task.issues[0];
+  const primaryBlockingIssue =
+    task.issues.find((issue) => issue.severity === "BLOCKS_WORK") ?? task.issues[0];
   const hasActiveRecovery = issuesWithRecovery.length > 0;
   const primaryRecoveryIssue = issuesWithRecovery[0];
   const recoveryTasks = primaryRecoveryIssue?.recoveryFlow?.tasks || [];
   const totalRecoveryTasks = recoveryTasks.length;
   const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
   const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
+  const missingSignals = task.requiresSignals.filter((s) => !liveSignals.includes(s));
+  const waitingReason =
+    missingSignals.length > 0
+      ? getSignalBlockedWaitingCopy(missingSignals)
+      : "Waiting for required prior work";
+  const isFieldHoldTask = isFieldEventTaskTitle(task.title);
   
   const payload = {
     jobId,
@@ -105,6 +113,7 @@ export function JobTaskCard({
               >
                 {task.title}
               </h4>
+              {isFieldHoldTask ? <StatusBadge label="Field hold" tone="warning" /> : null}
               <StatusBadge label={taskStateLabel(derivedState)} tone={taskStateTone(derivedState)} />
             </div>
             <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
@@ -140,7 +149,7 @@ export function JobTaskCard({
                 {isBlockedBySignal && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-accent">
                     <Zap className="size-3 shrink-0" />
-                    Waiting for: prior required work to complete
+                    {waitingReason}
                   </p>
                 )}
               </div>
