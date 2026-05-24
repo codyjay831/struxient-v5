@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import {
+  JobIssueStatus,
   JobRecoveryFlowStatus,
   JobTaskStatus,
   LineItemTemplateTaskSource,
@@ -53,11 +54,41 @@ export async function createAndActivateRecoveryFlowWithTasksAction(
 
   const issue = await db.jobIssue.findFirst({
     where: { id: input.jobIssueId, organizationId },
-    select: { id: true, jobId: true, title: true },
+    select: {
+      id: true,
+      jobId: true,
+      title: true,
+      status: true,
+      recoveryFlow: { select: { id: true, status: true } },
+    },
   });
 
   if (!issue) {
     throw new Error("Job issue not found or access denied.");
+  }
+  if (
+    issue.recoveryFlow &&
+    (issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT ||
+      issue.recoveryFlow.status === JobRecoveryFlowStatus.ACTIVE)
+  ) {
+    throw new Error(
+      "A recovery plan is already in progress for this issue. Open the existing plan instead of creating a duplicate.",
+    );
+  }
+  if (issue.recoveryFlow?.status === JobRecoveryFlowStatus.COMPLETED) {
+    if (issue.status === JobIssueStatus.OPEN) {
+      throw new Error(
+        "Recovery complete. Resume original path for this issue instead of creating another recovery plan.",
+      );
+    }
+    throw new Error(
+      "A completed recovery plan already exists for this issue.",
+    );
+  }
+  if (issue.recoveryFlow?.status === JobRecoveryFlowStatus.CANCELLED) {
+    throw new Error(
+      "This issue has a cancelled recovery plan. Resolve or force-resolve the issue before creating a new plan.",
+    );
   }
 
   try {

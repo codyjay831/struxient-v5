@@ -20,6 +20,8 @@ function proposal(tasks: AILibraryProposal["tasks"], warnings: string[] = []): A
     sourceContext: "Test",
     assumptions: [],
     warnings,
+    cleanupNotes: [],
+    missingContext: [],
     tasks,
   };
 }
@@ -167,4 +169,27 @@ test("mapped AI quote tasks satisfy activation readiness", () => {
     readiness.blockReasons.some((r) => r.code === "TASK_MISSING_STAGE"),
     false,
   );
+});
+
+test("validateQuoteAiExecutionPlanForApply blocks stale stage ids", () => {
+  const result = validateQuoteAiExecutionPlanForApply(
+    proposal([{ ...mappedTask, stageId: "stale-stage-id" }]),
+    stages,
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.deepEqual(result.unmappedTaskTitles, ["Install flashing"]);
+  }
+});
+
+test("missingContext and cleanupNotes do not block valid quote apply", () => {
+  const result = validateQuoteAiExecutionPlanForApply(
+    {
+      ...proposal([mappedTask]),
+      cleanupNotes: ["Merged duplicate closeout tasks."],
+      missingContext: ["Need service size confirmation."],
+    },
+    stages,
+  );
+  assert.equal(result.ok, true);
 });

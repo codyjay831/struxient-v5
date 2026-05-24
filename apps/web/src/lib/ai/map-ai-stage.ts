@@ -15,6 +15,7 @@ export type StageIntent =
   | "SITE_PREP"
   | "ROUGH_IN"
   | "INSPECTION"
+  | "WALKTHROUGH"
   | "INSTALL"
   | "FINISHES"
   | "CLOSEOUT";
@@ -73,13 +74,17 @@ const STAGE_NAME_ALIASES: Record<string, readonly string[]> = {
   roughin: ["Rough-In"],
   rough: ["Rough-In"],
   inspection: ["Inspection"],
+  finalinspection: ["Inspection"],
+  finalinspect: ["Inspection"],
   install: ["Rough-In", "Finishes", "Installation"],
   installation: ["Finishes", "Rough-In", "Installation"],
   finishes: ["Finishes"],
   finish: ["Finishes"],
-  walkthrough: ["Walkthrough", "Closeout"],
-  closeout: ["Closeout", "Walkthrough", "Final Inspection & Closeout"],
-  finalinspectioncloseout: ["Closeout", "Inspection", "Final Inspection & Closeout"],
+  walkthrough: ["Walkthrough"],
+  closeout: ["Closeout", "Final Inspection & Closeout"],
+  finalinspectioncloseout: ["Closeout", "Final Inspection & Closeout"],
+  wrapup: ["Closeout", "Final Inspection & Closeout"],
+  finalization: ["Closeout", "Final Inspection & Closeout"],
 };
 
 const STAGE_INTENT_TARGETS: Record<StageIntent, readonly string[]> = {
@@ -89,9 +94,10 @@ const STAGE_INTENT_TARGETS: Record<StageIntent, readonly string[]> = {
   SITE_PREP: ["Site Prep"],
   ROUGH_IN: ["Rough-In"],
   INSPECTION: ["Inspection"],
+  WALKTHROUGH: ["Walkthrough"],
   INSTALL: ["Rough-In", "Finishes", "Installation"],
   FINISHES: ["Finishes"],
-  CLOSEOUT: ["Closeout", "Walkthrough", "Final Inspection & Closeout"],
+  CLOSEOUT: ["Closeout", "Final Inspection & Closeout"],
 };
 
 function findStageByNormalizedName(

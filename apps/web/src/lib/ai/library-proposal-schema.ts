@@ -1,4 +1,4 @@
-import { TaskTemplateCategory } from "@prisma/client";
+import { StaffRole, TaskTemplateCategory } from "@prisma/client";
 import { z } from "zod";
 
 const stageIntentSchema = z.enum([
@@ -8,6 +8,7 @@ const stageIntentSchema = z.enum([
   "SITE_PREP",
   "ROUGH_IN",
   "INSPECTION",
+  "WALKTHROUGH",
   "INSTALL",
   "FINISHES",
   "CLOSEOUT",
@@ -31,6 +32,10 @@ export const AILibraryProposedTaskSchema = z.object({
   providesSignals: z.array(z.string()),
   requiresSignals: z.array(z.string()),
   hardSignal: z.boolean().default(false),
+  assigneeRole: z.nativeEnum(StaffRole).optional().nullable(),
+  noteRequired: z.boolean().optional(),
+  photoRequired: z.boolean().optional(),
+  attachmentRequired: z.boolean().optional(),
   checklist: z.array(z.object({
     label: z.string().min(1),
   })),
@@ -54,6 +59,8 @@ export const AILibraryProposalSchema = z.object({
   sourceContext: z.string(), // Description of the line item template
   assumptions: z.array(z.string()),
   warnings: z.array(z.string()),
+  cleanupNotes: z.array(z.string()).default([]),
+  missingContext: z.array(z.string()).default([]),
   tasks: z.array(AILibraryProposedTaskSchema),
 });
 

@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { AILibraryProposal, AILibraryProposedTask } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
-import { TaskTemplateCategory } from "@prisma/client";
+import { StaffRole, TaskTemplateCategory } from "@prisma/client";
 import { getTaskTemplateCategoryLabel, taskTemplateCategorySelectOptions } from "@/lib/task-template-category";
 
 const MAX_WARNING_CHARS = 280;
@@ -66,6 +66,15 @@ const controlClass = workspaceFormControlClass;
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
+
+function getRoleLabel(role: StaffRole): string {
+  if (role === StaffRole.OFFICE) return "Office";
+  if (role === StaffRole.FIELD) return "Field";
+  if (role === StaffRole.SUBCONTRACTOR) return "Subcontractor";
+  if (role === StaffRole.OWNER) return "Owner";
+  if (role === StaffRole.ADMIN) return "Admin";
+  return "Viewer";
+}
 
 export function AILibraryProposalReviewPanel({
   proposal,
@@ -191,8 +200,43 @@ export function AILibraryProposalReviewPanel({
             </div>
           ) : null}
           {/* Insights Section */}
-          {(editedProposal.assumptions.length > 0 || editedProposal.warnings.length > 0) && (
+          {(editedProposal.assumptions.length > 0 ||
+            editedProposal.warnings.length > 0 ||
+            editedProposal.cleanupNotes.length > 0 ||
+            editedProposal.missingContext.length > 0) && (
             <div className="space-y-4">
+              {editedProposal.cleanupNotes.length > 0 && (
+                <div className="rounded-lg border border-approved/20 bg-approved/5 p-4">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-approved-strong mb-2">
+                    <Check className="size-3.5" />
+                    What We Cleaned Up
+                  </div>
+                  <ul className="space-y-1">
+                    {editedProposal.cleanupNotes.map((note, i) => (
+                      <li key={i} className="text-sm text-foreground flex gap-2 break-words">
+                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-approved-strong" />
+                        <span className="min-w-0 flex-1 break-words">{note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {editedProposal.missingContext.length > 0 && (
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-warning-strong mb-2">
+                    <Info className="size-3.5" />
+                    Needs Your Input
+                  </div>
+                  <ul className="space-y-1">
+                    {editedProposal.missingContext.map((item, i) => (
+                      <li key={i} className="text-sm text-warning-strong flex gap-2 break-words">
+                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-warning-strong" />
+                        <span className="min-w-0 flex-1 break-words">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {editedProposal.warnings.length > 0 && (
                 <div className="rounded-lg border border-danger/20 bg-danger/5 p-4">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-danger mb-2">
@@ -275,6 +319,11 @@ export function AILibraryProposalReviewPanel({
                               <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
                                 {getTaskTemplateCategoryLabel(task.category)}
                               </span>
+                              {task.assigneeRole ? (
+                                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-strong">
+                                  {getRoleLabel(task.assigneeRole)}
+                                </span>
+                              ) : null}
                               {task.providesSignals.length > 0 && (
                                 <span className="flex items-center gap-1 rounded bg-approved/10 px-1.5 py-0.5 text-[10px] font-bold text-approved-strong">
                                   <Zap className="size-2.5" />

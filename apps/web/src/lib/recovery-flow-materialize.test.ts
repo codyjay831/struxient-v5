@@ -41,9 +41,14 @@ test("validateRecoveryFlowTasksInput: assigns default sortOrder", () => {
 
 function createMaterializeMockTx(options?: {
   existingFlow?: boolean;
+  existingFlowStatus?: JobRecoveryFlowStatus;
   issueStatus?: JobIssueStatus;
+  issueJobTaskId?: string | null;
+  validSourceTaskIds?: string[];
 }) {
   const issueStatus = options?.issueStatus ?? JobIssueStatus.OPEN;
+  const issueJobTaskId = options?.issueJobTaskId ?? null;
+  const validSourceTaskIds = new Set(options?.validSourceTaskIds ?? []);
   const flowCreates: unknown[] = [];
   const taskCreates: unknown[] = [];
   const activityCreates: unknown[] = [];
@@ -52,7 +57,13 @@ function createMaterializeMockTx(options?: {
 
   const tx = {
     jobRecoveryFlow: {
-      findUnique: async () => (options?.existingFlow ? { id: "flow-existing" } : null),
+      findUnique: async () =>
+        options?.existingFlow
+          ? {
+              id: "flow-existing",
+              status: options.existingFlowStatus ?? JobRecoveryFlowStatus.ACTIVE,
+            }
+          : null,
       create: async (args: { data: Record<string, unknown> }) => {
         flowCreates.push(args);
         flowIdCounter += 1;
@@ -62,9 +73,9 @@ function createMaterializeMockTx(options?: {
     jobIssue: {
       findFirst: async () =>
         issueStatus === JobIssueStatus.OPEN
-          ? { id: "issue-1", status: JobIssueStatus.OPEN }
+          ? { id: "issue-1", status: JobIssueStatus.OPEN, jobTaskId: issueJobTaskId }
           : issueStatus === JobIssueStatus.RESOLVED
-            ? { id: "issue-1", status: JobIssueStatus.RESOLVED }
+            ? { id: "issue-1", status: JobIssueStatus.RESOLVED, jobTaskId: issueJobTaskId }
             : null,
     },
     stage: {
@@ -82,6 +93,8 @@ function createMaterializeMockTx(options?: {
       },
     },
     jobTask: {
+      findFirst: async (args: { where: { id: string } }) =>
+        validSourceTaskIds.has(args.where.id) ? { id: args.where.id } : null,
       create: async (args: { data: Record<string, unknown> }) => {
         taskCreates.push(args);
         taskIdCounter += 1;
@@ -102,7 +115,7 @@ function createMaterializeMockTx(options?: {
 }
 
 test("materializeRecoveryFlowWithTasksInTx: creates ACTIVE flow and tasks", async () => {
-  const tx = createMaterializeMockTx();
+  const tx = createMaterializeMockTx({ issueJobTaskId: "task-source" });
   const result = await materializeRecoveryFlowWithTasksInTx(tx as never, {
     organizationId: "org-1",
     jobIssueId: "issue-1",
@@ -121,6 +134,7 @@ test("materializeRecoveryFlowWithTasksInTx: creates ACTIVE flow and tasks", asyn
   const flowData = (tx.flowCreates[0] as { data: Record<string, unknown> }).data;
   assert.equal(flowData.status, JobRecoveryFlowStatus.ACTIVE);
   assert.equal(flowData.jobIssueId, "issue-1");
+  assert.equal(flowData.sourceFailedTaskId, "task-source");
 
   assert.equal(tx.taskCreates.length, 2);
   const firstTask = (tx.taskCreates[0] as { data: Record<string, unknown> }).data;
@@ -143,7 +157,10 @@ test("materializeRecoveryFlowWithTasksInTx: creates ACTIVE flow and tasks", asyn
 });
 
 test("materializeRecoveryFlowWithTasksInTx: rejects existing flow", async () => {
-  const tx = createMaterializeMockTx({ existingFlow: true });
+  const tx = createMaterializeMockTx({
+    existingFlow: true,
+    existingFlowStatus: JobRecoveryFlowStatus.COMPLETED,
+  });
   await assert.rejects(
     () =>
       materializeRecoveryFlowWithTasksInTx(tx as never, {
@@ -158,6 +175,95 @@ test("materializeRecoveryFlowWithTasksInTx: rejects existing flow", async () => 
   );
   assert.equal(tx.flowCreates.length, 0);
   assert.equal(tx.taskCreates.length, 0);
+});
+
+test("materializeRecoveryFlowWithTasksInTx: rejects when active or draft flow already exists", async () => {
+  const tx = createMaterializeMockTx({
+    existingFlow: true,
+    existingFlowStatus: JobRecoveryFlowStatus.DRAFT,
+  });
+  await assert.rejects(
+    () =>
+      materializeRecoveryFlowWithTasksInTx(tx as never, {
+        organizationId: "org-1",
+        jobIssueId: "issue-1",
+        jobId: "job-1",
+        issueTitle: "Issue",
+        actorUserId: "user-1",
+        tasks: [{ title: "Step", category: TaskTemplateCategory.GENERAL }],
+      }),
+    /already in progress/i,
+  );
+});
+
+test("materializeRecoveryFlowWithTasksInTx: explicit sourceFailedTaskId wins when valid", async () => {
+  const tx = createMaterializeMockTx({
+    issueJobTaskId: "task-from-issue",
+    validSourceTaskIds: ["task-explicit"],
+  });
+  await materializeRecoveryFlowWithTasksInTx(tx as never, {
+    organizationId: "org-1",
+    jobIssueId: "issue-1",
+    jobId: "job-1",
+    issueTitle: "Issue",
+    actorUserId: "user-1",
+    sourceFailedTaskId: "task-explicit",
+    tasks: [{ title: "Step", category: TaskTemplateCategory.GENERAL }],
+  });
+
+  const flowData = (tx.flowCreates[0] as { data: Record<string, unknown> }).data;
+  assert.equal(flowData.sourceFailedTaskId, "task-explicit");
+});
+
+test("materializeRecoveryFlowWithTasksInTx: allows sourceFailedTaskId pointing to a recovery task in same job/org", async () => {
+  const tx = createMaterializeMockTx({
+    issueJobTaskId: "task-from-issue",
+    validSourceTaskIds: ["task-recovery-1"],
+  });
+  await materializeRecoveryFlowWithTasksInTx(tx as never, {
+    organizationId: "org-1",
+    jobIssueId: "issue-1",
+    jobId: "job-1",
+    issueTitle: "Issue",
+    actorUserId: "user-1",
+    sourceFailedTaskId: "task-recovery-1",
+    tasks: [{ title: "Step", category: TaskTemplateCategory.GENERAL }],
+  });
+
+  const flowData = (tx.flowCreates[0] as { data: Record<string, unknown> }).data;
+  assert.equal(flowData.sourceFailedTaskId, "task-recovery-1");
+});
+
+test("materializeRecoveryFlowWithTasksInTx: explicit sourceFailedTaskId rejects invalid task", async () => {
+  const tx = createMaterializeMockTx({ issueJobTaskId: "task-from-issue" });
+  await assert.rejects(
+    () =>
+      materializeRecoveryFlowWithTasksInTx(tx as never, {
+        organizationId: "org-1",
+        jobIssueId: "issue-1",
+        jobId: "job-1",
+        issueTitle: "Issue",
+        actorUserId: "user-1",
+        sourceFailedTaskId: "task-cross-job",
+        tasks: [{ title: "Step", category: TaskTemplateCategory.GENERAL }],
+      }),
+    /same job and organization/i,
+  );
+});
+
+test("materializeRecoveryFlowWithTasksInTx: sourceFailedTaskId remains empty when issue has no source task", async () => {
+  const tx = createMaterializeMockTx({ issueJobTaskId: null });
+  await materializeRecoveryFlowWithTasksInTx(tx as never, {
+    organizationId: "org-1",
+    jobIssueId: "issue-1",
+    jobId: "job-1",
+    issueTitle: "Issue",
+    actorUserId: "user-1",
+    tasks: [{ title: "Step", category: TaskTemplateCategory.GENERAL }],
+  });
+
+  const flowData = (tx.flowCreates[0] as { data: Record<string, unknown> }).data;
+  assert.equal(flowData.sourceFailedTaskId, undefined);
 });
 
 test("materializeRecoveryFlowWithTasksInTx: rejects non-open issue", async () => {

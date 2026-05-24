@@ -13,6 +13,12 @@ const stages: AllowedStage[] = [
   { id: "s4", name: "Permitting" },
 ];
 
+const closeoutStages: AllowedStage[] = [
+  { id: "s1", name: "Inspection" },
+  { id: "s2", name: "Walkthrough" },
+  { id: "s3", name: "Closeout" },
+];
+
 test("normalizeStageLabel collapses whitespace and case", () => {
   assert.equal(normalizeStageLabel("  Rough-In  "), "rough in");
   assert.equal(normalizeStageLabel("Site   Prep"), "site prep");
@@ -99,4 +105,28 @@ test("mapAiStageToStageId prefers stageKey when provided", () => {
     allowedStages: stages,
   });
   assert.equal(result.stageId, "s2");
+});
+
+test("CLOSEOUT intent resolves to Closeout, not Walkthrough", () => {
+  const result = mapAiStageToStageId({
+    stageIntent: "CLOSEOUT",
+    allowedStages: closeoutStages,
+  });
+  assert.equal(result.stageId, "s3");
+});
+
+test("INSPECTION intent resolves to Inspection", () => {
+  const result = mapAiStageToStageId({
+    stageIntent: "INSPECTION",
+    allowedStages: closeoutStages,
+  });
+  assert.equal(result.stageId, "s1");
+});
+
+test("generic wrap-up language maps to Closeout not Inspection", () => {
+  const result = mapAiStageToStageId({
+    stageName: "Wrap-up",
+    allowedStages: closeoutStages,
+  });
+  assert.equal(result.stageId, "s3");
 });

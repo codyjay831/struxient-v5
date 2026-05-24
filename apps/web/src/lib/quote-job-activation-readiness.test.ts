@@ -7,6 +7,7 @@ import {
 import {
   evaluateQuoteJobActivationReadiness,
   quoteActivationOnlyBlockedByApproval,
+  type QuoteActivationReadinessInput,
 } from "./quote-job-activation-readiness";
 
 const line = (
@@ -39,13 +40,16 @@ const line = (
 });
 
 function readinessInput(
-  overrides: Partial<Parameters<typeof evaluateQuoteJobActivationReadiness>[0]> = {},
-) {
+  overrides: Partial<QuoteActivationReadinessInput> = {},
+): QuoteActivationReadinessInput {
+  const status = overrides.status ?? QuoteStatus.APPROVED;
   return {
     quoteTotalCents: 0,
     paymentSchedule: [],
-    hasApprovalCheckpoint: overrides.status === QuoteStatus.APPROVED,
+    lines: [],
+    hasApprovalCheckpoint: status === QuoteStatus.APPROVED,
     ...overrides,
+    status,
   };
 }
 

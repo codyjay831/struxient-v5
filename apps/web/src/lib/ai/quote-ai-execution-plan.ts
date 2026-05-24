@@ -1,4 +1,5 @@
 import type { AILibraryProposal } from "./library-proposal-schema";
+import { StaffRole } from "@prisma/client";
 import type { AllowedStage } from "./map-ai-stage";
 import {
   canApplySimulatedExecutionPlans,
@@ -79,7 +80,10 @@ export function validateQuoteAiExecutionPlanForApply(
 
   const unmappedTaskTitles: string[] = [];
   const correctionsTaskTitles: string[] = [];
+  const invalidRoleTaskTitles: string[] = [];
   const warnings: string[] = [];
+  const validStageIds = new Set(allowedStages.map((stage) => stage.id));
+  const validRoles = new Set(Object.values(StaffRole));
 
   if (proposal.warnings.includes(CORRECTIONS_CONDITIONAL_WORK_WARNING)) {
     warnings.push(CORRECTIONS_CONDITIONAL_WORK_WARNING);
@@ -91,8 +95,12 @@ export function validateQuoteAiExecutionPlanForApply(
       continue;
     }
 
-    if (!task.stageId) {
+    if (!task.stageId || !validStageIds.has(task.stageId)) {
       unmappedTaskTitles.push(task.title);
+      continue;
+    }
+    if (task.assigneeRole && !validRoles.has(task.assigneeRole)) {
+      invalidRoleTaskTitles.push(task.title);
       continue;
     }
     const stageName = allowedStages.find((s) => s.id === task.stageId)?.name;
@@ -126,6 +134,15 @@ export function validateQuoteAiExecutionPlanForApply(
       error:
         "Every execution task must have a stage before applying—assign a stage for each task in the review panel.",
       unmappedTaskTitles,
+    };
+  }
+
+  if (invalidRoleTaskTitles.length > 0) {
+    return {
+      ok: false,
+      error:
+        "One or more execution tasks include an invalid assignee role. Update the proposal and try again.",
+      unmappedTaskTitles: invalidRoleTaskTitles,
     };
   }
 

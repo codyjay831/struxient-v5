@@ -34,6 +34,23 @@ type RecoveryTaskDraft = {
   reasoning?: string;
 };
 
+function toRecoveryPlanErrorMessage(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : "Failed to activate recovery plan.";
+
+  if (message.includes("already in progress")) {
+    return "A recovery plan is already in progress for this issue. Review the existing plan from this task’s issue panel.";
+  }
+  if (message.includes("Recovery complete. Resume original path")) {
+    return "Recovery complete. Resume original path for this issue instead of creating another plan.";
+  }
+  if (message.includes("cancelled recovery plan")) {
+    return "A cancelled recovery plan already exists for this issue. Resolve or force-resolve the issue before creating another plan.";
+  }
+
+  return message;
+}
+
 export function RecoveryFlowBuilder({
   issueId,
   onSuccess,
@@ -191,7 +208,7 @@ export function RecoveryFlowBuilder({
 
         onSuccess();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred.");
+        setError(toRecoveryPlanErrorMessage(err));
       }
     });
   };
@@ -200,7 +217,7 @@ export function RecoveryFlowBuilder({
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-sm font-bold text-foreground">Build Recovery Flow</h3>
+          <h3 className="text-sm font-bold text-foreground">Build Recovery Plan</h3>
           <p className="text-xs text-foreground-muted">
             Define the steps needed to resolve this issue and resume the original path.
           </p>
@@ -231,6 +248,7 @@ export function RecoveryFlowBuilder({
               <button
                 type="button"
                 onClick={() => setProposal(null)}
+                disabled={isPending}
                 className="text-[10px] font-bold text-foreground-muted hover:text-foreground"
               >
                 Dismiss
@@ -250,6 +268,7 @@ export function RecoveryFlowBuilder({
                     type="checkbox"
                     checked={selectedSuggestionIds.has(t.tempId)}
                     onChange={() => toggleSuggestion(t.tempId)}
+                    disabled={isPending}
                     className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
                   <div className="flex-1 min-w-0 space-y-2">
@@ -258,11 +277,13 @@ export function RecoveryFlowBuilder({
                       <input
                         value={t.title}
                         onChange={(e) => updateProposalTask(t.tempId, { title: e.target.value })}
+                        disabled={isPending}
                         className="flex-1 bg-transparent text-xs font-semibold text-foreground focus:outline-none focus:ring-0"
                       />
                       <select
                         value={t.category}
                         onChange={(e) => updateProposalTask(t.tempId, { category: e.target.value as TaskTemplateCategory })}
+                        disabled={isPending}
                         className="bg-transparent text-[8px] border-none p-0 h-4 focus:ring-0"
                       >
                         {Object.values(TaskTemplateCategory).map(cat => (
@@ -273,6 +294,7 @@ export function RecoveryFlowBuilder({
                     <textarea
                       value={t.instructions || ""}
                       onChange={(e) => updateProposalTask(t.tempId, { instructions: e.target.value })}
+                      disabled={isPending}
                       className="w-full bg-transparent text-[10px] text-foreground-muted leading-relaxed focus:outline-none focus:ring-0"
                       rows={1}
                     />
@@ -290,7 +312,7 @@ export function RecoveryFlowBuilder({
             <button
               type="button"
               onClick={addSelectedSuggestions}
-              disabled={selectedSuggestionIds.size === 0}
+              disabled={selectedSuggestionIds.size === 0 || isPending}
               className="rounded bg-primary px-3 py-1.5 text-[10px] font-bold text-primary-contrast hover:opacity-90 disabled:opacity-50"
             >
               Add Selected Tasks ({selectedSuggestionIds.size})
@@ -318,7 +340,7 @@ export function RecoveryFlowBuilder({
                 <button
                   type="button"
                   onClick={() => moveTask(index, "up")}
-                  disabled={index === 0}
+                  disabled={index === 0 || isPending}
                   className="rounded p-1 text-foreground-subtle hover:bg-foreground/5 hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronUp className="size-3.5" />
@@ -326,7 +348,7 @@ export function RecoveryFlowBuilder({
                 <button
                   type="button"
                   onClick={() => moveTask(index, "down")}
-                  disabled={index === tasks.length - 1}
+                  disabled={index === tasks.length - 1 || isPending}
                   className="rounded p-1 text-foreground-subtle hover:bg-foreground/5 hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronDown className="size-3.5" />
@@ -334,7 +356,7 @@ export function RecoveryFlowBuilder({
                 <button
                   type="button"
                   onClick={() => removeTask(task.id)}
-                  disabled={tasks.length === 1}
+                  disabled={tasks.length === 1 || isPending}
                   className="ml-1 rounded p-1 text-foreground-subtle hover:bg-danger/10 hover:text-danger disabled:opacity-30"
                 >
                   <Trash2 className="size-3.5" />
@@ -351,6 +373,7 @@ export function RecoveryFlowBuilder({
                   required
                   value={task.title}
                   onChange={(e) => updateTask(task.id, { title: e.target.value })}
+                  disabled={isPending}
                   placeholder="e.g., Revise engineering plans"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
                 />
@@ -364,6 +387,7 @@ export function RecoveryFlowBuilder({
                   onChange={(e) =>
                     updateTask(task.id, { category: e.target.value as TaskTemplateCategory })
                   }
+                  disabled={isPending}
                   className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
                 >
                   {Object.values(TaskTemplateCategory).map((cat) => (
@@ -382,6 +406,7 @@ export function RecoveryFlowBuilder({
               <textarea
                 value={task.instructions}
                 onChange={(e) => updateTask(task.id, { instructions: e.target.value })}
+                disabled={isPending}
                 placeholder="What specifically needs to be done?"
                 rows={2}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring/20"
@@ -400,6 +425,7 @@ export function RecoveryFlowBuilder({
                         next[idx].label = e.target.value;
                         updateTask(task.id, { checklist: next });
                       }}
+                      disabled={isPending}
                       className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs"
                       placeholder="Checklist item label"
                     />
@@ -409,6 +435,7 @@ export function RecoveryFlowBuilder({
                         const next = task.checklist.filter((_, i) => i !== idx);
                         updateTask(task.id, { checklist: next });
                       }}
+                      disabled={isPending}
                       className="text-foreground-subtle hover:text-danger"
                     >
                       <Trash2 className="size-3" />
@@ -422,6 +449,7 @@ export function RecoveryFlowBuilder({
                       checklist: [...task.checklist, { id: crypto.randomUUID(), label: "" }],
                     });
                   }}
+                  disabled={isPending}
                   className="flex items-center gap-1 text-[10px] font-bold text-primary hover:underline"
                 >
                   <Plus className="size-3" /> Add Item
@@ -438,6 +466,7 @@ export function RecoveryFlowBuilder({
                       type="checkbox"
                       checked={task.noteRequired}
                       onChange={(e) => updateTask(task.id, { noteRequired: e.target.checked })}
+                      disabled={isPending}
                       className="h-3.5 w-3.5 rounded border-border"
                     />
                     Note
@@ -447,6 +476,7 @@ export function RecoveryFlowBuilder({
                       type="checkbox"
                       checked={task.photoRequired}
                       onChange={(e) => updateTask(task.id, { photoRequired: e.target.checked })}
+                      disabled={isPending}
                       className="h-3.5 w-3.5 rounded border-border"
                     />
                     Photo
@@ -456,6 +486,7 @@ export function RecoveryFlowBuilder({
                       type="checkbox"
                       checked={task.attachmentRequired}
                       onChange={(e) => updateTask(task.id, { attachmentRequired: e.target.checked })}
+                      disabled={isPending}
                       className="h-3.5 w-3.5 rounded border-border"
                     />
                     File
@@ -470,6 +501,7 @@ export function RecoveryFlowBuilder({
                       type="checkbox"
                       checked={task.hardSignal}
                       onChange={(e) => updateTask(task.id, { hardSignal: e.target.checked })}
+                      disabled={isPending}
                       className="h-3.5 w-3.5 rounded border-border"
                     />
                     Hard Blocker
@@ -492,6 +524,7 @@ export function RecoveryFlowBuilder({
       <button
         type="button"
         onClick={addTask}
+        disabled={isPending}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-4 text-xs font-bold text-foreground-subtle transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
       >
         <Plus className="size-4" />
@@ -509,6 +542,7 @@ export function RecoveryFlowBuilder({
         <button
           type="button"
           onClick={onCancel}
+          disabled={isPending}
           className="text-xs font-medium text-foreground-muted hover:text-foreground"
         >
           Cancel
@@ -521,12 +555,12 @@ export function RecoveryFlowBuilder({
           {isPending ? (
             <>
               <Loader2 className="size-3.5 animate-spin" />
-              Creating Flow...
+              Activating Plan...
             </>
           ) : (
             <>
               <Check className="size-3.5" />
-              Activate Recovery Flow
+              Activate Recovery Plan
             </>
           )}
         </button>

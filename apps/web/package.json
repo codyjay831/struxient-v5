@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/lib/**/*.test.ts",
     "guardrails": "node ../../scripts/guardrails/run-all.mjs"
   },

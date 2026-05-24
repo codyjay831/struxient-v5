@@ -41,6 +41,53 @@ export type MaterializeRecoveryFlowResult = {
   taskIds: string[];
 };
 
+type RecoveryFlowSourceTaskValidationParams = {
+  tx: ExtendedTransactionClient;
+  organizationId: string;
+  jobId: string;
+  sourceFailedTaskId: string;
+};
+
+async function assertValidSourceFailedTaskId(
+  params: RecoveryFlowSourceTaskValidationParams,
+): Promise<void> {
+  const task = await params.tx.jobTask.findFirst({
+    where: {
+      id: params.sourceFailedTaskId,
+      jobId: params.jobId,
+      job: { organizationId: params.organizationId },
+    },
+    select: { id: true },
+  });
+
+  if (!task) {
+    throw new Error(
+      "sourceFailedTaskId must reference a task in the same job and organization.",
+    );
+  }
+}
+
+async function resolveRecoveryFlowSourceFailedTaskId(params: {
+  tx: ExtendedTransactionClient;
+  organizationId: string;
+  jobId: string;
+  explicitSourceFailedTaskId?: string;
+  issueJobTaskId?: string | null;
+}): Promise<string | undefined> {
+  const explicitId = params.explicitSourceFailedTaskId?.trim();
+  if (explicitId) {
+    await assertValidSourceFailedTaskId({
+      tx: params.tx,
+      organizationId: params.organizationId,
+      jobId: params.jobId,
+      sourceFailedTaskId: explicitId,
+    });
+    return explicitId;
+  }
+
+  return params.issueJobTaskId ?? undefined;
+}
+
 export function validateRecoveryFlowTasksInput(
   tasks: RecoveryFlowTaskInput[],
 ): RecoveryFlowTaskInput[] {
@@ -129,8 +176,17 @@ export async function materializeRecoveryFlowWithTasksInTx(
 
   const existingFlow = await tx.jobRecoveryFlow.findUnique({
     where: { jobIssueId: input.jobIssueId },
+    select: { id: true, status: true },
   });
   if (existingFlow) {
+    if (
+      existingFlow.status === JobRecoveryFlowStatus.DRAFT ||
+      existingFlow.status === JobRecoveryFlowStatus.ACTIVE
+    ) {
+      throw new Error(
+        "A recovery plan is already in progress for this issue. Open the existing plan instead of creating a duplicate.",
+      );
+    }
     throw new Error(
       "A recovery path already exists for this issue. Force resolve to cancel it, or contact support if the plan looks incomplete.",
     );
@@ -142,7 +198,7 @@ export async function materializeRecoveryFlowWithTasksInTx(
       organizationId: input.organizationId,
       jobId: input.jobId,
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, jobTaskId: true },
   });
   if (!issue) {
     throw new Error("Job issue not found or access denied.");
@@ -157,13 +213,21 @@ export async function materializeRecoveryFlowWithTasksInTx(
     input.jobId,
   );
 
+  const sourceFailedTaskId = await resolveRecoveryFlowSourceFailedTaskId({
+    tx,
+    organizationId: input.organizationId,
+    jobId: input.jobId,
+    explicitSourceFailedTaskId: input.sourceFailedTaskId,
+    issueJobTaskId: issue.jobTaskId,
+  });
+
   const flow = await tx.jobRecoveryFlow.create({
     data: {
       organizationId: input.organizationId,
       jobId: input.jobId,
       jobIssueId: input.jobIssueId,
       status: JobRecoveryFlowStatus.ACTIVE,
-      sourceFailedTaskId: input.sourceFailedTaskId,
+      sourceFailedTaskId,
       sourceChecklistItemId: input.sourceChecklistItemId,
       sourcePermitEventId: input.sourcePermitEventId,
       sourceInspectionEventId: input.sourceInspectionEventId,

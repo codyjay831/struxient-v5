@@ -40,6 +40,8 @@ test("filterCorrectionsStageTasksFromAiProposal removes tasks on Corrections sta
     sourceContext: "test",
     assumptions: [],
     warnings: [],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [
       { ...task, title: "Keep Me" },
       { ...task, title: "Remove Me", stageId: "s3", stageName: CORRECTIONS_STAGE_NAME },
@@ -60,6 +62,8 @@ test("filterCorrectionsStageTasksFromAiProposal removes tasks on Corrections sta
     sourceContext: "test",
     assumptions: [],
     warnings: [],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [
       { ...task, title: "Keep Me" },
       { ...task, title: "Remove Me", stageId: null, stageName: "Corrections" },
@@ -80,6 +84,8 @@ test("filterCorrectionsStageTasksFromAiProposal does nothing if no Corrections t
     sourceContext: "test",
     assumptions: [],
     warnings: ["Existing warning"],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [task],
   };
 
@@ -97,6 +103,8 @@ test("filterCorrectionsStageTasksFromAiProposal dedupes warning", () => {
     sourceContext: "test",
     assumptions: [],
     warnings: [CORRECTIONS_CONDITIONAL_WORK_WARNING],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [
       { ...task, stageId: "s3" },
     ],

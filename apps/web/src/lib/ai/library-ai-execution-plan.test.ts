@@ -30,6 +30,8 @@ test("validateLibraryDefaultExecutionProposalForApply passes when staged", () =>
     sourceContext: "Test",
     assumptions: [],
     warnings: [],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [task],
   });
   assert.equal(result.ok, true);
@@ -41,6 +43,8 @@ test("validateLibraryDefaultExecutionProposalForApply blocks unstaged tasks", ()
     sourceContext: "Test",
     assumptions: [],
     warnings: [],
+    cleanupNotes: [],
+    missingContext: [],
     tasks: [{ ...task, stageId: null }],
   });
   assert.equal(result.ok, false);
@@ -56,6 +60,8 @@ test("validateLibraryDefaultExecutionProposalForApply blocks Corrections-stage t
       sourceContext: "Test",
       assumptions: [],
       warnings: [],
+      cleanupNotes: [],
+      missingContext: [],
       tasks: [{ ...task, stageId: "s3", stageName: CORRECTIONS_STAGE_NAME }],
     },
     undefined,
@@ -66,4 +72,41 @@ test("validateLibraryDefaultExecutionProposalForApply blocks Corrections-stage t
     assert.ok(result.error.includes("Correction work is created later"));
     assert.deepEqual(result.unmappedTaskTitles, ["Install flashing"]);
   }
+});
+
+test("validateLibraryDefaultExecutionProposalForApply blocks stale stage ids", () => {
+  const result = validateLibraryDefaultExecutionProposalForApply(
+    {
+      templateId: "x",
+      sourceContext: "Test",
+      assumptions: [],
+      warnings: [],
+      cleanupNotes: ["Merged duplicate closeout tasks."],
+      missingContext: ["Service size missing."],
+      tasks: [{ ...task, stageId: "stale-stage-id" }],
+    },
+    undefined,
+    stages,
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.deepEqual(result.unmappedTaskTitles, ["Install flashing"]);
+  }
+});
+
+test("cleanupNotes and missingContext do not block valid library apply", () => {
+  const result = validateLibraryDefaultExecutionProposalForApply(
+    {
+      templateId: "x",
+      sourceContext: "Test",
+      assumptions: [],
+      warnings: [],
+      cleanupNotes: ["Merged duplicate closeout tasks."],
+      missingContext: ["Need utility provider policy."],
+      tasks: [task],
+    },
+    undefined,
+    stages,
+  );
+  assert.equal(result.ok, true);
 });

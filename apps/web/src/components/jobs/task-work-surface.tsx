@@ -36,6 +36,10 @@ import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-disp
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import {
+  shouldAutoOpenRecoveryPlanAfterIssueCreate,
+  shouldShowReviewRecoveryPlanAffordance,
+} from "@/lib/recovery-issue-ui-flow";
 import { RecoveryFlowBuilder } from "./recovery-flow-builder";
 import {
   Dialog,
@@ -116,7 +120,12 @@ export function TaskWorkSurface({
     attachmentSyncKey,
     issuesSyncKey,
   ]);
-  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string; issueId?: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+    issueId?: string;
+    issueSeverity?: JobIssueSeverity;
+  } | null>(null);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const hasJobsite = Boolean(jobsiteAddressLine?.trim());
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
@@ -300,7 +309,7 @@ export function TaskWorkSurface({
 
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reportTitle.trim()) return;
+    if (!reportTitle.trim() || isReporting) return;
 
     setIsReporting(true);
     setActionMessage(null);
@@ -319,10 +328,20 @@ export function TaskWorkSurface({
       setReportDescription("");
       setShowReportForm(false);
       setSelectedIssueId(result.issueId || null);
-      setActionMessage({ 
-        tone: "success", 
-        text: "Issue recorded for this task.",
-        issueId: result.issueId 
+      const shouldOpenRecoveryPlan = shouldAutoOpenRecoveryPlanAfterIssueCreate(
+        reportSeverity,
+        result.issueId,
+      );
+      if (shouldOpenRecoveryPlan) {
+        setShowRecoveryBuilder(true);
+      }
+      setActionMessage({
+        tone: "success",
+        text: shouldOpenRecoveryPlan
+          ? "Blocking issue recorded. Review your recovery plan to resume work."
+          : "Issue recorded for this task.",
+        issueId: result.issueId,
+        issueSeverity: reportSeverity,
       });
       refreshAfterMutation();
     } catch (err) {
@@ -508,18 +527,22 @@ export function TaskWorkSurface({
             const recoveryTasks = issue.recoveryFlow?.tasks || [];
             const totalRecoveryTasks = recoveryTasks.length;
             const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === JobTaskStatus.DONE).length;
-            const recoveryFlowOpen =
+            const recoveryFlowInProgress =
               issue.recoveryFlow &&
               (issue.recoveryFlow.status === JobRecoveryFlowStatus.ACTIVE ||
                 issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT);
-            const showRecoveryProgress = !!recoveryFlowOpen && totalRecoveryTasks > 0;
+            const recoveryFlowCompleted =
+              issue.recoveryFlow?.status === JobRecoveryFlowStatus.COMPLETED;
+            const showRecoveryProgress =
+              (!!recoveryFlowInProgress || recoveryFlowCompleted) &&
+              totalRecoveryTasks > 0;
             const allRecoveryTasksDone =
               totalRecoveryTasks > 0 &&
               recoveryTasks.every((t) => t.status === JobTaskStatus.DONE);
             const canResumeAfterRecovery =
               issue.status === JobIssueStatus.OPEN &&
               allRecoveryTasksDone &&
-              !!recoveryFlowOpen;
+              !!recoveryFlowInProgress;
 
             return (
               <div key={issue.id} className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
@@ -551,15 +574,32 @@ export function TaskWorkSurface({
                       )}
                     </div>
 
+                    {issue.recoveryFlow?.status === JobRecoveryFlowStatus.CANCELLED &&
+                      issue.status === JobIssueStatus.OPEN && (
+                        <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-warning-strong">
+                            Recovery plan cancelled
+                          </p>
+                          <p className="mt-1 text-[10px] leading-relaxed text-foreground-muted">
+                            This issue is still open and blocking work. Resolve or force-resolve this
+                            issue before creating another recovery plan.
+                          </p>
+                        </div>
+                      )}
+
                     {showRecoveryProgress && (
                       <div className="mt-3 space-y-2 rounded-lg bg-success/10 px-3 py-2">
                         <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success">
                           <Zap className="size-3" />
-                          {allRecoveryTasksDone
-                            ? `All follow-up steps done (${completedRecoveryTasks}/${totalRecoveryTasks}). Resume the original path to clear this blocker.`
-                            : `Active follow-up: ${completedRecoveryTasks}/${totalRecoveryTasks} steps done`}
+                          {issue.recoveryFlow?.status === JobRecoveryFlowStatus.COMPLETED
+                            ? `Recovery complete (${completedRecoveryTasks}/${totalRecoveryTasks}). Resume the original path.`
+                            : allRecoveryTasksDone
+                              ? `All follow-up steps done (${completedRecoveryTasks}/${totalRecoveryTasks}). Resume the original path to clear this blocker.`
+                              : `A recovery plan is already in progress (${completedRecoveryTasks}/${totalRecoveryTasks} steps done).`}
                         </p>
-                        {canResumeAfterRecovery && (
+                        {(canResumeAfterRecovery ||
+                          (issue.recoveryFlow?.status === JobRecoveryFlowStatus.COMPLETED &&
+                            issue.status === JobIssueStatus.OPEN)) && (
                           <button
                             type="button"
                             onClick={() => handleResumeAfterRecovery(issue.id)}
@@ -572,16 +612,25 @@ export function TaskWorkSurface({
                       </div>
                     )}
 
-                    {!issue.recoveryFlow && !showRecoveryBuilder && (
-                      <button
-                        onClick={() => {
-                          setSelectedIssueId(issue.id);
-                          setShowRecoveryBuilder(true);
-                        }}
-                        className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-contrast hover:opacity-90"
-                      >
-                        Start Recovery Flow
-                      </button>
+                    {shouldShowReviewRecoveryPlanAffordance({
+                      issue,
+                      showRecoveryBuilder,
+                    }) && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-[10px] leading-relaxed text-foreground-muted">
+                          Work is blocked until a recovery plan is activated, or this issue is
+                          resolved/force-resolved.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setSelectedIssueId(issue.id);
+                            setShowRecoveryBuilder(true);
+                          }}
+                          className="rounded-lg bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-contrast hover:opacity-90"
+                        >
+                          Review Recovery Plan
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -737,6 +786,7 @@ export function TaskWorkSurface({
               setShowRecoveryBuilder(false);
               setActionMessage(null);
             }}
+            disabled={isReporting}
             className={`${actionBtnBaseClass} border border-border bg-surface text-foreground-muted hover:border-border-strong hover:text-foreground`}
           >
             <AlertCircle className="size-4" />
@@ -750,16 +800,23 @@ export function TaskWorkSurface({
           <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
             Record an issue on this task
           </p>
+          {task.recoveryFlow?.jobIssueId && (
+            <p className="text-[10px] leading-relaxed text-foreground-muted">
+              This issue is being reported from a recovery task.
+            </p>
+          )}
           <input
             required
             value={reportTitle}
             onChange={(e) => setReportTitle(e.target.value)}
+            disabled={isReporting}
             placeholder="Short title"
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none"
           />
           <textarea
             value={reportDescription}
             onChange={(e) => setReportDescription(e.target.value)}
+            disabled={isReporting}
             placeholder="Details (optional)"
             rows={2}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none"
@@ -770,6 +827,7 @@ export function TaskWorkSurface({
               <select
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value as JobIssueType)}
+                disabled={isReporting}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
               >
                 {Object.values(JobIssueType).map((t) => (
@@ -784,6 +842,7 @@ export function TaskWorkSurface({
               <select
                 value={reportSeverity}
                 onChange={(e) => setReportSeverity(e.target.value as JobIssueSeverity)}
+                disabled={isReporting}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
               >
                 {Object.values(JobIssueSeverity).map((s) => (
@@ -798,6 +857,7 @@ export function TaskWorkSurface({
             <button
               type="button"
               onClick={() => setShowReportForm(false)}
+              disabled={isReporting}
               className="rounded-lg px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
             >
               Cancel
@@ -824,18 +884,23 @@ export function TaskWorkSurface({
           >
             {actionMessage.text}
           </p>
-          {actionMessage.tone === "success" && actionMessage.issueId && !showRecoveryBuilder && (
+          {actionMessage.tone === "success" &&
+            actionMessage.issueId &&
+            actionMessage.issueSeverity === JobIssueSeverity.DOES_NOT_BLOCK &&
+            !showRecoveryBuilder && (
             <WorkspacePanel className="border-accent/30 bg-accent/[0.02]">
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-foreground">Issue Recorded</p>
-                  <p className="text-[10px] text-foreground-muted">Would you like to build a recovery path now?</p>
+                  <p className="text-[10px] text-foreground-muted">
+                    Would you like to review a recovery plan now?
+                  </p>
                 </div>
                 <button
                   onClick={() => setShowRecoveryBuilder(true)}
                   className="rounded-lg bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-contrast hover:opacity-90"
                 >
-                  Start Recovery Flow
+                  Open Recovery Plan
                 </button>
               </div>
             </WorkspacePanel>
@@ -855,7 +920,7 @@ export function TaskWorkSurface({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Build Recovery Path</DialogTitle>
+            <DialogTitle>Review Recovery Plan</DialogTitle>
           </DialogHeader>
           <div className="max-h-[80vh] overflow-y-auto pr-2">
             {selectedIssueId && (
@@ -865,7 +930,7 @@ export function TaskWorkSurface({
                 onSuccess={() => {
                   setShowRecoveryBuilder(false);
                   setSelectedIssueId(null);
-                  setActionMessage({ tone: "success", text: "Recovery flow activated." });
+                  setActionMessage({ tone: "success", text: "Recovery plan activated." });
                   refreshAfterMutation();
                 }}
                 onCancel={() => {

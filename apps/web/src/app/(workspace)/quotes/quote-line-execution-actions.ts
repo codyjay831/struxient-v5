@@ -7,6 +7,7 @@ import { validateQuoteAiExecutionPlanForApply } from "@/lib/ai/quote-ai-executio
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import { AILibraryProposalSchema } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-task-requirements";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
@@ -636,12 +637,8 @@ async function createQuoteLineExecutionTasksFromProposal(
         providesSignals: gTask.providesSignals,
         requiresSignals: gTask.requiresSignals,
         hardSignal: gTask.hardSignal,
-        requirementsJson: {
-          checklist: gTask.checklist.map((c) => ({
-            id: crypto.randomUUID(),
-            label: c.label,
-          })),
-        } as Prisma.InputJsonValue,
+        assigneeRole: gTask.assigneeRole ?? null,
+        requirementsJson: buildTaskCompletionRequirementsFromAiTask(gTask) as Prisma.InputJsonValue,
         partsRequiredJson: {
           resources: gTask.resources.map((r) => ({
             id: crypto.randomUUID(),

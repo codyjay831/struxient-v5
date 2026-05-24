@@ -8,6 +8,7 @@ import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/library-ai-execution-plan";
+import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-task-requirements";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -652,9 +653,8 @@ export async function applyLineItemTemplateAIProposalAction(
             providesSignals: pTask.providesSignals,
             requiresSignals: pTask.requiresSignals,
             hardSignal: pTask.hardSignal,
-            requirementsJson: {
-              checklist: pTask.checklist.map((c) => ({ id: crypto.randomUUID(), label: c.label })),
-            } as Prisma.InputJsonValue,
+            assigneeRole: pTask.assigneeRole ?? null,
+            requirementsJson: buildTaskCompletionRequirementsFromAiTask(pTask) as Prisma.InputJsonValue,
             partsRequiredJson: {
               resources: pTask.resources.map((r) => ({ id: crypto.randomUUID(), ...r })),
             } as Prisma.InputJsonValue,

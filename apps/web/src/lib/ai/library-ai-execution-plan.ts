@@ -1,4 +1,5 @@
 import type { AILibraryProposal } from "./library-proposal-schema";
+import { StaffRole } from "@prisma/client";
 import {
   canApplySimulatedExecutionPlans,
   isSimulatedExecutionProposal,
@@ -63,7 +64,27 @@ export function validateLibraryDefaultExecutionProposalForApply(
     };
   }
 
-  const unmappedTaskTitles = proposal.tasks.filter((t) => !t.stageId).map((t) => t.title);
+  const validStageIds = new Set(allowedStages.map((stage) => stage.id));
+  const validRoles = new Set(Object.values(StaffRole));
+  const unmappedTaskTitles = proposal.tasks
+    .filter(
+      (task) =>
+        !task.stageId ||
+        (allowedStages.length > 0 && !validStageIds.has(task.stageId)),
+    )
+    .map((task) => task.title);
+  const invalidRoleTaskTitles = proposal.tasks
+    .filter((task) => task.assigneeRole && !validRoles.has(task.assigneeRole))
+    .map((task) => task.title);
+
+  if (invalidRoleTaskTitles.length > 0) {
+    return {
+      ok: false,
+      error: "One or more tasks include an invalid assignee role. Regenerate the proposal and try again.",
+      unmappedTaskTitles: invalidRoleTaskTitles,
+    };
+  }
+
   if (unmappedTaskTitles.length === 0) {
     return { ok: true };
   }

@@ -24,6 +24,8 @@ function baseProposal(tasks: AILibraryProposal["tasks"]): AILibraryProposal {
     sourceContext: "Roof tear-off",
     assumptions: [],
     warnings: [],
+    cleanupNotes: [],
+    missingContext: [],
     tasks,
   };
 }

@@ -1,4 +1,4 @@
-import { TaskTemplateCategory, JobIssueType, JobIssueSeverity } from "@prisma/client";
+import { TaskTemplateCategory, JobIssueType, JobIssueSeverity, StaffRole } from "@prisma/client";
 import {
   AILibraryProposal,
   AILibraryProposalSchema,
@@ -20,6 +20,7 @@ import {
   getStagesForAiExecutionPlanning, 
   filterCorrectionsStageTasksFromAiProposal 
 } from "./ai-execution-plan-corrections";
+import { normalizeExecutionProposalTasks } from "./normalize-execution-proposal";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
@@ -204,33 +205,64 @@ export class AIService {
     console.error("AI execution plan generation failed", error);
   }
 
-  private static assertValidProposedTasks(
+  /**
+   * Validate AI tasks against the proposed task schema and split into
+   * accepted vs dropped. We do NOT throw on per-task failures — one bad
+   * task from the model should not kill an otherwise usable plan. The
+   * caller surfaces dropped-task warnings in the proposal, and only
+   * throws if zero tasks survive.
+   */
+  private static partitionValidProposedTasks(
     tasks: Record<string, unknown>[],
-  ): Record<string, unknown>[] {
-    const rejected: { index: number; issues: z.ZodIssue[] }[] = [];
+  ): { validTasks: Record<string, unknown>[]; droppedWarnings: string[] } {
+    const validTasks: Record<string, unknown>[] = [];
+    const droppedWarnings: string[] = [];
+    const droppedLogEntries: {
+      taskIndex: number;
+      title: string | null;
+      issues: { path: string; message: string; code: string }[];
+    }[] = [];
 
     for (let index = 0; index < tasks.length; index++) {
-      const parsed = AILibraryProposedTaskSchema.safeParse(tasks[index]);
-      if (!parsed.success) {
-        rejected.push({ index, issues: parsed.error.issues });
+      const raw = tasks[index];
+      const parsed = AILibraryProposedTaskSchema.safeParse(raw);
+      if (parsed.success) {
+        validTasks.push(raw);
+        continue;
       }
-    }
 
-    if (rejected.length > 0) {
-      console.error(
-        "AI execution plan rejected invalid tasks",
-        rejected.map((r) => ({
-          taskIndex: r.index + 1,
-          issues: r.issues.map((i) => ({
-            path: i.path.join(".") || "(root)",
-            message: i.message,
-          })),
-        })),
+      const title = typeof raw?.title === "string" && raw.title.trim() !== ""
+        ? raw.title.trim()
+        : null;
+      const taskLabel = title ? `"${title}"` : `Task ${index + 1}`;
+      const issueDescriptions = parsed.error.issues.map((i) => ({
+        path: i.path.join(".") || "(root)",
+        message: i.message,
+        code: i.code,
+      }));
+
+      droppedLogEntries.push({
+        taskIndex: index + 1,
+        title,
+        issues: issueDescriptions,
+      });
+
+      const issueSummary = issueDescriptions
+        .map((i) => `${i.path}: ${i.message}`)
+        .join("; ");
+      droppedWarnings.push(
+        `${taskLabel}: AI returned an invalid task and it was dropped (${issueSummary}).`,
       );
-      throw new AiExecutionPlanInvalidError();
     }
 
-    return tasks;
+    if (droppedLogEntries.length > 0) {
+      console.error(
+        "AI execution plan dropped invalid tasks",
+        JSON.stringify(droppedLogEntries, null, 2),
+      );
+    }
+
+    return { validTasks, droppedWarnings };
   }
 
   /**
@@ -318,6 +350,11 @@ export class AIService {
             ...t,
             category: finalCategory,
             tempId: crypto.randomUUID(),
+            assigneeRole:
+              typeof t?.assigneeRole === "string" &&
+              (Object.values(StaffRole) as string[]).includes(t.assigneeRole)
+                ? (t.assigneeRole as StaffRole)
+                : null,
             stageId: stageMapping.stageId,
             stageName:
               stageMapping.stageId != null
@@ -330,16 +367,33 @@ export class AIService {
 
       const baseAssumptions = Array.isArray(rawProposal.assumptions) ? rawProposal.assumptions : [];
       const baseWarnings = Array.isArray(rawProposal.warnings) ? rawProposal.warnings : [];
+      const baseMissingContext = Array.isArray(rawProposal.missingContext)
+        ? rawProposal.missingContext.filter((value: unknown) => typeof value === "string")
+        : [];
 
-      const validatedTasks = this.assertValidProposedTasks(normalizedTasks);
+      const { validTasks, droppedWarnings } = this.partitionValidProposedTasks(normalizedTasks);
+
+      if (validTasks.length === 0 && normalizedTasks.length > 0) {
+        throw new AiExecutionPlanInvalidError();
+      }
+      const normalizedResult = normalizeExecutionProposalTasks(
+        validTasks.map((task) => AILibraryProposedTaskSchema.parse(task)),
+      );
 
       const proposal = {
         ...rawProposal,
         templateId: context.templateId,
         sourceContext: context.description,
         assumptions: baseAssumptions,
-        warnings: [...baseWarnings, ...normalizationWarnings, ...stageMappingWarnings],
-        tasks: validatedTasks,
+        missingContext: baseMissingContext,
+        cleanupNotes: normalizedResult.cleanupNotes,
+        warnings: [
+          ...baseWarnings,
+          ...normalizationWarnings,
+          ...stageMappingWarnings,
+          ...droppedWarnings,
+        ],
+        tasks: normalizedResult.tasks,
       };
 
       const { proposal: filteredProposal } = filterCorrectionsStageTasksFromAiProposal(
@@ -423,26 +477,44 @@ CATEGORY GUIDANCE:
 - SCHEDULING: appointments, dispatching crews, calendar booking, coordination.
 
 GOAL:
-Propose a set of tasks that a real contractor would perform to execute this scope.
-Avoid generic task lists. Think about permits, material orders, site prep, rough-in, inspections, and finish work.
+Produce the SMALLEST useful set of executable tasks for this scope.
+Avoid duplicate final/finalization/closeout filler tasks and avoid splitting proof-only details into fake standalone tasks.
+Think like contractor operations: ownership, scheduling, dependencies, blockers, and accountability.
 
 RULES:
 1. SELECT FROM REUSABLE TASKS FIRST. If an available reusable task fits the need, use its ID and title exactly.
 2. ONLY GENERATE NEW TASKS for gaps not covered by the library.
-3. Group tasks by STAGE. Each task's "stageName" MUST be copied exactly from EXISTING STAGES above — do not invent new stage names.
+3. Each task's "stageName" MUST be copied exactly from EXISTING STAGES above — do not invent new stage names.
 4. Do NOT assign tasks to the "Corrections" stage; correction work is created later from failed inspections, walkthrough findings, punch-list items, or job issues.
 5. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
 6. Mark critical blockers as "hardSignal: true".
-7. Include a checklist for each task.
-8. List required resources/equipment.
-9. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
-10. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
+7. Keep real-world distinct events separate when needed (example: "Request/Schedule Final Inspection" and "Attend Final Inspection" remain separate tasks).
+8. Stage intent rules:
+   - Use INSPECTION only for actual AHJ/inspection events.
+   - Use WALKTHROUGH only for distinct on-site/customer walkthrough events.
+   - Use CLOSEOUT for generic wrap-up/finalization work.
+   - Do not create multiple generic end-of-job stages/tasks.
+9. Put proof/photo/upload/signature/record-confirmation details into checklist/proof fields where possible.
+10. NEVER hoist high-risk or externally dependent work into checklist-only details: permits, inspection scheduling/attendance, utility work, payment collection, customer access blockers, material readiness, or safety-critical verification.
+11. If required context is missing, add entries in "missingContext" instead of inventing assumptions.
+12. Suggest "assigneeRole" conservatively using: OWNER | ADMIN | OFFICE | FIELD | VIEWER | SUBCONTRACTOR.
+    - PERMIT/PAYMENT/SCHEDULING/CUSTOMER_COMMUNICATION default to OFFICE.
+    - INSPECTION scheduling/request tasks default to OFFICE.
+    - INSPECTION attend/on-site tasks default to FIELD.
+    - MATERIAL order/purchase defaults to OFFICE; stage/load/deliver/install defaults to FIELD or null.
+    - If uncertain, use null.
+13. Include a checklist for each task.
+14. List required resources/equipment.
+15. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
+16. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this structure:
 {
   "assumptions": ["string"],
   "warnings": ["string"],
+  "cleanupNotes": ["string"],
+  "missingContext": ["string"],
   "tasks": [
     {
       "sourceTaskTemplateId": "string (ID from reusable tasks if selected, otherwise null)",
@@ -450,10 +522,14 @@ Return ONLY a valid JSON object matching this structure:
       "category": "one of: ${allowedCategories}",
       "instructions": "string",
       "stageName": "string (exact copy of one ALLOWED STAGES name)",
-      "stageIntent": "optional — PRE_CONSTRUCTION | PERMITTING | MOBILIZATION | SITE_PREP | ROUGH_IN | INSPECTION | INSTALL | FINISHES | CLOSEOUT",
+      "stageIntent": "optional — PRE_CONSTRUCTION | PERMITTING | MOBILIZATION | SITE_PREP | ROUGH_IN | INSPECTION | WALKTHROUGH | INSTALL | FINISHES | CLOSEOUT",
       "providesSignals": ["string"],
       "requiresSignals": ["string"],
       "hardSignal": boolean,
+      "assigneeRole": "optional one of OWNER | ADMIN | OFFICE | FIELD | VIEWER | SUBCONTRACTOR, or null",
+      "noteRequired": "optional boolean",
+      "photoRequired": "optional boolean",
+      "attachmentRequired": "optional boolean",
       "checklist": [{"label": "string"}],
       "resources": [{"name": "string", "quantity": number, "isEquipment": boolean}],
       "reasoning": "string",
@@ -462,6 +538,14 @@ Return ONLY a valid JSON object matching this structure:
   ]
 }
 `;
+  }
+
+  static buildContractorRealismPromptForTest(
+    context: AIExecutionPlanContext,
+    planningStages: { id: string; name: string }[],
+    reusableTasks: { id: string; title: string; category: string; stage?: { name: string } | null; tags: { name: string }[] }[] = [],
+  ): string {
+    return this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
   }
 
   /** Compatibility layer for quote-line AI execution planning */
@@ -746,6 +830,8 @@ Return ONLY a valid JSON object:
         "Demo AI output — not from the live provider. Apply is disabled unless demo apply is explicitly enabled.",
         ...(options.reason ? [`Simulated fallback reason: ${options.reason}`] : []),
       ],
+      cleanupNotes: [],
+      missingContext: [],
       tasks: [],
     };
 
