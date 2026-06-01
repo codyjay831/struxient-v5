@@ -450,13 +450,18 @@ export function LineItemTemplateDefaultExecutionPanel({
   const [proposal, setProposal] = useState<AILibraryProposal | null>(null);
   const [proposalGeneration, setProposalGeneration] =
     useState<AILibraryProposalGenerationMeta | null>(null);
+  const [planningContext, setPlanningContext] = useState("");
+  const [aiRegenerating, setAiRegenerating] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const totalTasks = stagesWithTasks.reduce((n, s) => n + s.tasks.length, 0);
 
-  const handleGenerateAI = async () => {
+  const handleGenerateAI = async (userInstructions?: string) => {
     setAiGenerating(true);
     try {
-      const result = await generateLineItemTemplateAIProposalAction(lineItemTemplateId);
+      const result = await generateLineItemTemplateAIProposalAction(
+        lineItemTemplateId,
+        userInstructions,
+      );
       if (result.error) {
         toast.error(result.error);
         setProposal(null);
@@ -493,7 +498,7 @@ export function LineItemTemplateDefaultExecutionPanel({
         />
         <button
           type="button"
-          onClick={handleGenerateAI}
+          onClick={() => void handleGenerateAI()}
           disabled={aiGenerating}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
@@ -510,9 +515,22 @@ export function LineItemTemplateDefaultExecutionPanel({
 
       {proposal && (
         <AILibraryProposalReviewPanel 
+          key={`${proposal.templateId}:${proposal.tasks.map((task) => task.tempId).join("|")}:${proposal.warnings.length}:${proposal.missingContext.length}`}
           proposal={proposal}
           generation={proposalGeneration ?? undefined}
           stages={getStagesForAiExecutionPlanning(stages)}
+          planningContext={planningContext}
+          onPlanningContextChange={setPlanningContext}
+          isRegenerating={aiRegenerating}
+          onRegenerate={async ({ planningContext: nextContext }) => {
+            setAiRegenerating(true);
+            try {
+              setPlanningContext(nextContext);
+              await handleGenerateAI(nextContext);
+            } finally {
+              setAiRegenerating(false);
+            }
+          }}
           onClose={() => {
             setProposal(null);
             setProposalGeneration(null);

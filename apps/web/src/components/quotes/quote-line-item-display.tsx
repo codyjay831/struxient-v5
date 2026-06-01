@@ -123,6 +123,7 @@ export function QuoteLineDraftExecutionSummary({
           draftTasks={draftTasks}
           reusableOptions={reusableOptions}
           stages={stages}
+          initialPlanningContext={line.internalNotes ?? ""}
         />
       ) : null}
     </div>

@@ -265,7 +265,7 @@ export function QuoteExecutionReviewPreviewView({
                             reusableOptions={reusableTaskOptions}
                             stages={stages}
                             revalidateScope="execution-review"
-                            openLabelOverride={row.taskCount === 0 ? "Add tasks" : "Edit execution"}
+                            openLabelOverride={row.taskCount === 0 ? "Add tasks" : "Refine with AI"}
                           />
                         </div>
                       ) : null}

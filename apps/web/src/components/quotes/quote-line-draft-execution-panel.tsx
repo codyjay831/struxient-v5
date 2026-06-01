@@ -1,22 +1,27 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   addQuoteLineExecutionTaskCustomAction,
   addQuoteLineExecutionTaskFromReusableAction,
   deleteQuoteLineExecutionTaskAction,
+  generateQuoteLineExecutionAIProposalAction,
   moveQuoteLineExecutionTaskAction,
+  applyQuoteLineExecutionAIProposalAction,
   updateQuoteLineExecutionTaskAction,
-  type QuoteLineExecutionFormState,
-  type QuoteLineExecutionRevalidateScope,
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
+import type {
+  QuoteLineExecutionFormState,
+  QuoteLineExecutionRevalidateScope,
+} from "@/app/(workspace)/quotes/quote-line-execution-types";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import {
   workspaceFormControlClass,
-  workspaceFormDangerButtonClass,
   workspaceFormFieldLabelClass,
   workspaceFormPrimaryButtonClass,
   workspaceFormSecondaryButtonClass,
+  workspaceFormDangerButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
   taskTemplateCategorySelectOptions,
@@ -26,6 +31,13 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 import type { LineItemTemplateTaskSource, TaskTemplateCategory } from "@prisma/client";
 import { quoteLineDraftExecutionSourceLabel } from "@/lib/quote-line-execution-source-label";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
+import { AILibraryProposalReviewPanel } from "@/components/scope-library/ai-library-proposal-review-panel";
+import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
+import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import { Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
@@ -577,6 +589,7 @@ export function QuoteLineDraftExecutionInlinePanel({
   reusableOptions,
   stages,
   revalidateScope = "quote",
+  initialPlanningContext = "",
 }: {
   quoteId: string;
   lineItemId: string;
@@ -584,8 +597,82 @@ export function QuoteLineDraftExecutionInlinePanel({
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
   revalidateScope?: QuoteLineExecutionRevalidateScope;
+  initialPlanningContext?: string;
 }) {
+  const router = useRouter();
   const [addMode, setAddMode] = useState<AddMode>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiProposal, setAiProposal] = useState<AILibraryProposal | null>(null);
+  const [aiProposalGeneration, setAiProposalGeneration] =
+    useState<AILibraryProposalGenerationMeta | null>(null);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [isAiRegenerating, setIsAiRegenerating] = useState(false);
+  const [planningContext, setPlanningContext] = useState(initialPlanningContext);
+  const [keepTaskIds, setKeepTaskIds] = useState<string[]>([]);
+
+  const draftTaskChoices = tasks.map((task) => ({ id: task.id, title: task.title }));
+
+  const closeAiPanel = () => {
+    setAiPanelOpen(false);
+    setAiProposal(null);
+    setAiProposalGeneration(null);
+    setKeepTaskIds([]);
+  };
+
+  const generateAiProposal = async (nextPlanningContext: string) => {
+    setIsAiGenerating(true);
+    try {
+      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineItemId, {
+        userInstructions: nextPlanningContext,
+        priorMissingContext: aiProposal?.missingContext,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        setAiProposal(null);
+        setAiProposalGeneration(null);
+        return;
+      }
+      if (!result.proposal) {
+        toast.error("AI returned no execution plan. Try again.");
+        setAiProposal(null);
+        setAiProposalGeneration(null);
+        return;
+      }
+      setAiProposal(result.proposal);
+      setAiProposalGeneration(result.generation ?? null);
+    } catch (error) {
+      console.error(error);
+      toast.error(getAiActionErrorMessage(error, "Failed to generate AI proposal."));
+      setAiProposal(null);
+      setAiProposalGeneration(null);
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  const handleApplyAiProposal = async (
+    approvedProposal: AILibraryProposal,
+    options?: { applyMode?: "append" | "replace"; keepTaskIds?: string[] },
+  ) => {
+    const result = await applyQuoteLineExecutionAIProposalAction(
+      quoteId,
+      lineItemId,
+      approvedProposal,
+      aiProposalGeneration ?? undefined,
+      {
+        mode: "replace",
+        keepTaskIds: options?.keepTaskIds ?? keepTaskIds,
+        revalidateScope,
+      },
+    );
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    if (result.warnings?.length) {
+      result.warnings.forEach((warning) => toast.warning(warning));
+    }
+    router.refresh();
+  };
 
   const tasksByStage = new Map<string | null, QuoteLineDraftExecutionTaskRow[]>();
   tasksByStage.set(null, []);
@@ -611,9 +698,44 @@ export function QuoteLineDraftExecutionInlinePanel({
 
   return (
     <div className="mt-3 rounded-lg border border-border-strong bg-foreground/[0.02] p-4 ring-1 ring-ring/20">
-      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-        Draft execution for this line
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+          Draft execution for this line
+        </p>
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => setAiPanelOpen(true)}
+          disabled={isAiGenerating}
+        >
+          {isAiGenerating ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Thinking…
+            </>
+          ) : (
+            <>
+              <Sparkles className="size-4" />
+              {tasks.length === 0 ? "Plan with AI" : "Refine with AI"}
+            </>
+          )}
+        </button>
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-surface/80 p-3 space-y-2">
+        <label className="block">
+          <span className={fieldLabelClass}>Details for AI (optional)</span>
+          <textarea
+            value={planningContext}
+            onChange={(event) => setPlanningContext(event.target.value)}
+            rows={2}
+            className={controlClass}
+            placeholder="Amperage, equipment model, route constraints, access notes…"
+          />
+        </label>
+        <p className="text-[10px] text-foreground-subtle">
+          Used when you open the AI planner. Add answers to AI questions there, or apply the plan as-is.
+        </p>
+      </div>
       {missingStageCount > 0 ? (
         <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
           {missingStageCount} {missingStageCount === 1 ? "task needs" : "tasks need"} a stage
@@ -635,6 +757,36 @@ export function QuoteLineDraftExecutionInlinePanel({
           />
         ))}
       </div>
+      {aiPanelOpen ? (
+        <AILibraryProposalReviewPanel
+          proposal={aiProposal}
+          generation={aiProposalGeneration ?? undefined}
+          stages={getStagesForAiExecutionPlanning(stages)}
+          planningContext={planningContext}
+          onPlanningContextChange={setPlanningContext}
+          isGenerating={isAiGenerating}
+          isRegenerating={isAiRegenerating}
+          onGenerate={async ({ planningContext: nextPlanningContext }) => {
+            setPlanningContext(nextPlanningContext);
+            await generateAiProposal(nextPlanningContext);
+          }}
+          onRegenerate={async ({ planningContext: nextPlanningContext }) => {
+            setIsAiRegenerating(true);
+            try {
+              setPlanningContext(nextPlanningContext);
+              await generateAiProposal(nextPlanningContext);
+            } finally {
+              setIsAiRegenerating(false);
+            }
+          }}
+          applyMode="replace"
+          existingDraftTasks={draftTaskChoices}
+          selectedKeepTaskIds={keepTaskIds}
+          onSelectedKeepTaskIdsChange={setKeepTaskIds}
+          onClose={closeAiPanel}
+          onApply={handleApplyAiProposal}
+        />
+      ) : null}
     </div>
   );
 }

@@ -51,14 +51,6 @@ export async function WorkstationPanelContent({
   }
 
   if (item.kind === "task") {
-    if (item.actionKind === "plan-recovery" && item.actionIssueId) {
-      return (
-        <IssueRecoveryDetailLoader
-          issueId={item.actionIssueId}
-          actionKind="plan-recovery"
-        />
-      );
-    }
     return <WorkstationTaskDetail taskId={item.recordId} />;
   }
 

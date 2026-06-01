@@ -130,3 +130,12 @@ test("generic wrap-up language maps to Closeout not Inspection", () => {
   });
   assert.equal(result.stageId, "s3");
 });
+
+test("scheduling label maps to Mobilization or Pre-Construction alias", () => {
+  const result = mapAiStageToStageId({
+    stageName: "Scheduling",
+    allowedStages: stages,
+  });
+  assert.ok(result.stageId === "s1");
+  assert.equal(result.confidence, "alias");
+});

@@ -19,7 +19,6 @@ import {
   deleteQuoteLineItemWorkspaceAction,
   updateQuoteLineItemWorkspaceAction,
   updateDraftQuoteDetailsWorkspaceAction,
-  copyLeadToQuoteNotesWorkspaceAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import {
@@ -75,6 +74,10 @@ const dangerButtonClass = workspaceFormDangerButtonClass;
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
+
+type AiRegenerateArgs = {
+  planningContext: string;
+};
 
 export function ArchivedQuoteReadOnlyNotice() {
   return (
@@ -631,54 +634,80 @@ export function QuoteAuthoringSurface({
   const [autoFocusAdd, setAutoFocusAdd] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [aiProposal, setAiProposal] = useState<AILibraryProposal | null>(null);
-  const [aiProposalLineId, setAiProposalLineId] = useState<string | null>(null);
+  const [activeAiLineId, setActiveAiLineId] = useState<string | null>(null);
   const [aiProposalGeneration, setAiProposalGeneration] =
     useState<AILibraryProposalGenerationMeta | null>(null);
+  const [aiRegenerating, setAiRegenerating] = useState(false);
+  const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showRawIntake, setShowRawIntake] = useState(false);
 
   const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead?.notes ?? null);
 
-  const handleGeneratePlan = async (lineId: string) => {
-    if (aiProposal && aiProposalLineId === lineId) {
-      return;
+  const ensurePlanningContextSeed = (lineId: string): string => {
+    const existing = planningContextByLineId[lineId];
+    if (typeof existing === "string") {
+      return existing;
     }
-    if (aiProposal) {
-      closeAiProposal();
+    const line = lineItems.find((item) => item.id === lineId);
+    const seed = line?.internalNotes?.trim() ?? "";
+    setPlanningContextByLineId((prev) => ({ ...prev, [lineId]: seed }));
+    return seed;
+  };
+
+  const setPlanningContextForLine = (lineId: string, value: string) => {
+    setPlanningContextByLineId((prev) => ({ ...prev, [lineId]: value }));
+  };
+
+  const openAiPanelForLine = (lineId: string) => {
+    ensurePlanningContextSeed(lineId);
+    if (activeAiLineId && activeAiLineId !== lineId) {
+      closeAiPanel();
     }
+    setActiveAiLineId(lineId);
+  };
+
+  const handleGeneratePlan = async (lineId: string, options?: AiRegenerateArgs) => {
+    const planningContext = options?.planningContext ?? ensurePlanningContextSeed(lineId);
+    setActiveAiLineId(lineId);
     setIsGenerating(lineId);
     try {
-      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId);
+      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId, {
+        userInstructions: planningContext,
+        priorMissingContext: aiProposal?.missingContext,
+      });
       if (result.error) {
         toast.error(result.error);
-        closeAiProposal();
+        setAiProposal(null);
+        setAiProposalGeneration(null);
       } else if (result.proposal) {
         setAiProposal(result.proposal);
-        setAiProposalLineId(lineId);
         setAiProposalGeneration(result.generation ?? null);
-        toast.success("Review the AI execution plan in the panel on the right.");
       } else {
         toast.error("AI returned no execution plan. Try again.");
-        closeAiProposal();
+        setAiProposal(null);
+        setAiProposalGeneration(null);
       }
     } catch (e) {
       console.error(e);
       toast.error(getAiActionErrorMessage(e, "Failed to generate AI proposal."));
-      closeAiProposal();
+      setAiProposal(null);
+      setAiProposalGeneration(null);
     } finally {
       setIsGenerating(null);
     }
   };
 
   const handleApplyAiProposal = async (approvedProposal: AILibraryProposal) => {
-    if (!aiProposalLineId) {
+    if (!activeAiLineId) {
       return;
     }
     const result = await applyQuoteLineExecutionAIProposalAction(
       quoteId,
-      aiProposalLineId,
+      activeAiLineId,
       approvedProposal,
       aiProposalGeneration ?? undefined,
+      undefined,
     );
     if (result.error) {
       throw new Error(result.error);
@@ -689,9 +718,9 @@ export function QuoteAuthoringSurface({
     onMutated();
   };
 
-  const closeAiProposal = () => {
+  const closeAiPanel = () => {
+    setActiveAiLineId(null);
     setAiProposal(null);
-    setAiProposalLineId(null);
     setAiProposalGeneration(null);
   };
 
@@ -866,8 +895,8 @@ export function QuoteAuthoringSurface({
                             </div>
                             <button
                               type="button"
-                              disabled={isGenerating === line.id || aiProposal !== null}
-                              onClick={() => handleGeneratePlan(line.id)}
+                              disabled={isGenerating === line.id}
+                              onClick={() => openAiPanelForLine(line.id)}
                               className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
                             >
                               {isGenerating === line.id ? (
@@ -1001,15 +1030,35 @@ export function QuoteAuthoringSurface({
         </div>
       </div>
 
-      {aiProposal && (
+      {activeAiLineId ? (
         <AILibraryProposalReviewPanel
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}
           stages={getStagesForAiExecutionPlanning(stages)}
-          onClose={closeAiProposal}
+          lineLabel={lineItems.find((item) => item.id === activeAiLineId)?.description}
+          planningContext={planningContextByLineId[activeAiLineId] ?? ""}
+          onPlanningContextChange={(value) => {
+            setPlanningContextForLine(activeAiLineId, value);
+          }}
+          isGenerating={isGenerating === activeAiLineId}
+          isRegenerating={aiRegenerating}
+          onGenerate={async ({ planningContext }) => {
+            setPlanningContextForLine(activeAiLineId, planningContext);
+            await handleGeneratePlan(activeAiLineId, { planningContext });
+          }}
+          onRegenerate={async ({ planningContext }) => {
+            setAiRegenerating(true);
+            try {
+              setPlanningContextForLine(activeAiLineId, planningContext);
+              await handleGeneratePlan(activeAiLineId, { planningContext });
+            } finally {
+              setAiRegenerating(false);
+            }
+          }}
+          onClose={closeAiPanel}
           onApply={handleApplyAiProposal}
         />
-      )}
+      ) : null}
     </div>
   );
 }

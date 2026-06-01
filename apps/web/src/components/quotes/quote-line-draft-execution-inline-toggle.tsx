@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { QuoteLineExecutionRevalidateScope } from "@/app/(workspace)/quotes/quote-line-execution-actions";
+import type { QuoteLineExecutionRevalidateScope } from "@/app/(workspace)/quotes/quote-line-execution-types";
 import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
   QuoteLineDraftExecutionInlinePanel,
@@ -21,6 +21,7 @@ export function QuoteLineDraftExecutionInlineToggle({
   stages,
   revalidateScope = "quote",
   openLabelOverride,
+  initialPlanningContext,
 }: {
   quoteId: string;
   lineItemId: string;
@@ -31,6 +32,8 @@ export function QuoteLineDraftExecutionInlineToggle({
   revalidateScope?: QuoteLineExecutionRevalidateScope;
   /** Optional override for the open-button label (e.g. "Edit execution" on review). */
   openLabelOverride?: string;
+  /** Optional seed used for AI planning-context input. */
+  initialPlanningContext?: string;
 }) {
   const [open, setOpen] = useState(false);
   const defaultOpenLabel = taskCount === 0 ? "Add draft execution" : "Edit draft execution";
@@ -54,6 +57,7 @@ export function QuoteLineDraftExecutionInlineToggle({
           reusableOptions={reusableOptions}
           stages={stages}
           revalidateScope={revalidateScope}
+          initialPlanningContext={initialPlanningContext}
         />
       ) : null}
     </div>

@@ -78,6 +78,8 @@ const STAGE_NAME_ALIASES: Record<string, readonly string[]> = {
   finalinspect: ["Inspection"],
   install: ["Rough-In", "Finishes", "Installation"],
   installation: ["Finishes", "Rough-In", "Installation"],
+  scheduling: ["Mobilization", "Pre-Construction"],
+  schedule: ["Mobilization", "Pre-Construction"],
   finishes: ["Finishes"],
   finish: ["Finishes"],
   walkthrough: ["Walkthrough"],

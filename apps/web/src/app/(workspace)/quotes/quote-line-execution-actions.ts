@@ -17,11 +17,22 @@ import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
+import { buildQuoteExecutionPlanningContext } from "@/lib/ai/quote-execution-planning-context";
+import { resolveQuoteLineAiReplaceDeleteIds } from "@/lib/ai/quote-line-ai-replace";
+import type {
+  QuoteLineExecutionAiApplyOptions,
+  QuoteLineExecutionAiGenerateOptions,
+  QuoteLineExecutionFormState,
+  QuoteLineExecutionRevalidateScope,
+} from "@/app/(workspace)/quotes/quote-line-execution-types";
 
-export type QuoteLineExecutionFormState = {
-  error?: string;
-  warnings?: string[];
-};
+export type {
+  QuoteLineExecutionAiApplyMode,
+  QuoteLineExecutionAiApplyOptions,
+  QuoteLineExecutionAiGenerateOptions,
+  QuoteLineExecutionFormState,
+  QuoteLineExecutionRevalidateScope,
+} from "@/app/(workspace)/quotes/quote-line-execution-types";
 
 function trimOrNull(value: FormDataEntryValue | null): string | null {
   if (value == null || typeof value !== "string") {
@@ -205,8 +216,6 @@ async function assertDraftQuoteLine(
 
 const QUOTE_LINE_EXECUTION_LOCKED_ERROR =
   "This quote line is not editable. The quote may be archived, a job may already be activated, or it is outside your organization.";
-
-export type QuoteLineExecutionRevalidateScope = "quote" | "execution-review";
 
 function parseRevalidateScope(
   value: FormDataEntryValue | null,
@@ -654,6 +663,7 @@ async function createQuoteLineExecutionTasksFromProposal(
 export async function generateQuoteLineExecutionAIProposalAction(
   quoteId: string,
   lineItemId: string,
+  options?: QuoteLineExecutionAiGenerateOptions,
 ): Promise<{
   error?: string;
   proposal?: AILibraryProposal;
@@ -682,7 +692,7 @@ export async function generateQuoteLineExecutionAIProposalAction(
         },
       },
       include: {
-        quote: { select: { organizationId: true } },
+        quote: { select: { organizationId: true, internalNotes: true, lead: { select: { notes: true } } } },
         sourceLineItemTemplate: { include: { tags: { select: { name: true } } } },
       },
     });
@@ -703,6 +713,13 @@ export async function generateQuoteLineExecutionAIProposalAction(
     });
 
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
+    const userInstructions = buildQuoteExecutionPlanningContext({
+      userInstructions: options?.userInstructions,
+      lineInternalNotes: line.internalNotes,
+      quoteInternalNotes: line.quote.internalNotes,
+      leadNotes: line.quote.lead?.notes ?? null,
+      priorMissingContext: options?.priorMissingContext,
+    });
     const generated = await AIService.generateExecutionPlan(
       line.description,
       line.quote.organizationId,
@@ -710,6 +727,7 @@ export async function generateQuoteLineExecutionAIProposalAction(
       stages,
       [],
       ctx.organizationName,
+      userInstructions,
     );
 
     console.info("[quote-ai] generate ok", {
@@ -737,6 +755,7 @@ export async function applyQuoteLineExecutionAIProposalAction(
   lineItemId: string,
   proposal: AILibraryProposal,
   generation?: AILibraryProposalGenerationMeta,
+  options?: QuoteLineExecutionAiApplyOptions,
 ): Promise<{ error?: string; success?: boolean; warnings?: string[] }> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
@@ -773,11 +792,31 @@ export async function applyQuoteLineExecutionAIProposalAction(
         throw new Error("LINE_LOCKED");
       }
 
+      const mode = options?.mode ?? "append";
+      if (mode === "replace") {
+        const existingTaskRows = await tx.quoteLineExecutionTask.findMany({
+          where: { quoteLineItemId: lid },
+          select: { id: true },
+        });
+        const replacePlan = resolveQuoteLineAiReplaceDeleteIds(
+          existingTaskRows.map((row) => row.id),
+          options?.keepTaskIds ?? [],
+        );
+        if (replacePlan.deleteTaskIds.length > 0) {
+          await tx.quoteLineExecutionTask.deleteMany({
+            where: {
+              quoteLineItemId: lid,
+              id: { in: replacePlan.deleteTaskIds },
+            },
+          });
+        }
+      }
+
       await createQuoteLineExecutionTasksFromProposal(tx, lid, parsedProposal);
       await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     });
 
-    revalidatePath(`/quotes/${qid}`);
+    revalidateQuoteLineExecutionSurfaces(qid, options?.revalidateScope ?? "quote");
     return {
       success: true,
       warnings: validation.warnings.length > 0 ? validation.warnings : undefined,
@@ -786,6 +825,9 @@ export async function applyQuoteLineExecutionAIProposalAction(
     if (e instanceof Error) {
       if (e.message === "LINE_LOCKED") {
         return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+      }
+      if (e.message === "INVALID_KEEP_TASKS") {
+        return { error: "One or more tasks selected to keep are no longer available on this line." };
       }
     }
     console.error("Failed to apply AI execution plan", e);

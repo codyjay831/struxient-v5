@@ -497,6 +497,7 @@ RULES:
 9. Put proof/photo/upload/signature/record-confirmation details into checklist/proof fields where possible.
 10. NEVER hoist high-risk or externally dependent work into checklist-only details: permits, inspection scheduling/attendance, utility work, payment collection, customer access blockers, material readiness, or safety-critical verification.
 11. If required context is missing, add entries in "missingContext" instead of inventing assumptions.
+11a. If USER INSTRUCTIONS answer a previously-missing detail, do not repeat that item in "missingContext".
 12. Suggest "assigneeRole" conservatively using: OWNER | ADMIN | OFFICE | FIELD | VIEWER | SUBCONTRACTOR.
     - PERMIT/PAYMENT/SCHEDULING/CUSTOMER_COMMUNICATION default to OFFICE.
     - INSPECTION scheduling/request tasks default to OFFICE.
@@ -556,6 +557,7 @@ Return ONLY a valid JSON object matching this structure:
     existingStages: { id: string; name: string }[] = [],
     existingSignals: string[] = [],
     organizationName?: string,
+    userInstructions?: string,
   ): Promise<AILibraryProposalGenerationResult> {
     return this.generateLibraryExecutionPlan({
       templateId: "compat",
@@ -565,6 +567,7 @@ Return ONLY a valid JSON object matching this structure:
       organizationName,
       existingStages,
       existingSignals,
+      userInstructions,
     });
   }
 

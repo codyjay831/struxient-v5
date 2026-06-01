@@ -2,6 +2,7 @@ import type {
   JobIssueSeverity,
   JobIssueStatus,
   JobIssueType,
+  JobRecoveryFlowStatus,
   JobTaskStatus,
 } from "@prisma/client";
 import type { TaskIssueRef } from "@/lib/task-readiness";
@@ -34,7 +35,7 @@ export type JobTaskExecutionTask = {
     } | null;
     recoveryFlow?: {
       id: string;
-      status: string;
+      status: JobRecoveryFlowStatus;
       tasks: {
         id: string;
         title: string;
