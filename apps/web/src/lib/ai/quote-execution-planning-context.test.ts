@@ -6,6 +6,10 @@ test("buildQuoteExecutionPlanningContext combines core context sources", () => {
   const context = buildQuoteExecutionPlanningContext({
     userInstructions: "Use attic route, 60A breaker.",
     lineInternalNotes: "Customer insists on NEMA receptacle.",
+    customerScopeTitle: "EV charger installation",
+    customerScopeDescription: "Install a Level 2 EV charger in the garage.",
+    customerIncludedNotes: "Permit coordination included.",
+    customerExcludedNotes: "Utility trenching excluded unless needed.",
     quoteInternalNotes: "Permit lead time is usually 2 weeks.",
     leadNotes:
       "[Public Intake Form]\nService / project location: Garage wall\nPreferred timing: ASAP\nRequest type: EV charger",
@@ -14,6 +18,10 @@ test("buildQuoteExecutionPlanningContext combines core context sources", () => {
   assert.ok(context);
   assert.match(context!, /User clarifications/i);
   assert.match(context!, /Line internal notes/i);
+  assert.match(context!, /Customer scope title/i);
+  assert.match(context!, /Customer scope description/i);
+  assert.match(context!, /Customer included notes/i);
+  assert.match(context!, /Customer excluded notes/i);
   assert.match(context!, /Quote internal notes/i);
   assert.match(context!, /Lead intake context/i);
 });
@@ -38,6 +46,10 @@ test("buildQuoteExecutionPlanningContext returns undefined for empty payload", (
   const context = buildQuoteExecutionPlanningContext({
     userInstructions: "   ",
     lineInternalNotes: null,
+    customerScopeTitle: " ",
+    customerScopeDescription: "",
+    customerIncludedNotes: undefined,
+    customerExcludedNotes: null,
     quoteInternalNotes: "",
     leadNotes: undefined,
     priorMissingContext: [],

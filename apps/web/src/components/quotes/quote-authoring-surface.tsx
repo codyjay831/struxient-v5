@@ -23,13 +23,26 @@ import {
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import {
   generateQuoteLineExecutionAIProposalAction,
+  assessQuoteLineExecutionContextAction,
   applyQuoteLineExecutionAIProposalAction,
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
+import {
+  generateQuoteScopeSuggestionsAction,
+  applyQuoteScopeSuggestionsAction,
+} from "@/app/(workspace)/quotes/quote-line-items-ai-actions";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import type {
+  CommercialLineItemSuggestion,
+  QuoteScopeSuggestionsProposal,
+  QuoteScopeSuggestionsGenerationMeta,
+} from "@/lib/ai/quote-line-items-proposal-schema";
+import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
+import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
 import { AILibraryProposalReviewPanel } from "@/components/scope-library/ai-library-proposal-review-panel";
+import { QuoteScopeCapturePanel } from "@/components/quotes/quote-line-items-ai-review-panel";
 import { 
   QUOTE_FIELD_LIMITS,
   QUOTE_LINE_FIELD_LIMITS 
@@ -71,6 +84,8 @@ const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
+const aiExecutionContextPreflightEnabled =
+  process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -638,9 +653,30 @@ export function QuoteAuthoringSurface({
   const [aiProposalGeneration, setAiProposalGeneration] =
     useState<AILibraryProposalGenerationMeta | null>(null);
   const [aiRegenerating, setAiRegenerating] = useState(false);
+  const [aiContextAssessment, setAiContextAssessment] =
+    useState<ExecutionContextAssessment | null>(null);
+  const [isAiAssessing, setIsAiAssessing] = useState(false);
+  const aiAssessRequestSeqRef = useRef(0);
   const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showRawIntake, setShowRawIntake] = useState(false);
+  const [scopeCaptureOpen, setScopeCaptureOpen] = useState(false);
+  const [scopeCaptureText, setScopeCaptureText] = useState("");
+  const [scopeAdditionalInstructions, setScopeAdditionalInstructions] = useState("");
+  const [scopeCaptureSources, setScopeCaptureSources] = useState<QuoteScopeCaptureSourceFlags>({
+    includeIntakeNotes: true,
+    includeInternalQuoteNotes: true,
+    includeScopeSummary: true,
+  });
+  const [scopeProposal, setScopeProposal] = useState<QuoteScopeSuggestionsProposal | null>(null);
+  const [scopeGeneration, setScopeGeneration] =
+    useState<QuoteScopeSuggestionsGenerationMeta | null>(null);
+  const [isScopeGenerating, setIsScopeGenerating] = useState(false);
+  const [isScopeApplying, setIsScopeApplying] = useState(false);
+
+  const hasIntakeNotes = Boolean(lead?.notes?.trim());
+  const hasScopeSummary = Boolean(lead?.scopeSummary?.trim());
+  const hasInternalNotesForCapture = Boolean(initialInternalNotes?.trim());
 
   const { isPublicIntake, parsedFields, cleanNotes } = parseIntakeNotes(lead?.notes ?? null);
 
@@ -722,6 +758,140 @@ export function QuoteAuthoringSurface({
     setActiveAiLineId(null);
     setAiProposal(null);
     setAiProposalGeneration(null);
+    setAiContextAssessment(null);
+    setIsAiAssessing(false);
+    aiAssessRequestSeqRef.current += 1;
+  };
+
+  const handleAssessExecutionContext = async (lineId: string, planningContext: string) => {
+    if (!aiExecutionContextPreflightEnabled) return;
+    const seq = aiAssessRequestSeqRef.current + 1;
+    aiAssessRequestSeqRef.current = seq;
+    setIsAiAssessing(true);
+    try {
+      const result = await assessQuoteLineExecutionContextAction(quoteId, lineId, {
+        userInstructions: planningContext,
+        priorMissingContext: aiProposal?.missingContext,
+      });
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      if (result.error) {
+        toast.warning(result.error);
+        return;
+      }
+      setAiContextAssessment(result.assessment ?? null);
+    } catch (error) {
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      console.error(error);
+      toast.warning(getAiActionErrorMessage(error, "Failed to assess execution context."));
+    } finally {
+      if (aiAssessRequestSeqRef.current === seq) {
+        setIsAiAssessing(false);
+      }
+    }
+  };
+
+  const openScopeCapture = () => {
+    setScopeCaptureOpen(true);
+    setScopeProposal(null);
+    setScopeGeneration(null);
+  };
+
+  const closeScopeCapture = () => {
+    setScopeCaptureOpen(false);
+    setScopeProposal(null);
+    setScopeGeneration(null);
+    setIsScopeGenerating(false);
+    setIsScopeApplying(false);
+  };
+
+  const handleGenerateScopeSuggestions = async () => {
+    setIsScopeGenerating(true);
+    try {
+      const result = await generateQuoteScopeSuggestionsAction(quoteId, {
+        captureText: scopeCaptureText,
+        additionalInstructions: scopeAdditionalInstructions,
+        sources: scopeCaptureSources,
+        priorMissingInfo: scopeProposal
+          ? [
+              ...scopeProposal.quoteMissingInfo,
+              ...scopeProposal.commercialLineItems.flatMap((item) => item.missingInfo),
+            ]
+          : undefined,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        setScopeProposal(null);
+        setScopeGeneration(null);
+        return;
+      }
+      if (!result.proposal) {
+        toast.error("No scope suggestions returned. Try again.");
+        setScopeProposal(null);
+        setScopeGeneration(null);
+        return;
+      }
+      setScopeProposal(result.proposal);
+      setScopeGeneration(result.generation ?? null);
+    } catch (e) {
+      console.error(e);
+      toast.error(getAiActionErrorMessage(e, "Failed to draft scope suggestions."));
+      setScopeProposal(null);
+      setScopeGeneration(null);
+    } finally {
+      setIsScopeGenerating(false);
+    }
+  };
+
+  const handleApplyScopeSuggestions = async (approved: {
+    selectedTemplateIds: string[];
+    selectedCommercialLineItems: CommercialLineItemSuggestion[];
+    selectedOptionalAddOnIds: string[];
+    selectedQuoteJobContext: string[];
+  }) => {
+    if (!scopeProposal) return;
+    setIsScopeApplying(true);
+    try {
+      const result = await applyQuoteScopeSuggestionsAction(quoteId, scopeProposal, {
+        approved: {
+          selectedTemplateIds: approved.selectedTemplateIds,
+          selectedCommercialLineItems: approved.selectedCommercialLineItems.map((item) => ({
+            tempId: item.tempId,
+            description: item.description,
+            customerScopeTitle: item.customerScopeTitle,
+            customerScopeDescription: item.customerScopeDescription,
+            lineItemDetails: item.lineItemDetails,
+            executionPlanningNotes: item.executionPlanningNotes,
+            missingInfo: item.missingInfo,
+          })),
+          selectedOptionalAddOnIds: approved.selectedOptionalAddOnIds,
+          selectedQuoteJobContext: approved.selectedQuoteJobContext,
+        },
+        generation: scopeGeneration ?? undefined,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.warnings?.length) {
+        result.warnings.forEach((warning) => toast.warning(warning));
+      }
+      toast.success(
+        result.createdCount === 1
+          ? "1 line item added. Set pricing when ready."
+          : `${result.createdCount} line items added. Set pricing when ready.`,
+      );
+      closeScopeCapture();
+      onMutated();
+    } catch (e) {
+      console.error(e);
+      toast.error(getAiActionErrorMessage(e, "Failed to add scope suggestions."));
+    } finally {
+      setIsScopeApplying(false);
+    }
   };
 
   useEffect(() => {
@@ -771,16 +941,25 @@ export function QuoteAuthoringSurface({
               description="Each row is commercial scope and pricing first. Internal draft execution and planning stay under each line."
               actions={
                 !isAddOpen ? (
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => {
-                      setIsAddOpen(true);
-                      setAutoFocusAdd(true);
-                    }}
-                  >
-                    Add line item
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={openScopeCapture}
+                    >
+                      Quick scope capture
+                    </button>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => {
+                        setIsAddOpen(true);
+                        setAutoFocusAdd(true);
+                      }}
+                    >
+                      Add line item
+                    </button>
+                  </div>
                 ) : null
               }
             />
@@ -838,6 +1017,13 @@ export function QuoteAuthoringSurface({
                         Add line item
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={openScopeCapture}
+                    >
+                      Quick scope capture
+                    </button>
                     <SavedLineItemPickerDialog
                       quoteId={quoteId}
                       templates={[...lineItemTemplates]}
@@ -1015,6 +1201,15 @@ export function QuoteAuthoringSurface({
                   ) : (
                     <p className="text-xs italic text-foreground-subtle">No intake notes available.</p>
                   )}
+                  {(hasIntakeNotes || hasScopeSummary || hasInternalNotesForCapture) && (
+                    <button
+                      type="button"
+                      className="text-[10px] font-medium text-foreground-subtle underline underline-offset-2 hover:text-foreground transition-colors"
+                      onClick={openScopeCapture}
+                    >
+                      Draft scope from intake →
+                    </button>
+                  )}
                 </section>
 
                 {/* Internal Quote Notes Block */}
@@ -1034,6 +1229,7 @@ export function QuoteAuthoringSurface({
         <AILibraryProposalReviewPanel
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}
+          contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
           stages={getStagesForAiExecutionPlanning(stages)}
           lineLabel={lineItems.find((item) => item.id === activeAiLineId)?.description}
           planningContext={planningContextByLineId[activeAiLineId] ?? ""}
@@ -1041,7 +1237,16 @@ export function QuoteAuthoringSurface({
             setPlanningContextForLine(activeAiLineId, value);
           }}
           isGenerating={isGenerating === activeAiLineId}
+          isAssessing={isAiAssessing}
           isRegenerating={aiRegenerating}
+          onAssessContext={
+            aiExecutionContextPreflightEnabled
+              ? async ({ planningContext }) => {
+                  setPlanningContextForLine(activeAiLineId, planningContext);
+                  await handleAssessExecutionContext(activeAiLineId, planningContext);
+                }
+              : undefined
+          }
           onGenerate={async ({ planningContext }) => {
             setPlanningContextForLine(activeAiLineId, planningContext);
             await handleGeneratePlan(activeAiLineId, { planningContext });
@@ -1059,6 +1264,26 @@ export function QuoteAuthoringSurface({
           onApply={handleApplyAiProposal}
         />
       ) : null}
+
+      <QuoteScopeCapturePanel
+        open={scopeCaptureOpen}
+        onClose={closeScopeCapture}
+        hasIntakeNotes={hasIntakeNotes}
+        hasInternalNotes={hasInternalNotesForCapture}
+        hasScopeSummary={hasScopeSummary}
+        captureText={scopeCaptureText}
+        onCaptureTextChange={setScopeCaptureText}
+        additionalInstructions={scopeAdditionalInstructions}
+        onAdditionalInstructionsChange={setScopeAdditionalInstructions}
+        sources={scopeCaptureSources}
+        onSourcesChange={setScopeCaptureSources}
+        proposal={scopeProposal}
+        generation={scopeGeneration}
+        isGenerating={isScopeGenerating}
+        isApplying={isScopeApplying}
+        onGenerate={handleGenerateScopeSuggestions}
+        onApply={handleApplyScopeSuggestions}
+      />
     </div>
   );
 }

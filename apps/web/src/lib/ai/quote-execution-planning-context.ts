@@ -3,6 +3,10 @@ import { parseIntakeNotes } from "@/lib/lead-display";
 type BuildQuoteExecutionPlanningContextInput = {
   userInstructions?: string | null;
   lineInternalNotes?: string | null;
+  customerScopeTitle?: string | null;
+  customerScopeDescription?: string | null;
+  customerIncludedNotes?: string | null;
+  customerExcludedNotes?: string | null;
   quoteInternalNotes?: string | null;
   leadNotes?: string | null;
   priorMissingContext?: string[];
@@ -41,6 +45,26 @@ export function buildQuoteExecutionPlanningContext(
   const lineInternalNotes = trimOrNull(input.lineInternalNotes);
   if (lineInternalNotes) {
     sections.push(`Line internal notes:\n${lineInternalNotes}`);
+  }
+
+  const customerScopeTitle = trimOrNull(input.customerScopeTitle);
+  if (customerScopeTitle) {
+    sections.push(`Customer scope title:\n${customerScopeTitle}`);
+  }
+
+  const customerScopeDescription = trimOrNull(input.customerScopeDescription);
+  if (customerScopeDescription) {
+    sections.push(`Customer scope description:\n${customerScopeDescription}`);
+  }
+
+  const customerIncludedNotes = trimOrNull(input.customerIncludedNotes);
+  if (customerIncludedNotes) {
+    sections.push(`Customer included notes:\n${customerIncludedNotes}`);
+  }
+
+  const customerExcludedNotes = trimOrNull(input.customerExcludedNotes);
+  if (customerExcludedNotes) {
+    sections.push(`Customer excluded notes:\n${customerExcludedNotes}`);
   }
 
   const quoteInternalNotes = trimOrNull(input.quoteInternalNotes);

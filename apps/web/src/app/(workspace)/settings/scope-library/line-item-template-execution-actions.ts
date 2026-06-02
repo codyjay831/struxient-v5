@@ -7,6 +7,7 @@ import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { isAiExecutionContextPreflightEnabled } from "@/lib/ai/ai-execution-plan-generation";
 import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/library-ai-execution-plan";
 import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-task-requirements";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
@@ -17,6 +18,8 @@ import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import { lineItemTemplateDefaultExecutionPath } from "@/lib/line-item-template-execution-path";
+import { buildTemplateExecutionPlanningContext } from "@/lib/ai/execution-planning-inputs";
+import type { ExecutionContextAssessment } from "@/lib/ai/execution-context-assessment-schema";
 
 export type LineItemTemplateExecutionFormState = {
   error?: string;
@@ -595,6 +598,59 @@ export async function generateLineItemTemplateAIProposalAction(
   } catch (e) {
     console.error("Failed to generate AI execution plan", e);
     return { error: getAiActionErrorMessage(e) };
+  }
+}
+
+export async function assessLineItemTemplateExecutionContextAction(
+  lineItemTemplateId: string,
+  userInstructions?: string,
+): Promise<{ error?: string; assessment?: ExecutionContextAssessment }> {
+  const tid = lineItemTemplateId.trim();
+  if (!tid) {
+    return { error: "Missing saved line item." };
+  }
+  if (!isAiExecutionContextPreflightEnabled()) {
+    return {
+      assessment: { foundContext: [], missingContext: [], assumptions: [] },
+    };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  try {
+    const preset = await db.lineItemTemplate.findFirst({
+      where: { id: tid, organizationId: ctx.organizationId, archivedAt: null },
+      select: {
+        description: true,
+        tags: { select: { name: true } },
+      },
+    });
+
+    if (!preset) {
+      return { error: "Line item template not found." };
+    }
+
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    const assessment = await AIService.assessExecutionPlanningContext({
+      organizationId: ctx.organizationId,
+      templateId: tid,
+      description: preset.description,
+      tags: preset.tags.map((t) => t.name),
+      organizationName: ctx.organizationName,
+      existingStages: stages,
+      existingSignals: [],
+      userInstructions: buildTemplateExecutionPlanningContext(preset.description, userInstructions),
+    });
+
+    return { assessment };
+  } catch (e) {
+    console.error("Failed to assess AI execution context", e);
+    return { error: getAiActionErrorMessage(e, "Failed to assess execution context.") };
   }
 }
 

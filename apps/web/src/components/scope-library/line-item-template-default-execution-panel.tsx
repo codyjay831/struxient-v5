@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { LineItemTemplateTaskSource, type TaskTemplateCategory } from "@prisma/client";
 import {
   addLineItemTemplateTaskCustomAction,
@@ -9,6 +9,7 @@ import {
   moveLineItemTemplateTaskAction,
   updateLineItemTemplateTaskAction,
   generateLineItemTemplateAIProposalAction,
+  assessLineItemTemplateExecutionContextAction,
   applyLineItemTemplateAIProposalAction,
   type LineItemTemplateExecutionFormState,
 } from "@/app/(workspace)/settings/scope-library/line-item-template-execution-actions";
@@ -36,6 +37,7 @@ import { AILibraryProposalReviewPanel } from "./ai-library-proposal-review-panel
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
+import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
 import { toast } from "sonner";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -43,6 +45,8 @@ const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
+const aiExecutionContextPreflightEnabled =
+  process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
 
 const initialFormState: LineItemTemplateExecutionFormState = {};
 
@@ -450,6 +454,11 @@ export function LineItemTemplateDefaultExecutionPanel({
   const [proposal, setProposal] = useState<AILibraryProposal | null>(null);
   const [proposalGeneration, setProposalGeneration] =
     useState<AILibraryProposalGenerationMeta | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiContextAssessment, setAiContextAssessment] =
+    useState<ExecutionContextAssessment | null>(null);
+  const [isAiAssessing, setIsAiAssessing] = useState(false);
+  const aiAssessRequestSeqRef = useRef(0);
   const [planningContext, setPlanningContext] = useState("");
   const [aiRegenerating, setAiRegenerating] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -489,6 +498,46 @@ export function LineItemTemplateDefaultExecutionPanel({
     }
   };
 
+  const handleAssessContext = async (nextPlanningContext: string) => {
+    if (!aiExecutionContextPreflightEnabled) return;
+    const seq = aiAssessRequestSeqRef.current + 1;
+    aiAssessRequestSeqRef.current = seq;
+    setIsAiAssessing(true);
+    try {
+      const result = await assessLineItemTemplateExecutionContextAction(
+        lineItemTemplateId,
+        nextPlanningContext,
+      );
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      if (result.error) {
+        toast.warning(result.error);
+        return;
+      }
+      setAiContextAssessment(result.assessment ?? null);
+    } catch (e) {
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      console.error(e);
+      toast.warning(getAiActionErrorMessage(e, "Failed to assess execution context."));
+    } finally {
+      if (aiAssessRequestSeqRef.current === seq) {
+        setIsAiAssessing(false);
+      }
+    }
+  };
+
+  const closeAiPanel = () => {
+    setAiPanelOpen(false);
+    setProposal(null);
+    setProposalGeneration(null);
+    setAiContextAssessment(null);
+    setIsAiAssessing(false);
+    aiAssessRequestSeqRef.current += 1;
+  };
+
   return (
     <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
@@ -498,12 +547,12 @@ export function LineItemTemplateDefaultExecutionPanel({
         />
         <button
           type="button"
-          onClick={() => void handleGenerateAI()}
-          disabled={aiGenerating}
+          onClick={() => setAiPanelOpen(true)}
+          disabled={aiGenerating || isAiAssessing}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           <Sparkles className="size-4" />
-          {aiGenerating ? "Generating..." : "Generate with AI"}
+          {aiGenerating ? "Generating..." : "Plan with AI"}
         </button>
       </div>
 
@@ -513,14 +562,28 @@ export function LineItemTemplateDefaultExecutionPanel({
         stages={stages}
       />
 
-      {proposal && (
+      {aiPanelOpen && (
         <AILibraryProposalReviewPanel 
-          key={`${proposal.templateId}:${proposal.tasks.map((task) => task.tempId).join("|")}:${proposal.warnings.length}:${proposal.missingContext.length}`}
           proposal={proposal}
           generation={proposalGeneration ?? undefined}
+          contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
           stages={getStagesForAiExecutionPlanning(stages)}
           planningContext={planningContext}
           onPlanningContextChange={setPlanningContext}
+          isGenerating={aiGenerating}
+          isAssessing={isAiAssessing}
+          onAssessContext={
+            aiExecutionContextPreflightEnabled
+              ? async ({ planningContext: nextPlanningContext }) => {
+                  setPlanningContext(nextPlanningContext);
+                  await handleAssessContext(nextPlanningContext);
+                }
+              : undefined
+          }
+          onGenerate={async ({ planningContext: nextContext }) => {
+            setPlanningContext(nextContext);
+            await handleGenerateAI(nextContext);
+          }}
           isRegenerating={aiRegenerating}
           onRegenerate={async ({ planningContext: nextContext }) => {
             setAiRegenerating(true);
@@ -532,8 +595,7 @@ export function LineItemTemplateDefaultExecutionPanel({
             }
           }}
           onClose={() => {
-            setProposal(null);
-            setProposalGeneration(null);
+            closeAiPanel();
           }}
           onApply={handleApplyProposal}
         />

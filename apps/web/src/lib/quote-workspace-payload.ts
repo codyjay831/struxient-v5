@@ -28,6 +28,7 @@ export type QuoteWorkspaceLead = {
   title: string;
   href: string;
   notes: string | null;
+  scopeSummary: string | null;
   source: string;
   contactName: string | null;
   email: string | null;

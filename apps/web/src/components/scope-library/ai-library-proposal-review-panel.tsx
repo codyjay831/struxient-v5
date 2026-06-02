@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 function subscribeNoop() {
@@ -28,6 +28,7 @@ import { AILibraryProposal, AILibraryProposedTask } from "@/lib/ai/library-propo
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { StaffRole, TaskTemplateCategory } from "@prisma/client";
 import { getTaskTemplateCategoryLabel, taskTemplateCategorySelectOptions } from "@/lib/task-template-category";
+import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
 
 const MAX_WARNING_CHARS = 280;
 
@@ -90,9 +91,12 @@ export function AILibraryProposalReviewPanel({
   planningContext,
   onPlanningContextChange,
   onGenerate,
+  onAssessContext,
   onRegenerate,
   isGenerating = false,
+  isAssessing = false,
   isRegenerating = false,
+  contextAssessment,
   applyMode = "append",
   existingDraftTasks = [],
   selectedKeepTaskIds = [],
@@ -109,9 +113,12 @@ export function AILibraryProposalReviewPanel({
   onPlanningContextChange?: (value: string) => void;
   /** First-time generate from the context prelude. */
   onGenerate?: (ctx: { planningContext: string }) => Promise<void>;
+  onAssessContext?: (ctx: { planningContext: string }) => Promise<void>;
   onRegenerate?: (ctx: { planningContext: string }) => Promise<void>;
   isGenerating?: boolean;
+  isAssessing?: boolean;
   isRegenerating?: boolean;
+  contextAssessment?: ExecutionContextAssessment | null;
   applyMode?: ApplyMode;
   existingDraftTasks?: { id: string; title: string }[];
   selectedKeepTaskIds?: string[];
@@ -124,6 +131,8 @@ export function AILibraryProposalReviewPanel({
 }) {
   const mounted = useIsClientMounted();
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const assessRequestSeqRef = useRef(0);
+  const autoAssessTriggeredRef = useRef(false);
   const [editedProposal, setEditedProposal] = useState<AILibraryProposal | null>(proposal ?? null);
   const [applying, setApplying] = useState(false);
   const [regenerateAcknowledged, setRegenerateAcknowledged] = useState(false);
@@ -151,7 +160,10 @@ export function AILibraryProposalReviewPanel({
   const isPrelude = !editedProposal;
   const isReplaceMode = applyMode === "replace";
   const contextValue = planningContext ?? "";
-  const missingContextItems = editedProposal?.missingContext ?? [];
+  const missingContextItems = isPrelude
+    ? (contextAssessment?.missingContext ?? [])
+    : (editedProposal?.missingContext ?? []);
+  const foundContextItems = contextAssessment?.foundContext ?? [];
   const isBusy = isGenerating || isRegenerating;
   const normalizedKeepTaskIds = useMemo(
     () => selectedKeepTaskIds.filter((id) => existingDraftTasks.some((task) => task.id === id)),
@@ -247,6 +259,38 @@ export function AILibraryProposalReviewPanel({
     }
   };
 
+  const runAssessContext = async () => {
+    if (!onAssessContext) return;
+    const seq = assessRequestSeqRef.current + 1;
+    assessRequestSeqRef.current = seq;
+    try {
+      await onAssessContext({ planningContext: contextValue });
+      if (assessRequestSeqRef.current !== seq) {
+        return;
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to assess execution context.");
+    }
+  };
+
+  useEffect(() => {
+    autoAssessTriggeredRef.current = false;
+  }, [proposal]);
+
+  useEffect(() => {
+    if (!isPrelude || !onAssessContext || autoAssessTriggeredRef.current || isAssessing) {
+      return;
+    }
+    autoAssessTriggeredRef.current = true;
+    const seq = assessRequestSeqRef.current + 1;
+    assessRequestSeqRef.current = seq;
+    void onAssessContext({ planningContext: contextValue }).catch((error) => {
+      console.error(error);
+      toast.error("Failed to assess execution context.");
+    });
+  }, [contextValue, isAssessing, isPrelude, onAssessContext]);
+
   const handleRegenerate = async () => {
     if (!onRegenerate) return;
     if (didEditCurrentProposal && !regenerateAcknowledged) {
@@ -305,14 +349,36 @@ export function AILibraryProposalReviewPanel({
         </p>
         <p className="mt-1 text-xs text-primary-strong">
           {isPrelude
-            ? "Include site conditions, equipment specs, access notes, or anything the intake did not capture. You can refine after the first draft."
+            ? "Include site conditions, equipment specs, access notes, or anything intake did not capture."
             : missingContextItems.length > 0
               ? "Answer the items below, then regenerate — or apply the plan as-is if the assumptions work."
               : "Update context and regenerate to refine the plan."}
         </p>
       </div>
 
-      {!isPrelude && missingContextItems.length > 0 ? (
+      {isPrelude && isAssessing ? (
+        <div className="rounded-md border border-primary/20 bg-background/70 p-3">
+          <p className="text-xs text-primary-strong">Checking context…</p>
+        </div>
+      ) : null}
+
+      {isPrelude && foundContextItems.length > 0 ? (
+        <div className="rounded-md border border-approved/30 bg-approved/10 p-3 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-approved-strong">
+            From your notes
+          </p>
+          <ul className="space-y-1">
+            {foundContextItems.map((item) => (
+              <li key={item} className="text-sm text-approved-strong flex gap-2">
+                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-approved-strong" />
+                <span className="min-w-0 flex-1 break-words">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {missingContextItems.length > 0 ? (
         <div className="rounded-md border border-warning/30 bg-warning/10 p-3 space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-warning-strong">
             AI still needs
@@ -373,6 +439,25 @@ export function AILibraryProposalReviewPanel({
           </button>
         </div>
       ) : null}
+      {isPrelude && onAssessContext ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => void runAssessContext()}
+            disabled={isAssessing}
+            className={secondaryButtonClass}
+          >
+            {isAssessing ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Checking…
+              </>
+            ) : (
+              <>Re-check context</>
+            )}
+          </button>
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -394,7 +479,7 @@ export function AILibraryProposalReviewPanel({
                   <span className="block truncate max-w-[18rem] font-medium text-foreground">{lineLabel}</span>
                 ) : null}
                 {isPrelude ? (
-                  "Add context, then generate a draft execution plan."
+                  "We check your notes first, then generate a draft execution plan."
                 ) : (
                   <>
                     Review and refine before applying.
@@ -777,13 +862,15 @@ export function AILibraryProposalReviewPanel({
                   ) : (
                     <>
                       <Sparkles className="size-4" />
-                      Generate execution plan
+                      {missingContextItems.length > 0
+                        ? "Generate with assumptions"
+                        : "Generate execution plan"}
                     </>
                   )}
                 </button>
               </div>
               <p className="mt-4 text-center text-[10px] text-foreground-subtle">
-                Context is optional — you can add more after the first draft.
+                We check context first. You can still generate and refine afterward.
               </p>
             </>
           ) : (

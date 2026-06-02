@@ -25,6 +25,11 @@ export function canApplySimulatedExecutionPlans(): boolean {
   return process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS === "1";
 }
 
+/** Enables preflight context assessment before full execution plan generation. */
+export function isAiExecutionContextPreflightEnabled(): boolean {
+  return process.env.AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
+}
+
 export function buildSimulatedGenerationMeta(): AILibraryProposalGenerationMeta {
   const canApply = canApplySimulatedExecutionPlans();
   return {

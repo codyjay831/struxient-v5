@@ -7,6 +7,7 @@ import { validateQuoteAiExecutionPlanForApply } from "@/lib/ai/quote-ai-executio
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import { AILibraryProposalSchema } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
+import { isAiExecutionContextPreflightEnabled } from "@/lib/ai/ai-execution-plan-generation";
 import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-task-requirements";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
@@ -17,9 +18,10 @@ import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
-import { buildQuoteExecutionPlanningContext } from "@/lib/ai/quote-execution-planning-context";
+import { buildQuoteLineExecutionPlanningContextFromLine } from "@/lib/ai/execution-planning-inputs";
 import { resolveQuoteLineAiReplaceDeleteIds } from "@/lib/ai/quote-line-ai-replace";
 import type {
+  ExecutionContextAssessment,
   QuoteLineExecutionAiApplyOptions,
   QuoteLineExecutionAiGenerateOptions,
   QuoteLineExecutionFormState,
@@ -27,6 +29,7 @@ import type {
 } from "@/app/(workspace)/quotes/quote-line-execution-types";
 
 export type {
+  ExecutionContextAssessment,
   QuoteLineExecutionAiApplyMode,
   QuoteLineExecutionAiApplyOptions,
   QuoteLineExecutionAiGenerateOptions,
@@ -691,9 +694,15 @@ export async function generateQuoteLineExecutionAIProposalAction(
           job: { is: null },
         },
       },
-      include: {
+      select: {
+        description: true,
+        internalNotes: true,
+        customerScopeTitle: true,
+        customerScopeDescription: true,
+        customerIncludedNotes: true,
+        customerExcludedNotes: true,
         quote: { select: { organizationId: true, internalNotes: true, lead: { select: { notes: true } } } },
-        sourceLineItemTemplate: { include: { tags: { select: { name: true } } } },
+        sourceLineItemTemplate: { select: { tags: { select: { name: true } } } },
       },
     });
 
@@ -713,11 +722,9 @@ export async function generateQuoteLineExecutionAIProposalAction(
     });
 
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
-    const userInstructions = buildQuoteExecutionPlanningContext({
+    const userInstructions = buildQuoteLineExecutionPlanningContextFromLine({
+      line,
       userInstructions: options?.userInstructions,
-      lineInternalNotes: line.internalNotes,
-      quoteInternalNotes: line.quote.internalNotes,
-      leadNotes: line.quote.lead?.notes ?? null,
       priorMissingContext: options?.priorMissingContext,
     });
     const generated = await AIService.generateExecutionPlan(
@@ -747,6 +754,92 @@ export async function generateQuoteLineExecutionAIProposalAction(
       error: e,
     });
     return { error: getAiActionErrorMessage(e) };
+  }
+}
+
+export async function assessQuoteLineExecutionContextAction(
+  quoteId: string,
+  lineItemId: string,
+  options?: QuoteLineExecutionAiGenerateOptions,
+): Promise<{ error?: string; assessment?: ExecutionContextAssessment }> {
+  const qid = quoteId.trim();
+  const lid = lineItemId.trim();
+  if (!qid || !lid) {
+    return { error: "Missing quote or line item." };
+  }
+  if (!isAiExecutionContextPreflightEnabled()) {
+    return {
+      assessment: { foundContext: [], missingContext: [], assumptions: [] },
+    };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+  const startedAt = Date.now();
+
+  try {
+    const line = await db.quoteLineItem.findFirst({
+      where: {
+        id: lid,
+        quoteId: qid,
+        quote: {
+          organizationId: ctx.organizationId,
+          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+          job: { is: null },
+        },
+      },
+      select: {
+        description: true,
+        internalNotes: true,
+        customerScopeTitle: true,
+        customerScopeDescription: true,
+        customerIncludedNotes: true,
+        customerExcludedNotes: true,
+        quote: { select: { organizationId: true, internalNotes: true, lead: { select: { notes: true } } } },
+        sourceLineItemTemplate: { select: { tags: { select: { name: true } } } },
+      },
+    });
+    if (!line) {
+      return { error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+    }
+
+    const stages = await db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
+    const userInstructions = buildQuoteLineExecutionPlanningContextFromLine({
+      line,
+      userInstructions: options?.userInstructions,
+      priorMissingContext: options?.priorMissingContext,
+    });
+    const assessment = await AIService.assessExecutionPlanningContext({
+      templateId: "compat",
+      description: line.description,
+      organizationId: line.quote.organizationId,
+      tags,
+      existingStages: stages,
+      existingSignals: [],
+      organizationName: ctx.organizationName,
+      userInstructions,
+    });
+    console.info("[quote-ai] assess ok", {
+      quoteId: qid,
+      lineItemId: lid,
+      durationMs: Date.now() - startedAt,
+      missingCount: assessment.missingContext.length,
+    });
+
+    return { assessment };
+  } catch (e) {
+    console.error("[quote-ai] assess failed", {
+      quoteId: qid,
+      lineItemId: lid,
+      durationMs: Date.now() - startedAt,
+      error: e,
+    });
+    return { error: getAiActionErrorMessage(e, "Failed to assess execution context.") };
   }
 }
 

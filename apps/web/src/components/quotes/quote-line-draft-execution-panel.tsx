@@ -1,17 +1,19 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addQuoteLineExecutionTaskCustomAction,
   addQuoteLineExecutionTaskFromReusableAction,
   deleteQuoteLineExecutionTaskAction,
   generateQuoteLineExecutionAIProposalAction,
+  assessQuoteLineExecutionContextAction,
   moveQuoteLineExecutionTaskAction,
   applyQuoteLineExecutionAIProposalAction,
   updateQuoteLineExecutionTaskAction,
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
 import type {
+  ExecutionContextAssessment,
   QuoteLineExecutionFormState,
   QuoteLineExecutionRevalidateScope,
 } from "@/app/(workspace)/quotes/quote-line-execution-types";
@@ -44,6 +46,8 @@ const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
+const aiExecutionContextPreflightEnabled =
+  process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
 
 const initialFormState: QuoteLineExecutionFormState = {};
 
@@ -607,6 +611,10 @@ export function QuoteLineDraftExecutionInlinePanel({
     useState<AILibraryProposalGenerationMeta | null>(null);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isAiRegenerating, setIsAiRegenerating] = useState(false);
+  const [isAiAssessing, setIsAiAssessing] = useState(false);
+  const [aiContextAssessment, setAiContextAssessment] =
+    useState<ExecutionContextAssessment | null>(null);
+  const aiAssessRequestSeqRef = useRef(0);
   const [planningContext, setPlanningContext] = useState(initialPlanningContext);
   const [keepTaskIds, setKeepTaskIds] = useState<string[]>([]);
 
@@ -616,7 +624,41 @@ export function QuoteLineDraftExecutionInlinePanel({
     setAiPanelOpen(false);
     setAiProposal(null);
     setAiProposalGeneration(null);
+    setAiContextAssessment(null);
+    setIsAiAssessing(false);
+    aiAssessRequestSeqRef.current += 1;
     setKeepTaskIds([]);
+  };
+
+  const assessAiContext = async (nextPlanningContext: string) => {
+    if (!aiExecutionContextPreflightEnabled) return;
+    const seq = aiAssessRequestSeqRef.current + 1;
+    aiAssessRequestSeqRef.current = seq;
+    setIsAiAssessing(true);
+    try {
+      const result = await assessQuoteLineExecutionContextAction(quoteId, lineItemId, {
+        userInstructions: nextPlanningContext,
+        priorMissingContext: aiProposal?.missingContext,
+      });
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      if (result.error) {
+        toast.warning(result.error);
+        return;
+      }
+      setAiContextAssessment(result.assessment ?? null);
+    } catch (error) {
+      if (aiAssessRequestSeqRef.current !== seq) {
+        return;
+      }
+      console.error(error);
+      toast.warning(getAiActionErrorMessage(error, "Failed to assess execution context."));
+    } finally {
+      if (aiAssessRequestSeqRef.current === seq) {
+        setIsAiAssessing(false);
+      }
+    }
   };
 
   const generateAiProposal = async (nextPlanningContext: string) => {
@@ -733,7 +775,7 @@ export function QuoteLineDraftExecutionInlinePanel({
           />
         </label>
         <p className="text-[10px] text-foreground-subtle">
-          Used when you open the AI planner. Add answers to AI questions there, or apply the plan as-is.
+          AI checks this context first, then drafts tasks. You can still generate with assumptions.
         </p>
       </div>
       {missingStageCount > 0 ? (
@@ -761,11 +803,21 @@ export function QuoteLineDraftExecutionInlinePanel({
         <AILibraryProposalReviewPanel
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}
+          contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
           stages={getStagesForAiExecutionPlanning(stages)}
           planningContext={planningContext}
           onPlanningContextChange={setPlanningContext}
           isGenerating={isAiGenerating}
+          isAssessing={isAiAssessing}
           isRegenerating={isAiRegenerating}
+          onAssessContext={
+            aiExecutionContextPreflightEnabled
+              ? async ({ planningContext: nextPlanningContext }) => {
+                  setPlanningContext(nextPlanningContext);
+                  await assessAiContext(nextPlanningContext);
+                }
+              : undefined
+          }
           onGenerate={async ({ planningContext: nextPlanningContext }) => {
             setPlanningContext(nextPlanningContext);
             await generateAiProposal(nextPlanningContext);

@@ -22,9 +22,38 @@ import {
 } from "./ai-execution-plan-corrections";
 import { normalizeExecutionProposalTasks } from "./normalize-execution-proposal";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
+import {
+  QuoteScopeSuggestionsProposalSchema,
+  type CommercialLineItemSuggestion,
+  type LineItemDetailSuggestion,
+  type OptionalAddOnSuggestion,
+  type QuoteScopeSuggestionsGenerationResult,
+  type QuoteScopeSuggestionsProposal,
+  type RecommendedTemplateSuggestion,
+} from "./quote-line-items-proposal-schema";
+import { normalizeScopeSuggestionGrouping } from "./normalize-scope-suggestion-grouping";
+import type { RecommendedTemplateMatch } from "./recommend-line-item-templates";
+import {
+  ExecutionContextAssessmentSchema,
+  type ExecutionContextAssessment,
+} from "./execution-context-assessment-schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+
+function buildScopeSuggestionsGenerationMeta(simulated: boolean): QuoteScopeSuggestionsGenerationResult["generation"] {
+  if (simulated) {
+    const canApply = process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS === "1";
+    return {
+      isSimulated: true,
+      canApply,
+      applyBlockedReason: canApply
+        ? undefined
+        : "This is demo AI output. Apply is disabled until demo apply is explicitly enabled.",
+    };
+  }
+  return { isSimulated: false, canApply: true };
+}
 
 /**
  * AI Service for Execution Planning
@@ -430,6 +459,139 @@ export class AIService {
     }
   }
 
+  static async assessExecutionPlanningContext(
+    context: AIExecutionPlanContext,
+  ): Promise<ExecutionContextAssessment> {
+    const gemini = this.getGeminiClient();
+    const planningStages = getStagesForAiExecutionPlanning(context.existingStages);
+
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return this.simulateExecutionContextAssessment(context, {
+          reason: "GEMINI_API_KEY is missing.",
+        });
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    try {
+      const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+      const model = gemini.getGenerativeModel({ model: modelName });
+      const prompt = this.buildExecutionContextAssessmentPrompt(context, planningStages);
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      const raw = JSON.parse(jsonStr);
+      return ExecutionContextAssessmentSchema.parse(raw);
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return this.simulateExecutionContextAssessment(context, {
+          reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+        });
+      }
+      throw new AiProviderTemporarilyUnavailableError(
+        "AI could not assess missing execution context right now. Try again shortly.",
+      );
+    }
+  }
+
+  private static buildExecutionContextAssessmentPrompt(
+    context: AIExecutionPlanContext,
+    planningStages: { id: string; name: string }[],
+  ): string {
+    const stageNames = planningStages.map((s) => s.name).join(", ");
+    const signalNames = context.existingSignals.join(", ");
+    return `
+You are a contractor execution preflight assistant.
+Determine what context is already known and what context is still missing BEFORE drafting execution tasks.
+
+LINE ITEM DESCRIPTION: "${context.description}"
+LINE ITEM TAGS: [${context.tags.join(", ")}]
+ORGANIZATION CONTEXT: "${context.organizationName || "General Contractor"}"
+EXISTING STAGES: [${stageNames || "None"}]
+EXISTING SIGNALS: [${signalNames || "None"}]
+MERGED NOTES / USER INSTRUCTIONS:
+"""
+${context.userInstructions || "None"}
+"""
+
+RULES:
+1. Use ONLY facts explicitly present in the provided text.
+2. Never invent details (panel size, utility policy, permit specifics, access constraints, etc.).
+3. Put only explicit facts into "foundContext".
+4. Put unanswered decisions required for reliable planning into "missingContext".
+5. Keep each bullet concise, practical, and scoped to this line item.
+6. If enough context exists, return an empty "missingContext" array.
+7. "assumptions" should list minimal assumptions someone might accept if they proceed anyway.
+
+OUTPUT FORMAT:
+Return JSON only:
+{
+  "foundContext": ["string"],
+  "missingContext": ["string"],
+  "assumptions": ["string"]
+}
+`;
+  }
+
+  static buildExecutionContextAssessmentPromptForTest(
+    context: AIExecutionPlanContext,
+    planningStages: { id: string; name: string }[],
+  ): string {
+    return this.buildExecutionContextAssessmentPrompt(context, planningStages);
+  }
+
+  private static simulateExecutionContextAssessment(
+    context: AIExecutionPlanContext,
+    options: { reason?: string } = {},
+  ): ExecutionContextAssessment {
+    const source = `${context.description}\n${context.userInstructions ?? ""}`.toLowerCase();
+    const foundContext: string[] = [];
+    const missingContext: string[] = [];
+
+    if (/\b(100a|125a|150a|200a|225a|400a)\b/.test(source)) {
+      foundContext.push("Service/panel amperage appears to be specified.");
+    } else {
+      missingContext.push("Confirm existing and required service/panel amperage.");
+    }
+    if (/utility|power company|meter|service drop/.test(source)) {
+      foundContext.push("Utility coordination appears to be acknowledged.");
+    } else {
+      missingContext.push("Confirm utility coordination requirements and lead time.");
+    }
+    if (/permit|inspection|ahj/.test(source)) {
+      foundContext.push("Permit and inspection requirements are referenced.");
+    } else {
+      missingContext.push("Confirm permit and inspection path for this scope.");
+    }
+    if (/grounding|bonding|electrode/.test(source)) {
+      foundContext.push("Grounding/bonding requirements are mentioned.");
+    } else {
+      missingContext.push("Confirm grounding and bonding upgrades required by local code.");
+    }
+
+    const assumptions = [
+      "Assume standard scheduling and site access unless clarified.",
+      "Assume no abnormal utility constraints unless stated otherwise.",
+    ];
+    if (options.reason) {
+      assumptions.push(`Simulated fallback reason: ${options.reason}`);
+    }
+
+    return ExecutionContextAssessmentSchema.parse({
+      foundContext,
+      missingContext,
+      assumptions,
+    });
+  }
+
   private static buildContractorRealismPrompt(
     context: AIExecutionPlanContext,
     planningStages: { id: string; name: string }[],
@@ -547,6 +709,407 @@ Return ONLY a valid JSON object matching this structure:
     reusableTasks: { id: string; title: string; category: string; stage?: { name: string } | null; tags: { name: string }[] }[] = [],
   ): string {
     return this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
+  }
+
+  /**
+   * Generates reviewable scope suggestions for Quick scope capture.
+   * Does not set pricing — only drafts commercial scope candidates.
+   */
+  static async generateScopeSuggestions(params: {
+    quoteId: string;
+    contextText: string;
+    organizationName?: string;
+    recommendedTemplates: RecommendedTemplateMatch[];
+    existingLineDescriptions?: string[];
+  }): Promise<QuoteScopeSuggestionsGenerationResult> {
+    const gemini = this.getGeminiClient();
+    const recommendedSuggestions: RecommendedTemplateSuggestion[] =
+      params.recommendedTemplates.map((match) => ({
+        tempId: crypto.randomUUID(),
+        templateId: match.templateId,
+        templateDescription: match.templateDescription,
+        confidence: match.confidence,
+        reasoning: match.reasoning,
+      }));
+
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        const proposal = this.simulateScopeSuggestions({
+          quoteId: params.quoteId,
+          contextText: params.contextText,
+          recommendedSuggestions,
+          reason: "GEMINI_API_KEY is missing.",
+        });
+        return { proposal, generation: buildScopeSuggestionsGenerationMeta(true) };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    const alreadyRecommended = recommendedSuggestions
+      .map((item) => `- ${item.templateDescription}`)
+      .join("\n");
+    const existingLines = (params.existingLineDescriptions ?? [])
+      .map((desc) => `- ${desc}`)
+      .join("\n");
+
+    const prompt = `
+You are a contractor scope assistant. Group messy job notes into three layers:
+
+1) TEMPLATE-GRADE commercial line items (what the customer is buying) — short reusable descriptions only.
+2) LINE-SPECIFIC instance details — how that sold item applies on this job (under each commercial line).
+3) QUOTE/JOB-WIDE context — site, access, schedule, pets, gates, whole-job preferences (NOT on every line).
+
+CORE RULE:
+A quote line item = what the customer is buying. Do NOT create one line item per execution step.
+
+description MUST be a short, reusable-grade commercial label. Do NOT put in description:
+- address, access notes, customer schedule, pets, locked gates, one-off site facts
+- brand names (e.g. Zinsco) unless the brand IS the sellable product
+
+Put LINE-SPECIFIC facts in lineItemDetails, executionPlanningNotes, or per-line missingInfo:
+- remove/demo/install, utility, permit, inspection, grounding for THAT line
+- panel brand/type, amperage questions for THAT line
+
+Put JOB-WIDE facts in quoteJobContext only (do not duplicate on every line):
+- locked gate, dog in yard, customer available after 3 PM, whole-job access preferences
+
+Put whole-quote gaps in quoteMissingInfo (not repeated on every line).
+
+Only create a SEPARATE commercialLineItem or optionalAddOn when scope is separately priced, optional/upsell, or materially distinct.
+
+Do NOT create vague commercial rows like "manage project logistics".
+
+NEVER include price, cost, dollar amounts, or unit rates.
+
+ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
+
+JOB CONTEXT:
+"""
+${params.contextText}
+"""
+
+ALREADY RECOMMENDED FROM SCOPE LIBRARY (do not repeat as commercialLineItems):
+${alreadyRecommended || "None"}
+
+EXISTING QUOTE LINE ITEMS (do not repeat):
+${existingLines || "None"}
+
+EXAMPLE:
+Messy: "Zinsco panel, 200A upgrade, utility, permit, locked gate, dog, after 3pm, EV prep, garage outlet"
+GOOD:
+- commercialLineItem description: "Main electrical service upgrade" (no Zinsco in title)
+- lineItemDetails: Zinsco panel, utility, permit, grounding on THAT line
+- quoteJobContext: locked gate, dog, customer after 3 PM
+- optionalAddOns: EV-ready preparation, exterior garage outlet
+BAD: Zinsco or gate in description; gate/dog on every line item
+
+OUTPUT JSON ONLY:
+{
+  "assumptions": ["string"],
+  "warnings": ["string"],
+  "quoteJobContext": ["string"],
+  "quoteMissingInfo": ["string"],
+  "commercialLineItems": [
+    {
+      "description": "string (short reusable commercial label)",
+      "customerScopeTitle": "optional string",
+      "customerScopeDescription": "optional string",
+      "reasoning": "optional string",
+      "confidence": "high" | "medium" | "low",
+      "missingInfo": ["string"],
+      "lineItemDetails": [{ "label": "optional", "content": "string", "audience": "internal"|"customer"|"both" }],
+      "executionPlanningNotes": ["string"]
+    }
+  ],
+  "optionalAddOns": [{ "description": "string", "whySeparate": "string", "confidence": "high"|"medium"|"low" }]
+}
+`;
+
+    try {
+      const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+      const model = gemini.getGenerativeModel({ model: modelName });
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      const raw = JSON.parse(jsonStr);
+
+      const parseAudience = (value: unknown): LineItemDetailSuggestion["audience"] => {
+        if (value === "customer" || value === "both" || value === "internal") {
+          return value;
+        }
+        return "internal";
+      };
+
+      const parseDetails = (rawDetails: unknown): LineItemDetailSuggestion[] => {
+        if (!Array.isArray(rawDetails)) return [];
+        return rawDetails
+          .filter((d: Record<string, unknown>) => typeof d?.content === "string")
+          .map((d: Record<string, unknown>) => ({
+            tempId: crypto.randomUUID(),
+            label: typeof d.label === "string" ? d.label.slice(0, 200) : null,
+            content: String(d.content).trim().slice(0, 5000),
+            audience: parseAudience(d.audience),
+          }))
+          .filter((d) => d.content.length > 0);
+      };
+
+      const rawCommercial = Array.isArray(raw.commercialLineItems) ? raw.commercialLineItems : [];
+      const commercialLineItems: CommercialLineItemSuggestion[] = rawCommercial
+        .filter((item: Record<string, unknown>) => typeof item?.description === "string")
+        .map((item: Record<string, unknown>) => ({
+          tempId: crypto.randomUUID(),
+          description: String(item.description).trim().slice(0, 2000),
+          customerScopeTitle:
+            typeof item.customerScopeTitle === "string"
+              ? item.customerScopeTitle.slice(0, 500)
+              : null,
+          customerScopeDescription:
+            typeof item.customerScopeDescription === "string"
+              ? item.customerScopeDescription.slice(0, 10_000)
+              : null,
+          reasoning: typeof item.reasoning === "string" ? item.reasoning : null,
+          confidence:
+            item.confidence === "high" || item.confidence === "medium" || item.confidence === "low"
+              ? item.confidence
+              : "medium",
+          lineItemDetails: parseDetails(item.lineItemDetails),
+          executionPlanningNotes: Array.isArray(item.executionPlanningNotes)
+            ? item.executionPlanningNotes
+                .filter((v: unknown) => typeof v === "string")
+                .map((v: string) => v.slice(0, 2000))
+            : [],
+          missingInfo: Array.isArray(item.missingInfo)
+            ? item.missingInfo
+                .filter((v: unknown) => typeof v === "string")
+                .map((v: string) => v.slice(0, 2000))
+            : [],
+        }))
+        .filter((item: CommercialLineItemSuggestion) => item.description.length > 0);
+
+      const rawOptional = Array.isArray(raw.optionalAddOns) ? raw.optionalAddOns : [];
+      const optionalAddOns: OptionalAddOnSuggestion[] = rawOptional
+        .filter(
+          (item: Record<string, unknown>) =>
+            typeof item?.description === "string" && typeof item?.whySeparate === "string",
+        )
+        .map((item: Record<string, unknown>) => ({
+          tempId: crypto.randomUUID(),
+          description: String(item.description).trim().slice(0, 2000),
+          whySeparate: String(item.whySeparate).trim().slice(0, 2000),
+          reasoning: typeof item.reasoning === "string" ? item.reasoning : null,
+          confidence:
+            item.confidence === "high" || item.confidence === "medium" || item.confidence === "low"
+              ? item.confidence
+              : "medium",
+        }))
+        .filter((item: OptionalAddOnSuggestion) => item.description.length > 0);
+
+      const parsed = QuoteScopeSuggestionsProposalSchema.parse({
+        quoteId: params.quoteId,
+        sourceContextSummary: params.contextText.slice(0, 500),
+        assumptions: Array.isArray(raw.assumptions) ? raw.assumptions : [],
+        warnings: Array.isArray(raw.warnings) ? raw.warnings : [],
+        quoteJobContext: Array.isArray(raw.quoteJobContext)
+          ? raw.quoteJobContext.filter((v: unknown) => typeof v === "string")
+          : [],
+        quoteMissingInfo: Array.isArray(raw.quoteMissingInfo)
+          ? raw.quoteMissingInfo.filter((v: unknown) => typeof v === "string")
+          : Array.isArray(raw.missingInfo)
+            ? raw.missingInfo.filter((v: unknown) => typeof v === "string")
+            : [],
+        recommendedTemplates: recommendedSuggestions,
+        commercialLineItems,
+        optionalAddOns,
+      });
+
+      const proposal = normalizeScopeSuggestionGrouping(parsed);
+
+      return { proposal, generation: buildScopeSuggestionsGenerationMeta(false) };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        const proposal = this.simulateScopeSuggestions({
+          quoteId: params.quoteId,
+          contextText: params.contextText,
+          recommendedSuggestions,
+          reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+        });
+        return { proposal, generation: buildScopeSuggestionsGenerationMeta(true) };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+  }
+
+  private static simulateScopeSuggestions(params: {
+    quoteId: string;
+    contextText: string;
+    recommendedSuggestions: RecommendedTemplateSuggestion[];
+    reason?: string;
+  }): QuoteScopeSuggestionsProposal {
+    const contextLower = params.contextText.toLowerCase();
+    const commercialLineItems: CommercialLineItemSuggestion[] = [];
+    const optionalAddOns: OptionalAddOnSuggestion[] = [];
+    const quoteJobContext: string[] = [];
+
+    if (/locked|gate/i.test(contextLower)) {
+      quoteJobContext.push("Locked side gate");
+    }
+    if (/dog/i.test(contextLower)) {
+      quoteJobContext.push("Dog in yard");
+    }
+    if (/after 3|3\s*pm|3pm|weekday/i.test(contextLower)) {
+      quoteJobContext.push("Customer available after 3 PM on weekdays");
+    }
+
+    if (/zinsco|panel|200a|service upgrade|main panel|utility|meter/i.test(contextLower)) {
+      commercialLineItems.push({
+        tempId: crypto.randomUUID(),
+        description: "Main electrical service upgrade",
+        confidence: "high",
+        reasoning: "Grouped panel removal, install, utility, permit, and inspection under one commercial scope.",
+        customerScopeTitle: "Main electrical service upgrade",
+        customerScopeDescription: null,
+        lineItemDetails: [
+          {
+            tempId: crypto.randomUUID(),
+            label: "Panel",
+            content: "Existing panel appears to be Zinsco",
+            audience: "internal",
+          },
+          {
+            tempId: crypto.randomUUID(),
+            label: "Install",
+            content: "Install new main panel and service equipment",
+            audience: "internal",
+          },
+          {
+            tempId: crypto.randomUUID(),
+            label: "Utility",
+            content: "Coordinate utility release and meter work",
+            audience: "internal",
+          },
+          {
+            tempId: crypto.randomUUID(),
+            label: "Permit",
+            content: "Obtain required electrical permit",
+            audience: "internal",
+          },
+          {
+            tempId: crypto.randomUUID(),
+            label: "Inspection",
+            content: "Schedule and pass required inspection",
+            audience: "internal",
+          },
+          {
+            tempId: crypto.randomUUID(),
+            label: "Grounding",
+            content: "Verify grounding and bonding per code",
+            audience: "internal",
+          },
+        ],
+        executionPlanningNotes: [
+          "Confirm proposed service amperage with customer",
+        ],
+        missingInfo: /service size|amperage|200a/i.test(contextLower)
+          ? ["Confirm existing service size if not verified on site"]
+          : ["Confirm existing service size", "Confirm proposed amperage"],
+      });
+    } else if (
+      !params.recommendedSuggestions.some((t) => /charger|ev/i.test(t.templateDescription)) &&
+      /charger|ev|240|garage/i.test(contextLower)
+    ) {
+      commercialLineItems.push({
+        tempId: crypto.randomUUID(),
+        description: "EV charger installation",
+        confidence: "medium",
+        reasoning: "Grouped charger install scope with planning notes.",
+        customerScopeTitle: null,
+        customerScopeDescription: null,
+        lineItemDetails: [
+          {
+            tempId: crypto.randomUUID(),
+            label: "Install",
+            content: "Install EV charger and dedicated circuit",
+            audience: "customer",
+          },
+        ],
+        executionPlanningNotes: [
+          "Verify charger model and panel capacity",
+          "Confirm route from panel to charger location",
+        ],
+        missingInfo: [],
+      });
+    }
+
+    if (/ev.?ready|ev prep|future ev/i.test(contextLower)) {
+      optionalAddOns.push({
+        tempId: crypto.randomUUID(),
+        description: "EV-ready preparation",
+        whySeparate: "Optional future upgrade — customer may accept or decline independently",
+        confidence: "medium",
+        reasoning: "Distinct optional scope for future EV charging.",
+      });
+    }
+
+    if (/garage outlet|exterior outlet/i.test(contextLower)) {
+      optionalAddOns.push({
+        tempId: crypto.randomUUID(),
+        description: "Exterior garage outlet",
+        whySeparate: "Separate optional scope — independently priced add-on",
+        confidence: "medium",
+        reasoning: "Garage outlet mentioned as optional separate work.",
+      });
+    }
+
+    if (/surge|whole.?home/i.test(contextLower)) {
+      optionalAddOns.push({
+        tempId: crypto.randomUUID(),
+        description: "Whole-home surge protection",
+        whySeparate: "Optional upsell — customer may accept or decline independently",
+        confidence: "medium",
+        reasoning: "Distinct optional scope mentioned in notes.",
+      });
+    }
+
+    if (commercialLineItems.length === 0 && params.recommendedSuggestions.length === 0) {
+      const firstLine = params.contextText.split("\n")[0]?.trim().slice(0, 120);
+      if (firstLine) {
+        commercialLineItems.push({
+          tempId: crypto.randomUUID(),
+          description: firstLine,
+          confidence: "low",
+          reasoning: "Simulated fallback from capture text.",
+          customerScopeTitle: null,
+          customerScopeDescription: null,
+          lineItemDetails: [],
+          executionPlanningNotes: [],
+          missingInfo: [],
+        });
+      }
+    }
+
+    const parsed = QuoteScopeSuggestionsProposalSchema.parse({
+      quoteId: params.quoteId,
+      sourceContextSummary: params.contextText.slice(0, 500),
+      assumptions: ["Simulated: demo scope suggestions for local development."],
+      warnings: [
+        "Demo AI output — not from the live provider.",
+        ...(params.reason ? [`Simulated fallback reason: ${params.reason}`] : []),
+      ],
+      quoteJobContext,
+      quoteMissingInfo: [],
+      recommendedTemplates: params.recommendedSuggestions,
+      commercialLineItems,
+      optionalAddOns,
+    });
+
+    return normalizeScopeSuggestionGrouping(parsed);
   }
 
   /** Compatibility layer for quote-line AI execution planning */
