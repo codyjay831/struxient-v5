@@ -171,6 +171,9 @@ function ActiveQuoteCard({
                 Edits since last send
               </p>
             ) : null}
+            <p className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+              Opens full quote page
+            </p>
           </div>
         </div>
         <StatusBadge

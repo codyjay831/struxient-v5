@@ -1,5 +1,6 @@
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { ButtonLink } from "@/components/ui/button";
+import { redirect } from "next/navigation";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import {
@@ -24,12 +25,20 @@ export default async function WorkstationTasksLensPage({
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
   const urlState = parseWorkstationUrlState(sp);
+  if (urlState.selected && urlState.selected.kind !== "task") {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation/tasks${cleared}`);
+  }
   const selectedId = urlState.selected?.id;
 
   const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
   const taskItems = allItems.filter((i) => i.kind === "task");
 
   const selectedItem = selectedId ? taskItems.find((i) => i.id === selectedId) : null;
+  if (selectedId && !selectedItem) {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation/tasks${cleared}`);
+  }
 
   return (
     <div className="space-y-8">

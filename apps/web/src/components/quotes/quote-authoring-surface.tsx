@@ -940,8 +940,8 @@ export function QuoteAuthoringSurface({
           ? "1 line item added. Set pricing when ready."
           : `${result.createdCount} line items added. Set pricing when ready.`,
       );
+      await Promise.resolve(onMutated());
       closeScopeCapture();
-      onMutated();
     } catch (e) {
       console.error(e);
       toast.error(getAiActionErrorMessage(e, "Failed to add scope suggestions."));

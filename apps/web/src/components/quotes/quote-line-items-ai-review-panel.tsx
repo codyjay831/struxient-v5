@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Check, Loader2, X } from "lucide-react";
 import type {
@@ -81,12 +81,14 @@ export function QuoteScopeCapturePanel({
   onApply,
 }: QuoteScopeCapturePanelProps) {
   const mounted = useIsClientMounted();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [selectedCommercialIds, setSelectedCommercialIds] = useState<Set<string>>(new Set());
   const [selectedOptionalIds, setSelectedOptionalIds] = useState<Set<string>>(new Set());
   const [editedCommercial, setEditedCommercial] = useState<CommercialLineItemSuggestion[]>([]);
   const [selectedQuoteJobContext, setSelectedQuoteJobContext] = useState<Set<string>>(new Set());
   const [prevProposal, setPrevProposal] = useState(proposal);
+  const canClose = !isApplying;
 
   if (proposal !== prevProposal) {
     setPrevProposal(proposal);
@@ -105,7 +107,41 @@ export function QuoteScopeCapturePanel({
     }
   }
 
-  if (!open || !mounted) return null;
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) {
+      dialog.showModal();
+    } else if (!open && dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    function handleCancel(event: Event) {
+      if (!canClose) {
+        event.preventDefault();
+        return;
+      }
+      onClose();
+    }
+
+    function handleClose() {
+      if (open) {
+        onClose();
+      }
+    }
+
+    dialog.addEventListener("cancel", handleCancel);
+    dialog.addEventListener("close", handleClose);
+    return () => {
+      dialog.removeEventListener("cancel", handleCancel);
+      dialog.removeEventListener("close", handleClose);
+    };
+  }, [canClose, onClose, open]);
 
   const toggleTemplate = (templateId: string) => {
     setSelectedTemplateIds((prev) => {
@@ -168,14 +204,19 @@ export function QuoteScopeCapturePanel({
     selectedOptionalIds.size +
     selectedQuoteJobContext.size;
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="scope-capture-title"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
-      >
+  const dialogNode = (
+    <dialog
+      ref={dialogRef}
+      data-workspace-child-dialog="true"
+      aria-labelledby="scope-capture-title"
+      aria-busy={isApplying}
+      className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl outline-none [&::backdrop]:bg-black/40 [&:not([open])]:hidden"
+      onClick={(e) => {
+        if (!canClose) return;
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <h2 id="scope-capture-title" className="text-base font-semibold text-foreground">
@@ -188,6 +229,7 @@ export function QuoteScopeCapturePanel({
           <button
             type="button"
             onClick={onClose}
+            disabled={!canClose}
             className="rounded-lg border border-border p-2 text-foreground-subtle hover:text-foreground"
             aria-label="Close"
           >
@@ -268,7 +310,7 @@ export function QuoteScopeCapturePanel({
             <button
               type="button"
               className={primaryButtonClass}
-              disabled={isGenerating}
+              disabled={isGenerating || isApplying}
               onClick={() => void onGenerate()}
             >
               {isGenerating ? (
@@ -521,7 +563,12 @@ export function QuoteScopeCapturePanel({
               : "Select suggestions to add to the quote"}
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={secondaryButtonClass} onClick={onClose}>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={onClose}
+              disabled={!canClose}
+            >
               Cancel
             </button>
             <button
@@ -545,7 +592,9 @@ export function QuoteScopeCapturePanel({
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </dialog>
   );
+
+  if (!mounted) return null;
+  return createPortal(dialogNode, document.body);
 }

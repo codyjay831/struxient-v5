@@ -16,7 +16,10 @@ import {
 } from "@/lib/ai/quote-line-items-proposal-schema";
 import { validateQuoteScopeSuggestionsForApply } from "@/lib/ai/quote-line-items-ai-plan";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
-import { performApplyQuoteScopeSuggestionsInTx } from "@/lib/quote-scope-suggestions-apply-tx";
+import {
+  performApplyQuoteScopeSuggestionsInTx,
+  QuoteScopeApplyTxError,
+} from "@/lib/quote-scope-suggestions-apply-tx";
 import { readRequest } from "@/lib/lead/lead-projection";
 import type {
   QuoteScopeSuggestionsApplyOptions,
@@ -191,16 +194,24 @@ export async function applyQuoteScopeSuggestionsAction(
       .map((id) => optionalByTempId.get(id))
       .filter(Boolean) as typeof parsedProposal.optionalAddOns;
 
-    const outcome = await db.$transaction(async (tx) =>
-      performApplyQuoteScopeSuggestionsInTx(tx, {
-        quoteId: qid,
-        organizationId: ctx.organizationId,
-        selectedTemplateIds: approved.selectedTemplateIds,
-        selectedCommercialLineItems: approved.selectedCommercialLineItems,
-        selectedOptionalAddOns,
-        selectedQuoteJobContext: approved.selectedQuoteJobContext,
-      }),
-    );
+    let outcome: Awaited<ReturnType<typeof performApplyQuoteScopeSuggestionsInTx>>;
+    try {
+      outcome = await db.$transaction(async (tx) =>
+        performApplyQuoteScopeSuggestionsInTx(tx, {
+          quoteId: qid,
+          organizationId: ctx.organizationId,
+          selectedTemplateIds: approved.selectedTemplateIds,
+          selectedCommercialLineItems: approved.selectedCommercialLineItems,
+          selectedOptionalAddOns,
+          selectedQuoteJobContext: approved.selectedQuoteJobContext,
+        }),
+      );
+    } catch (e) {
+      if (e instanceof QuoteScopeApplyTxError) {
+        return { error: e.message };
+      }
+      throw e;
+    }
 
     if (!outcome.ok) {
       return { error: outcome.error };
@@ -215,6 +226,9 @@ export async function applyQuoteScopeSuggestionsAction(
     };
   } catch (e) {
     console.error("[quote-scope-ai] apply failed", { quoteId: qid, error: e });
+    if (e instanceof Error && e.message.trim()) {
+      return { error: e.message };
+    }
     return { error: getAiActionErrorMessage(e, "Failed to apply scope suggestions.") };
   }
 }

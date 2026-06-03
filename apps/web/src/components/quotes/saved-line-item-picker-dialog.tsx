@@ -79,7 +79,10 @@ export function SavedLineItemPickerDialog({
   }, [requestOpen, onRequestOpenConsumed]);
 
   function open() {
-    dialogRef.current?.showModal();
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
   }
 
   function close() {
@@ -132,6 +135,7 @@ export function SavedLineItemPickerDialog({
 
       <dialog
         ref={dialogRef}
+        data-workspace-child-dialog="true"
         aria-labelledby="saved-line-item-picker-title"
         className="z-50 w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-lg outline-none ring-offset-background [&::backdrop]:bg-foreground/25"
         onClick={(e) => {

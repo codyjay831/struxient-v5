@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonClassName, ButtonLink } from "@/components/ui/button";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -82,7 +83,11 @@ export default async function WorkstationTodayLensPage({
     filteredItems = filteredItems.filter((i) => i.filterCategory === filter);
   }
 
-  const selectedItem = selectedId ? allItems.find((i) => i.id === selectedId) : null;
+  const selectedItem = selectedId ? filteredItems.find((i) => i.id === selectedId) : null;
+  if (selectedId && !selectedItem) {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation${cleared}`);
+  }
 
   // Group by lane
   const criticalItems = filteredItems.filter((i) => i.lane === "critical").sort((a, b) => a.withinLaneRank - b.withinLaneRank);

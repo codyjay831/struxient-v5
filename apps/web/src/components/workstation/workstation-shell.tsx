@@ -61,7 +61,10 @@ export function WorkstationShell() {
               <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
                 {LENSES.map(({ label, icon: Icon, lens }) => {
                   const active = lensActive(pathname, urlState.lens, lens);
-                  const finalHref = buildWorkstationUrl(urlState, { lens });
+                  const finalHref = buildWorkstationUrl(urlState, {
+                    lens,
+                    selected: undefined,
+                  });
 
                   return (
                     <li key={lens}>

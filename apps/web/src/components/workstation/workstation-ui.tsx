@@ -37,7 +37,10 @@ export function WorkstationFilterBar({
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
       {filters.map((f) => {
         const active = currentFilter === f.id;
-        const href = buildWorkstationUrl(urlState, { filter: f.id });
+        const href = buildWorkstationUrl(urlState, {
+          filter: f.id,
+          selected: undefined,
+        });
 
         return (
           <Link
@@ -261,7 +264,10 @@ export function WorkstationClearedState({
       <div className="mt-8 flex gap-4">
         {isFiltered ? (
           <Link 
-            href={buildWorkstationUrl(urlState, { filter: "all" })}
+            href={buildWorkstationUrl(urlState, {
+              filter: "all",
+              selected: undefined,
+            })}
             className="text-sm font-medium text-accent hover:underline"
           >
             Clear Filters

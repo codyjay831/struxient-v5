@@ -436,12 +436,12 @@ export function LeadCommercialSurface({
                       </div>
                       <p className="mt-2 text-[11px] font-medium text-accent">
                         {quote.status === "DRAFT"
-                          ? "Continue quote"
+                          ? "Open full quote page"
                           : quote.status === "SENT"
-                            ? "Review send status"
+                            ? "Open full quote page"
                             : quote.status === "APPROVED"
-                              ? "Review job plan"
-                              : "Open quote"}
+                              ? "Open full quote page"
+                              : "Open full quote page"}
                       </p>
                     </Link>
                   ))}

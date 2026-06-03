@@ -14,6 +14,13 @@ import type {
 import { performApplyLineItemTemplateToQuoteTx, recalculateQuoteRollupsInTx } from "@/lib/quote-line-item-template-apply-tx";
 import { computeLineTotalCents } from "@/lib/quote-money";
 
+export class QuoteScopeApplyTxError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QuoteScopeApplyTxError";
+  }
+}
+
 export type ApplyQuoteScopeSuggestionsTxInput = {
   quoteId: string;
   organizationId: string;
@@ -90,31 +97,35 @@ export async function performApplyQuoteScopeSuggestionsInTx(
       input.organizationId,
     );
     if (!result.ok) {
-      return {
-        ok: false,
-        error: "One or more selected library items could not be applied.",
-      };
+      throw new QuoteScopeApplyTxError(
+        "One or more selected library items could not be applied.",
+      );
     }
     createdCount += 1;
   }
 
-  try {
-    for (const item of input.selectedCommercialLineItems) {
-      const fields = mapCommercialSuggestionToLineFields(item);
+  for (const item of input.selectedCommercialLineItems) {
+    const fields = mapCommercialSuggestionToLineFields(item);
+    try {
       await createCommercialLineRow(tx, input.quoteId, fields);
       createdCount += 1;
+    } catch (e) {
+      throw new QuoteScopeApplyTxError(
+        e instanceof Error ? e.message : "Failed to create line items from scope suggestions.",
+      );
     }
+  }
 
-    for (const addOn of input.selectedOptionalAddOns) {
-      const fields = mapOptionalAddOnToLineFields(addOn);
+  for (const addOn of input.selectedOptionalAddOns) {
+    const fields = mapOptionalAddOnToLineFields(addOn);
+    try {
       await createCommercialLineRow(tx, input.quoteId, fields);
       createdCount += 1;
+    } catch (e) {
+      throw new QuoteScopeApplyTxError(
+        e instanceof Error ? e.message : "Failed to create line items from scope suggestions.",
+      );
     }
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Failed to create line items from scope suggestions.",
-    };
   }
 
   if (input.selectedQuoteJobContext.length > 0) {

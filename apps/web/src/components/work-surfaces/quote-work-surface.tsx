@@ -150,7 +150,7 @@ export type QuoteWorkSurfaceProps = {
    * + `router.refresh()` already covers them — but providing it is
    * always safe.
    */
-  onWorkSurfaceMutated?: () => void;
+  onWorkSurfaceMutated?: () => void | Promise<void>;
   /**
    * When true, the surface is rendered inside the Lead workspace Quote tab.
    * Lets the surface defer service-address ownership to the surrounding
@@ -2253,7 +2253,7 @@ export function QuoteWorkSurface({
    * everything that displays it without navigating away". */
   const handleSurfaceMutated = useCallback(() => {
     router.refresh();
-    onWorkSurfaceMutated?.();
+    void onWorkSurfaceMutated?.();
   }, [router, onWorkSurfaceMutated]);
 
   /* Tab strip styling — adapts via container width. */

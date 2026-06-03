@@ -1,5 +1,6 @@
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import {
@@ -26,6 +27,10 @@ export default async function WorkstationJobsLensPage({
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
   const urlState = parseWorkstationUrlState(sp);
+  if (urlState.selected && urlState.selected.kind !== "job") {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation/jobs${cleared}`);
+  }
   const selectedId = urlState.selected?.id;
 
   const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
@@ -67,6 +72,10 @@ export default async function WorkstationJobsLensPage({
           updatedAt: selectedJob.updatedAt,
         }
       : null);
+  if (selectedId && !resolvedSelectedItem) {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation/jobs${cleared}`);
+  }
 
   return (
     <div className="space-y-8">

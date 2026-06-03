@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, X } from "lucide-react";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
@@ -125,12 +125,14 @@ export function QuoteWorkspaceDialogBody({
   onClose,
 }: QuoteWorkspaceDialogBodyProps) {
   const [state, setState] = useState<QuoteSurfaceLazyState>({ kind: "loading" });
+  const requestSeqRef = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    void loadQuoteWorkSurfaceAction(display.quoteId)
+  const loadSurface = useCallback(async () => {
+    const seq = requestSeqRef.current + 1;
+    requestSeqRef.current = seq;
+    await loadQuoteWorkSurfaceAction(display.quoteId)
       .then((res: LoadQuoteWorkSurfaceResult) => {
-        if (cancelled) return;
+        if (requestSeqRef.current !== seq) return;
         if (res.ok) {
           setState({ kind: "loaded", payload: res.payload });
         } else {
@@ -138,18 +140,23 @@ export function QuoteWorkspaceDialogBody({
         }
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (requestSeqRef.current !== seq) return;
         const message =
           err instanceof Error
             ? err.message
             : "Failed to load quote — try opening the full quote page.";
         setState({ kind: "error", message });
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [display.quoteId]);
+
+  useEffect(() => {
+    void loadSurface();
+  }, [loadSurface]);
+
+  const handleWorkSurfaceMutated = useCallback(() => {
+    setState({ kind: "loading" });
+    void loadSurface();
+  }, [loadSurface]);
 
   const subtitle = resolveDialogSubtitle(display);
 
@@ -203,6 +210,7 @@ export function QuoteWorkspaceDialogBody({
             readiness={state.payload.readiness}
             workspaceTabs={state.payload.workspaceTabs}
             suppressIdentityRow
+            onWorkSurfaceMutated={handleWorkSurfaceMutated}
           />
         ) : null}
       </div>

@@ -20,6 +20,15 @@ export function CenteredWorkspaceDialog({
 }: CenteredWorkspaceDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  const hasOpenChildWorkspaceDialog = (): boolean => {
+    if (typeof document === "undefined") return false;
+    const current = dialogRef.current;
+    const nested = document.querySelectorAll<HTMLDialogElement>(
+      'dialog[data-workspace-child-dialog="true"][open]',
+    );
+    return Array.from(nested).some((dialog) => dialog !== current);
+  };
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -33,7 +42,11 @@ export function CenteredWorkspaceDialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    function handleCancel() {
+    function handleCancel(event: Event) {
+      if (hasOpenChildWorkspaceDialog()) {
+        event.preventDefault();
+        return;
+      }
       onClose();
     }
     dialog.addEventListener("cancel", handleCancel);
@@ -46,6 +59,7 @@ export function CenteredWorkspaceDialog({
       className={CENTERED_WORKSPACE_DIALOG_CLASS}
       aria-labelledby={ariaLabelledBy}
       onClick={(e) => {
+        if (hasOpenChildWorkspaceDialog()) return;
         if (e.target === e.currentTarget) onClose();
       }}
     >
