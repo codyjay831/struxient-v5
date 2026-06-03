@@ -1,6 +1,15 @@
 "use server";
 
-import { JobTaskStatus, JobActivityType, JobIssueStatus, JobIssueSeverity, Prisma } from "@prisma/client";
+import {
+  JobTaskStatus,
+  JobActivityType,
+  JobIssueStatus,
+  JobIssueSeverity,
+  JobStatus,
+  LineItemTemplateTaskSource,
+  TaskTemplateCategory,
+  Prisma,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
@@ -16,11 +25,114 @@ import { promotePendingPaymentsToDue } from "@/lib/job-payment-readiness";
 import { assertCanOverrideTaskReadiness } from "@/lib/job-task-override-guard";
 import { assertCanToggleTaskChecklistItem } from "@/lib/job-task-checklist-guard";
 import { assertCanRevertJobTaskToTodo } from "@/lib/job-task-revert";
+import {
+  computeNextTaskSortOrder,
+  validateAddJobTaskInput,
+  type AddJobTaskInput,
+} from "@/lib/job-task-add-guard";
 
 export type JobTaskActionState = {
   error?: string;
   success?: boolean;
+  taskId?: string;
 };
+
+export async function addJobTaskAction(
+  input: AddJobTaskInput,
+): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  try {
+    const jobStage = await db.jobStage.findFirst({
+      where: {
+        id: input.jobStageId.trim(),
+        jobId: input.jobId.trim(),
+        job: { organizationId },
+      },
+      select: {
+        id: true,
+        title: true,
+        jobId: true,
+        job: { select: { id: true, status: true } },
+      },
+    });
+
+    if (!jobStage) {
+      return { error: "Job or stage not found in your organization." };
+    }
+
+    const validation = validateAddJobTaskInput(input, {
+      jobId: jobStage.jobId,
+      jobStageId: jobStage.id,
+      stageTitle: jobStage.title,
+      stageBelongsToJob: true,
+      jobIsActive: jobStage.job.status === JobStatus.ACTIVE,
+    });
+
+    if (!validation.ok) {
+      return { error: validation.error };
+    }
+
+    const maxSort = await db.jobTask.aggregate({
+      where: { jobStageId: jobStage.id },
+      _max: { sortOrder: true },
+    });
+
+    const sortOrder = computeNextTaskSortOrder(maxSort._max.sortOrder);
+
+    const task = await db.$transaction(async (tx) => {
+      const created = await tx.jobTask.create({
+        data: {
+          jobId: jobStage.jobId,
+          jobStageId: jobStage.id,
+          sourceType: LineItemTemplateTaskSource.CUSTOM,
+          title: validation.title,
+          instructions: validation.instructions,
+          category: TaskTemplateCategory.GENERAL,
+          status: JobTaskStatus.TODO,
+          sortOrder,
+          completionRequirementsJson: {},
+          providesSignals: [],
+          requiresSignals: [],
+          hardSignal: false,
+        },
+      });
+
+      await recordJobActivity(
+        {
+          organizationId,
+          jobId: jobStage.jobId,
+          type: JobActivityType.ISSUE_FOLLOW_UP_TASK_CREATED,
+          title: `Task added: ${validation.title}`,
+          details: validation.instructions
+            ? `Added to ${jobStage.title}. ${validation.instructions}`
+            : `Added to ${jobStage.title}.`,
+          entityType: "JobTask",
+          entityId: created.id,
+          actorUserId: session.userId,
+          metadataJson: {
+            activityKind: "TASK_ADDED",
+            jobStageId: jobStage.id,
+            stageTitle: jobStage.title,
+          },
+        },
+        tx,
+      );
+
+      return created;
+    });
+
+    revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
+    revalidatePath(`/jobs/${jobStage.jobId}`);
+
+    return { success: true, taskId: task.id };
+  } catch (e) {
+    console.error("Failed to add job task", e);
+    return { error: "Failed to add task. Please try again." };
+  }
+}
 
 export async function completeJobTaskAction(
   taskId: string,

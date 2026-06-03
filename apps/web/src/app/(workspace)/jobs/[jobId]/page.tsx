@@ -25,6 +25,7 @@ import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobVisitManager } from "@/components/jobs/job-visit-manager";
 import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobEventButton } from "@/components/jobs/job-event-button";
+import { JobTaskAddButton } from "@/components/jobs/job-task-add-button";
 import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import { getLiveSignals } from "@/lib/signal-bus";
 import {
@@ -235,6 +236,7 @@ export default async function JobDetailPage({
             type: true,
             title: true,
             details: true,
+            metadataJson: true,
             createdAt: true,
             actorUser: { select: { name: true, email: true } },
           },
@@ -283,6 +285,8 @@ export default async function JobDetailPage({
   const secondaryIdentity = job.title !== primaryIdentity ? job.title : null;
 
   const totalTasks = job.stages.reduce((sum, s) => sum + s.tasks.length, 0);
+  const firstAddableStageId =
+    job.stages.find((stage) => stage.title !== CORRECTIONS_STAGE_NAME)?.id ?? null;
   const activatedLabel = new Date(job.activatedAt).toLocaleString();
 
   const paymentScheduleAnchors = await loadScheduleAnchorsByIds(
@@ -511,12 +515,12 @@ export default async function JobDetailPage({
         initialLogs={job.dailyJobLogs}
       />
 
-      {totalTasks === 0 ? (
+      {job.stages.length === 0 ? (
         <WorkspacePanel>
           <EmptyState
             icon={Briefcase}
-            title="No execution tasks on this job"
-            description="No stages or tasks were copied at activation."
+            title="No execution stages on this job"
+            description="No stages were copied at activation. Open the source quote to review execution planning before adding work here."
           >
             {safeQuote ? (
               <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
@@ -529,8 +533,14 @@ export default async function JobDetailPage({
         <WorkspacePanel className="mb-6">
           <SectionHeading
             title="Execution stages"
-            description="Tasks grouped by stage. Readiness is based on completed prerequisite work and open blockers."
+            description="Tasks grouped by stage. Add ordinary work here, use field events for holds, and use Issue / Recovery when something blocks progress."
           />
+          {totalTasks === 0 ? (
+            <div className="mb-6 rounded-lg border border-dashed border-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-foreground-muted">
+              No tasks yet on this job. Add the first step to the internal work plan below. This
+              does not change the quote or customer-approved scope.
+            </div>
+          ) : null}
           <div className="space-y-8">
             {job.stages.map((stage) => (
               <section key={stage.id}>
@@ -538,9 +548,29 @@ export default async function JobDetailPage({
                   <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
                     {stage.title}
                   </h3>
+                  {stage.title === CORRECTIONS_STAGE_NAME ? (
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">
+                      Recovery tasks only
+                    </p>
+                  ) : (
+                    <JobTaskAddButton
+                      jobId={job.id}
+                      jobStageId={stage.id}
+                      stageTitle={stage.title}
+                      variant={
+                        totalTasks === 0 && stage.id === firstAddableStageId
+                          ? "empty"
+                          : "stage"
+                      }
+                    />
+                  )}
                 </div>
                 {stage.tasks.length === 0 ? (
-                  <p className="text-xs text-foreground-muted">No tasks on this stage.</p>
+                  <p className="text-xs text-foreground-muted">
+                    {stage.title === CORRECTIONS_STAGE_NAME
+                      ? "Correction tasks appear here when a recovery path is active."
+                      : "No tasks on this stage yet."}
+                  </p>
                 ) : (
                   <ul className="space-y-3">
                     {stage.tasks.map((task, taskIndex) => {
@@ -611,8 +641,13 @@ export default async function JobDetailPage({
         <div className="flex gap-2">
           <Info className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <p className="text-xs leading-relaxed text-foreground-muted">
-            Read-only stages and tasks for now. Status changes, assignments, scheduling, and field workflow ship in
-            later slices—nothing here mutates the source quote.
+            Work plan changes on this job update internal execution only. They do not change the
+            source quote, price, or customer-approved scope. Use{" "}
+            <span className="font-medium text-foreground">Add task</span> for ordinary plan
+            refinement, <span className="font-medium text-foreground">Record field event</span>{" "}
+            for lightweight holds, and{" "}
+            <span className="font-medium text-foreground">Issue / Recovery</span> when work is
+            blocked by a problem.
           </p>
         </div>
       </WorkspacePanel>

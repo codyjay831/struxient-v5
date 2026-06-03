@@ -1,6 +1,6 @@
 "use client";
 
-import { JobActivityType } from "@prisma/client";
+import { JobActivityType, Prisma } from "@prisma/client";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
 import { History, User as UserIcon, Settings, Calendar } from "lucide-react";
@@ -10,12 +10,21 @@ type Activity = {
   type: JobActivityType;
   title: string;
   details: string | null;
+  metadataJson: Prisma.JsonValue | null;
   createdAt: Date;
   actorUser: {
     name: string | null;
     email: string | null;
   } | null;
 };
+
+function activityTypeLabel(activity: Activity): string {
+  const meta = activity.metadataJson as { activityKind?: string } | null;
+  if (meta?.activityKind === "TASK_ADDED") {
+    return "TASK ADDED";
+  }
+  return activity.type.replace(/_/g, " ");
+}
 
 export function JobActivityFeed({ activities }: { activities: Activity[] }) {
   return (
@@ -42,7 +51,7 @@ export function JobActivityFeed({ activities }: { activities: Activity[] }) {
                 <div key={activity.id} className="relative flex items-start gap-4 sm:gap-6">
                   {/* Timeline dot/icon */}
                   <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface sm:size-10">
-                    <ActivityIcon type={activity.type} />
+                    <ActivityIcon type={activity.type} metadataJson={activity.metadataJson} />
                   </div>
 
                   <div className="min-w-0 flex-1 pt-1.5 sm:pt-2.5">
@@ -70,7 +79,7 @@ export function JobActivityFeed({ activities }: { activities: Activity[] }) {
                       )}
                       <span className="text-foreground-muted/50">·</span>
                       <span className="font-mono text-[10px] uppercase opacity-70">
-                        {activity.type.replace(/_/g, " ")}
+                        {activityTypeLabel(activity)}
                       </span>
                     </div>
 
@@ -90,7 +99,18 @@ export function JobActivityFeed({ activities }: { activities: Activity[] }) {
   );
 }
 
-function ActivityIcon({ type }: { type: JobActivityType }) {
+function ActivityIcon({
+  type,
+  metadataJson,
+}: {
+  type: JobActivityType;
+  metadataJson: Prisma.JsonValue | null;
+}) {
+  const meta = metadataJson as { activityKind?: string } | null;
+  if (meta?.activityKind === "TASK_ADDED") {
+    return <span className="text-accent">+</span>;
+  }
+
   switch (type) {
     case "JOB_ACTIVATED":
       return <span className="text-accent">▶</span>;
