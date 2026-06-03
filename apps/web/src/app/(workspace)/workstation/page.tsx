@@ -14,7 +14,8 @@ import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
-import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
+import { WorkstationSelectionModal } from "@/components/workstation/workstation-selection-modal";
+import { usesGenericPanel } from "@/lib/workstation/uses-generic-panel";
 import { WorkstationPanelContent } from "@/components/workstation/workstation-panel-content";
 import { 
   WorkstationFocusCard, 
@@ -299,13 +300,14 @@ export default async function WorkstationTodayLensPage({
         </aside>
       </div>
 
-      {selectedItem && (
-        <div id="selected-item-panel" className="scroll-mt-6">
-          <WorkstationWorkPanel item={selectedItem}>
+      <WorkstationSelectionModal
+        item={selectedItem ?? null}
+        genericContent={
+          selectedItem && usesGenericPanel(selectedItem) ? (
             <WorkstationPanelContent item={selectedItem} />
-          </WorkstationWorkPanel>
-        </div>
-      )}
+          ) : undefined
+        }
+      />
 
       {/* Footer Navigation */}
       <div className="border-t border-border pt-12">

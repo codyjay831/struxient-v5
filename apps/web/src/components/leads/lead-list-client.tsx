@@ -10,17 +10,12 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import { ArrowUpRight, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import {
-  loadLeadCommercialSurfaceAction,
-} from "@/app/(workspace)/leads/lead-workspace-actions";
-import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
-import { type LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
-import { Loader2 } from "lucide-react";
+import { CenteredWorkspaceDialog } from "@/components/ui/centered-workspace-dialog";
+import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
 import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 
 /* ─── Compact lead row ───────────────────────────────────────────────────── */
@@ -81,76 +76,6 @@ function LeadRow({
   );
 }
 
-/* ─── Workspace content (popup chrome + LeadWorkSurface body) ───────────── */
-
-function WorkspaceContent({
-  leadId,
-  onClose,
-}: {
-  leadId: string;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-  const [payload, setPayload] = useState<LeadCommercialSurfacePayload | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const reloadSurface = useCallback(async () => {
-    const result = await loadLeadCommercialSurfaceAction(leadId);
-    if (result.ok) {
-      setPayload(result.payload);
-    } else {
-      console.error(result.error);
-    }
-  }, [leadId]);
-
-  const handleMutationSuccess = useCallback(() => {
-    void reloadSurface();
-    router.refresh();
-  }, [reloadSurface, router]);
-
-  useEffect(() => {
-    let active = true;
-    Promise.resolve().then(() => {
-      if (active) setIsLoading(true);
-    });
-    loadLeadCommercialSurfaceAction(leadId).then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setPayload(result.payload);
-      } else {
-        console.error(result.error);
-      }
-      setIsLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [leadId]);
-
-  return (
-    <div className="flex max-h-[88vh] flex-col min-h-[400px]">
-      {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-accent/20" />
-        </div>
-      ) : payload ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <LeadCommercialSurface
-            payload={payload}
-            entryPoint="record"
-            onMutationSuccess={handleMutationSuccess}
-            onClose={onClose}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center p-12 text-center">
-          <p className="text-sm text-foreground-muted">Failed to load opportunity details.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ─── Main export ────────────────────────────────────────────────────────── */
 
 const primaryLinkClass =
@@ -166,39 +91,15 @@ export function LeadsListClient({
   leads: SerializedLeadRow[];
   orgHasLeads: boolean;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
 
-  /* Sync native dialog open/close state */
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (openLeadId && !dialog.open) {
-      dialog.showModal();
-    } else if (!openLeadId && dialog.open) {
-      dialog.close();
-    }
-  }, [openLeadId]);
-
-  /* Reset state when user presses Escape (native cancel) */
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    function handleCancel() {
-      setOpenLeadId(null);
-    }
-    dialog.addEventListener("cancel", handleCancel);
-    return () => dialog.removeEventListener("cancel", handleCancel);
+  const openWorkspace = useCallback((id: string) => {
+    setOpenLeadId(id);
   }, []);
 
-  function openWorkspace(id: string) {
-    setOpenLeadId(id);
-  }
-
-  function closeWorkspace() {
-    dialogRef.current?.close();
+  const closeWorkspace = useCallback(() => {
     setOpenLeadId(null);
-  }
+  }, []);
 
   return (
     <>
@@ -234,24 +135,15 @@ export function LeadsListClient({
         </div>
       )}
 
-      {/* ── Opportunity Workspace dialog ──────────────────────────────────────── */}
-      <dialog
-        ref={dialogRef}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-3xl overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-xl outline-none [&::backdrop]:bg-foreground/25"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) closeWorkspace();
-        }}
-      >
-        {openLeadId && (
-          /* Key by lead.id so internal state resets cleanly when the user 
-             opens a different record. */
-          <WorkspaceContent
+      <CenteredWorkspaceDialog open={openLeadId != null} onClose={closeWorkspace}>
+        {openLeadId ? (
+          <LeadWorkspaceDialogBody
             key={openLeadId}
             leadId={openLeadId}
             onClose={closeWorkspace}
           />
-        )}
-      </dialog>
+        ) : null}
+      </CenteredWorkspaceDialog>
     </>
   );
 }

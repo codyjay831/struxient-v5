@@ -6,7 +6,8 @@ import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
-import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
+import { WorkstationSelectionModal } from "@/components/workstation/workstation-selection-modal";
+import { usesGenericPanel } from "@/lib/workstation/uses-generic-panel";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import { JobTaskStatus, JobStatus } from "@prisma/client";
 import { 
@@ -41,6 +42,32 @@ export default async function WorkstationJobsLensPage({
   const selectedItem = selectedId ? jobItems.find((i) => i.id === selectedId) : null;
   const selectedJob = selectedId?.startsWith("job-") ? activeJobs.find(j => `job-${j.id}` === selectedId) : null;
 
+  const resolvedSelectedItem =
+    selectedItem ??
+    (selectedJob
+      ? {
+          id: `job-${selectedJob.id}`,
+          kind: "job" as const,
+          title: selectedJob.title,
+          subtitle:
+            selectedJob.customer?.displayName ||
+            selectedJob.lead?.title ||
+            undefined,
+          status: selectedJob.status,
+          priority: "medium" as const,
+          group: "active" as const,
+          lane: "due" as const,
+          withinLaneRank: 0,
+          lens: "today" as const,
+          filterCategory: "jobs" as const,
+          reason: "Active job in progress.",
+          nextStep: "Review job status.",
+          recordId: selectedJob.id,
+          href: `/jobs/${selectedJob.id}`,
+          updatedAt: selectedJob.updatedAt,
+        }
+      : null);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between border-b border-border pb-4">
@@ -58,32 +85,14 @@ export default async function WorkstationJobsLensPage({
         </div>
       </div>
 
-      {(selectedItem || selectedJob) && (
-        <div id="selected-item-panel" className="scroll-mt-6">
-          <WorkstationWorkPanel 
-            item={selectedItem || {
-              id: `job-${selectedJob!.id}`,
-              kind: "job",
-              title: selectedJob!.title,
-              subtitle: selectedJob!.customer?.displayName || selectedJob!.lead?.title || undefined,
-              status: selectedJob!.status,
-              priority: "medium",
-              group: "active",
-              lane: "due",
-              withinLaneRank: 0,
-              lens: "today",
-              filterCategory: "jobs",
-              reason: "Active job in progress.",
-              nextStep: "Review job status.",
-              recordId: selectedJob!.id,
-              href: `/jobs/${selectedJob!.id}`,
-              updatedAt: selectedJob!.updatedAt,
-            }}
-          >
-            <JobDetailWrapper jobId={(selectedItem?.recordId || selectedJob?.id)!} />
-          </WorkstationWorkPanel>
-        </div>
-      )}
+      <WorkstationSelectionModal
+        item={resolvedSelectedItem}
+        genericContent={
+          resolvedSelectedItem && usesGenericPanel(resolvedSelectedItem) ? (
+            <JobDetailWrapper jobId={resolvedSelectedItem.recordId} />
+          ) : undefined
+        }
+      />
 
       {activeJobs.length > 0 ? (
         <div className="grid gap-2">

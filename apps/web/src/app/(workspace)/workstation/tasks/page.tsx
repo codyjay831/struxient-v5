@@ -6,7 +6,8 @@ import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
-import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
+import { WorkstationSelectionModal } from "@/components/workstation/workstation-selection-modal";
+import { usesGenericPanel } from "@/lib/workstation/uses-generic-panel";
 import { WorkstationPanelContent } from "@/components/workstation/workstation-panel-content";
 import {
   WorkstationQueueItem,
@@ -41,13 +42,14 @@ export default async function WorkstationTasksLensPage({
         </div>
       </div>
 
-      {selectedItem && (
-        <div id="selected-item-panel" className="scroll-mt-6">
-          <WorkstationWorkPanel item={selectedItem}>
+      <WorkstationSelectionModal
+        item={selectedItem ?? null}
+        genericContent={
+          selectedItem && usesGenericPanel(selectedItem) ? (
             <WorkstationPanelContent item={selectedItem} />
-          </WorkstationWorkPanel>
-        </div>
-      )}
+          ) : undefined
+        }
+      />
 
       {taskItems.length > 0 ? (
         <div className="grid gap-2">

@@ -157,7 +157,7 @@ function QuoteDraftDetailsForm({
     <div className="space-y-4">
       <SectionHeading
         title="Draft details"
-        description="Staff workspace fields. Optional proposal document title shapes the customer-facing document."
+        description="Internal title and the name your customer sees on the proposal."
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
@@ -679,7 +679,7 @@ export function QuoteAuthoringSurface({
   const [isAiAssessing, setIsAiAssessing] = useState(false);
   const aiAssessRequestSeqRef = useRef(0);
   const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showRawIntake, setShowRawIntake] = useState(false);
   const [scopeCaptureOpen, setScopeCaptureOpen] = useState(false);
   const [scopeCaptureText, setScopeCaptureText] = useState("");
@@ -979,24 +979,24 @@ export function QuoteAuthoringSurface({
 
   return (
     <div className="@container">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="flex flex-col gap-6 @5xl:flex-row @5xl:items-start">
         {/* Main Content Area */}
         <div className="flex-1 min-w-0 space-y-6">
-          <WorkspacePanel padding="none" className="border-none bg-transparent shadow-none ring-0">
+          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
             <QuoteDraftDetailsForm
               quoteId={quoteId}
               initialTitle={initialTitle}
               initialCustomerDocumentTitle={initialCustomerDocumentTitle}
               onMutated={onMutated}
             />
-          </WorkspacePanel>
 
-          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+            <div className="my-6 border-t border-border" />
+
             <SectionHeading
               title="Line items"
-              description="Each row is commercial scope and pricing first. Internal draft execution and planning stay under each line."
+              description="What you're quoting — scope, quantity, and price."
               actions={
-                !isAddOpen ? (
+                !isAddOpen && lineCount > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -1020,21 +1020,21 @@ export function QuoteAuthoringSurface({
               }
             />
 
-            <div className="mb-5 grid gap-3 grid-cols-2 @lg:grid-cols-3">
+            <div className="mb-5 grid grid-cols-2 gap-3 @4xl:grid-cols-3">
               <SignalCard
                 label="Subtotal"
                 value={formatMoneyCents(subtotalCents)}
-                hint="Sum of line totals."
+                hint="Before tax and fees"
               />
               <SignalCard
                 label="Total"
                 value={formatMoneyCents(totalCents)}
-                hint="Same as subtotal for now."
+                hint="Before tax and fees"
               />
               <SignalCard
                 label="Lines"
                 value={String(lineCount)}
-                hint="Persisted rows."
+                hint="Items on this quote"
               />
             </div>
 
@@ -1058,7 +1058,7 @@ export function QuoteAuthoringSurface({
                 <EmptyState
                   icon={ListOrdered}
                   title="No line items on this quote yet"
-                  description="This draft quote has no line items. Add custom scope or copy reusable scope from the Scope Library."
+                  description="Add your first line item to start building this quote."
                 >
                   <div className="flex flex-wrap gap-2">
                     {!isAddOpen && (
@@ -1195,12 +1195,17 @@ export function QuoteAuthoringSurface({
         </div>
 
         {/* Sidebar: Intake Reference & Internal Notes */}
-        <div className={`w-full lg:w-80 shrink-0 transition-all duration-300 ${isSidebarOpen ? "opacity-100" : "lg:w-10 opacity-50"}`}>
+        <div
+          className={[
+            "w-full shrink-0 transition-all duration-300",
+            isSidebarOpen ? "opacity-100 @5xl:w-72" : "opacity-50 @5xl:w-10",
+          ].join(" ")}
+        >
           <div className="sticky top-6 space-y-6">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle hover:text-foreground transition-colors"
+                className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-foreground-subtle transition-colors hover:text-foreground"
               >
                 {isSidebarOpen ? (
                   <>Hide Reference <X className="size-3" /></>
@@ -1216,7 +1221,7 @@ export function QuoteAuthoringSurface({
                 <section className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-3.5 text-accent" />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
                       Intake Reference
                     </h3>
                   </div>
@@ -1227,7 +1232,7 @@ export function QuoteAuthoringSurface({
                         const isHighSignal = field.label === "Service Location Address" || field.label === "Request Type";
                         return (
                           <div key={field.label} className="space-y-1">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-foreground-subtle">
+                            <p className="text-xs font-bold uppercase tracking-wider text-foreground-subtle">
                               {field.label}
                             </p>
                             <p className={`text-xs leading-tight ${isHighSignal ? "font-bold text-foreground" : "text-foreground-muted"}`}>
@@ -1240,7 +1245,7 @@ export function QuoteAuthoringSurface({
                       <div className="border-t border-border pt-2">
                         <button
                           onClick={() => setShowRawIntake(!showRawIntake)}
-                          className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground transition-colors"
+                          className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground-subtle transition-colors hover:text-foreground"
                         >
                           <ChevronDown className={`size-2.5 transition-transform ${showRawIntake ? "rotate-180" : ""}`} />
                           {showRawIntake ? "Hide raw notes" : "View raw notes"}
@@ -1262,7 +1267,7 @@ export function QuoteAuthoringSurface({
                   {(hasIntakeNotes || hasScopeSummary || hasInternalNotesForCapture) && (
                     <button
                       type="button"
-                      className="text-[10px] font-medium text-foreground-subtle underline underline-offset-2 hover:text-foreground transition-colors"
+                      className="text-xs font-medium text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
                       onClick={openScopeCapture}
                     >
                       Draft scope from intake →

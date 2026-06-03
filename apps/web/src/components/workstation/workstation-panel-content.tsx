@@ -3,10 +3,6 @@ import { db } from "@/lib/db";
 import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
-import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
-import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
-import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
-import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
 import { IssueRecoveryDetailLoader } from "./issue-recovery-detail-loader";
@@ -56,14 +52,6 @@ export async function WorkstationPanelContent({
 
   if (item.kind === "job") {
     return <WorkstationJobDetail jobId={item.recordId} />;
-  }
-
-  if (item.kind === "lead") {
-    return <WorkstationLeadDetail leadId={item.recordId} />;
-  }
-
-  if (item.kind === "quote") {
-    return <WorkstationQuoteDetail quoteId={item.recordId} />;
   }
 
   return null;
@@ -183,30 +171,6 @@ async function WorkstationJobDetail({ jobId }: { jobId: string }) {
       stageCount={stageCount}
       taskCount={activeTaskCount}
       nextTaskTitle={nextReadyTask?.title ?? sortedTasks[0]?.title}
-    />
-  );
-}
-
-async function WorkstationLeadDetail({ leadId }: { leadId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const payload = await loadLeadCommercialSurface(leadId, ctx);
-
-  if (!payload) return null;
-
-  return <LeadCommercialSurface payload={payload} entryPoint="workstation" />;
-}
-
-async function WorkstationQuoteDetail({ quoteId }: { quoteId: string }) {
-  const ctx = await getRequestContextOrThrow();
-  const result = await loadQuoteWorkSurface(quoteId, ctx.organizationId);
-
-  if (!result) return null;
-
-  return (
-    <QuoteWorkSurface
-      quote={result.quote}
-      readiness={result.readiness}
-      workspaceTabs={result.workspaceTabs}
     />
   );
 }

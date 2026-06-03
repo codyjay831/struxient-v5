@@ -11,13 +11,15 @@
  *   standard  — Quotes list popup, Lead Quote tab embed
  *   full      — Quote full page (`/quotes/[quoteId]`) — the entire workspace body
  *
- * The surface owns the same five tabs the full Quote page used to render
- * separately:
+ * Primary tabs (pill strip — core quote flow):
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
- *   - Customer & Opportunity — customer card + intake context
+ *   - Payments        — payment schedule
  *   - Send & Accept   — inline Send/Approve + checkpoint history + preview link
- *   - Record          — archive/restore + internal notes + record details
+ *
+ * Secondary views (muted Details row — reference / admin):
+ *   - Customer & Intake — customer card + intake context
+ *   - Record            — archive/restore + internal notes + record details
  *
  * Actions that the surface can satisfy in-place switch tabs internally:
  *   - ADD_LINE_ITEM / ADD_FROM_SCOPE_LIBRARY / CONTINUE_EDITING → Scope tab
@@ -170,12 +172,15 @@ export type QuoteWorkSurfaceProps = {
 
 /* ─── Constants ────────────────────────────────────────────────────────── */
 
-const TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
+const PRIMARY_TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
   { id: "payments", label: "Payments" },
-  { id: "context", label: "Customer & Intake" },
   { id: "sendaccept", label: "Send & Accept" },
+];
+
+const SECONDARY_VIEWS: { id: QuoteWorkSurfaceTab; label: string }[] = [
+  { id: "context", label: "Customer & Intake" },
   { id: "record", label: "Record" },
 ];
 
@@ -975,7 +980,7 @@ function FactsGrid({
   const leadLabel = quote.leadTitle ?? "—";
 
   return (
-    <div className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
       <button
         type="button"
         onClick={() => onSwitchToTab("scope")}
@@ -1164,7 +1169,7 @@ function OverviewTab({
       </div>
 
       {/* Footer escape hatch — only when not on full page. */}
-      <div className="pt-1 @[1000px]:hidden">
+      <div className="pt-1 @[768px]:hidden">
         <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
           Open full quote page
           <ArrowUpRight className="size-3" strokeWidth={1.5} />
@@ -1253,21 +1258,21 @@ function ScopeTab({
               : "Commercial scope and pricing are read-only after send. Internal draft execution can still be edited from each line."
           }
         />
-        <div className="mb-5 grid gap-3 grid-cols-2 @lg:grid-cols-3">
+        <div className="mb-5 grid grid-cols-2 gap-3 @4xl:grid-cols-3">
           <SignalCard
             label="Subtotal"
             value={formatMoneyCents(subtotalCents)}
-            hint={isArchived ? "Stored rollup." : "Sum of line totals."}
+            hint={isArchived ? "Stored rollup." : "Before tax and fees"}
           />
           <SignalCard
             label="Total"
             value={formatMoneyCents(totalCents)}
-            hint="Same as subtotal for now."
+            hint="Before tax and fees"
           />
           <SignalCard
             label="Lines"
             value={String(lineCount)}
-            hint="Persisted rows."
+            hint="Items on this quote"
           />
         </div>
         {lineCount === 0 ? (
@@ -1299,7 +1304,7 @@ function ScopeTab({
         )}
       </WorkspacePanel>
 
-      <div className="pt-1 @[1000px]:hidden">
+      <div className="pt-1 @[768px]:hidden">
         <Link
           href={`${quote.quoteHref}#line-items`}
           className={mutedFooterLinkClass}
@@ -2059,7 +2064,7 @@ function SendAcceptTab({
           <Link href={`/jobs/${quote.activatedJobId}`} className={listLinkClass}>
             <Briefcase className="size-3.5 mr-1.5" strokeWidth={1.5} />
             Open job
-            <span className="@[1000px]:hidden"> — opens job</span>
+            <span className="@[768px]:hidden"> — opens job</span>
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>
@@ -2173,7 +2178,7 @@ function RecordTab({
       </div>
 
       {/* Footer escape hatch — only when not on full page. */}
-      <div className="pt-1 @[1000px]:hidden">
+      <div className="pt-1 @[768px]:hidden">
         <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
           Open full quote page
           <ArrowUpRight className="size-3" strokeWidth={1.5} />
@@ -2207,10 +2212,11 @@ export function QuoteWorkSurface({
     return initialTab;
   });
 
-  const visibleTabs = TABS.filter((t) => {
-    if (embeddedInLead && t.id === "context") return false;
-    return true;
-  });
+  const hideContext = embeddedInLead;
+  const visiblePrimaryTabs = PRIMARY_TABS;
+  const visibleSecondaryViews = SECONDARY_VIEWS.filter(
+    (v) => !(hideContext && v.id === "context"),
+  );
   const [activePreview, setActivePreview] = useState<
     "none" | "proposal" | "execution" | "send"
   >("none");
@@ -2251,33 +2257,65 @@ export function QuoteWorkSurface({
   }, [router, onWorkSurfaceMutated]);
 
   /* Tab strip styling — adapts via container width. */
-  const tabStripClass = "mb-4 inline-flex rounded-lg bg-background p-1 gap-0.5 @[1000px]:bg-surface @[1000px]:border @[1000px]:border-border";
-  const activeTabClass = "bg-surface text-foreground shadow-sm @[1000px]:bg-background";
+  const tabStripClass =
+    "inline-flex max-w-full overflow-x-auto rounded-lg bg-background p-1 gap-0.5 @[768px]:bg-surface @[768px]:border @[768px]:border-border";
+  const activeTabClass = "bg-surface text-foreground shadow-sm @[768px]:bg-background";
   const inactiveTabClass = "text-foreground-subtle hover:text-foreground";
   const tabPaddingClass = "px-3 py-1.5 @lg:px-4";
+  const secondaryNavInactiveClass =
+    "text-foreground-subtle transition-colors hover:text-foreground";
+  const secondaryNavActiveClass =
+    "text-foreground underline underline-offset-2";
 
   return (
-    <div className="@container space-y-4 @[1000px]:mb-6">
+    <div className="@container space-y-4 @[768px]:mb-6">
       {!suppressIdentityRow && (
-        <div className="@[1000px]:hidden">
+        <div className="@[768px]:hidden">
           <StandardIdentityRow quote={quote} />
         </div>
       )}
 
-      <div className={tabStripClass}>
-        {visibleTabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => handleSwitchToTab(t.id)}
-            className={[
-              `rounded-md ${tabPaddingClass} text-xs font-medium transition-colors`,
-              activeTab === t.id ? activeTabClass : inactiveTabClass,
-            ].join(" ")}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-4 space-y-2">
+        <div className={tabStripClass}>
+          {visiblePrimaryTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => handleSwitchToTab(t.id)}
+              className={[
+                `rounded-md ${tabPaddingClass} text-xs font-medium transition-colors`,
+                activeTab === t.id ? activeTabClass : inactiveTabClass,
+              ].join(" ")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {visibleSecondaryViews.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span className={sectionLabelClass}>Details</span>
+            {visibleSecondaryViews.map((v, index) => (
+              <span key={v.id} className="inline-flex items-center gap-2">
+                {index > 0 ? (
+                  <span className="text-foreground-subtle" aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => handleSwitchToTab(v.id)}
+                  className={
+                    activeTab === v.id
+                      ? secondaryNavActiveClass
+                      : secondaryNavInactiveClass
+                  }
+                >
+                  {v.label}
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {activeTab === "overview" && (

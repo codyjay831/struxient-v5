@@ -258,7 +258,7 @@ export default async function QuoteLiveProposalPreviewPage({
             <SignalCard
               label="Total"
               value={formatMoneyCents(preview.totalCents)}
-              hint="Same as subtotal for now—no tax or fees in this foundation."
+              hint="Before tax and fees"
             />
           </div>
           <dl className="grid gap-3 text-xs text-foreground-muted sm:grid-cols-2">
