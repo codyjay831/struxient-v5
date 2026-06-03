@@ -1,4 +1,10 @@
-import { buildQuoteExecutionPlanningContext } from "@/lib/ai/quote-execution-planning-context";
+import {
+  buildQuoteExecutionPlanningContext,
+  buildQuoteExecutionPlanningContextManifest,
+  type ExecutionPlanningContextItemOverride,
+  type ExecutionPlanningContextManifest,
+  type ExecutionPlanningContextSourceFlags,
+} from "@/lib/ai/quote-execution-planning-context";
 
 type QuoteLinePlanningInput = {
   internalNotes?: string | null;
@@ -16,12 +22,33 @@ type BuildQuoteLinePlanningContextArgs = {
   line: QuoteLinePlanningInput;
   userInstructions?: string | null;
   priorMissingContext?: string[];
+  sourceFlags?: ExecutionPlanningContextSourceFlags;
+  itemOverrides?: Record<string, ExecutionPlanningContextItemOverride>;
 };
 
 export function buildQuoteLineExecutionPlanningContextFromLine(
   args: BuildQuoteLinePlanningContextArgs,
 ): string | undefined {
   return buildQuoteExecutionPlanningContext({
+    userInstructions: args.userInstructions,
+    lineInternalNotes: args.line.internalNotes,
+    customerScopeTitle: args.line.customerScopeTitle,
+    customerScopeDescription: args.line.customerScopeDescription,
+    customerIncludedNotes: args.line.customerIncludedNotes,
+    customerExcludedNotes: args.line.customerExcludedNotes,
+    quoteInternalNotes: args.line.quote?.internalNotes,
+    leadNotes: args.line.quote?.lead?.notes ?? null,
+    priorMissingContext: args.priorMissingContext,
+  }, {
+    sourceFlags: args.sourceFlags,
+    itemOverrides: args.itemOverrides,
+  });
+}
+
+export function buildQuoteLineExecutionPlanningContextManifestFromLine(
+  args: BuildQuoteLinePlanningContextArgs,
+): ExecutionPlanningContextManifest {
+  return buildQuoteExecutionPlanningContextManifest({
     userInstructions: args.userInstructions,
     lineInternalNotes: args.line.internalNotes,
     customerScopeTitle: args.line.customerScopeTitle,

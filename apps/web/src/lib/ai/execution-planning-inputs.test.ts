@@ -20,6 +20,11 @@ test("buildQuoteLineExecutionPlanningContextFromLine merges quote line and quote
     },
     userInstructions: "Use 200A replacement panel.",
     priorMissingContext: ["Confirm utility disconnect window"],
+    sourceFlags: {
+      includeSiteAccessSchedule: true,
+      includeCustomerProposal: true,
+      includeJobTechnicalDetails: true,
+    },
   });
 
   assert.ok(context);
@@ -27,6 +32,22 @@ test("buildQuoteLineExecutionPlanningContextFromLine merges quote line and quote
   assert.match(context!, /Customer included notes/i);
   assert.match(context!, /Quote internal notes/i);
   assert.match(context!, /Confirm utility disconnect window/i);
+});
+
+test("buildQuoteLineExecutionPlanningContextFromLine keeps job details off by default", () => {
+  const context = buildQuoteLineExecutionPlanningContextFromLine({
+    line: {
+      internalNotes: "Line-specific details:\n- Existing Zinsco panel",
+      quote: {
+        internalNotes: "Locked side gate",
+      },
+    },
+    userInstructions: "Plan clean execution.",
+  });
+  assert.ok(context);
+  assert.match(context!, /User clarifications/i);
+  assert.doesNotMatch(context!, /Zinsco/i);
+  assert.doesNotMatch(context!, /Locked side gate/i);
 });
 
 test("buildTemplateExecutionPlanningContext returns merged blocks", () => {

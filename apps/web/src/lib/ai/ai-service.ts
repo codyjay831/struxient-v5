@@ -21,6 +21,10 @@ import {
   filterCorrectionsStageTasksFromAiProposal 
 } from "./ai-execution-plan-corrections";
 import { normalizeExecutionProposalTasks } from "./normalize-execution-proposal";
+import {
+  collectExecutionPlanQualityWarnings,
+  isCategoryLikeStageNameNotAllowed,
+} from "./execution-plan-quality-warnings";
 import { AIRecoveryProposal, AIRecoveryProposalSchema } from "./recovery-proposal-schema";
 import {
   QuoteScopeSuggestionsProposalSchema,
@@ -328,8 +332,14 @@ export class AIService {
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({ model: modelName });
-      
+      // JSON mode: ask the model to return raw application/json so we are not
+      // dependent on stripping ```json fences. We keep the regex extraction
+      // below as a belt-and-braces fallback for models/SDKs that ignore this.
+      const model = gemini.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+
       const prompt = this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
 
       const result = await this.retryWithBackoff(() =>
@@ -375,6 +385,18 @@ export class AIService {
             stageMappingWarnings.push(`${taskLabel}: ${stageMapping.reason}`);
           }
 
+          if (
+            isCategoryLikeStageNameNotAllowed(
+              t?.stageName as string | undefined,
+              planningStages,
+            )
+          ) {
+            const taskLabel = t?.title ? `"${t.title}"` : `Task ${idx + 1}`;
+            stageMappingWarnings.push(
+              `${taskLabel}: stage "${t?.stageName}" looks like a task category, not an allowed stage. Review the assigned stage before applying.`,
+            );
+          }
+
           return {
             ...t,
             category: finalCategory,
@@ -409,6 +431,21 @@ export class AIService {
         validTasks.map((task) => AILibraryProposedTaskSchema.parse(task)),
       );
 
+      const qualityWarnings = collectExecutionPlanQualityWarnings({
+        description: context.description,
+        userInstructions: context.userInstructions,
+        assumptions: baseAssumptions,
+        missingContext: baseMissingContext,
+        tasks: normalizedResult.tasks.map((task) => ({
+          title: task.title,
+          category: task.category,
+          instructions: task.instructions,
+          confidence: task.confidence,
+          providesSignals: task.providesSignals,
+          requiresSignals: task.requiresSignals,
+        })),
+      });
+
       const proposal = {
         ...rawProposal,
         templateId: context.templateId,
@@ -421,6 +458,7 @@ export class AIService {
           ...normalizationWarnings,
           ...stageMappingWarnings,
           ...droppedWarnings,
+          ...qualityWarnings,
         ],
         tasks: normalizedResult.tasks,
       };
@@ -611,65 +649,273 @@ Return JSON only:
     ).join("\n");
 
     return `
-You are a realistic contractor execution planner. Your job is to draft a structured execution plan for a commercial line item.
+You are Struxient's contractor execution planner.
+
+Your job is to convert ONE contractor quote line item or scope library template into the smallest useful starter execution plan for human review.
+
+This is NOT a full construction schedule.
+This is NOT an engineering design document.
+This is NOT a generic project-management checklist.
+This is NOT customer-facing sales copy.
+
+You are creating only the real operational tasks needed to execute the quoted scope safely, legally, and accountably.
 
 LINE ITEM DESCRIPTION: "${context.description}"
 LINE ITEM TAGS: [${context.tags.join(", ")}]
 ORGANIZATION CONTEXT: "${context.organizationName || 'General Contractor'}"
-ALLOWED STAGES (stageName on each task MUST be copied exactly from this list):
+
+ALLOWED STAGES:
 ${stageListJson}
+
 EXISTING STAGES (summary): [${stageNames || "None — add stages in Scope Library before generating tasks."}]
 EXISTING SIGNALS: [${signalNames}]
-USER INSTRUCTIONS: "${context.userInstructions || 'None'}"
+
+USER INSTRUCTIONS:
+"${context.userInstructions || 'None'}"
 
 AVAILABLE REUSABLE TASKS FROM LIBRARY (PRIORITIZE THESE):
 ${reusableTaskList || 'None matching current tags.'}
 
-ALLOWED TASK CATEGORIES (use EXACTLY one of these, uppercase, no other values permitted):
+ALLOWED TASK CATEGORIES:
 ${allowedCategories}
 
 CATEGORY GUIDANCE:
-- GENERAL: physical work, install, prep, demo, framing, finish, cleanup, safety briefings.
-- PERMIT: permits, AHJ submissions, jurisdictional approvals, licensing checks.
-- INSPECTION: rough/final inspections, sign-offs, QA checks by an inspector.
-- MATERIAL: ordering, delivery, staging, procurement of physical materials/parts.
-- PAYMENT: invoices, deposits, billing milestones, financial collection.
-- CUSTOMER_COMMUNICATION: any email/phone/text/in-person contact with the homeowner or client.
-- PHOTO_EVIDENCE: required photos, documentation uploads, visual proof of work.
-- SCHEDULING: appointments, dispatching crews, calendar booking, coordination.
+- GENERAL: physical work, install, prep, demo, repair, field verification, safety-critical field work.
+- PERMIT: permit applications, AHJ submissions, permit approval, jurisdictional responses.
+- INSPECTION: AHJ inspection scheduling, AHJ inspection attendance, inspection result/sign-off.
+- MATERIAL: ordering, sourcing, delivery, staging, procurement of physical materials/parts.
+- PAYMENT: invoices, deposits, billing milestones, payment holds, financial collection.
+- CUSTOMER_COMMUNICATION: communication with homeowner/client that is itself the work.
+- PHOTO_EVIDENCE: required photos or visual proof only when photo capture is the standalone work.
+- SCHEDULING: customer appointments, crew dispatch, work windows, calendar coordination. Do not use this for AHJ inspection scheduling; use INSPECTION.
 
-GOAL:
-Produce the SMALLEST useful set of executable tasks for this scope.
-Avoid duplicate final/finalization/closeout filler tasks and avoid splitting proof-only details into fake standalone tasks.
-Think like contractor operations: ownership, scheduling, dependencies, blockers, and accountability.
+CORE GOAL:
+Create the SMALLEST useful operational task path for this scope.
 
-RULES:
-1. SELECT FROM REUSABLE TASKS FIRST. If an available reusable task fits the need, use its ID and title exactly.
-2. ONLY GENERATE NEW TASKS for gaps not covered by the library.
-3. Each task's "stageName" MUST be copied exactly from EXISTING STAGES above — do not invent new stage names.
-4. Do NOT assign tasks to the "Corrections" stage; correction work is created later from failed inspections, walkthrough findings, punch-list items, or job issues.
-5. Define SIGNALS for dependencies. If Task B requires Task A to be done, Task A should "provide" a signal and Task B should "require" it.
-6. Mark critical blockers as "hardSignal: true".
-7. Keep real-world distinct events separate when needed (example: "Request/Schedule Final Inspection" and "Attend Final Inspection" remain separate tasks).
-8. Stage intent rules:
-   - Use INSPECTION only for actual AHJ/inspection events.
-   - Use WALKTHROUGH only for distinct on-site/customer walkthrough events.
-   - Use CLOSEOUT for generic wrap-up/finalization work.
-   - Do not create multiple generic end-of-job stages/tasks.
-9. Put proof/photo/upload/signature/record-confirmation details into checklist/proof fields where possible.
-10. NEVER hoist high-risk or externally dependent work into checklist-only details: permits, inspection scheduling/attendance, utility work, payment collection, customer access blockers, material readiness, or safety-critical verification.
-11. If required context is missing, add entries in "missingContext" instead of inventing assumptions.
-11a. If USER INSTRUCTIONS answer a previously-missing detail, do not repeat that item in "missingContext".
-12. Suggest "assigneeRole" conservatively using: OWNER | ADMIN | OFFICE | FIELD | VIEWER | SUBCONTRACTOR.
-    - PERMIT/PAYMENT/SCHEDULING/CUSTOMER_COMMUNICATION default to OFFICE.
-    - INSPECTION scheduling/request tasks default to OFFICE.
-    - INSPECTION attend/on-site tasks default to FIELD.
-    - MATERIAL order/purchase defaults to OFFICE; stage/load/deliver/install defaults to FIELD or null.
-    - If uncertain, use null.
-13. Include a checklist for each task.
-14. List required resources/equipment.
-15. Provide "reasoning" for each task and "assumptions" for the whole plan (especially regarding local codes/jurisdiction).
-16. The "category" field MUST be exactly one of the ALLOWED TASK CATEGORIES above — uppercase, no spaces, no synonyms, no invented values. If unsure, use GENERAL.
+Think like contractor operations:
+- Who owns the work?
+- What blocks the next step?
+- What must be scheduled?
+- What requires external approval?
+- What must be verified?
+- What should be reviewed by a human before applying?
+
+Do not create tasks just because a stage exists.
+Do not fill every stage.
+Do not create tasks to make the plan feel complete.
+Do not turn customer proposal wording into tasks unless it changes actual execution work.
+
+TASK EXISTENCE TEST:
+Before creating any task, ask:
+
+1. Does a real person need to intentionally do this work?
+2. Can it be assigned to one role?
+3. Can it be scheduled, completed, blocked, or verified?
+4. Would skipping it create real operational, safety, scheduling, permit, payment, customer, material, inspection, or accountability risk?
+5. Is this more than normal cleanup, normal professionalism, or generic documentation?
+
+Only create a top-level task when the answer is clearly yes.
+
+EXECUTION GATE RULE:
+Top-level tasks should represent real execution gates, such as:
+- site visit / field verification if needed
+- permit submission
+- permit approval or AHJ response
+- material sourcing / material readiness
+- customer/crew scheduling
+- installation / field work
+- inspection scheduling
+- inspection attendance / result upload
+- explicit payment hold only if payment or billing is provided in the scope/rules
+
+Do not decompose technical details into top-level tasks.
+
+TECHNICAL DETAIL RULE:
+Technical details usually belong inside task instructions, checklist items, resources, missingContext, warnings, or notes.
+
+Do NOT create standalone tasks by default for:
+- breaker size
+- wire size
+- charger specs
+- equipment model
+- load calculation
+- panel capacity
+- conduit route
+- measurements
+- mounting height
+- application fields
+- parts list creation
+- basic testing
+- cleanup
+- customer explanation
+- photo upload
+- final documentation
+
+Only create a standalone technical task if it requires a separate site visit, separate responsible person, separate approval, or independently blocks execution.
+
+TASK COUNT RULE:
+For simple single-trade scopes, target 5-8 tasks.
+Use 8-12 tasks only when the scope clearly requires multi-visit, multi-trade, rough + final inspections, utility coordination, engineering review, drywall/repair follow-up, external approvals, or real customer/access blockers.
+
+If more than 8 tasks are returned, each extra task must have a clear operational reason.
+
+FORBIDDEN DEFAULT TASKS:
+Do not create these as standalone tasks by default:
+- Project Kickoff
+- Scope Confirmation
+- Crew Mobilization
+- Site Setup
+- Site Cleanup
+- Final Cleanup
+- Customer Walkthrough
+- Customer Acceptance
+- Final Documentation
+- Project Closeout
+- Archive Project
+- Issue Final Invoice
+- Collect Payment
+
+These may only become standalone tasks if the input explicitly requires them as separate operational work, or if they are true blockers that cannot be handled as checklist/proof/payment rules.
+
+CHECKLIST VS TASK RULE:
+Use checklist/proof fields for normal details inside a real task:
+- protect work area
+- confirm access instructions
+- take before/after photos
+- upload permit card
+- upload inspection result
+- label breaker/equipment
+- confirm work area cleaned
+- perform basic test
+- explain basic operation to customer
+- collect notes
+
+Never hide high-risk or externally dependent work in checklist-only details:
+- permit submission
+- permit approval
+- utility disconnect/reconnect
+- inspection scheduling
+- inspection attendance
+- material readiness
+- customer access blocker
+- safety-critical verification
+- explicit payment hold
+
+INSPECTION RULE:
+AHJ inspection scheduling and AHJ inspection attendance are real operational events and may remain separate.
+
+For inspection scheduling:
+- category = INSPECTION
+- stageName = exact allowed Inspection stage
+- assigneeRole = OFFICE
+
+For inspection attendance/result:
+- category = INSPECTION
+- stageName = exact allowed Inspection stage
+- assigneeRole = FIELD
+- attachmentRequired = true when inspection result proof is expected
+
+Do not use category SCHEDULING for AHJ inspection scheduling.
+
+PAYMENT RULE:
+Do not create PAYMENT tasks unless payment, billing, deposit, invoice, collection, or payment hold is explicitly mentioned in the scope, payment rules, quote rules, or user instructions.
+
+Do not put payment collection inside closeout checklists unless explicitly provided.
+
+ASSUMPTION SAFETY RULE:
+Do not list the same unresolved issue in both assumptions and missingContext.
+
+If a missing item could change safety, legality, schedule, material selection, inspection path, cost, or customer access, treat it as missingContext or checklist detail — not as a confident assumption.
+
+Missing context is allowed. Do not invent certainty.
+
+TITLE RULE:
+Use neutral operational task titles.
+Do not include exact specs in titles unless explicitly provided.
+
+Good:
+- Source and stage required materials
+- Install EV charger circuit
+- Prepare and submit electrical permit
+
+Bad:
+- Install 60A breaker with 6 AWG wire
+- Confirm Tesla charger specs with customer
+- Complete final project closeout
+
+SIGNAL RULE:
+Define dependency signals only when they help sequence work.
+Use stable lowercase dot-key format.
+
+Good examples:
+- site_visit.decision_complete
+- permit.submitted
+- permit.approved
+- material.ready
+- install.scheduled
+- install.completed
+- inspection.final_scheduled
+- inspection.final_passed
+
+Bad examples:
+- ScopeConfirmed
+- PermitApproved
+- MaterialsOnSite
+- FinalInspectionApproved
+
+REUSABLE TASK RULE:
+Select from reusable tasks first.
+If a reusable task fits the operational need, use its ID and title exactly.
+Only generate new tasks for gaps not covered by reusable tasks.
+Prefer refining checklist/instructions around reusable tasks instead of inventing duplicate tasks.
+
+STAGE RULE:
+Each task's stageName must be copied exactly from EXISTING STAGES.
+Never invent stage names.
+Never use category names as stageName.
+"Scheduling" is not a stage unless it appears in the allowed stage list.
+Do not assign tasks to Corrections. Correction tasks are created later from failed inspections, walkthrough findings, punch-list items, or job issues.
+
+ASSIGNEE ROLE RULE:
+Suggest assigneeRole conservatively using:
+OWNER | ADMIN | OFFICE | FIELD | VIEWER | SUBCONTRACTOR
+
+Defaults:
+- PERMIT = OFFICE
+- PAYMENT = OFFICE or ADMIN
+- CUSTOMER_COMMUNICATION = OFFICE unless clearly field-owned
+- SCHEDULING = OFFICE
+- INSPECTION scheduling/request = OFFICE
+- INSPECTION attendance/result = FIELD
+- MATERIAL order/purchase = OFFICE
+- MATERIAL staging/loading/delivery = FIELD or null
+- GENERAL physical install/work = FIELD
+- If uncertain, use null
+
+CONFIDENCE RULE:
+Never use confidence 1.0.
+Use:
+- 0.85–0.95 for obvious standard tasks with clear scope and no major missing context.
+- 0.65–0.84 when task is likely needed but details depend on AHJ, site condition, equipment specs, or company process.
+- 0.45–0.64 when the task may be needed but should be reviewed carefully.
+
+OUTPUT STYLE:
+Return concise task instructions.
+Use one-sentence reasoning per task.
+Keep resources minimal. Do not list generic tools unless meaningful.
+Checklist items should be practical and not over-detailed.
+
+FINAL SELF-AUDIT BEFORE OUTPUT:
+Before returning JSON, silently remove any task that is:
+- generic admin filler
+- normal cleanup/professionalism
+- duplicate closeout
+- customer proposal wording turned into fake work
+- technical detail pretending to be a task
+- checklist item pretending to be a task
+- payment task not backed by payment/billing input
+- walkthrough task not explicitly required
+- stage filler created only because the stage exists
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this structure:

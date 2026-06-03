@@ -37,6 +37,11 @@ import type {
   QuoteScopeSuggestionsGenerationMeta,
 } from "@/lib/ai/quote-line-items-proposal-schema";
 import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
+import type {
+  ExecutionPlanningContextBucket,
+  ExecutionPlanningContextManifest,
+  ExecutionPlanningContextSourceFlags,
+} from "@/app/(workspace)/quotes/quote-line-execution-types";
 import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
 import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
@@ -77,6 +82,7 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { parseIntakeNotes } from "@/lib/lead-display";
+import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -655,6 +661,21 @@ export function QuoteAuthoringSurface({
   const [aiRegenerating, setAiRegenerating] = useState(false);
   const [aiContextAssessment, setAiContextAssessment] =
     useState<ExecutionContextAssessment | null>(null);
+  const [aiContextManifest, setAiContextManifest] =
+    useState<ExecutionPlanningContextManifest | null>(null);
+  const [aiContextPreview, setAiContextPreview] = useState("");
+  const [aiContextSourceFlags, setAiContextSourceFlags] = useState<ExecutionPlanningContextSourceFlags>({
+    includeReusableExecutionGuidance: true,
+    includeJobTechnicalDetails: false,
+    includeSiteAccessSchedule: false,
+    includeCustomerProposal: false,
+    includeBackground: false,
+    includePriorMissingContext: true,
+  });
+  const [aiContextItemOverrides, setAiContextItemOverrides] = useState<
+    Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>
+  >({});
+  const [aiKeepTaskIds, setAiKeepTaskIds] = useState<string[]>([]);
   const [isAiAssessing, setIsAiAssessing] = useState(false);
   const aiAssessRequestSeqRef = useRef(0);
   const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
@@ -686,7 +707,23 @@ export function QuoteAuthoringSurface({
       return existing;
     }
     const line = lineItems.find((item) => item.id === lineId);
-    const seed = line?.internalNotes?.trim() ?? "";
+    const manifest = buildQuoteExecutionPlanningContextManifest({
+      userInstructions: "",
+      lineInternalNotes: line?.internalNotes ?? null,
+      customerScopeTitle: null,
+      customerScopeDescription: null,
+      customerIncludedNotes: null,
+      customerExcludedNotes: null,
+      quoteInternalNotes: null,
+      leadNotes: null,
+      priorMissingContext: [],
+    });
+    const seed = manifest.items
+      .filter((item) => item.bucket === "reusable_execution_guidance")
+      .map((item) => item.content.trim())
+      .filter(Boolean)
+      .join("\n")
+      .trim();
     setPlanningContextByLineId((prev) => ({ ...prev, [lineId]: seed }));
     return seed;
   };
@@ -700,6 +737,8 @@ export function QuoteAuthoringSurface({
     if (activeAiLineId && activeAiLineId !== lineId) {
       closeAiPanel();
     }
+    setAiContextItemOverrides({});
+    setAiKeepTaskIds([]);
     setActiveAiLineId(lineId);
   };
 
@@ -711,6 +750,8 @@ export function QuoteAuthoringSurface({
       const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId, {
         userInstructions: planningContext,
         priorMissingContext: aiProposal?.missingContext,
+        sourceFlags: aiContextSourceFlags,
+        itemOverrides: aiContextItemOverrides,
       });
       if (result.error) {
         toast.error(result.error);
@@ -719,6 +760,8 @@ export function QuoteAuthoringSurface({
       } else if (result.proposal) {
         setAiProposal(result.proposal);
         setAiProposalGeneration(result.generation ?? null);
+        setAiContextManifest(result.contextManifest ?? null);
+        setAiContextPreview(result.contextPreview ?? "");
       } else {
         toast.error("AI returned no execution plan. Try again.");
         setAiProposal(null);
@@ -734,7 +777,10 @@ export function QuoteAuthoringSurface({
     }
   };
 
-  const handleApplyAiProposal = async (approvedProposal: AILibraryProposal) => {
+  const handleApplyAiProposal = async (
+    approvedProposal: AILibraryProposal,
+    options?: { applyMode?: "append" | "replace"; keepTaskIds?: string[] },
+  ) => {
     if (!activeAiLineId) {
       return;
     }
@@ -743,7 +789,10 @@ export function QuoteAuthoringSurface({
       activeAiLineId,
       approvedProposal,
       aiProposalGeneration ?? undefined,
-      undefined,
+      {
+        mode: options?.applyMode ?? "replace",
+        keepTaskIds: options?.keepTaskIds ?? aiKeepTaskIds,
+      },
     );
     if (result.error) {
       throw new Error(result.error);
@@ -759,12 +808,15 @@ export function QuoteAuthoringSurface({
     setAiProposal(null);
     setAiProposalGeneration(null);
     setAiContextAssessment(null);
+    setAiContextManifest(null);
+    setAiContextPreview("");
+    setAiContextItemOverrides({});
+    setAiKeepTaskIds([]);
     setIsAiAssessing(false);
     aiAssessRequestSeqRef.current += 1;
   };
 
   const handleAssessExecutionContext = async (lineId: string, planningContext: string) => {
-    if (!aiExecutionContextPreflightEnabled) return;
     const seq = aiAssessRequestSeqRef.current + 1;
     aiAssessRequestSeqRef.current = seq;
     setIsAiAssessing(true);
@@ -772,6 +824,8 @@ export function QuoteAuthoringSurface({
       const result = await assessQuoteLineExecutionContextAction(quoteId, lineId, {
         userInstructions: planningContext,
         priorMissingContext: aiProposal?.missingContext,
+        sourceFlags: aiContextSourceFlags,
+        itemOverrides: aiContextItemOverrides,
       });
       if (aiAssessRequestSeqRef.current !== seq) {
         return;
@@ -781,6 +835,8 @@ export function QuoteAuthoringSurface({
         return;
       }
       setAiContextAssessment(result.assessment ?? null);
+      setAiContextManifest(result.contextManifest ?? null);
+      setAiContextPreview(result.contextPreview ?? "");
     } catch (error) {
       if (aiAssessRequestSeqRef.current !== seq) {
         return;
@@ -1230,6 +1286,12 @@ export function QuoteAuthoringSurface({
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}
           contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
+          contextManifest={aiContextManifest}
+          contextPreview={aiContextPreview}
+          contextSourceFlags={aiContextSourceFlags}
+          onContextSourceFlagsChange={setAiContextSourceFlags}
+          contextItemOverrides={aiContextItemOverrides}
+          onContextItemOverridesChange={setAiContextItemOverrides}
           stages={getStagesForAiExecutionPlanning(stages)}
           lineLabel={lineItems.find((item) => item.id === activeAiLineId)?.description}
           planningContext={planningContextByLineId[activeAiLineId] ?? ""}
@@ -1239,14 +1301,10 @@ export function QuoteAuthoringSurface({
           isGenerating={isGenerating === activeAiLineId}
           isAssessing={isAiAssessing}
           isRegenerating={aiRegenerating}
-          onAssessContext={
-            aiExecutionContextPreflightEnabled
-              ? async ({ planningContext }) => {
-                  setPlanningContextForLine(activeAiLineId, planningContext);
-                  await handleAssessExecutionContext(activeAiLineId, planningContext);
-                }
-              : undefined
-          }
+          onAssessContext={async ({ planningContext }) => {
+            setPlanningContextForLine(activeAiLineId, planningContext);
+            await handleAssessExecutionContext(activeAiLineId, planningContext);
+          }}
           onGenerate={async ({ planningContext }) => {
             setPlanningContextForLine(activeAiLineId, planningContext);
             await handleGeneratePlan(activeAiLineId, { planningContext });
@@ -1260,6 +1318,13 @@ export function QuoteAuthoringSurface({
               setAiRegenerating(false);
             }
           }}
+          applyMode="replace"
+          existingDraftTasks={(draftTasksByLineId[activeAiLineId] ?? []).map((task) => ({
+            id: task.id,
+            title: task.title,
+          }))}
+          selectedKeepTaskIds={aiKeepTaskIds}
+          onSelectedKeepTaskIdsChange={setAiKeepTaskIds}
           onClose={closeAiPanel}
           onApply={handleApplyAiProposal}
         />

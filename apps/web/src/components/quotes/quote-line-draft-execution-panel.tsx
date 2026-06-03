@@ -14,6 +14,9 @@ import {
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
 import type {
   ExecutionContextAssessment,
+  ExecutionPlanningContextBucket,
+  ExecutionPlanningContextManifest,
+  ExecutionPlanningContextSourceFlags,
   QuoteLineExecutionFormState,
   QuoteLineExecutionRevalidateScope,
 } from "@/app/(workspace)/quotes/quote-line-execution-types";
@@ -614,6 +617,20 @@ export function QuoteLineDraftExecutionInlinePanel({
   const [isAiAssessing, setIsAiAssessing] = useState(false);
   const [aiContextAssessment, setAiContextAssessment] =
     useState<ExecutionContextAssessment | null>(null);
+  const [aiContextManifest, setAiContextManifest] =
+    useState<ExecutionPlanningContextManifest | null>(null);
+  const [aiContextPreview, setAiContextPreview] = useState("");
+  const [contextSourceFlags, setContextSourceFlags] = useState<ExecutionPlanningContextSourceFlags>({
+    includeReusableExecutionGuidance: true,
+    includeJobTechnicalDetails: false,
+    includeSiteAccessSchedule: false,
+    includeCustomerProposal: false,
+    includeBackground: false,
+    includePriorMissingContext: true,
+  });
+  const [contextItemOverrides, setContextItemOverrides] = useState<
+    Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>
+  >({});
   const aiAssessRequestSeqRef = useRef(0);
   const [planningContext, setPlanningContext] = useState(initialPlanningContext);
   const [keepTaskIds, setKeepTaskIds] = useState<string[]>([]);
@@ -625,13 +642,15 @@ export function QuoteLineDraftExecutionInlinePanel({
     setAiProposal(null);
     setAiProposalGeneration(null);
     setAiContextAssessment(null);
+    setAiContextManifest(null);
+    setAiContextPreview("");
     setIsAiAssessing(false);
     aiAssessRequestSeqRef.current += 1;
     setKeepTaskIds([]);
+    setContextItemOverrides({});
   };
 
   const assessAiContext = async (nextPlanningContext: string) => {
-    if (!aiExecutionContextPreflightEnabled) return;
     const seq = aiAssessRequestSeqRef.current + 1;
     aiAssessRequestSeqRef.current = seq;
     setIsAiAssessing(true);
@@ -639,6 +658,8 @@ export function QuoteLineDraftExecutionInlinePanel({
       const result = await assessQuoteLineExecutionContextAction(quoteId, lineItemId, {
         userInstructions: nextPlanningContext,
         priorMissingContext: aiProposal?.missingContext,
+        sourceFlags: contextSourceFlags,
+        itemOverrides: contextItemOverrides,
       });
       if (aiAssessRequestSeqRef.current !== seq) {
         return;
@@ -648,6 +669,8 @@ export function QuoteLineDraftExecutionInlinePanel({
         return;
       }
       setAiContextAssessment(result.assessment ?? null);
+      setAiContextManifest(result.contextManifest ?? null);
+      setAiContextPreview(result.contextPreview ?? "");
     } catch (error) {
       if (aiAssessRequestSeqRef.current !== seq) {
         return;
@@ -667,6 +690,8 @@ export function QuoteLineDraftExecutionInlinePanel({
       const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineItemId, {
         userInstructions: nextPlanningContext,
         priorMissingContext: aiProposal?.missingContext,
+        sourceFlags: contextSourceFlags,
+        itemOverrides: contextItemOverrides,
       });
       if (result.error) {
         toast.error(result.error);
@@ -682,6 +707,8 @@ export function QuoteLineDraftExecutionInlinePanel({
       }
       setAiProposal(result.proposal);
       setAiProposalGeneration(result.generation ?? null);
+      setAiContextManifest(result.contextManifest ?? null);
+      setAiContextPreview(result.contextPreview ?? "");
     } catch (error) {
       console.error(error);
       toast.error(getAiActionErrorMessage(error, "Failed to generate AI proposal."));
@@ -804,20 +831,22 @@ export function QuoteLineDraftExecutionInlinePanel({
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}
           contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
+          contextManifest={aiContextManifest}
+          contextPreview={aiContextPreview}
+          contextSourceFlags={contextSourceFlags}
+          onContextSourceFlagsChange={setContextSourceFlags}
+          contextItemOverrides={contextItemOverrides}
+          onContextItemOverridesChange={setContextItemOverrides}
           stages={getStagesForAiExecutionPlanning(stages)}
           planningContext={planningContext}
           onPlanningContextChange={setPlanningContext}
           isGenerating={isAiGenerating}
           isAssessing={isAiAssessing}
           isRegenerating={isAiRegenerating}
-          onAssessContext={
-            aiExecutionContextPreflightEnabled
-              ? async ({ planningContext: nextPlanningContext }) => {
-                  setPlanningContext(nextPlanningContext);
-                  await assessAiContext(nextPlanningContext);
-                }
-              : undefined
-          }
+          onAssessContext={async ({ planningContext: nextPlanningContext }) => {
+            setPlanningContext(nextPlanningContext);
+            await assessAiContext(nextPlanningContext);
+          }}
           onGenerate={async ({ planningContext: nextPlanningContext }) => {
             setPlanningContext(nextPlanningContext);
             await generateAiProposal(nextPlanningContext);

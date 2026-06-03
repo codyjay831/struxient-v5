@@ -28,7 +28,16 @@ import { AILibraryProposal, AILibraryProposedTask } from "@/lib/ai/library-propo
 import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
 import { StaffRole, TaskTemplateCategory } from "@prisma/client";
 import { getTaskTemplateCategoryLabel, taskTemplateCategorySelectOptions } from "@/lib/task-template-category";
-import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
+import type {
+  ExecutionContextAssessment,
+  ExecutionPlanningContextBucket,
+  ExecutionPlanningContextManifest,
+  ExecutionPlanningContextSourceFlags,
+} from "@/app/(workspace)/quotes/quote-line-execution-types";
+import {
+  buildQuoteExecutionPlanningContextFromManifest,
+  resolveExecutionPlanningContextItemIncluded,
+} from "@/lib/ai/quote-execution-planning-context";
 
 const MAX_WARNING_CHARS = 280;
 
@@ -74,6 +83,25 @@ type AIProposalApplyOptions = {
   keepTaskIds: string[];
 };
 
+function getBucketLabel(bucket: ExecutionPlanningContextBucket): string {
+  if (bucket === "sold_scope") return "Sold scope";
+  if (bucket === "reusable_execution_guidance") return "Reusable guidance";
+  if (bucket === "job_technical_detail") return "Job detail";
+  if (bucket === "site_access_schedule") return "Site/access";
+  if (bucket === "customer_proposal") return "Customer wording";
+  return "Background";
+}
+
+function getSourceLabel(source: string): string {
+  if (source === "line_internal_notes") return "Line notes";
+  if (source === "customer_proposal") return "Customer proposal";
+  if (source === "quote_internal_notes") return "Quote notes";
+  if (source === "lead_intake") return "Lead intake";
+  if (source === "manual") return "Manual input";
+  if (source === "prior_missing") return "Prior missing";
+  return source;
+}
+
 function getRoleLabel(role: StaffRole): string {
   if (role === StaffRole.OFFICE) return "Office";
   if (role === StaffRole.FIELD) return "Field";
@@ -97,6 +125,12 @@ export function AILibraryProposalReviewPanel({
   isAssessing = false,
   isRegenerating = false,
   contextAssessment,
+  contextManifest,
+  contextPreview,
+  contextSourceFlags,
+  onContextSourceFlagsChange,
+  contextItemOverrides = {},
+  onContextItemOverridesChange,
   applyMode = "append",
   existingDraftTasks = [],
   selectedKeepTaskIds = [],
@@ -119,6 +153,26 @@ export function AILibraryProposalReviewPanel({
   isAssessing?: boolean;
   isRegenerating?: boolean;
   contextAssessment?: ExecutionContextAssessment | null;
+  contextManifest?: ExecutionPlanningContextManifest | null;
+  contextPreview?: string;
+  contextSourceFlags?: ExecutionPlanningContextSourceFlags;
+  onContextSourceFlagsChange?: (next: ExecutionPlanningContextSourceFlags) => void;
+  contextItemOverrides?: Record<
+    string,
+    {
+      include?: boolean;
+      bucket?: ExecutionPlanningContextBucket;
+    }
+  >;
+  onContextItemOverridesChange?: (
+    next: Record<
+      string,
+      {
+        include?: boolean;
+        bucket?: ExecutionPlanningContextBucket;
+      }
+    >,
+  ) => void;
   applyMode?: ApplyMode;
   existingDraftTasks?: { id: string; title: string }[];
   selectedKeepTaskIds?: string[];
@@ -169,6 +223,27 @@ export function AILibraryProposalReviewPanel({
     () => selectedKeepTaskIds.filter((id) => existingDraftTasks.some((task) => task.id === id)),
     [selectedKeepTaskIds, existingDraftTasks],
   );
+  const mergedContextPreview = useMemo(() => {
+    if (!contextManifest) return contextPreview ?? "";
+    return (
+      buildQuoteExecutionPlanningContextFromManifest(contextManifest, {
+        sourceFlags: contextSourceFlags,
+        itemOverrides: contextItemOverrides,
+      }) ?? ""
+    );
+  }, [contextManifest, contextPreview, contextSourceFlags, contextItemOverrides]);
+  const [contextPreviewOpen, setContextPreviewOpen] = useState(false);
+  const contextItems = useMemo(() => {
+    if (!contextManifest) return [];
+    return contextManifest.items.map((item) => {
+      const override = contextItemOverrides[item.id];
+      const bucket = override?.bucket ?? item.bucket;
+      const include =
+        override?.include ??
+        resolveExecutionPlanningContextItemIncluded(bucket, item.source, contextSourceFlags);
+      return { ...item, bucket, include };
+    });
+  }, [contextManifest, contextItemOverrides, contextSourceFlags]);
 
   const toggleKeepTask = (taskId: string, checked: boolean) => {
     const current = new Set(normalizedKeepTaskIds);
@@ -178,6 +253,23 @@ export function AILibraryProposalReviewPanel({
       current.delete(taskId);
     }
     onSelectedKeepTaskIdsChange?.([...current]);
+  };
+
+  const setContextFlag = (
+    key: keyof ExecutionPlanningContextSourceFlags,
+    checked: boolean,
+  ) => {
+    onContextSourceFlagsChange?.({ ...(contextSourceFlags ?? {}), [key]: checked });
+  };
+
+  const updateContextItemOverride = (
+    itemId: string,
+    updates: { include?: boolean; bucket?: ExecutionPlanningContextBucket },
+  ) => {
+    onContextItemOverridesChange?.({
+      ...contextItemOverrides,
+      [itemId]: { ...(contextItemOverrides[itemId] ?? {}), ...updates },
+    });
   };
 
   const toggleTaskExpansion = (tempId: string) => {
@@ -397,6 +489,131 @@ export function AILibraryProposalReviewPanel({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {contextManifest && contextItems.length > 0 ? (
+        <div className="rounded-md border border-border bg-background/70 p-3 space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            Context controls
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeReusableExecutionGuidance !== false}
+                onChange={(e) =>
+                  setContextFlag("includeReusableExecutionGuidance", e.target.checked)
+                }
+              />
+              Reusable guidance
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeJobTechnicalDetails === true}
+                onChange={(e) => setContextFlag("includeJobTechnicalDetails", e.target.checked)}
+              />
+              Job technical details
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeSiteAccessSchedule === true}
+                onChange={(e) => setContextFlag("includeSiteAccessSchedule", e.target.checked)}
+              />
+              Site/access/schedule
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeCustomerProposal === true}
+                onChange={(e) => setContextFlag("includeCustomerProposal", e.target.checked)}
+              />
+              Customer wording
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeBackground === true}
+                onChange={(e) => setContextFlag("includeBackground", e.target.checked)}
+              />
+              Background notes
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includePriorMissingContext !== false}
+                onChange={(e) => setContextFlag("includePriorMissingContext", e.target.checked)}
+              />
+              Prior missing context
+            </label>
+          </div>
+          <p className="text-[10px] text-foreground-subtle">
+            AI will generate tasks from included context only. Excluded context stays visible for
+            review.
+          </p>
+          <ul className="max-h-56 space-y-2 overflow-auto pr-1">
+            {contextItems.map((item) => (
+              <li key={item.id} className="rounded border border-border bg-surface/80 p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={item.include}
+                      onChange={(e) =>
+                        updateContextItemOverride(item.id, { include: e.target.checked })
+                      }
+                    />
+                    <span className="font-medium">{item.label}</span>
+                  </label>
+                  <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                    {getSourceLabel(item.source)}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-[10px] uppercase tracking-wider text-foreground-subtle">
+                    Bucket
+                  </label>
+                  <select
+                    value={item.bucket}
+                    onChange={(e) =>
+                      updateContextItemOverride(item.id, {
+                        bucket: e.target.value as ExecutionPlanningContextBucket,
+                      })
+                    }
+                    className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    <option value="sold_scope">{getBucketLabel("sold_scope")}</option>
+                    <option value="reusable_execution_guidance">
+                      {getBucketLabel("reusable_execution_guidance")}
+                    </option>
+                    <option value="job_technical_detail">
+                      {getBucketLabel("job_technical_detail")}
+                    </option>
+                    <option value="site_access_schedule">{getBucketLabel("site_access_schedule")}</option>
+                    <option value="customer_proposal">{getBucketLabel("customer_proposal")}</option>
+                    <option value="background">{getBucketLabel("background")}</option>
+                  </select>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-foreground-muted whitespace-pre-wrap">
+                  {item.content}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
+            onClick={() => setContextPreviewOpen((open) => !open)}
+          >
+            {contextPreviewOpen ? "Hide exact AI context" : "Preview exact AI context"}
+          </button>
+          {contextPreviewOpen ? (
+            <pre className="max-h-56 overflow-auto rounded border border-border bg-background p-2 text-[10px] leading-relaxed text-foreground-muted whitespace-pre-wrap">
+              {mergedContextPreview || "No additional context will be sent."}
+            </pre>
+          ) : null}
         </div>
       ) : null}
 

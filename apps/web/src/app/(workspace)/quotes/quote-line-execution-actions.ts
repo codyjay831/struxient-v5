@@ -18,10 +18,15 @@ import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
-import { buildQuoteLineExecutionPlanningContextFromLine } from "@/lib/ai/execution-planning-inputs";
+import {
+  buildQuoteLineExecutionPlanningContextFromLine,
+  buildQuoteLineExecutionPlanningContextManifestFromLine,
+} from "@/lib/ai/execution-planning-inputs";
+import { buildQuoteExecutionPlanningContextFromManifest } from "@/lib/ai/quote-execution-planning-context";
 import { resolveQuoteLineAiReplaceDeleteIds } from "@/lib/ai/quote-line-ai-replace";
 import type {
   ExecutionContextAssessment,
+  ExecutionPlanningContextManifest,
   QuoteLineExecutionAiApplyOptions,
   QuoteLineExecutionAiGenerateOptions,
   QuoteLineExecutionFormState,
@@ -671,6 +676,8 @@ export async function generateQuoteLineExecutionAIProposalAction(
   error?: string;
   proposal?: AILibraryProposal;
   generation?: AILibraryProposalGenerationMeta;
+  contextManifest?: ExecutionPlanningContextManifest;
+  contextPreview?: string;
 }> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
@@ -722,10 +729,21 @@ export async function generateQuoteLineExecutionAIProposalAction(
     });
 
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
+    const contextManifest = buildQuoteLineExecutionPlanningContextManifestFromLine({
+      line,
+      userInstructions: options?.userInstructions,
+      priorMissingContext: options?.priorMissingContext,
+    });
     const userInstructions = buildQuoteLineExecutionPlanningContextFromLine({
       line,
       userInstructions: options?.userInstructions,
       priorMissingContext: options?.priorMissingContext,
+      sourceFlags: options?.sourceFlags,
+      itemOverrides: options?.itemOverrides,
+    });
+    const contextPreview = buildQuoteExecutionPlanningContextFromManifest(contextManifest, {
+      sourceFlags: options?.sourceFlags,
+      itemOverrides: options?.itemOverrides,
     });
     const generated = await AIService.generateExecutionPlan(
       line.description,
@@ -745,7 +763,12 @@ export async function generateQuoteLineExecutionAIProposalAction(
       isSimulated: generated.generation.isSimulated,
     });
 
-    return { proposal: generated.proposal, generation: generated.generation };
+    return {
+      proposal: generated.proposal,
+      generation: generated.generation,
+      contextManifest,
+      contextPreview,
+    };
   } catch (e) {
     console.error("[quote-ai] generate failed", {
       quoteId: qid,
@@ -761,17 +784,18 @@ export async function assessQuoteLineExecutionContextAction(
   quoteId: string,
   lineItemId: string,
   options?: QuoteLineExecutionAiGenerateOptions,
-): Promise<{ error?: string; assessment?: ExecutionContextAssessment }> {
+): Promise<{
+  error?: string;
+  assessment?: ExecutionContextAssessment;
+  contextManifest?: ExecutionPlanningContextManifest;
+  contextPreview?: string;
+}> {
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
     return { error: "Missing quote or line item." };
   }
-  if (!isAiExecutionContextPreflightEnabled()) {
-    return {
-      assessment: { foundContext: [], missingContext: [], assumptions: [] },
-    };
-  }
+  const preflightEnabled = isAiExecutionContextPreflightEnabled();
 
   const ctx = await getRequestContextOrThrow();
   const startedAt = Date.now();
@@ -809,21 +833,34 @@ export async function assessQuoteLineExecutionContextAction(
     });
 
     const tags = line.sourceLineItemTemplate?.tags.map((t) => t.name) || [];
-    const userInstructions = buildQuoteLineExecutionPlanningContextFromLine({
+    const contextManifest = buildQuoteLineExecutionPlanningContextManifestFromLine({
       line,
       userInstructions: options?.userInstructions,
       priorMissingContext: options?.priorMissingContext,
     });
-    const assessment = await AIService.assessExecutionPlanningContext({
-      templateId: "compat",
-      description: line.description,
-      organizationId: line.quote.organizationId,
-      tags,
-      existingStages: stages,
-      existingSignals: [],
-      organizationName: ctx.organizationName,
-      userInstructions,
+    const userInstructions = buildQuoteLineExecutionPlanningContextFromLine({
+      line,
+      userInstructions: options?.userInstructions,
+      priorMissingContext: options?.priorMissingContext,
+      sourceFlags: options?.sourceFlags,
+      itemOverrides: options?.itemOverrides,
     });
+    const contextPreview = buildQuoteExecutionPlanningContextFromManifest(contextManifest, {
+      sourceFlags: options?.sourceFlags,
+      itemOverrides: options?.itemOverrides,
+    });
+    const assessment = preflightEnabled
+      ? await AIService.assessExecutionPlanningContext({
+          templateId: "compat",
+          description: line.description,
+          organizationId: line.quote.organizationId,
+          tags,
+          existingStages: stages,
+          existingSignals: [],
+          organizationName: ctx.organizationName,
+          userInstructions,
+        })
+      : { foundContext: [], missingContext: [], assumptions: [] };
     console.info("[quote-ai] assess ok", {
       quoteId: qid,
       lineItemId: lid,
@@ -831,7 +868,7 @@ export async function assessQuoteLineExecutionContextAction(
       missingCount: assessment.missingContext.length,
     });
 
-    return { assessment };
+    return { assessment, contextManifest, contextPreview };
   } catch (e) {
     console.error("[quote-ai] assess failed", {
       quoteId: qid,

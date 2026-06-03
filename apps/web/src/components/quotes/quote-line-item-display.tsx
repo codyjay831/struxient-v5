@@ -5,6 +5,7 @@ import { buildQuoteLineExecutionPlanningSummaryLine } from "@/lib/quote-line-exe
 import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
 
 const lineMetricLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -104,6 +105,23 @@ export function QuoteLineDraftExecutionSummary({
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
 }) {
+  const planningSeed = buildQuoteExecutionPlanningContextManifest({
+    userInstructions: "",
+    lineInternalNotes: line.internalNotes ?? null,
+    customerScopeTitle: null,
+    customerScopeDescription: null,
+    customerIncludedNotes: null,
+    customerExcludedNotes: null,
+    quoteInternalNotes: null,
+    leadNotes: null,
+    priorMissingContext: [],
+  })
+    .items
+    .filter((item) => item.bucket === "reusable_execution_guidance")
+    .map((item) => item.content.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
   const text = buildQuoteLineExecutionPlanningSummaryLine({
     taskCount: line.executionSummary.taskCount,
     executionSummaryLine: line.executionSummary.summaryLine,
@@ -123,7 +141,7 @@ export function QuoteLineDraftExecutionSummary({
           draftTasks={draftTasks}
           reusableOptions={reusableOptions}
           stages={stages}
-          initialPlanningContext={line.internalNotes ?? ""}
+          initialPlanningContext={planningSeed}
         />
       ) : null}
     </div>
