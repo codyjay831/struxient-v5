@@ -16,13 +16,13 @@ test("patchSerializedLeadRowAfterQuoteStarted adds linked quote summary", () => 
   const row: Parameters<typeof patchSerializedLeadRowAfterQuoteStarted>[0] = {
     id: "intake-a",
     quotes: [],
-    progressLabel: "Ready for quote",
+    progressLabel: "Ready to build quote",
     progressDescription: "Customer is linked.",
     progressTone: "draft" as const,
     progressState: "READY_FOR_QUOTE",
     progressPrimaryAction: {
-      href: "/quotes/new?leadId=intake-a",
-      label: "Start quote",
+      href: "/leads/intake-a",
+      label: "Build quote",
       opensQuoteTab: true,
       opensContactTab: false,
     },
@@ -77,6 +77,7 @@ test("patchSerializedLeadRowAfterQuoteStarted adds linked quote summary", () => 
   assert.equal(patched.quotes.length, 1);
   assert.equal(patched.quotes[0]?.id, "quote-1");
   assert.equal(patched.progressState, "QUOTE_IN_PROGRESS");
+  assert.equal(patched.progressLabel, "Quote draft in progress");
   assert.equal(patched.progressPrimaryAction?.opensQuoteTab, true);
   assert.equal(patched.valueLabel, "$1,200");
 });

@@ -1050,6 +1050,8 @@ function OverviewTab({
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
+  const canSendFromOverview = readiness.primaryAction?.kind === "SEND_QUOTE";
+
   return (
     <div className="space-y-4">
       <NextStepCard
@@ -1060,6 +1062,25 @@ function OverviewTab({
         onRequestScopeLibraryPicker={onRequestScopeLibraryPicker}
         onMutated={onMutated}
       />
+
+      {canSendFromOverview ? (
+        <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
+          <p className={sectionLabelClass}>Ready to send</p>
+          <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
+            This quote is ready for customers. Open the send panel to choose recipients and deliver the proposal.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => onSwitchToTab("sendaccept", "send")}
+              className={primaryBtnClass}
+            >
+              <Send className="size-3.5 opacity-80" strokeWidth={2} />
+              Send quote
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <FactsGrid
         quote={quote}
@@ -1695,6 +1716,12 @@ function SendAcceptTab({
   embeddedInLead?: boolean;
 }) {
   const { isArchived, sendCheckpoints, approvalCheckpoints } = workspaceTabs;
+  const [lastSendSummary, setLastSendSummary] = useState<{
+    recipientCount: number;
+    recipientEmails: string[];
+    expiresInDays: string;
+    shareUrl: string;
+  } | null>(null);
 
   const canSend = readiness.primaryAction?.kind === "SEND_QUOTE";
   const canApprove = readiness.primaryAction?.kind === "MARK_APPROVED";
@@ -1714,7 +1741,8 @@ function SendAcceptTab({
         }
         organizationDisplayName={quote.organizationDisplayName}
         shareUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/q/${quote.shareToken}`}
-        onSuccess={() => {
+        onSuccess={(summary) => {
+          setLastSendSummary(summary);
           onPreviewChange("none");
           onMutated?.();
         }}
@@ -1773,6 +1801,30 @@ function SendAcceptTab({
 
   return (
     <div className="space-y-4">
+      {lastSendSummary ? (
+        <div className="rounded-lg border border-success/35 bg-success/[0.08] px-3 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-success">
+            Quote sent
+          </p>
+          <p className="mt-1 text-sm text-foreground">
+            Sent to {lastSendSummary.recipientCount} recipient
+            {lastSendSummary.recipientCount === 1 ? "" : "s"}.
+          </p>
+          <p className="mt-1 text-xs text-foreground-muted">
+            {lastSendSummary.recipientEmails.join(", ")}
+          </p>
+          <p className="mt-1 text-xs text-foreground-muted">
+            Link expiry:{" "}
+            {lastSendSummary.expiresInDays === "never"
+              ? "Never"
+              : `${lastSendSummary.expiresInDays} days`}
+          </p>
+          <p className="mt-1 text-xs text-foreground-muted truncate">
+            Share link: {lastSendSummary.shareUrl}
+          </p>
+        </div>
+      ) : null}
+
       {/* Inline action panel — workspace-safe in every mode. */}
       <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
         <p className={`${sectionLabelClass} mb-1`}>Commercial send & acceptance</p>

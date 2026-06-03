@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getLeadCommercialProgress } from "./lead-commercial-progress";
 
-test("NEW + incomplete readiness offers Complete missing details as primary", () => {
+test("NEW + incomplete readiness offers Fix missing info as primary", () => {
   const progress = getLeadCommercialProgress({
     lead: {
       status: "NEW",
@@ -18,11 +18,11 @@ test("NEW + incomplete readiness offers Complete missing details as primary", ()
 
   assert.equal(progress.state, "ADD_CONTACT_INFO");
   assert.equal(progress.primaryAction?.kind, "EDIT_CONTACT_INFO");
-  assert.equal(progress.primaryAction?.label, "Complete missing details");
+  assert.equal(progress.primaryAction?.label, "Fix missing info");
   assert.equal(progress.secondaryAction, null);
 });
 
-test("NEW + ready offers Start quote as primary", () => {
+test("NEW + ready offers Build quote as primary", () => {
   const progress = getLeadCommercialProgress({
     lead: {
       status: "NEW",
@@ -39,7 +39,7 @@ test("NEW + ready offers Start quote as primary", () => {
 
   assert.equal(progress.state, "READY_FOR_QUOTE");
   assert.equal(progress.primaryAction?.kind, "START_QUOTE");
-  assert.equal(progress.primaryAction?.label, "Start quote");
+  assert.equal(progress.primaryAction?.label, "Build quote");
 });
 
 test("ADD_CONTACT_INFO favors fix missing info without Start quote anyway", () => {
@@ -83,7 +83,7 @@ test("CONFLICT_WITH_EXISTING_CUSTOMER does not offer Start quote anyway", () => 
   assert.equal(progress.secondaryAction, null);
 });
 
-test("READY_FOR_QUOTE offers Start quote as primary", () => {
+test("READY_FOR_QUOTE offers Build quote as primary", () => {
   const progress = getLeadCommercialProgress({
     lead: {
       status: "QUALIFIED",
@@ -100,4 +100,5 @@ test("READY_FOR_QUOTE offers Start quote as primary", () => {
 
   assert.equal(progress.state, "READY_FOR_QUOTE");
   assert.equal(progress.primaryAction?.kind, "START_QUOTE");
+  assert.equal(progress.primaryAction?.label, "Build quote");
 });

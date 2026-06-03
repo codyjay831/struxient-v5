@@ -47,10 +47,10 @@ function ProgressActionControl({
       title = "Resolve the matching customer conflict before starting a quote.";
       break;
     case "ATTACH_OR_CREATE_CUSTOMER":
-      title = "Link this opportunity to an existing customer record or create a new one.";
+      title = "Link this request to an existing customer record or create a new one.";
       break;
     case "EDIT_CONTACT_INFO":
-      title = "Complete the identity, contact, and location details to move toward a quote.";
+      title = "Fix contact and jobsite details so this request can be quoted.";
       break;
     case "OPEN_DRAFT_QUOTE":
       title = "Open the current draft quote.";
@@ -89,7 +89,7 @@ function StepIndicator({
   if (isTerminal) {
     return (
       <p className="text-xs text-foreground-subtle">
-        This opportunity is closed; no further commercial steps.
+        This request is closed; no further quote steps.
       </p>
     );
   }
@@ -155,7 +155,7 @@ function ActiveQuoteCard({
           />
           <div className="min-w-0">
             <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-              Active quote
+              Current quote
             </p>
             <p className="mt-0.5 truncate text-sm font-medium text-foreground">
               {quote.title}
@@ -240,7 +240,7 @@ export function LeadCommercialProgressPanel({
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          {compact ? "Next steps" : "Commercial progress"}
+          {compact ? "Next steps" : "Quote progress"}
         </h2>
         <StatusBadge label={progress.label} tone={progress.badgeTone} />
       </div>
@@ -276,7 +276,7 @@ export function LeadCommercialProgressPanel({
           className={`flex flex-wrap items-center gap-2 border-t border-border ${compact ? "mt-4 pt-3" : "mt-6 pt-4"}`}
         >
           <span className="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Next
+            Recommended action
           </span>
           {progress.primaryAction ? (
             <ProgressActionControl

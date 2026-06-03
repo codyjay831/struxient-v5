@@ -164,21 +164,21 @@ const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
 };
 
 const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
-  ADD_CONTACT_INFO: "Needs contact info",
+  ADD_CONTACT_INFO: "Needs request details",
   NEEDS_CUSTOMER: "Needs customer record",
-  READY_FOR_QUOTE: "Ready for quote",
-  QUOTE_IN_PROGRESS: "Quote in progress",
+  READY_FOR_QUOTE: "Ready to build quote",
+  QUOTE_IN_PROGRESS: "Quote draft in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
   APPROVED_READY_TO_ACTIVATE: "Approved — ready to activate",
   JOB_ACTIVE: "Job active",
-  CONFLICT_WITH_EXISTING_CUSTOMER: "Customer match found",
+  CONFLICT_WITH_EXISTING_CUSTOMER: "Customer match needs review",
   CLOSED_NOT_A_FIT: "Closed — not a fit",
   ARCHIVED: "Archived",
 };
 
 /** Canonical steps the indicator renders, left-to-right. */
 export const LEAD_COMMERCIAL_PROGRESS_STEPS: readonly { key: string; label: string }[] = [
-  { key: "setup", label: "Setup" },
+  { key: "setup", label: "Intake" },
   { key: "quote", label: "Quote" },
   { key: "sent", label: "Sent" },
   { key: "approved", label: "Approved" },
@@ -327,10 +327,10 @@ export function getLeadCommercialProgress(
       return {
         state: "APPROVED_READY_TO_ACTIVATE",
         label: STATE_LABEL.APPROVED_READY_TO_ACTIVATE,
-        description: "The customer has approved this quote. Review execution to activate the job.",
+        description: "The customer approved this quote. Review the job plan to activate work.",
         primaryAction: {
           kind: "OPEN_EXECUTION_REVIEW",
-          label: "Open execution review",
+          label: "Review job plan",
           targetQuoteId: activeQuote.id,
         },
         secondaryAction: {
@@ -354,7 +354,7 @@ export function getLeadCommercialProgress(
       return {
         state: "SENT_AWAITING_CUSTOMER",
         label: STATE_LABEL.SENT_AWAITING_CUSTOMER,
-        description: "The quote has been sent. Waiting on the customer's response.",
+        description: "Quote sent. Waiting for customer approval.",
         primaryAction: {
           kind: "OPEN_QUOTE",
           label: "Open quote",
@@ -379,7 +379,7 @@ export function getLeadCommercialProgress(
       description: describeQuote(activeQuote, "A draft quote is open"),
       primaryAction: {
         kind: "OPEN_DRAFT_QUOTE",
-        label: "Open draft quote",
+        label: "Continue quote",
         targetQuoteId: activeQuote.id,
       },
       secondaryAction: null,
@@ -400,10 +400,10 @@ export function getLeadCommercialProgress(
       return {
         state: "CONFLICT_WITH_EXISTING_CUSTOMER",
         label: STATE_LABEL.CONFLICT_WITH_EXISTING_CUSTOMER,
-        description: "A customer with matching contact info already exists. Resolve the conflict before starting a quote.",
+        description: "A customer with matching contact info already exists. Review the match before building a quote.",
         primaryAction: {
           kind: "RESOLVE_CUSTOMER_CONFLICT",
-          label: "Resolve conflict",
+          label: "Review customer match",
         },
         secondaryAction: null,
         activeQuote: null,
@@ -422,9 +422,9 @@ export function getLeadCommercialProgress(
       state: "READY_FOR_QUOTE",
       label: STATE_LABEL.READY_FOR_QUOTE,
       description: lead.customerId
-        ? "Customer is linked. Start a quote when you have enough scope to price."
-        : "Lead is qualified. Start a quote to automatically create the customer and draft.",
-      primaryAction: { kind: "START_QUOTE", label: "Start quote" },
+        ? "Customer is linked. Build a quote when you have enough scope to price."
+        : "Request details are qualified. Build a quote to create the customer and draft together.",
+      primaryAction: { kind: "START_QUOTE", label: "Build quote" },
       secondaryAction: null,
       activeQuote: null,
       activeJob: null,
@@ -443,7 +443,7 @@ export function getLeadCommercialProgress(
       state: "ADD_CONTACT_INFO",
       label: "New intake — review details",
       description: "Review the intake details and complete the 4 requirements to start a quote.",
-      primaryAction: { kind: "EDIT_CONTACT_INFO", label: "Complete missing details" },
+      primaryAction: { kind: "EDIT_CONTACT_INFO", label: "Fix missing info" },
       secondaryAction: null,
       activeQuote: null,
       activeJob: null,
@@ -513,7 +513,8 @@ export function resolveLeadCommercialProgressActionHref(
     case "RESOLVE_CUSTOMER_CONFLICT":
       return `/leads/${ctx.leadId}#customer-link`;
     case "START_QUOTE":
-      return `/quotes/new?leadId=${encodeURIComponent(ctx.leadId)}`;
+      // Keep lead-origin quote starts on the lead surface UX.
+      return `/leads/${ctx.leadId}`;
     case "OPEN_DRAFT_QUOTE":
     case "OPEN_QUOTE":
       return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : "/leads";

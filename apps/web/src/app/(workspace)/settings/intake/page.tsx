@@ -66,7 +66,7 @@ export default async function IntakeSettingsHubPage() {
       />
       <PageHeader
         title="Customer intake"
-        description="Default-first intake setup. Start with one standard public request form, then use Advanced forms only when you need extra public slugs."
+        description="Set up how customers request work and how office staff logs requests. Start with the default flow, then open advanced options only when needed."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
@@ -86,7 +86,7 @@ export default async function IntakeSettingsHubPage() {
         <WorkspacePanel>
           <SectionHeading
             title="Public customer request"
-            description="Primary customer path — one default public request form, plus optional advanced public forms when needed."
+            description="Main customer request page. Keep this simple: one public page, clear copy, and one default request form."
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge
@@ -100,24 +100,33 @@ export default async function IntakeSettingsHubPage() {
             ) : null}
           </div>
           <p className="mt-3 text-sm text-foreground-muted">
-            Public forms define customer-facing fields. Public request page settings control link/status
-            and page copy. Does not affect office intake at{" "}
+            Public form fields live with the form. Request-page settings control link status and customer-facing copy. This does not affect office intake at{" "}
             <span className="font-medium text-foreground">/leads/new</span>.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={INTAKE_PUBLIC_COPY_PATH} className={cardLinkClass}>
-              Public request page settings
+              Customer request page settings
             </Link>
-            <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
-              Advanced: additional public forms ({publicCustomFormCount})
-            </Link>
+            <details className="group rounded-lg border border-border px-3 py-2">
+              <summary className="cursor-pointer list-none text-xs font-medium text-foreground-muted transition-colors group-open:text-foreground [&::-webkit-details-marker]:hidden">
+                Advanced form options
+              </summary>
+              <p className="mt-2 text-xs text-foreground-muted">
+                Use only when you need extra public slugs or specialized request forms.
+              </p>
+              <div className="mt-3">
+                <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
+                  Additional public forms ({publicCustomFormCount})
+                </Link>
+              </div>
+            </details>
           </div>
         </WorkspacePanel>
 
         <WorkspacePanel>
           <SectionHeading
             title="Office new lead form"
-            description="Form used by staff at /leads/new — separate from public customer forms."
+            description="Staff-only request intake at /leads/new. Keep this tuned for call/email/walk-in speed."
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge label="Always on" tone="approved" />

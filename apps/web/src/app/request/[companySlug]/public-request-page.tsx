@@ -10,7 +10,7 @@ export function PublicRequestPageContent({ bundle }: { bundle: PublicRequestInta
       <header className="border-b border-border bg-surface px-4 py-6 sm:px-8">
         <div className="mx-auto max-w-xl">
           <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-            Service Request
+            Customer Request
           </p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             {view.formTitle}

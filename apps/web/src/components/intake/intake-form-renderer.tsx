@@ -250,10 +250,21 @@ export function IntakeFormRenderer({
         <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-success text-success-contrast mb-6">
           <Check className="size-6" />
         </div>
-        <h2 className="text-xl font-bold text-foreground tracking-tight">Request received</h2>
-        <p className="mt-3 text-sm leading-relaxed text-foreground-muted max-w-sm mx-auto">
-          Thank you. Your request has been sent to <strong>{organizationDisplayName}</strong>.
+        <h2 className="text-xl font-bold text-foreground tracking-tight">Request sent</h2>
+        <p className="mt-3 text-sm leading-relaxed text-foreground-muted max-w-md mx-auto">
+          Thanks for reaching out. Your request has been sent to{" "}
+          <strong>{organizationDisplayName}</strong>.
         </p>
+        <div className="mt-5 rounded-lg border border-border bg-background px-4 py-3 text-left max-w-md mx-auto">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+            What happens next
+          </p>
+          <ul className="mt-2 space-y-1.5 text-sm text-foreground-muted">
+            <li>We review your request details and attachments.</li>
+            <li>Our team may follow up by phone or email.</li>
+            <li>A quote is prepared once scope details are confirmed.</li>
+          </ul>
+        </div>
       </div>
     );
   }

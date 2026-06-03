@@ -59,6 +59,8 @@ export function LeadCommercialSurface({
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
   const [isPending, startTransition] = useTransition();
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const customerSectionRef = useRef<HTMLDivElement>(null);
 
   const compact = entryPoint === "workstation";
@@ -84,14 +86,19 @@ export function LeadCommercialSurface({
   }, []);
 
   const handleArchive = async () => {
-    if (!confirm("Are you sure you want to archive this opportunity?")) return;
+    if (!archiveConfirmOpen) {
+      setArchiveConfirmOpen(true);
+      return;
+    }
 
     startTransition(async () => {
       const result = await archiveLeadInboxAction(lead.id);
       if (result.success) {
+        setArchiveConfirmOpen(false);
+        setSurfaceError(null);
         notifyMutationSuccess();
       } else {
-        alert(result.error);
+        setSurfaceError(result.error ?? "Could not archive this request.");
       }
     });
   };
@@ -106,7 +113,7 @@ export function LeadCommercialSurface({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
               <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                Lead review
+                Request review
               </p>
               <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
                 {lead.title}
@@ -140,14 +147,14 @@ export function LeadCommercialSurface({
                     className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
                   >
                     <Pencil className="size-3" />
-                    Request more info
+                    Edit request details
                   </Link>
                 </div>
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
               <span className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                Pipeline tag
+                Record status
               </span>
               <StatusBadge
                 label={formatLeadStatus(lead.status as LeadStatus)}
@@ -157,6 +164,11 @@ export function LeadCommercialSurface({
           </div>
 
           <LeadCommercialProgressPanel progress={progress} leadId={lead.id} compact={compact} />
+          {surfaceError ? (
+            <p className="rounded-lg border border-danger/30 bg-danger/[0.06] px-3 py-2 text-sm text-danger">
+              {surfaceError}
+            </p>
+          ) : null}
         </header>
 
         <div className="flex flex-col gap-8 @lg:flex-row">
@@ -233,7 +245,7 @@ export function LeadCommercialSurface({
             <section className="space-y-3" aria-labelledby="lead-review-missing">
               <div className="flex items-center justify-between gap-2">
                 <h3 id="lead-review-missing" className={sectionTitleClass}>
-                  Ready for quote
+                  Quote readiness
                 </h3>
                 <Link
                   href={editHref}
@@ -260,7 +272,7 @@ export function LeadCommercialSurface({
                         href={req.fixHref}
                         className="text-xs font-medium text-accent hover:underline shrink-0"
                       >
-                        Add
+                        Fix
                       </Link>
                     ) : null}
                   </li>
@@ -268,13 +280,22 @@ export function LeadCommercialSurface({
               </ul>
               {reviewViewModel.allRequirementsMet ? (
                 <p className="text-xs text-success font-medium">
-                  All requirements met — you can start a quote when ready.
+                  All requirements met - you can build a quote now.
                 </p>
               ) : (
                 <p className="text-xs text-foreground-muted">
-                  Complete missing items before starting a quote.
+                  Fix missing items before building a quote.
                 </p>
               )}
+              {!customer ? (
+                <p className="text-xs text-warning">
+                  Customer still needs review.{" "}
+                  <Link href="#customer-link" className="underline underline-offset-2">
+                    Open customer link section
+                  </Link>
+                  .
+                </p>
+              ) : null}
             </section>
 
             {/* Contact + location */}
@@ -385,7 +406,7 @@ export function LeadCommercialSurface({
                               if (result.success) {
                                 notifyMutationSuccess();
                               } else {
-                                alert(result.error);
+                                setSurfaceError(result.error ?? "Could not link this request to a customer.");
                               }
                             });
                           }}
@@ -530,6 +551,15 @@ export function LeadCommercialSurface({
                           }).format(quote.totalCents / 100)}
                         </span>
                       </div>
+                      <p className="mt-2 text-[11px] font-medium text-accent">
+                        {quote.status === "DRAFT"
+                          ? "Continue quote"
+                          : quote.status === "SENT"
+                            ? "Review send status"
+                            : quote.status === "APPROVED"
+                              ? "Review job plan"
+                              : "Open quote"}
+                      </p>
                     </Link>
                   ))}
                 </div>
@@ -540,7 +570,7 @@ export function LeadCommercialSurface({
               type="button"
               onClick={handleArchive}
               disabled={isPending}
-              title="Archive this opportunity"
+              title="Archive this request"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
             >
               {isPending ? (
@@ -548,8 +578,18 @@ export function LeadCommercialSurface({
               ) : (
                 <Archive className="size-4" />
               )}
-              Archive
+              {archiveConfirmOpen ? "Confirm archive request" : "Archive request"}
             </button>
+            {archiveConfirmOpen ? (
+              <button
+                type="button"
+                onClick={() => setArchiveConfirmOpen(false)}
+                disabled={isPending}
+                className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-subtle transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50"
+              >
+                Cancel archive
+              </button>
+            ) : null}
           </aside>
         </div>
       </div>

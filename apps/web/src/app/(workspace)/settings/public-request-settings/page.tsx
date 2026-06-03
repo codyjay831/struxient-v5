@@ -57,8 +57,8 @@ export default async function PublicRequestSettingsPage() {
         ]}
       />
       <PageHeader
-        title="Public request page settings"
-        description="Controls your public link status and page copy for the default customer request flow. Advanced form fields and request type options are managed per form under Public intake forms."
+        title="Customer request page settings"
+        description="Control whether customers can submit requests, plus the page title/copy shown on your default request link. Advanced fields and request options stay in form editing."
         actions={
           <Link href="/settings/intake" className={listLinkClass}>
             ← Customer intake

@@ -80,13 +80,13 @@ export function patchSerializedLeadRowAfterQuoteStarted<
   return {
     ...row,
     quotes,
-    progressLabel: "Quote in progress",
+    progressLabel: "Quote draft in progress",
     progressDescription: "A draft quote is open.",
     progressTone: "draft",
     progressState: "QUOTE_IN_PROGRESS",
     progressPrimaryAction: {
       href: quote.quoteHref,
-      label: "Open draft quote",
+      label: "Continue quote",
       opensQuoteTab: true,
       opensContactTab: false,
     },

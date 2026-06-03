@@ -28,7 +28,12 @@ export type QuoteSendPanelProps = {
   initialRecipients: { email: string; name?: string }[];
   organizationDisplayName: string;
   shareUrl: string;
-  onSuccess: () => void;
+  onSuccess: (summary: {
+    recipientCount: number;
+    recipientEmails: string[];
+    expiresInDays: string;
+    shareUrl: string;
+  }) => void;
   onCancel: () => void;
 };
 
@@ -60,9 +65,14 @@ export function QuoteSendPanel({
     if (state.success && handledKeyRef.current !== state) {
       handledKeyRef.current = state;
       toast.success("Quote sent successfully.");
-      onSuccess();
+      onSuccess({
+        recipientCount: recipients.length,
+        recipientEmails: recipients.map((recipient) => recipient.email),
+        expiresInDays,
+        shareUrl,
+      });
     }
-  }, [state, onSuccess]);
+  }, [state, onSuccess, recipients, expiresInDays, shareUrl]);
 
   const handleAddRecipient = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +113,9 @@ export function QuoteSendPanel({
         {/* Recipients */}
         <div className="space-y-3">
           <label className={workspaceFormFieldLabelClass}>Recipients</label>
+          <p className="text-xs text-foreground-muted">
+            Add at least one recipient before sending.
+          </p>
           <div className="space-y-2">
             {recipients.length === 0 ? (
               <p className="text-xs text-foreground-muted italic px-1">No recipients added yet.</p>
@@ -290,6 +303,11 @@ export function QuoteSendPanel({
             Cancel
           </button>
         </div>
+        {recipients.length === 0 ? (
+          <p className="text-xs text-warning">
+            Send is disabled until at least one recipient is added.
+          </p>
+        ) : null}
       </form>
     </div>
   );

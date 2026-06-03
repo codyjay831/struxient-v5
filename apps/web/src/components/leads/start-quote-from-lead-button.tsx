@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { createQuoteFromLeadWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 
 const primaryActionClass =
@@ -21,12 +21,14 @@ export function StartQuoteFromLeadButton({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function handleClick() {
+    setError(null);
     startTransition(async () => {
       const result = await createQuoteFromLeadWorkspaceAction(leadId);
       if (!result.success) {
-        alert(result.error ?? "Could not start the quote.");
+        setError(result.error ?? "Could not start the quote.");
         return;
       }
       router.push(`/quotes/${result.quoteId}`);
@@ -35,14 +37,21 @@ export function StartQuoteFromLeadButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={isPending}
-      title="Start a quote draft for this opportunity using the canonical lead handoff."
-      className={variant === "primary" ? primaryActionClass : secondaryActionClass}
-    >
-      {isPending ? "Starting quote…" : label}
-    </button>
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isPending}
+        title="Start a quote draft for this request using the canonical lead handoff."
+        className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+      >
+        {isPending ? "Starting quote..." : label}
+      </button>
+      {error ? (
+        <p className="text-xs text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

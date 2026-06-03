@@ -28,9 +28,9 @@ export function PublicRequestLinkPanel({
   return (
     <WorkspacePanel padding="compact" className={className}>
       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-        Public Request Link
+        Customer request link
       </p>
-      <p className="mt-2 text-sm font-medium text-foreground">Request Settings</p>
+      <p className="mt-2 text-sm font-medium text-foreground">Customer request page</p>
       <p className="mt-3">
         <Link href="/settings/intake" className={handoffMutedLinkClass}>
           Customer intake settings
@@ -38,14 +38,13 @@ export function PublicRequestLinkPanel({
       </p>
       {!publicRequestLive ? (
         <p className="mt-3 text-xs leading-relaxed text-danger">
-          Public request is turned off. Customers who open your Public Request Link see an
-          unavailable message until you turn it back on in customer intake settings.
+          Customer request intake is paused. Anyone opening this link sees an unavailable message
+          until you turn intake back on.
         </p>
       ) : null}
       <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-        Your default <span className="text-foreground">Public Request Form</span> is the primary
-        customer entry point. Additional public forms are an advanced setup option — not required
-        for day-one intake.
+        Your default public request form is the main customer entry point. Additional public forms
+        are optional advanced setup.
       </p>
 
       {!slug ? (

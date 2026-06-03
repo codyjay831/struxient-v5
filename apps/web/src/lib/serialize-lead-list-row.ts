@@ -179,7 +179,7 @@ export function serializeLeadListRow(
         href: `/quotes/${q.id}`,
       })),
     leadHref: `/leads/${lead.id}`,
-    newQuoteHref: `/quotes/new?leadId=${encodeURIComponent(lead.id)}`,
+    newQuoteHref: `/leads/${lead.id}`,
     jobsiteAddressLine: jobsiteLineFromLead(lead),
   };
 }
