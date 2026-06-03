@@ -1,9 +1,5 @@
 import Link from "next/link";
-import {
-  HandoffPanel,
-  handoffMutedLinkClass,
-  handoffPrimaryLinkClass,
-} from "@/components/ui/handoff-panel";
+import { ButtonLink } from "@/components/ui/button";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,14 +10,10 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { UserCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 
 export const dynamic = "force-dynamic";
-
-const returnLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function CustomersPage({
   searchParams,
@@ -61,110 +53,68 @@ export default async function CustomersPage({
       />
       <PageHeader
         title="Customers"
-        description="Relationship records for this organization—identity and contact live here; linked opportunity appears as a count per row and on each customer’s detail page. Quotes and jobs remain future workspaces."
+        description="People and companies you work with — contact info, linked sales, and job history in one place."
         actions={
           <>
             {fromWorkstation ? (
-              <Link
-                href={workstationReturnHref(returnSection)}
-                className={returnLinkClass}
-              >
+              <ButtonLink href={workstationReturnHref(returnSection)} variant="muted" size="sm">
                 ← Workstation
-              </Link>
+              </ButtonLink>
             ) : null}
-            <Link href="/customers/new" className={handoffPrimaryLinkClass}>
+            <ButtonLink href="/customers/new" variant="primary" size="sm">
               New customer
-            </Link>
-            <PlaceholderButton>Merge records (soon)</PlaceholderButton>
+            </ButtonLink>
+            <PlaceholderButton>Merge records</PlaceholderButton>
           </>
         }
       />
 
-      <HandoffPanel
-        title="Relationship context"
-        description="Customer rows are the anchor for durable identity; linked opportunities are real today. Sales and jobs remain authoritative record surfaces; Workstation is the attention lens."
-      >
-        <Link href="/leads" className={handoffMutedLinkClass}>
-          Sales
-        </Link>
-        <Link href="/jobs" className={handoffMutedLinkClass}>
-          Jobs
-        </Link>
-        <Link href="/payments" className={handoffMutedLinkClass}>
-          Payments (reserved)
-        </Link>
-      </HandoffPanel>
-
       <section className="mb-10">
         <SectionHeading
-          title="Organization snapshot"
-          description="Real Opportunity + Customer counts for this development tenant only. Jobs, money rollups, and contact-age signals stay placeholders until those models exist."
+          title="At a glance"
+          description="Live counts for your organization."
         />
         <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li>
-            <SignalCard label="Customers" value={String(customers.length)} hint="Rows in this org." />
+            <SignalCard label="Customers" value={String(customers.length)} hint="Total customer records" />
           </li>
           <li>
-            <SignalCard label="Opportunities (all)" value={String(totalLeads)} hint="Intake records in this org." />
+            <SignalCard label="All sales" value={String(totalLeads)} hint="Leads in the pipeline" />
           </li>
           <li>
             <SignalCard
-              label="Open opportunities"
+              label="Open sales"
               value={String(openPipelineLeads)}
-              hint="Status Open or Qualifying—manual lifecycle."
+              hint="Still being worked"
             />
           </li>
           <li>
             <SignalCard
-              label="Unlinked opportunities"
+              label="Unlinked sales"
               value={String(unlinkedLeads)}
-              hint="No customerId yet; link or create from each record’s page."
+              hint="Not tied to a customer yet"
             />
           </li>
         </ul>
-        <ul className="grid gap-3 sm:grid-cols-3">
-          <li>
-            <SignalCard label="Active jobs" value="—" hint="Open work tied to customers" />
-          </li>
-          <li>
-            <SignalCard label="Past-due AR" value="—" hint="When billing exists" />
-          </li>
-          <li>
-            <SignalCard label="Stale contact" value="—" hint="No touch in N days" />
-          </li>
-        </ul>
-        <p className="mt-3 text-xs text-foreground-muted">
-          Customers with at least one linked lead:{" "}
+        <p className="text-sm text-foreground-muted">
+          Customers with linked sales:{" "}
           <span className="font-medium text-foreground">{customersWithLinkedLead}</span>
         </p>
       </section>
 
-      <WorkspacePanel padding="compact" className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Persistence Foundation Active
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          This route reads from <span className="font-medium text-foreground">PostgreSQL</span> via{" "}
-          <span className="font-medium text-foreground">Prisma</span>. Until auth exists, rows are
-          scoped with <span className="font-medium text-foreground">getRequestContextOrThrow()</span>{" "}
-          ({ctx.organizationName}).
-
-        </p>
-      </WorkspacePanel>
-
       <SectionHeading
-        title="Customer records"
-        description="Each row opens the customer detail page. Linked opportunities counts come from the Opportunity → Customer link in this org only."
+        title="All customers"
+        description="Click a row to open details, contact info, and linked sales."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <thead>
-              <tr className="border-b border-border text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+              <tr className="border-b border-border text-xs font-medium text-foreground-subtle">
                 <th className="pb-3 pr-4 font-medium">Customer</th>
                 <th className="pb-3 pr-4 font-medium">Contact</th>
-                <th className="pb-3 pr-4 font-medium">Linked opportunities</th>
+                <th className="pb-3 pr-4 font-medium">Linked sales</th>
                 <th className="pb-3 font-medium">Created</th>
               </tr>
             </thead>
@@ -176,7 +126,7 @@ export default async function CustomersPage({
                       href={`/customers/${customer.id}`}
                       className="group block rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                      <div className="font-medium text-foreground transition-colors group-hover:text-foreground group-hover:underline">
+                      <div className="font-medium text-foreground transition-colors group-hover:text-accent group-hover:underline">
                         {customer.displayName}
                       </div>
                       {customer.companyName && (
@@ -209,12 +159,12 @@ export default async function CustomersPage({
           <div className="border-t border-border pt-6">
             <EmptyState
               icon={UserCircle}
-              title="No customer rows yet"
-              description="Create a customer to anchor identity and contact; link intake from each record’s detail page when you are ready—no sample rows."
+              title="No customers yet"
+              description="Add your first customer to keep contact info and sales history in one place."
             >
-              <Link href="/customers/new" className={handoffPrimaryLinkClass}>
+              <ButtonLink href="/customers/new" variant="primary" size="sm">
                 New customer
-              </Link>
+              </ButtonLink>
             </EmptyState>
           </div>
         )}

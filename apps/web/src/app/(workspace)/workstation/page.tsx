@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonClassName, ButtonLink } from "@/components/ui/button";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -26,8 +27,7 @@ import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-
 
 export const dynamic = "force-dynamic";
 
-const quickActionClass =
-  "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle transition-all hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+const quickActionClass = buttonClassName({ variant: "muted", size: "sm" });
 
 const activityItemClass =
   "flex items-start gap-3 rounded-lg border border-transparent p-2 transition-colors hover:bg-foreground/[0.02]";
@@ -125,13 +125,13 @@ export default async function WorkstationTodayLensPage({
                   </span>
                 )}
               </div>
-              New Intake
+              New lead
             </Link>
           )}
           {quickActions.includes("browse-jobs") && (
             <Link href="/jobs" className={quickActionClass}>
               <ListOrdered className="size-3.5" />
-              Browse Jobs
+              Browse jobs
             </Link>
           )}
         </section>
@@ -144,8 +144,8 @@ export default async function WorkstationTodayLensPage({
               {/* Critical Lane */}
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-danger">
-                    Critical / Blocking
+                  <h3 className="text-sm font-semibold text-danger">
+                    Critical
                   </h3>
                 </div>
                 {criticalItems.length > 0 ? (
@@ -176,8 +176,8 @@ export default async function WorkstationTodayLensPage({
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-foreground-muted italic">
-                    Nothing critical. Pick from due today below.
+                  <p className="text-sm text-foreground-muted">
+                    Nothing urgent — check due today below.
                   </p>
                 )}
               </section>
@@ -186,8 +186,8 @@ export default async function WorkstationTodayLensPage({
               {dueItems.length > 0 && (
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Due Today
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Due today
                     </h3>
                   </div>
                   <div className="grid gap-2">
@@ -209,8 +209,8 @@ export default async function WorkstationTodayLensPage({
               {upcomingItems.length > 0 && (
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Upcoming / Prepare
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Upcoming
                     </h3>
                   </div>
                   <div className="grid gap-2">
@@ -232,8 +232,8 @@ export default async function WorkstationTodayLensPage({
               {watchItems.length > 0 && (
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Watch / Aging
+                    <h3 className="text-sm font-semibold text-foreground-subtle">
+                      Watch list
                     </h3>
                   </div>
                   <div className="grid gap-2">
@@ -261,8 +261,8 @@ export default async function WorkstationTodayLensPage({
           <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
             <div className="flex items-center gap-2 mb-6">
               <History className="size-4 text-foreground-subtle" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">
-                Recent Activity
+              <h3 className="text-sm font-semibold text-foreground">
+                Recent activity
               </h3>
             </div>
             
@@ -285,14 +285,14 @@ export default async function WorkstationTodayLensPage({
                 ))}
                 <Link 
                   href="/jobs" 
-                  className="mt-4 block text-center text-[10px] font-bold uppercase tracking-widest text-foreground-subtle hover:text-foreground transition-colors"
+                  className="mt-4 block text-center text-sm font-medium text-accent hover:underline"
                 >
-                  View All Activity
+                  View all activity
                 </Link>
               </div>
             ) : (
-              <p className="text-xs text-foreground-muted italic">
-                No recent activity recorded.
+              <p className="text-sm text-foreground-muted">
+                No recent activity.
               </p>
             )}
           </section>
@@ -312,15 +312,15 @@ export default async function WorkstationTodayLensPage({
         <WorkspacePanel id="reserved-areas" padding="compact" className="bg-foreground/[0.01] max-w-2xl">
           <SectionHeading title={WORKSTATION_COPY.reservedAreas.title} description={WORKSTATION_COPY.reservedAreas.description} />
           <div className="flex flex-wrap gap-2">
-            <Link href="/workstation/tasks" className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground">
+            <ButtonLink href="/workstation/tasks" variant="muted" size="sm">
               {WORKSTATION_COPY.reservedAreas.tasksLabel}
-            </Link>
-            <Link href="/workstation/jobs" className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground">
+            </ButtonLink>
+            <ButtonLink href="/workstation/jobs" variant="muted" size="sm">
               {WORKSTATION_COPY.reservedAreas.jobsLabel}
-            </Link>
-            <Link href="/workstation/schedule" className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground">
+            </ButtonLink>
+            <ButtonLink href="/workstation/schedule" variant="muted" size="sm">
               {WORKSTATION_COPY.reservedAreas.scheduleLabel}
-            </Link>
+            </ButtonLink>
           </div>
         </WorkspacePanel>
       </div>

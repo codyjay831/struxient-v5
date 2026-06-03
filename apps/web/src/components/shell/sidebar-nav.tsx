@@ -40,8 +40,8 @@ const workNav: NavItem[] = [
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
-/** Money tracking shell only—no processor, ledger, or automatic quote linkage yet. */
-const reservedPlanningNav: NavItem[] = [
+/** Money tracking — coming soon. */
+const financeNav: NavItem[] = [
   { href: "/payments", label: "Payments", icon: CreditCard },
 ];
 
@@ -74,7 +74,7 @@ function NavSection({
   return (
     <div className="mb-8">
       {title ? (
-        <p className="mb-3 px-3 text-[0.65rem] font-medium uppercase tracking-[0.2em] text-foreground-subtle">
+        <p className="mb-3 px-3 text-xs font-medium text-foreground-subtle">
           {title}
         </p>
       ) : null}
@@ -116,7 +116,7 @@ export function SidebarNav() {
       <NavSection title="Sales Hub" items={salesNav} pathname={pathname} />
       <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
-      <NavSection title="Reserved" items={reservedPlanningNav} pathname={pathname} />
+      <NavSection title="Finance" items={financeNav} pathname={pathname} />
       <div className="mt-auto">
         <NavSection title="" items={utilityNav} pathname={pathname} />
       </div>

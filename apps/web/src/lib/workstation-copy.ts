@@ -1,65 +1,66 @@
 /**
- * Centralized Workstation microcopy. Importing from here keeps the honesty
- * disclaimers, lens descriptions, and severity labels consistent across pages
- * and avoids drift when copy changes.
- *
- * Only strings that are reused (or that share the same honesty tone) live
- * here. Page-unique paragraphs stay inline at their call site.
+ * Centralized Workstation microcopy.
  */
 
+export const WORKSTATION_LENS_LABELS: Record<
+  "attention" | "today" | "waiting" | "upcoming" | "all",
+  string
+> = {
+  attention: "Needs attention",
+  today: "Today",
+  waiting: "Waiting",
+  upcoming: "Upcoming",
+  all: "All",
+};
+
 export const WORKSTATION_COPY = {
-  /** Investigate lane (lib/workstation-investigate-signals.ts + section). */
   investigate: {
-    sectionTitle: "Investigate",
+    sectionTitle: "Review",
     sectionDescription:
-      "Records with open questions or missing context. Review these before taking the next step.",
-    severityTitle: "Investigate severity",
+      "Records that need a second look before you move forward.",
+    severityTitle: "Priority",
     previewLabel: "Preview",
-    previewTooltip: "Illustrative preview — not derived from live data yet",
-    previewSectionTitle: "Coming soon — preview signals",
+    previewTooltip: "Sample layout — live data coming soon",
+    previewSectionTitle: "Coming soon",
     previewSectionLead:
-      "These cards show the categories the Investigate lane will surface once duplicate detection, quote readiness scans, payment review, and activity feeds are wired. Not derived from live records.",
-    emptyTitle: "No investigation signals right now.",
+      "Duplicate detection, quote readiness, payment follow-ups, and activity alerts will show up here.",
+    emptyTitle: "Nothing to review right now.",
     emptyDescription:
-      "Struxient will surface unclear, risky, or missing-context items here before they become tasks. Only org-scoped opportunity linkage is wired today.",
+      "When something looks off or incomplete, it will appear here before it becomes a problem.",
   },
 
-  /** Severity wording used in AttentionCard pills and elsewhere. */
   severity: {
     high: "High",
     medium: "Medium",
     low: "Low",
   },
 
-  /** Summary-strip counters at the top of Workstation Today. */
   summaryStrip: {
-    investigateLabel: "Investigate",
-    investigateHint: "Records flagged for review.",
-    openPipelineLabel: "Sales pipeline",
-    openPipelineHint: "Opportunities in Open or Qualifying.",
+    investigateLabel: "Review",
+    investigateHint: "Items flagged for a closer look.",
+    openPipelineLabel: "Open sales",
+    openPipelineHint: "Leads still in the pipeline.",
     unlinkedLabel: "Unlinked",
-    unlinkedHint: "Opportunities with no customer linked yet.",
+    unlinkedHint: "Leads not tied to a customer yet.",
   },
 
-  /** Reserved-lens footer that replaces the always-on Future Attention Feed. */
   reservedAreas: {
-    title: "Reserved lens areas",
+    title: "More views",
     description:
-      "Tasks, Jobs, and Schedule lenses will surface their own attention signals as that data becomes derivable. They stay reserved on their own pages so this Today view focuses on what is actionable now.",
-    tasksLabel: "Open tasks lens",
-    jobsLabel: "Open jobs lens",
-    scheduleLabel: "Open schedule lens",
+      "Tasks, jobs, and schedule each get their own lens as more data comes online.",
+    tasksLabel: "Tasks",
+    jobsLabel: "Jobs",
+    scheduleLabel: "Schedule",
   },
 
-  /** Continuation CTA labels for empty states across Workstation lenses. */
   continuation: {
-    backToToday: "Back to Workstation Today",
+    backToToday: "Back to Workstation",
     backToWorkstation: "← Workstation",
-    openLeads: "Open Sales",
-    openCustomers: "Open customers",
-    openQuotes: "Browse Sales",
-    openJobs: "Open jobs",
-    openSchedule: "Open schedule",
-    openPayments: "Open payments (reserved)",
+    openLeads: "Sales",
+    openCustomers: "Customers",
+    openQuotes: "Sales",
+    openJobs: "Jobs",
+    openSchedule: "Schedule",
+    openPayments: "Payments",
   },
 } as const;

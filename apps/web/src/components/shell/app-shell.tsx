@@ -13,7 +13,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-lg font-semibold tracking-tight text-foreground">
             Struxient
           </span>
-          <span className="text-[0.65rem] font-medium uppercase tracking-[0.15em] text-foreground-subtle">
+          <span className="rounded bg-brand-muted px-1.5 py-0.5 text-[0.6rem] font-semibold text-accent">
             v5
           </span>
         </Link>

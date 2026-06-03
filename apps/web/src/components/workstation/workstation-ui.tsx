@@ -13,6 +13,7 @@ import {
   type WorkstationFilterCategory,
   type WorkstationLens,
 } from "@/lib/workstation-query";
+import { WORKSTATION_LENS_LABELS } from "@/lib/workstation-copy";
 
 export function WorkstationFilterBar({ 
   currentFilter, 
@@ -26,19 +27,21 @@ export function WorkstationFilterBar({
 
   const filters: { id: WorkstationFilterCategory; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "leads", label: "Opportunities" },
+    { id: "leads", label: "Sales" },
     { id: "quotes", label: "Quotes" },
     { id: "jobs", label: "Jobs" },
     { id: "tasks", label: "Tasks" },
     { id: "issues", label: "Issues" },
     { id: "payments", label: "Payments" },
-    { id: "logs", label: "Logs" },
+    { id: "logs", label: "Activity" },
   ];
+
+  const lenses: WorkstationLens[] = ["attention", "today", "waiting", "upcoming", "all"];
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
       <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
-        {(["attention", "today", "waiting", "upcoming", "all"] as WorkstationLens[]).map((l) => {
+        {lenses.map((l) => {
           const active = currentLens === l;
           const href = buildWorkstationUrl(urlState, { lens: l });
 
@@ -47,13 +50,13 @@ export function WorkstationFilterBar({
               key={l}
               href={href}
               className={[
-                "rounded-md px-2 py-1 text-[0.6rem] font-bold uppercase tracking-wider transition-colors",
+                "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                 active
-                  ? "bg-accent text-accent-contrast"
-                  : "bg-foreground/5 text-foreground-subtle hover:bg-foreground/10",
+                  ? "bg-accent text-accent-contrast shadow-sm"
+                  : "text-foreground-muted hover:bg-foreground/[0.05] hover:text-foreground",
               ].join(" ")}
             >
-              {l}
+              {WORKSTATION_LENS_LABELS[l]}
             </Link>
           );
         })}
@@ -67,10 +70,10 @@ export function WorkstationFilterBar({
             key={f.id}
             href={href}
             className={[
-              "whitespace-nowrap rounded-full px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider transition-colors sm:px-3 sm:py-1",
+              "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
               active
                 ? "bg-foreground text-background"
-                : "bg-foreground/[0.03] text-foreground-muted hover:bg-foreground/[0.06] hover:text-foreground",
+                : "bg-foreground/[0.04] text-foreground-muted hover:bg-foreground/[0.08] hover:text-foreground",
             ].join(" ")}
           >
             {f.label}
@@ -99,8 +102,8 @@ export function WorkstationFocusCard({
   ].filter(Boolean).join(" ");
 
   const badgeClass = [
-    "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider",
-    isHighPriority ? "bg-danger/10 text-danger" : "bg-foreground/10 text-foreground",
+    "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+    isHighPriority ? "bg-danger/10 text-danger" : "bg-brand-muted text-accent",
   ].filter(Boolean).join(" ");
 
   return (
@@ -119,22 +122,22 @@ export function WorkstationFocusCard({
                 {isHighPriority ? "Urgent Action" : "Next Action"}
               </span>
               {item.isBlocked && (
-                <span className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-danger">
+                <span className="flex items-center gap-1 text-xs font-medium text-danger">
                   <AlertCircle className="size-3" />
-                  {item.missingSignals ? "Waiting on Signal" : "Blocked"}
+                  {item.missingSignals ? "Waiting on info" : "Blocked"}
                 </span>
               )}
               {item.missingSignals && (
                 <div className="flex flex-wrap gap-1">
                   {item.missingSignals.map(s => (
-                    <span key={s} className="rounded bg-accent/10 px-1.5 py-0.5 text-[0.6rem] font-mono font-bold text-accent">
-                      {s}
+                    <span key={s} className="rounded-md bg-brand-muted px-1.5 py-0.5 text-[0.65rem] font-medium text-accent">
+                      {s.replace(/_/g, " ").toLowerCase()}
                     </span>
                   ))}
                 </div>
               )}
               {item.status && (
-                <span className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
+                <span className="text-xs font-medium text-foreground-subtle">
                   {item.status}
                 </span>
               )}
@@ -153,16 +156,16 @@ export function WorkstationFocusCard({
 
             <div className="flex flex-col gap-6 pt-2 sm:flex-row sm:gap-12">
               <div className="space-y-1">
-                <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                  Context
+                <p className="text-xs font-medium text-foreground-subtle">
+                  Why it is here
                 </p>
-                <p className="text-base italic leading-relaxed text-foreground-muted">
+                <p className="text-base leading-relaxed text-foreground-muted">
                   {item.reason}
                 </p>
               </div>
               <div className="space-y-1">
-                <p className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">
-                  Action
+                <p className="text-xs font-medium text-foreground-subtle">
+                  Next step
                 </p>
                 <p className="text-base font-bold leading-relaxed text-foreground">
                   {item.actionLabel ?? item.nextStep}
@@ -172,7 +175,7 @@ export function WorkstationFocusCard({
           </div>
 
           <div className="flex shrink-0 items-center justify-end sm:pt-2">
-            <div className="rounded-full bg-foreground p-3 text-background shadow-lg transition-transform group-hover:scale-105">
+            <div className="rounded-full bg-accent p-3 text-accent-contrast shadow-md transition-transform group-hover:scale-105">
               <ArrowRight className="size-6" />
             </div>
           </div>
@@ -206,11 +209,11 @@ export function WorkstationQueueItem({
     >
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="text-[0.6rem] font-bold uppercase tracking-wider text-foreground-subtle">
+          <span className="text-xs font-medium capitalize text-foreground-subtle">
             {item.kind.replace("-", " ")}
           </span>
           {item.isBlocked && (
-            <span className="flex items-center gap-1 text-[0.6rem] font-bold uppercase tracking-wider text-danger">
+            <span className="flex items-center gap-1 text-xs font-medium text-danger">
               <AlertCircle className="size-2.5" />
               {item.missingSignals ? "Waiting" : "Blocked"}
             </span>
@@ -218,8 +221,8 @@ export function WorkstationQueueItem({
           {item.missingSignals && (
             <div className="flex flex-wrap gap-1">
               {item.missingSignals.map(s => (
-                <span key={s} className="rounded bg-accent/10 px-1 py-0.5 text-[0.5rem] font-mono font-bold text-accent">
-                  {s}
+                <span key={s} className="rounded-md bg-brand-muted px-1 py-0.5 text-[0.6rem] font-medium text-accent">
+                  {s.replace(/_/g, " ").toLowerCase()}
                 </span>
               ))}
             </div>
@@ -236,7 +239,7 @@ export function WorkstationQueueItem({
             {item.actionLabel ?? item.nextStep}
           </span>
         </div>
-        <p className="truncate text-xs italic text-foreground-muted">
+        <p className="truncate text-xs text-foreground-muted">
           {item.reason}
         </p>
       </div>
@@ -285,7 +288,7 @@ export function WorkstationClearedState({
         {isFiltered ? (
           <Link 
             href={buildWorkstationUrl(urlState, { filter: "all" })}
-            className="text-xs font-semibold uppercase tracking-wider text-foreground hover:underline"
+            className="text-sm font-medium text-accent hover:underline"
           >
             Clear Filters
           </Link>
@@ -293,13 +296,13 @@ export function WorkstationClearedState({
           <>
             <Link 
               href="/leads" 
-              className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
+              className="text-sm font-medium text-foreground-muted hover:text-foreground"
             >
               Browse Sales
             </Link>
             <Link 
               href="/jobs" 
-              className="text-xs font-semibold uppercase tracking-wider text-foreground-muted hover:text-foreground"
+              className="text-sm font-medium text-foreground-muted hover:text-foreground"
             >
               Review Jobs
             </Link>

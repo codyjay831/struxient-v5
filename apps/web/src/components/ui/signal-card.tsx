@@ -24,7 +24,7 @@ export function SignalCard({
   return (
     <div className={["rounded-lg border px-4 py-3 shadow-sm transition-colors", toneClasses[tone]].join(" ")}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+        <p className="text-xs font-medium text-foreground-subtle">
           {label}
         </p>
         {Icon && <Icon className="size-3.5 text-foreground-subtle opacity-60" />}

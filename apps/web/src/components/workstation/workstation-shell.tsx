@@ -14,14 +14,15 @@ import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
+import { WORKSTATION_LENS_LABELS } from "@/lib/workstation-copy";
 import { WorkstationLens } from "@/lib/workstation-query";
 
 const LENSES: { href: string; label: string; icon: LucideIcon; lens: WorkstationLens }[] = [
-  { href: "/workstation", label: "Needs Attention", icon: LayoutDashboard, lens: "attention" },
-  { href: "/workstation?lens=today", label: "Today", icon: ClipboardList, lens: "today" },
-  { href: "/workstation?lens=waiting", label: "Waiting", icon: FolderKanban, lens: "waiting" },
-  { href: "/workstation?lens=upcoming", label: "Upcoming", icon: CalendarDays, lens: "upcoming" },
-  { href: "/workstation?lens=all", label: "All", icon: LayoutDashboard, lens: "all" },
+  { href: "/workstation", label: WORKSTATION_LENS_LABELS.attention, icon: LayoutDashboard, lens: "attention" },
+  { href: "/workstation?lens=today", label: WORKSTATION_LENS_LABELS.today, icon: ClipboardList, lens: "today" },
+  { href: "/workstation?lens=waiting", label: WORKSTATION_LENS_LABELS.waiting, icon: FolderKanban, lens: "waiting" },
+  { href: "/workstation?lens=upcoming", label: WORKSTATION_LENS_LABELS.upcoming, icon: CalendarDays, lens: "upcoming" },
+  { href: "/workstation?lens=all", label: WORKSTATION_LENS_LABELS.all, icon: LayoutDashboard, lens: "all" },
 ];
 
 function lensActive(pathname: string, currentLens: string, targetLens: string) {
@@ -40,7 +41,7 @@ export function WorkstationShell() {
       <header className="border-b border-border pb-6">
         <div className="flex items-baseline justify-between gap-4">
           <div>
-            <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-foreground-subtle">
+            <p className="mb-1 text-sm font-medium text-foreground-subtle">
               Workstation
             </p>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">

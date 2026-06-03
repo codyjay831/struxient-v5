@@ -1,21 +1,17 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
-/** Disabled control — signals a future action without implying persistence. */
+/** Disabled control — signals a future action without dev-facing labels. */
 export function PlaceholderButton({
   children,
-  title = "Available once org data and persistence exist",
+  title = "Coming in a future update",
 }: {
   children: ReactNode;
   title?: string;
 }) {
   return (
-    <button
-      type="button"
-      disabled
-      title={title}
-      className="cursor-not-allowed rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs font-medium text-foreground-subtle opacity-60"
-    >
+    <Button variant="muted" size="sm" disabled title={title} className="cursor-not-allowed opacity-60">
       {children}
-    </button>
+    </Button>
   );
 }
