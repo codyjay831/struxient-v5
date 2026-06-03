@@ -53,7 +53,7 @@ export default async function CustomersPage({
       />
       <PageHeader
         title="Customers"
-        description="People and companies you work with — contact info, linked sales, and job history in one place."
+        description="People and companies you work with — contact info, linked opportunities, and job history in one place."
         actions={
           <>
             {fromWorkstation ? (
@@ -79,32 +79,32 @@ export default async function CustomersPage({
             <SignalCard label="Customers" value={String(customers.length)} hint="Total customer records" />
           </li>
           <li>
-            <SignalCard label="All sales" value={String(totalLeads)} hint="Leads in the pipeline" />
+            <SignalCard label="All opportunities" value={String(totalLeads)} hint="Records in the sales pipeline" />
           </li>
           <li>
             <SignalCard
-              label="Open sales"
+              label="Open opportunities"
               value={String(openPipelineLeads)}
               hint="Still being worked"
             />
           </li>
           <li>
             <SignalCard
-              label="Unlinked sales"
+              label="Unlinked opportunities"
               value={String(unlinkedLeads)}
               hint="Not tied to a customer yet"
             />
           </li>
         </ul>
         <p className="text-sm text-foreground-muted">
-          Customers with linked sales:{" "}
+          Customers with linked opportunities:{" "}
           <span className="font-medium text-foreground">{customersWithLinkedLead}</span>
         </p>
       </section>
 
       <SectionHeading
         title="All customers"
-        description="Click a row to open details, contact info, and linked sales."
+        description="Click a row to open details, contact info, and linked opportunities."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -114,7 +114,7 @@ export default async function CustomersPage({
               <tr className="border-b border-border text-xs font-medium text-foreground-subtle">
                 <th className="pb-3 pr-4 font-medium">Customer</th>
                 <th className="pb-3 pr-4 font-medium">Contact</th>
-                <th className="pb-3 pr-4 font-medium">Linked sales</th>
+                <th className="pb-3 pr-4 font-medium">Linked opportunities</th>
                 <th className="pb-3 font-medium">Created</th>
               </tr>
             </thead>
@@ -160,7 +160,7 @@ export default async function CustomersPage({
             <EmptyState
               icon={UserCircle}
               title="No customers yet"
-              description="Add your first customer to keep contact info and sales history in one place."
+              description="Add your first customer to keep contact info and opportunity history in one place."
             >
               <ButtonLink href="/customers/new" variant="primary" size="sm">
                 New customer

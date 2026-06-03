@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MetaLabel } from "@/components/ui/meta-label";
 
 export type PageHeaderProps = {
   eyebrow?: ReactNode;
@@ -21,8 +22,8 @@ export function PageHeader({
     <header className="mb-10 flex flex-col gap-6 border-b border-border pb-10 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
         {eyebrow ? (
-          <p className="mb-2 text-sm font-medium text-foreground-subtle">
-            {eyebrow}
+          <p className="mb-2">
+            <MetaLabel>{eyebrow}</MetaLabel>
           </p>
         ) : null}
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">

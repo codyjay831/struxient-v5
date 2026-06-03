@@ -9,6 +9,10 @@ const triggerClass =
 export function LeadScaffoldingDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  if (process.env.NODE_ENV !== "development") {
+    return null;
+  }
+
   function open() {
     dialogRef.current?.showModal();
   }
@@ -20,7 +24,7 @@ export function LeadScaffoldingDialog() {
   return (
     <>
       <button type="button" className={triggerClass} onClick={open}>
-        Scaffolding
+        Sales notes
       </button>
       <dialog
         ref={dialogRef}
@@ -36,7 +40,7 @@ export function LeadScaffoldingDialog() {
               id="lead-scaffolding-title"
               className="text-sm font-semibold tracking-tight text-foreground"
             >
-              Scaffolding needed
+              Sales development notes
             </h2>
             <button
               type="button"
@@ -49,8 +53,8 @@ export function LeadScaffoldingDialog() {
           </div>
           <div className="overflow-y-auto px-5 py-4">
             <p className="text-sm leading-relaxed text-foreground-muted">
-              Development-only notes for the Sales area. These are not
-              customer-facing UI.
+              Internal notes for development while the Sales area is being
+              finalized.
             </p>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-foreground-muted">
               <li>

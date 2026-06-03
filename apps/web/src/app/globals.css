@@ -5,7 +5,7 @@
   color-scheme: light;
   --background: #f4f4f5;
   --surface: #ffffff;
-  --surface-elevated: #ffffff;
+  --surface-elevated: #fcfcfd;
   --foreground: #0a0a0a;
   --foreground-muted: #52525b;
   --foreground-subtle: #71717a;
@@ -19,7 +19,12 @@
   --sidebar: #fafafa;
   --danger: #b91c1c;
   --success: #15803d;
-  --warning: #b45309;
+  --warning: #a16207;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --shadow-soft: 0 1px 2px rgba(10, 10, 10, 0.08);
+  --shadow-elevated: 0 10px 20px rgba(10, 10, 10, 0.06);
 }
 
 /* Dark palette — applied when `next-themes` sets class `dark` on <html> (user or system). */
@@ -39,7 +44,9 @@
   --accent-contrast: #0a0a0a;
   --ring: rgba(245, 158, 11, 0.45);
   --sidebar: #0c0c0d;
-  --warning: #f59e0b;
+  --warning: #facc15;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 12px 24px rgba(0, 0, 0, 0.35);
 }
 
 @theme inline {
@@ -60,6 +67,11 @@
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-elevated: var(--shadow-elevated);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

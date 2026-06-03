@@ -8,7 +8,10 @@ export function buildQuoteLineExecutionPlanningSummaryLine(params: {
     return "Needs job plan review";
   }
 
-  return `Planned work · ${params.taskCount} tasks${
-    params.executionSummaryLine ? ` · ${params.executionSummaryLine}` : ""
-  }`;
+  if (params.executionSummaryLine) {
+    return `Planned work · ${params.executionSummaryLine}`;
+  }
+
+  const taskWord = params.taskCount === 1 ? "task" : "tasks";
+  return `Planned work · ${params.taskCount} ${taskWord}`;
 }

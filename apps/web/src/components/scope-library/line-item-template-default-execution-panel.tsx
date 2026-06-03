@@ -294,8 +294,8 @@ function ExecutionTaskRow({
 
   return (
     <li className="rounded-lg border border-border/80 bg-background/30 px-3 py-3 sm:px-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-3">
+        <div className="min-w-0 break-words">
           <p className="text-sm font-medium text-foreground">{task.title}</p>
           {!task.stageId ? (
             <span className="mt-1 inline-flex rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
@@ -330,7 +330,7 @@ function ExecutionTaskRow({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
           <button
             type="button"
             className={secondaryButtonClass}

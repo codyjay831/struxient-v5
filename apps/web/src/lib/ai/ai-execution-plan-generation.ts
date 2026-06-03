@@ -15,9 +15,15 @@ export type AILibraryProposalGenerationResult = {
   generation: AILibraryProposalGenerationMeta;
 };
 
-/** Enables demo/simulated execution plans when the provider is missing or fails. */
+/**
+ * Simulated/demo execution plans are disabled in app runtime.
+ * Keep env-based behavior only for tests that explicitly exercise simulation guards.
+ */
 export function isAiSimulatedExecutionPlansEnabled(): boolean {
-  return process.env.AI_ALLOW_SIMULATED_EXECUTION_PLANS === "1";
+  if (process.env.NODE_ENV === "test") {
+    return process.env.AI_ALLOW_SIMULATED_EXECUTION_PLANS === "1";
+  }
+  return false;
 }
 
 /** Allows applying demo/simulated execution plans (dev/test only). */

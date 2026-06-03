@@ -22,7 +22,7 @@ export default function PersonalSettingsPage() {
       />
       <PageHeader
         title="Personal"
-        description="Future per-user preferences—display, notifications, and where you land after sign-in. No account system yet, so nothing saves."
+        description="Manage your personal display, notification, and landing preferences."
         actions={
           <>
             <Link href="/settings" className={listLinkClass}>
@@ -40,14 +40,13 @@ export default function PersonalSettingsPage() {
           Personal preference shell
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          This page does not manage passwords, sessions, or identity—those ship with real
-          auth later. It only reserves space for how a signed-in user might tune their
-          workspace.
+          Personal settings shape your workspace experience without changing
+          organization defaults.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge label="User preferences" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            No persistence in this build
+            Personal options for your workspace
           </span>
         </div>
       </WorkspacePanel>
@@ -60,11 +59,11 @@ export default function PersonalSettingsPage() {
           />
           <WorkspacePanel>
             <div className="flex flex-wrap gap-2">
-              <PlaceholderButton title="No preference store in this build">
-                Compact tables (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Compact tables
               </PlaceholderButton>
-              <PlaceholderButton title="No preference store in this build">
-                Date format (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Date format
               </PlaceholderButton>
             </div>
           </WorkspacePanel>
@@ -73,19 +72,19 @@ export default function PersonalSettingsPage() {
         <section>
           <SectionHeading
             title="Default landing"
-            description="Where Struxient might open after sign-in—Workstation vs a Work list is a future preference, not wired today."
+            description="Choose which page opens first when you start your day."
           />
           <WorkspacePanel>
             <EmptyState
               icon={LayoutDashboard}
               title="Landing not configurable yet"
-              description="Bookmarks and manual navigation decide where you start until preference storage and auth exist."
+              description="For now, use bookmarks or manual navigation to choose your start page."
             >
-              <PlaceholderButton title="No preference store in this build">
-                Default to Workstation (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Default to Workstation
               </PlaceholderButton>
-              <PlaceholderButton title="No preference store in this build">
-                Default to Jobs (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Default to Jobs
               </PlaceholderButton>
             </EmptyState>
           </WorkspacePanel>
@@ -94,19 +93,19 @@ export default function PersonalSettingsPage() {
         <section>
           <SectionHeading
             title="Notifications"
-            description="Future email or in-app alerts for quotes, jobs, and schedule—no channels, no delivery rules, and no device tokens in this shell."
+            description="Control email and in-app alerts for quotes, jobs, and schedule updates."
           />
           <WorkspacePanel>
             <EmptyState
               icon={Bell}
               title="No notification settings"
-              description="When notifications ship, they will respect auth and org policy. Nothing sends from this placeholder."
+              description="Notification preferences will appear here as alert channels are enabled."
             >
-              <PlaceholderButton title="No notification engine in this build">
-                Quote alerts (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Quote alerts
               </PlaceholderButton>
-              <PlaceholderButton title="No notification engine in this build">
-                Job alerts (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Job alerts
               </PlaceholderButton>
             </EmptyState>
           </WorkspacePanel>

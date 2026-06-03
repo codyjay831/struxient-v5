@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -78,7 +77,7 @@ export default async function CustomerDetailPage({
         />
         <PageHeader
           title="Customer"
-          description="No customer exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          description="This customer record could not be found."
           actions={
             <>
               {returnHref ? (
@@ -92,16 +91,10 @@ export default async function CustomerDetailPage({
             </>
           }
         />
-        <WorkspacePanel padding="compact" className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-            Requested id
-          </p>
-          <p className="mt-1 break-all font-mono text-sm text-foreground">{customerId}</p>
-        </WorkspacePanel>
         <EmptyState
           icon={UserRound}
           title="Customer not found"
-          description="This id is not a customer record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          description="The customer may have been removed, or you may not have access to it."
         >
           <Link href="/customers" className={listLinkClass}>
             Back to customers
@@ -251,7 +244,7 @@ export default async function CustomerDetailPage({
             href={`/leads/new?customerId=${encodeURIComponent(customer.id)}`}
             className={listLinkClass}
           >
-            Create quote
+            New request
           </Link>
         </div>
       </div>

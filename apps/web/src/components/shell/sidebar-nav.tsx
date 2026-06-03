@@ -4,27 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
-  ClipboardList,
   CreditCard,
-  FileText,
   FolderKanban,
-  Inbox,
   LayoutDashboard,
-  Library,
   Settings2,
   UserCircle,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; soon?: boolean };
 
 /** Primary unified work queue. */
 const workstationEntry: NavItem[] = [
   { href: "/workstation", label: "Workstation", icon: LayoutDashboard },
 ];
 
-/** Commercial pipeline: intake and working quotes (record routes). */
+/** Commercial pipeline: opportunities and working quotes. */
 const salesNav: NavItem[] = [
   { href: "/leads", label: "Sales", icon: Users },
 ];
@@ -34,15 +30,15 @@ const relationshipsNav: NavItem[] = [
   { href: "/customers", label: "Customers", icon: UserCircle },
 ];
 
-/** Reserved shells for job records and schedule planning—not live runtime execution yet. */
+/** Work records and scheduling views. */
 const workNav: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: FolderKanban },
-  { href: "/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays, soon: true },
 ];
 
 /** Money tracking — coming soon. */
 const financeNav: NavItem[] = [
-  { href: "/payments", label: "Payments", icon: CreditCard },
+  { href: "/payments", label: "Payments", icon: CreditCard, soon: true },
 ];
 
 const utilityNav: NavItem[] = [
@@ -79,7 +75,7 @@ function NavSection({
         </p>
       ) : null}
       <ul className="flex flex-col gap-0.5">
-        {items.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon, soon }) => {
           const active = itemActive(pathname, href);
           return (
             <li key={href}>
@@ -88,7 +84,7 @@ function NavSection({
                 className={[
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-foreground/5 text-foreground"
+                    ? "bg-brand-muted text-accent ring-1 ring-accent/15"
                     : "text-foreground-muted hover:bg-foreground/[0.03] hover:text-foreground",
                 ].join(" ")}
               >
@@ -97,7 +93,12 @@ function NavSection({
                   strokeWidth={1.5}
                   aria-hidden
                 />
-                {label}
+                <span>{label}</span>
+                {soon ? (
+                  <span className="ml-auto rounded bg-brand-muted px-1.5 py-0.5 text-[0.6rem] font-semibold text-accent">
+                    Soon
+                  </span>
+                ) : null}
               </Link>
             </li>
           );
@@ -113,7 +114,7 @@ export function SidebarNav() {
   return (
     <nav className="flex flex-1 flex-col" aria-label="Main">
       <NavSection title="" items={workstationEntry} pathname={pathname} />
-      <NavSection title="Sales Hub" items={salesNav} pathname={pathname} />
+      <NavSection title="Sales" items={salesNav} pathname={pathname} />
       <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
       <NavSection title="Finance" items={financeNav} pathname={pathname} />

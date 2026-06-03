@@ -22,7 +22,7 @@ export function WorkspacePanel({
     <div
       id={id}
       className={[
-        "rounded-xl border border-border bg-surface shadow-sm",
+        "rounded-[var(--radius-lg)] border border-border bg-surface-elevated shadow-[var(--shadow-soft)]",
         pad,
         className,
       ].join(" ")}

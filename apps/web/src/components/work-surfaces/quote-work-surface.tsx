@@ -1284,19 +1284,15 @@ function ScopeTab({
           <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
             {lineItems.map((line) => (
               <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <QuoteLineItemScanBlock line={line} />
-                    <QuoteLineDraftExecutionSummary
-                      quoteId={quote.id}
-                      line={line}
-                      isExecutionEditable={isExecutionEditable}
-                      draftTasks={draftTasksByLineId[line.id] ?? []}
-                      reusableOptions={reusableTaskOptions}
-                      stages={stages}
-                    />
-                  </div>
-                </div>
+                <QuoteLineItemScanBlock line={line} />
+                <QuoteLineDraftExecutionSummary
+                  quoteId={quote.id}
+                  line={line}
+                  isExecutionEditable={isExecutionEditable}
+                  draftTasks={draftTasksByLineId[line.id] ?? []}
+                  reusableOptions={reusableTaskOptions}
+                  stages={stages}
+                />
               </li>
             ))}
           </ul>
@@ -2140,8 +2136,7 @@ function RecordTab({
       <div className="rounded-xl border border-border bg-surface p-4">
         <p className={`${sectionLabelClass} mb-1`}>Notes & activity</p>
         <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
-          When edit and checkpoint events exist, they will surface here. No
-          fabricated history is shown.
+          Changes and checkpoints for this quote will appear here.
         </p>
         <EmptyState
           icon={MessageSquare}

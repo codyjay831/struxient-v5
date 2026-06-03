@@ -1,10 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   activateQuoteJobAction,
   type QuoteJobActivationFormState,
 } from "@/app/(workspace)/quotes/quote-job-activation-actions";
+import {
+  applyQuoteCrossLineWiringSuggestionAction,
+  reviewQuoteCrossLineWiringAction,
+} from "@/app/(workspace)/quotes/quote-execution-secretary-actions";
+import type { CrossLineWiringSuggestion } from "@/lib/ai/signal-suggester";
 import { Sparkles, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,15 +31,25 @@ function FormError({ message }: { message: string }) {
   );
 }
 
+function suggestionCountLabel(count: number): string {
+  if (count === 1) {
+    return "1 potential dependency";
+  }
+  return `${count} potential dependencies`;
+}
+
 /**
  * Activates an APPROVED quote into an active job (one job per quote).
  * Server validates org scope, status, and execution readiness inside the transaction.
  */
 export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
+  const router = useRouter();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showAIReview, setShowAIReview] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [suggestions, setSuggestions] = useState<{ taskId: string, taskTitle: string, signal: string }[]>([]);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<CrossLineWiringSuggestion[]>([]);
+  const [applyingKey, setApplyingKey] = useState<string | null>(null);
 
   const [state, formAction, isPending] = useActionState(
     activateQuoteJobAction.bind(null, quoteId),
@@ -42,62 +58,126 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
 
   const startAIReview = async () => {
     setIsReviewing(true);
-    // Simulate AI analysis delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // In a real app, this would call a server action that uses suggestCrossLineWiring
-    // For this demo, we'll just simulate finding one suggestion
-    setSuggestions([
-      { taskId: "fake-id", taskTitle: "Install Skylights", signal: "roof-prepped" }
-    ]);
-    
-    setIsReviewing(false);
-    setShowAIReview(true);
+    setReviewError(null);
+    try {
+      const result = await reviewQuoteCrossLineWiringAction(quoteId);
+      if (!result.ok) {
+        setReviewError(result.error);
+        toast.error(result.error);
+        return;
+      }
+      setSuggestions(result.suggestions);
+      setShowAIReview(true);
+    } catch {
+      const message = "Could not run AI Secretary review. Try again.";
+      setReviewError(message);
+      toast.error(message);
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const applySuggestion = async (suggestion: CrossLineWiringSuggestion) => {
+    setApplyingKey(suggestion.suggestionKey);
+    try {
+      const result = await applyQuoteCrossLineWiringSuggestionAction(
+        quoteId,
+        suggestion.suggestionKey,
+      );
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setSuggestions((prev) =>
+        prev.filter((s) => s.suggestionKey !== suggestion.suggestionKey),
+      );
+      toast.success("Dependency wired on the quote work plan.");
+      router.refresh();
+    } catch {
+      toast.error("Could not apply suggestion. Try again.");
+    } finally {
+      setApplyingKey(null);
+    }
   };
 
   if (showAIReview) {
+    const count = suggestions.length;
     return (
       <div className="rounded-xl border border-accent/30 bg-accent/5 p-6">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="mb-4 flex items-center gap-2">
           <Sparkles className="size-5 text-accent" />
           <h3 className="text-lg font-semibold text-foreground">AI Secretary Review</h3>
         </div>
-        
-        <p className="text-sm leading-relaxed text-foreground-muted mb-6">
-          I&apos;ve analyzed your execution plan. I found <strong>1 potential dependency</strong> that isn&apos;t wired yet. 
-          Would you like to apply this suggestion before activating?
+
+        {reviewError ? (
+          <div className="mb-4">
+            <FormError message={reviewError} />
+          </div>
+        ) : null}
+
+        <p className="mb-6 text-sm leading-relaxed text-foreground-muted">
+          {count > 0 ? (
+            <>
+              I&apos;ve analyzed your execution plan. I found{" "}
+              <strong>{suggestionCountLabel(count)}</strong> that{" "}
+              {count === 1 ? "isn't" : "aren't"} wired yet. Apply any suggestions before
+              activating, or continue when you are ready.
+            </>
+          ) : (
+            <>
+              I&apos;ve analyzed your execution plan. No cross-line dependency gaps need
+              wiring right now. You can continue to job creation.
+            </>
+          )}
         </p>
 
-        <div className="space-y-3 mb-8">
-          {suggestions.map((s, idx) => (
-            <div key={idx} className="flex items-start gap-3 rounded-lg border border-accent/20 bg-surface p-3">
-              <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
-                <Zap className="size-3" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-foreground">Suggested dependency</p>
-                <p className="mt-1 text-xs text-foreground-muted">
-                  Make <span className="font-semibold text-foreground">“{s.taskTitle}”</span> wait for the
-                  <span className="mx-1 rounded bg-accent/10 px-1 py-0.5 font-mono text-[10px] font-bold text-accent">{s.signal}</span> 
-                  prerequisite from the Roofing line.
-                </p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  toast.success("Suggestion applied to activation draft.");
-                  setSuggestions(prev => prev.filter((_, i) => i !== idx));
-                }}
-                className="rounded-md bg-accent px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-accent-contrast"
+        {count > 0 ? (
+          <div className="mb-8 space-y-3">
+            {suggestions.map((s) => (
+              <div
+                key={s.suggestionKey}
+                className="flex items-start gap-3 rounded-lg border border-accent/20 bg-surface p-3"
               >
-                Apply
-              </button>
-            </div>
-          ))}
-        </div>
+                <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                  <Zap className="size-3" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Suggested dependency</p>
+                  <p className="mt-1 text-xs text-foreground-muted">
+                    Make{" "}
+                    <span className="font-semibold text-foreground">
+                      &ldquo;{s.consumerTaskTitle}&rdquo;
+                    </span>{" "}
+                    wait for the
+                    <span className="mx-1 rounded bg-accent/10 px-1 py-0.5 font-mono text-[10px] font-bold text-accent">
+                      {s.signal}
+                    </span>
+                    prerequisite from{" "}
+                    <span className="font-semibold text-foreground">
+                      &ldquo;{s.providerTaskTitle}&rdquo;
+                    </span>{" "}
+                    on the {s.providerLineDescription} line.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => applySuggestion(s)}
+                  disabled={applyingKey === s.suggestionKey}
+                  className="rounded-md bg-accent px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-accent-contrast disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {applyingKey === s.suggestionKey ? (
+                    <Loader2 className="size-3 animate-spin" aria-label="Applying" />
+                  ) : (
+                    "Apply"
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
-          <button 
+          <button
             type="button"
             onClick={() => {
               setShowAIReview(false);
@@ -110,7 +190,7 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
           <button
             type="button"
             onClick={() => setShowAIReview(false)}
-            className="text-sm font-medium text-foreground-subtle hover:text-foreground transition-colors"
+            className="text-sm font-medium text-foreground-subtle transition-colors hover:text-foreground"
           >
             Back
           </button>
@@ -135,7 +215,7 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
           <button
             type="button"
             onClick={() => setShowConfirm(false)}
-            className="text-sm font-medium text-foreground-subtle hover:text-foreground transition-colors"
+            className="text-sm font-medium text-foreground-subtle transition-colors hover:text-foreground"
             disabled={isPending}
           >
             Cancel
@@ -156,8 +236,8 @@ export function QuoteActivateJobForm({ quoteId }: { quoteId: string }) {
         <button type="button" onClick={() => setShowConfirm(true)} className={primaryButtonClass}>
           Create job
         </button>
-        <button 
-          type="button" 
+        <button
+          type="button"
           onClick={startAIReview}
           disabled={isReviewing}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-accent/30 bg-surface px-4 py-2 text-xs font-medium text-accent hover:bg-accent/5 disabled:opacity-50"

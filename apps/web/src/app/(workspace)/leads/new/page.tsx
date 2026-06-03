@@ -30,23 +30,23 @@ export default async function NewLeadPage() {
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales", href: "/leads" },
-          { label: "New intake" },
+          { label: "New request" },
         ]}
       />
       <PageHeader
-        title="New intake"
-        description="Create an intake record in your organization. After save you go to the opportunity detail page, where you can link a customer and start a quote."
+        title="New request"
+        description="Create a new opportunity in your organization. After saving, open the opportunity detail page to link a customer and start a quote."
         actions={
           <Link href="/leads" className={listLinkClass}>
-            ← Sales pipeline
+            ← Sales
           </Link>
         }
       />
 
       <WorkspacePanel className="mb-6">
         <SectionHeading
-          title="Intake record"
-          description="Office intake uses its own form definition. Changes to public customer forms do not affect this page."
+          title="Request details"
+          description="Office request entry uses its own form definition. Changes to public customer forms do not affect this page."
         />
         <StaffIntakeClient
           formDefinition={officeBundle.formDefinition}

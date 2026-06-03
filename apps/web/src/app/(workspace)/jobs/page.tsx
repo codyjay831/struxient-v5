@@ -12,12 +12,10 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { ButtonLink } from "@/components/ui/button";
 import { Briefcase } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
-const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function JobsPage() {
   const ctx = await getRequestContextOrThrow();
@@ -49,13 +47,13 @@ export default async function JobsPage() {
       <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Jobs" }]} />
       <PageHeader
         title="Jobs"
-        description="Runtime jobs activated from approved quotes in this organization. Each job has stages and tasks copied at activation—later quote edits do not change tasks already on the job."
+        description="Track active work created from approved quotes, including linked customer context and execution status."
       />
 
       <section className="mb-8">
         <SectionHeading
-          title="Organization overview"
-          description={`Real database counts for ${ctx.organizationName}.`}
+          title="Overview"
+          description={`Current job counts for ${ctx.organizationName}.`}
 
         />
         <ul className="grid gap-3 sm:grid-cols-3">
@@ -76,11 +74,11 @@ export default async function JobsPage() {
           <EmptyState
             icon={Briefcase}
             title="No jobs yet"
-            description="Jobs are created by activating an approved quote from its execution preview. Approve a quote and review its draft execution to enable activation."
+            description="Approve a quote and activate it to create the first job."
           >
-            <Link href="/leads" className={listLinkClass}>
-              Open sales pipeline
-            </Link>
+            <ButtonLink href="/leads" variant="muted" size="sm">
+              Open sales
+            </ButtonLink>
           </EmptyState>
         </WorkspacePanel>
       ) : (

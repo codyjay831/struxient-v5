@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { UserRound } from "lucide-react";
@@ -11,9 +11,6 @@ import { updateCustomerAction } from "../../customer-form-actions";
 import { CustomerRecordForm } from "../../customer-record-form";
 
 export const dynamic = "force-dynamic";
-
-const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function EditCustomerPage({
   params,
@@ -42,27 +39,21 @@ export default async function EditCustomerPage({
         <PageHeader
           eyebrow="Relationships"
           title="Edit customer"
-          description="No customer exists for this id in the current development organization. Links only resolve within your tenant scope—not across organizations."
+          description="This customer record could not be found."
           actions={
-            <Link href="/customers" className={listLinkClass}>
+            <ButtonLink href="/customers" variant="muted" size="sm">
               ← Customers list
-            </Link>
+            </ButtonLink>
           }
         />
-        <WorkspacePanel padding="compact" className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-            Requested id
-          </p>
-          <p className="mt-1 break-all font-mono text-sm text-foreground">{customerId}</p>
-        </WorkspacePanel>
         <EmptyState
           icon={UserRound}
           title="Customer not found"
-          description="This id is not a customer record in the development organization, or it belongs to another tenant. When auth exists, routing will follow your real org context."
+          description="The customer may have been removed, or you may not have access to it."
         >
-          <Link href="/customers" className={listLinkClass}>
+          <ButtonLink href="/customers" variant="muted" size="sm">
             Back to customers
-          </Link>
+          </ButtonLink>
         </EmptyState>
       </div>
     );
@@ -81,15 +72,15 @@ export default async function EditCustomerPage({
       <PageHeader
         eyebrow="Relationships"
         title={`Edit ${customer.displayName}`}
-        description="Update fields stored on this customer for your development organization only. Organization cannot be changed from this form."
+        description="Update this customer's profile and contact details."
         actions={
           <>
-            <Link href={`/customers/${customer.id}`} className={listLinkClass}>
+            <ButtonLink href={`/customers/${customer.id}`} variant="muted" size="sm">
               ← Customer detail
-            </Link>
-            <Link href="/customers" className={listLinkClass}>
+            </ButtonLink>
+            <ButtonLink href="/customers" variant="muted" size="sm">
               All customers
-            </Link>
+            </ButtonLink>
           </>
         }
       />

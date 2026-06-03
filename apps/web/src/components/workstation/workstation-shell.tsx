@@ -35,6 +35,14 @@ export function WorkstationShell() {
   const searchParams = useSearchParams();
   const urlState = parseWorkstationUrlState(searchParams);
   const activeLens = LENSES.find(l => lensActive(pathname, urlState.lens, l.lens)) || LENSES[0];
+  const isMainWorkstation = pathname === "/workstation";
+
+  const subrouteLabels: Record<string, string> = {
+    "/workstation/tasks": "Tasks",
+    "/workstation/jobs": "Jobs",
+    "/workstation/schedule": "Schedule",
+  };
+  const activeSubrouteLabel = subrouteLabels[pathname] ?? null;
 
   return (
     <div className="mb-8 space-y-6">
@@ -45,35 +53,59 @@ export function WorkstationShell() {
               Workstation
             </p>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {activeLens.label}
+              {isMainWorkstation ? activeLens.label : activeSubrouteLabel ?? "Workstation"}
             </h1>
           </div>
-          <nav aria-label="Workstation lenses">
-            <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-              {LENSES.map(({ label, icon: Icon, lens }) => {
-                const active = lensActive(pathname, urlState.lens, lens);
-                
-                const finalHref = buildWorkstationUrl(urlState, { lens });
+          {isMainWorkstation ? (
+            <nav aria-label="Workstation lenses">
+              <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
+                {LENSES.map(({ label, icon: Icon, lens }) => {
+                  const active = lensActive(pathname, urlState.lens, lens);
+                  const finalHref = buildWorkstationUrl(urlState, { lens });
 
-                return (
-                  <li key={lens}>
-                    <Link
-                      href={finalHref}
-                      className={[
-                        "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                        active
-                          ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
-                          : "text-foreground-muted hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
-                      {label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+                  return (
+                    <li key={lens}>
+                      <Link
+                        href={finalHref}
+                        className={[
+                          "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                          active
+                            ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
+                            : "text-foreground-muted hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
+                        {label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          ) : (
+            <nav aria-label="Workstation sections">
+              <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
+                {Object.entries(subrouteLabels).map(([href, label]) => {
+                  const active = pathname === href;
+                  return (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        className={[
+                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                          active
+                            ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
+                            : "text-foreground-muted hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        {label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          )}
         </div>
       </header>
     </div>

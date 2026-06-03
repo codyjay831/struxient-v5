@@ -6,6 +6,7 @@ import type {
 } from "@/lib/quote-job-activation-readiness";
 import { QuoteActivateJobForm } from "@/components/quotes/quote-activate-job-form";
 import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
+import { QuoteLineExecutionAiDrawerButton } from "@/components/quotes/quote-line-execution-ai-drawer";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -29,6 +30,7 @@ export function QuoteExecutionReviewPreviewView({
   model,
   activation,
   draftTasksByLineId,
+  planningContextByLineId,
   reusableTaskOptions,
   stages,
 }: {
@@ -39,6 +41,8 @@ export function QuoteExecutionReviewPreviewView({
   activation: QuoteActivationStatus;
   /** Full draft execution task rows by quote line item id — used by the inline editor. */
   draftTasksByLineId: Record<string, readonly QuoteLineDraftExecutionTaskRow[]>;
+  /** AI planning context seed by line item id. */
+  planningContextByLineId: Record<string, string>;
   /** Org-scoped reusable task picker options. Empty when execution edits are not allowed. */
   reusableTaskOptions: ReusableTaskPickerOption[];
   stages: { id: string; name: string }[];
@@ -207,69 +211,81 @@ export function QuoteExecutionReviewPreviewView({
             <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
               {lineReadiness.map((row) => {
                 const draftTasks = draftTasksByLineId[row.lineId] ?? [];
+                const planningContext = planningContextByLineId[row.lineId] ?? "";
+                const aiTaskChoices = draftTasks.map((task) => ({ id: task.id, title: task.title }));
                 return (
                   <li key={row.lineId} className="px-4 py-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-foreground">{row.description}</p>
-                        <div className="mt-1 flex items-center gap-3 text-xs text-foreground-muted">
-                          <span>
-                            {row.taskCount} {row.taskCount === 1 ? "task" : "tasks"}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{row.description}</p>
+                      <div className="mt-1 flex items-center gap-3 text-xs text-foreground-muted">
+                        <span>
+                          {row.taskCount} {row.taskCount === 1 ? "task" : "tasks"}
+                        </span>
+                        {row.checklistCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <ListChecks className="size-3 text-foreground-subtle" />
+                            0/{row.checklistCount} {row.checklistCount === 1 ? "step" : "steps"}
                           </span>
-                          {row.checklistCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <ListChecks className="size-3 text-foreground-subtle" />
-                              0/{row.checklistCount} {row.checklistCount === 1 ? "step" : "steps"}
-                            </span>
-                          )}
-                          {row.equipmentCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <Hammer className="size-3 text-foreground-subtle" />
-                              {row.equipmentCount} {row.equipmentCount === 1 ? "item" : "items"}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {(row.providesSignals.length > 0 || row.requiresSignals.length > 0) && (
-                          <div className="mt-3 flex flex-wrap gap-3">
-                            {row.providesSignals.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Outputs</p>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {row.providesSignals.map(s => (
-                                    <span key={s} className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-mono text-success">{s}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {row.requiresSignals.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Dependencies</p>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {row.requiresSignals.map(s => (
-                                    <span key={s} className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono text-accent">{s}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                        )}
+                        {row.equipmentCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Hammer className="size-3 text-foreground-subtle" />
+                            {row.equipmentCount} {row.equipmentCount === 1 ? "item" : "items"}
+                          </span>
                         )}
                       </div>
-                      {executionPlanningEditable ? (
-                        <div className="shrink-0">
-                          <QuoteLineDraftExecutionInlineToggle
-                            quoteId={quoteId}
-                            lineItemId={row.lineId}
-                            taskCount={row.taskCount}
-                            draftTasks={[...draftTasks]}
-                            reusableOptions={reusableTaskOptions}
-                            stages={stages}
-                            revalidateScope="execution-review"
-                            openLabelOverride={row.taskCount === 0 ? "Add tasks" : "Refine with AI"}
-                          />
+
+                      {(row.providesSignals.length > 0 || row.requiresSignals.length > 0) && (
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {row.providesSignals.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Outputs</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {row.providesSignals.map(s => (
+                                  <span key={s} className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-mono text-success">{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {row.requiresSignals.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Dependencies</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {row.requiresSignals.map(s => (
+                                  <span key={s} className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono text-accent">{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ) : null}
+                      )}
                     </div>
+                    {executionPlanningEditable ? (
+                      <div className="mt-4 flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
+                        <QuoteLineExecutionAiDrawerButton
+                          quoteId={quoteId}
+                          lineItemId={row.lineId}
+                          lineLabel={row.description}
+                          tasks={aiTaskChoices}
+                          stages={stages}
+                          revalidateScope="execution-review"
+                          initialPlanningContext={planningContext}
+                        />
+                        <QuoteLineDraftExecutionInlineToggle
+                          quoteId={quoteId}
+                          lineItemId={row.lineId}
+                          taskCount={row.taskCount}
+                          draftTasks={[...draftTasks]}
+                          reusableOptions={reusableTaskOptions}
+                          stages={stages}
+                          revalidateScope="execution-review"
+                          panelLayout="fullWidth"
+                          hideAiButton
+                          openLabelOverride={row.taskCount === 0 ? "Add tasks" : "Edit tasks"}
+                          initialPlanningContext={planningContext}
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}

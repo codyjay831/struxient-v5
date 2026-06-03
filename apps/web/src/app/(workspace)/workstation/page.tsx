@@ -101,7 +101,7 @@ export default async function WorkstationTodayLensPage({
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
-        <WorkstationFilterBar currentFilter={filter} currentLens={lens} />
+        <WorkstationFilterBar currentFilter={filter} />
         <WorkstationSettingsDrawer 
           initial={{
             showQuickActions,
@@ -287,7 +287,7 @@ export default async function WorkstationTodayLensPage({
                   href="/jobs" 
                   className="mt-4 block text-center text-sm font-medium text-accent hover:underline"
                 >
-                  View all activity
+                  Browse jobs
                 </Link>
               </div>
             ) : (

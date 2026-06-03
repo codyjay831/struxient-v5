@@ -38,10 +38,10 @@ export const WORKSTATION_COPY = {
   summaryStrip: {
     investigateLabel: "Review",
     investigateHint: "Items flagged for a closer look.",
-    openPipelineLabel: "Open sales",
-    openPipelineHint: "Leads still in the pipeline.",
-    unlinkedLabel: "Unlinked",
-    unlinkedHint: "Leads not tied to a customer yet.",
+    openPipelineLabel: "Open opportunities",
+    openPipelineHint: "Opportunity records still in the pipeline.",
+    unlinkedLabel: "Unlinked opportunities",
+    unlinkedHint: "Opportunities not tied to a customer yet.",
   },
 
   reservedAreas: {

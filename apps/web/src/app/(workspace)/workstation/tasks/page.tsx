@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
+import { ButtonLink } from "@/components/ui/button";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import {
@@ -69,24 +69,15 @@ export default async function WorkstationTasksLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <Link
-          href="/leads"
-          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
-        >
+        <ButtonLink href="/leads" variant="ghost" size="sm">
           Browse Sales
-        </Link>
-        <Link
-          href="/jobs"
-          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
-        >
+        </ButtonLink>
+        <ButtonLink href="/jobs" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.openJobs}
-        </Link>
-        <Link
-          href="/workstation"
-          className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground"
-        >
+        </ButtonLink>
+        <ButtonLink href="/workstation" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.backToToday}
-        </Link>
+        </ButtonLink>
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ export default function SettingsPage() {
       <WorkspaceBreadcrumb items={[{ label: "Settings" }]} />
       <PageHeader
         title="Settings"
-        description="Where company defaults and personal preferences will live once accounts and persistence exist. This is a shell—not an admin console, payroll desk, or security center yet."
+        description="Set up company defaults and personal preferences for how your team uses Struxient."
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
@@ -27,14 +27,13 @@ export default function SettingsPage() {
           This area
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          Settings shapes how Struxient behaves for you and your company later. It does
-          not hold leads, quotes, customers, jobs, or Workstation attention—those stay
-          in their own parts of the app.
+          Settings controls behavior and defaults. Your operational records stay
+          in Sales, Customers, Jobs, and Workstation.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Configuration shell" tone="neutral" />
+          <StatusBadge label="Configuration" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            No persistence, no auth, not Admin yet
+            Company and personal preferences
           </span>
         </div>
       </WorkspacePanel>
@@ -73,7 +72,7 @@ export default function SettingsPage() {
       <section className="mb-10">
         <SectionHeading
           title="Settings areas"
-          description="Company-wide shells vs your own preference shells—both are honest placeholders today."
+          description="Manage company-wide defaults and your own workspace preferences."
         />
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/settings/organization" className={cardLinkClass}>
@@ -84,8 +83,7 @@ export default function SettingsPage() {
               Company profile, org defaults, future team controls
             </p>
             <p className="mt-2 text-xs text-foreground-muted">
-              Org-wide configuration shell—employees, roles, payroll, billing, and org
-              security are out of scope for this pass →
+              Company profile, defaults, and team-level setup →
             </p>
           </Link>
           <Link href="/settings/personal" className={cardLinkClass}>
@@ -96,7 +94,7 @@ export default function SettingsPage() {
               Display, notifications, default landing
             </p>
             <p className="mt-2 text-xs text-foreground-muted">
-              Per-user preference shell—no account storage yet →
+              Personal display, notification, and landing preferences →
             </p>
           </Link>
         </div>
@@ -117,13 +115,12 @@ export default function SettingsPage() {
 
       <section className="mb-10">
         <SectionHeading
-          title="Admin-type systems (intentionally later)"
-          description="Employee directories, invitations, role matrices, payroll, billing, subscriptions, and org-wide security policy are future systems—not part of this Settings shell."
+          title="Coming later"
+          description="More advanced admin systems will appear here as your account setup expands."
         />
         <WorkspacePanel>
           <p className="mb-4 text-sm text-foreground-muted">
-            Nothing below connects to a database or identity provider. Buttons are
-            labels for future work only.
+            These areas are planned next.
           </p>
           <div className="flex flex-wrap gap-2">
             <PlaceholderButton title="Not built in v5 shell">

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
@@ -15,6 +14,7 @@ import {
 import { LeadListSearchForm } from "@/components/leads/lead-list-search-form";
 import { LeadListFiltersClient } from "@/components/leads/lead-list-filters-client";
 import { LeadScaffoldingDialog } from "@/components/leads/lead-scaffolding-dialog";
+import { ButtonLink, buttonClassName } from "@/components/ui/button";
 import {
   parseLeadListSearchParams,
   leadListWhere,
@@ -24,15 +24,12 @@ import {
   type LeadListSortParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
-import { Users, Search, Globe } from "lucide-react";
+import { Users, Search } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-const primaryLinkClass =
-  "inline-flex items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
-
-const mutedLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+const primaryLinkClass = buttonClassName({ variant: "primary", size: "sm" });
+const mutedLinkClass = buttonClassName({ variant: "muted", size: "sm" });
 
 const sortLinkBase =
   "inline-flex items-center rounded-md border px-2.5 py-1 text-[0.7rem] font-medium transition-colors";
@@ -114,16 +111,13 @@ export default async function LeadsPage({
         actions={
           <>
             {fromWorkstation ? (
-              <Link
-                href={workstationReturnHref(returnSection)}
-                className={mutedLinkClass}
-              >
+              <ButtonLink href={workstationReturnHref(returnSection)} variant="muted" size="sm">
                 ← Workstation
-              </Link>
+              </ButtonLink>
             ) : null}
-            <Link href="/leads/new" className={primaryLinkClass}>
-              New intake
-            </Link>
+            <ButtonLink href="/leads/new" variant="primary" size="sm">
+              New request
+            </ButtonLink>
             <LeadScaffoldingDialog />
           </>
         }
@@ -155,11 +149,11 @@ export default async function LeadsPage({
               <EmptyState
                 icon={Users}
                 title="No sales opportunities yet"
-                description="There are no intake records for this organization. Add one manually or share your Public Request Link."
+                description="No opportunities yet. Add a request manually or share your public request link."
               >
-                <Link href="/leads/new" className={primaryLinkClass}>
-                  New intake
-                </Link>
+                <ButtonLink href="/leads/new" variant="primary" size="sm">
+                  New request
+                </ButtonLink>
               </EmptyState>
             </div>
           ) : matchingCount === 0 ? (
@@ -169,12 +163,12 @@ export default async function LeadsPage({
                 title="No opportunities match this view"
                 description="Try a different search term or change sort. Records still exist in your organization—they are just filtered out here."
               >
-                <Link href="/leads" scroll={false} className={primaryLinkClass}>
+                <ButtonLink href="/leads" scroll={false} variant="primary" size="sm">
                   Clear filters
-                </Link>
-                <Link href="/leads/new" className={mutedLinkClass}>
-                  New intake
-                </Link>
+                </ButtonLink>
+                <ButtonLink href="/leads/new" variant="muted" size="sm">
+                  New request
+                </ButtonLink>
               </EmptyState>
             </div>
           ) : (

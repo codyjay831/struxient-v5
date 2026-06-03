@@ -1,22 +1,14 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useState } from "react";
 import {
   addQuoteLineExecutionTaskCustomAction,
   addQuoteLineExecutionTaskFromReusableAction,
   deleteQuoteLineExecutionTaskAction,
-  generateQuoteLineExecutionAIProposalAction,
-  assessQuoteLineExecutionContextAction,
   moveQuoteLineExecutionTaskAction,
-  applyQuoteLineExecutionAIProposalAction,
   updateQuoteLineExecutionTaskAction,
 } from "@/app/(workspace)/quotes/quote-line-execution-actions";
 import type {
-  ExecutionContextAssessment,
-  ExecutionPlanningContextBucket,
-  ExecutionPlanningContextManifest,
-  ExecutionPlanningContextSourceFlags,
   QuoteLineExecutionFormState,
   QuoteLineExecutionRevalidateScope,
 } from "@/app/(workspace)/quotes/quote-line-execution-types";
@@ -36,21 +28,14 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 import type { LineItemTemplateTaskSource, TaskTemplateCategory } from "@prisma/client";
 import { quoteLineDraftExecutionSourceLabel } from "@/lib/quote-line-execution-source-label";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
-import { AILibraryProposalReviewPanel } from "@/components/scope-library/ai-library-proposal-review-panel";
-import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
-import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
-import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
-import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
-import { Sparkles, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { QuoteLineExecutionAiDrawer } from "@/components/quotes/quote-line-execution-ai-drawer";
+import { Sparkles } from "lucide-react";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
-const aiExecutionContextPreflightEnabled =
-  process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
 
 const initialFormState: QuoteLineExecutionFormState = {};
 
@@ -239,8 +224,8 @@ function StageTaskRow({
 
   return (
     <li className="rounded-md border border-border bg-background/40 px-3 py-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-3">
+        <div className="min-w-0 break-words">
           <p className="text-sm font-medium text-foreground">{task.title}</p>
           {!task.stageId ? (
             <span className="mt-1 inline-flex rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
@@ -279,7 +264,7 @@ function StageTaskRow({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
           <button
             type="button"
             className={secondaryButtonClass}
@@ -515,7 +500,7 @@ function StageSection({
   const isAddingReusable = addMode?.stageId === stage.id && addMode.mode === "reusable";
 
   return (
-    <section className="rounded-lg border border-border bg-surface/60 px-4 py-4">
+    <section className="border-t border-border pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
           {stage.name}
@@ -597,6 +582,8 @@ export function QuoteLineDraftExecutionInlinePanel({
   stages,
   revalidateScope = "quote",
   initialPlanningContext = "",
+  hideAiButton = false,
+  onClose,
 }: {
   quoteId: string;
   lineItemId: string;
@@ -605,143 +592,16 @@ export function QuoteLineDraftExecutionInlinePanel({
   stages: { id: string, name: string }[];
   revalidateScope?: QuoteLineExecutionRevalidateScope;
   initialPlanningContext?: string;
+  /** When true, skip AI controls — caller provides a line-level AI entry point. */
+  hideAiButton?: boolean;
+  /** When set, show Close in the panel header (toggle lives outside the panel). */
+  onClose?: () => void;
 }) {
-  const router = useRouter();
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [aiProposal, setAiProposal] = useState<AILibraryProposal | null>(null);
-  const [aiProposalGeneration, setAiProposalGeneration] =
-    useState<AILibraryProposalGenerationMeta | null>(null);
-  const [isAiGenerating, setIsAiGenerating] = useState(false);
-  const [isAiRegenerating, setIsAiRegenerating] = useState(false);
-  const [isAiAssessing, setIsAiAssessing] = useState(false);
-  const [aiContextAssessment, setAiContextAssessment] =
-    useState<ExecutionContextAssessment | null>(null);
-  const [aiContextManifest, setAiContextManifest] =
-    useState<ExecutionPlanningContextManifest | null>(null);
-  const [aiContextPreview, setAiContextPreview] = useState("");
-  const [contextSourceFlags, setContextSourceFlags] = useState<ExecutionPlanningContextSourceFlags>({
-    includeReusableExecutionGuidance: true,
-    includeJobTechnicalDetails: false,
-    includeSiteAccessSchedule: false,
-    includeCustomerProposal: false,
-    includeBackground: false,
-    includePriorMissingContext: true,
-  });
-  const [contextItemOverrides, setContextItemOverrides] = useState<
-    Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>
-  >({});
-  const aiAssessRequestSeqRef = useRef(0);
   const [planningContext, setPlanningContext] = useState(initialPlanningContext);
-  const [keepTaskIds, setKeepTaskIds] = useState<string[]>([]);
 
   const draftTaskChoices = tasks.map((task) => ({ id: task.id, title: task.title }));
-
-  const closeAiPanel = () => {
-    setAiPanelOpen(false);
-    setAiProposal(null);
-    setAiProposalGeneration(null);
-    setAiContextAssessment(null);
-    setAiContextManifest(null);
-    setAiContextPreview("");
-    setIsAiAssessing(false);
-    aiAssessRequestSeqRef.current += 1;
-    setKeepTaskIds([]);
-    setContextItemOverrides({});
-  };
-
-  const assessAiContext = async (nextPlanningContext: string) => {
-    const seq = aiAssessRequestSeqRef.current + 1;
-    aiAssessRequestSeqRef.current = seq;
-    setIsAiAssessing(true);
-    try {
-      const result = await assessQuoteLineExecutionContextAction(quoteId, lineItemId, {
-        userInstructions: nextPlanningContext,
-        priorMissingContext: aiProposal?.missingContext,
-        sourceFlags: contextSourceFlags,
-        itemOverrides: contextItemOverrides,
-      });
-      if (aiAssessRequestSeqRef.current !== seq) {
-        return;
-      }
-      if (result.error) {
-        toast.warning(result.error);
-        return;
-      }
-      setAiContextAssessment(result.assessment ?? null);
-      setAiContextManifest(result.contextManifest ?? null);
-      setAiContextPreview(result.contextPreview ?? "");
-    } catch (error) {
-      if (aiAssessRequestSeqRef.current !== seq) {
-        return;
-      }
-      console.error(error);
-      toast.warning(getAiActionErrorMessage(error, "Failed to assess execution context."));
-    } finally {
-      if (aiAssessRequestSeqRef.current === seq) {
-        setIsAiAssessing(false);
-      }
-    }
-  };
-
-  const generateAiProposal = async (nextPlanningContext: string) => {
-    setIsAiGenerating(true);
-    try {
-      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineItemId, {
-        userInstructions: nextPlanningContext,
-        priorMissingContext: aiProposal?.missingContext,
-        sourceFlags: contextSourceFlags,
-        itemOverrides: contextItemOverrides,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        setAiProposal(null);
-        setAiProposalGeneration(null);
-        return;
-      }
-      if (!result.proposal) {
-        toast.error("AI returned no execution plan. Try again.");
-        setAiProposal(null);
-        setAiProposalGeneration(null);
-        return;
-      }
-      setAiProposal(result.proposal);
-      setAiProposalGeneration(result.generation ?? null);
-      setAiContextManifest(result.contextManifest ?? null);
-      setAiContextPreview(result.contextPreview ?? "");
-    } catch (error) {
-      console.error(error);
-      toast.error(getAiActionErrorMessage(error, "Failed to generate AI proposal."));
-      setAiProposal(null);
-      setAiProposalGeneration(null);
-    } finally {
-      setIsAiGenerating(false);
-    }
-  };
-
-  const handleApplyAiProposal = async (
-    approvedProposal: AILibraryProposal,
-    options?: { applyMode?: "append" | "replace"; keepTaskIds?: string[] },
-  ) => {
-    const result = await applyQuoteLineExecutionAIProposalAction(
-      quoteId,
-      lineItemId,
-      approvedProposal,
-      aiProposalGeneration ?? undefined,
-      {
-        mode: "replace",
-        keepTaskIds: options?.keepTaskIds ?? keepTaskIds,
-        revalidateScope,
-      },
-    );
-    if (result.error) {
-      throw new Error(result.error);
-    }
-    if (result.warnings?.length) {
-      result.warnings.forEach((warning) => toast.warning(warning));
-    }
-    router.refresh();
-  };
 
   const tasksByStage = new Map<string | null, QuoteLineDraftExecutionTaskRow[]>();
   tasksByStage.set(null, []);
@@ -766,45 +626,51 @@ export function QuoteLineDraftExecutionInlinePanel({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-border-strong bg-foreground/[0.02] p-4 ring-1 ring-ring/20">
+    <div className="@container mt-3 rounded-lg border border-border bg-surface/80 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
           Draft execution for this line
         </p>
-        <button
-          type="button"
-          className={secondaryButtonClass}
-          onClick={() => setAiPanelOpen(true)}
-          disabled={isAiGenerating}
-        >
-          {isAiGenerating ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Thinking…
-            </>
-          ) : (
-            <>
+        <div className="flex flex-wrap items-center gap-2">
+          {!hideAiButton ? (
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setAiPanelOpen(true)}
+            >
               <Sparkles className="size-4" />
               {tasks.length === 0 ? "Plan with AI" : "Refine with AI"}
-            </>
-          )}
-        </button>
+            </button>
+          ) : null}
+          {onClose ? (
+            <button type="button" className={secondaryButtonClass} onClick={onClose}>
+              Close
+            </button>
+          ) : null}
+        </div>
       </div>
-      <div className="mt-3 rounded-md border border-border bg-surface/80 p-3 space-y-2">
-        <label className="block">
-          <span className={fieldLabelClass}>Details for AI (optional)</span>
-          <textarea
-            value={planningContext}
-            onChange={(event) => setPlanningContext(event.target.value)}
-            rows={2}
-            className={controlClass}
-            placeholder="Amperage, equipment model, route constraints, access notes…"
-          />
-        </label>
-        <p className="text-[10px] text-foreground-subtle">
-          AI checks this context first, then drafts tasks. You can still generate with assumptions.
-        </p>
-      </div>
+      {!hideAiButton ? (
+        <details className="mt-3 rounded-md border border-dashed border-border bg-background/40 px-3 py-2">
+          <summary className="cursor-pointer select-none text-xs font-medium text-foreground-muted">
+            Details for AI (optional)
+          </summary>
+          <div className="mt-3 space-y-2 pb-1">
+            <label className="block">
+              <span className={fieldLabelClass}>Planning context</span>
+              <textarea
+                value={planningContext}
+                onChange={(event) => setPlanningContext(event.target.value)}
+                rows={2}
+                className={controlClass}
+                placeholder="Amperage, equipment model, route constraints, access notes…"
+              />
+            </label>
+            <p className="text-[10px] text-foreground-subtle">
+              AI checks this context first, then drafts tasks. You can still generate with assumptions.
+            </p>
+          </div>
+        </details>
+      ) : null}
       {missingStageCount > 0 ? (
         <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-danger-strong">
           {missingStageCount} {missingStageCount === 1 ? "task needs" : "tasks need"} a stage
@@ -826,46 +692,18 @@ export function QuoteLineDraftExecutionInlinePanel({
           />
         ))}
       </div>
-      {aiPanelOpen ? (
-        <AILibraryProposalReviewPanel
-          proposal={aiProposal}
-          generation={aiProposalGeneration ?? undefined}
-          contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
-          contextManifest={aiContextManifest}
-          contextPreview={aiContextPreview}
-          contextSourceFlags={contextSourceFlags}
-          onContextSourceFlagsChange={setContextSourceFlags}
-          contextItemOverrides={contextItemOverrides}
-          onContextItemOverridesChange={setContextItemOverrides}
-          stages={getStagesForAiExecutionPlanning(stages)}
+      {aiPanelOpen && !hideAiButton ? (
+        <QuoteLineExecutionAiDrawer
+          quoteId={quoteId}
+          lineItemId={lineItemId}
+          tasks={draftTaskChoices}
+          stages={stages}
+          revalidateScope={revalidateScope}
+          initialPlanningContext={initialPlanningContext}
           planningContext={planningContext}
           onPlanningContextChange={setPlanningContext}
-          isGenerating={isAiGenerating}
-          isAssessing={isAiAssessing}
-          isRegenerating={isAiRegenerating}
-          onAssessContext={async ({ planningContext: nextPlanningContext }) => {
-            setPlanningContext(nextPlanningContext);
-            await assessAiContext(nextPlanningContext);
-          }}
-          onGenerate={async ({ planningContext: nextPlanningContext }) => {
-            setPlanningContext(nextPlanningContext);
-            await generateAiProposal(nextPlanningContext);
-          }}
-          onRegenerate={async ({ planningContext: nextPlanningContext }) => {
-            setIsAiRegenerating(true);
-            try {
-              setPlanningContext(nextPlanningContext);
-              await generateAiProposal(nextPlanningContext);
-            } finally {
-              setIsAiRegenerating(false);
-            }
-          }}
-          applyMode="replace"
-          existingDraftTasks={draftTaskChoices}
-          selectedKeepTaskIds={keepTaskIds}
-          onSelectedKeepTaskIdsChange={setKeepTaskIds}
-          onClose={closeAiPanel}
-          onApply={handleApplyAiProposal}
+          open={aiPanelOpen}
+          onClose={() => setAiPanelOpen(false)}
         />
       ) : null}
     </div>

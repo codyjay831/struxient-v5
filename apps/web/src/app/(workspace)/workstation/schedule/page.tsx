@@ -1,9 +1,11 @@
-import Link from "next/link";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { JobStatus, JobTaskStatus } from "@prisma/client";
 import { WorkstationClearedState } from "@/components/workstation/workstation-ui";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/ui/button";
+import { CalendarDays } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -19,35 +21,31 @@ export default async function WorkstationScheduleLensPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between border-b border-border pb-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground-subtle">
-          Schedule signals
+        <h2 className="text-sm font-semibold text-foreground">
+          Scheduling attention
         </h2>
-        <div className="flex items-center gap-4 text-xs font-medium text-foreground-muted">
+        <div className="flex items-center gap-4 text-sm text-foreground-muted">
           <span>{activeJobsCount} jobs to schedule</span>
         </div>
       </div>
 
-      <div className="rounded-xl border border-dashed border-border bg-foreground/[0.01] p-12 text-center">
-        <p className="mx-auto max-w-md text-sm leading-relaxed text-foreground-muted">
-          The schedule lens surfaces timing-related signals. While the full calendar grid lives under Work → Schedule, 
-          this view highlights what needs a human decision soon.
-        </p>
-        <div className="mt-6 flex justify-center gap-4">
-          <div className="rounded-lg bg-foreground/[0.03] px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-            Layer reserved
-          </div>
-        </div>
-      </div>
-
-      <WorkstationClearedState />
+      {activeJobsCount > 0 ? (
+        <EmptyState
+          icon={CalendarDays}
+          title="No schedule blockers right now"
+          description="Nothing needs immediate timing decisions. Check Work → Schedule to plan upcoming windows."
+        />
+      ) : (
+        <WorkstationClearedState lens="upcoming" />
+      )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <Link href="/schedule" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        <ButtonLink href="/schedule" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.openSchedule}
-        </Link>
-        <Link href="/workstation" className="text-xs font-bold uppercase tracking-widest text-foreground-muted hover:text-foreground">
+        </ButtonLink>
+        <ButtonLink href="/workstation" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.backToToday}
-        </Link>
+        </ButtonLink>
       </div>
     </div>
   );

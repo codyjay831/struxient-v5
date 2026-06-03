@@ -13,14 +13,11 @@ import {
   type WorkstationFilterCategory,
   type WorkstationLens,
 } from "@/lib/workstation-query";
-import { WORKSTATION_LENS_LABELS } from "@/lib/workstation-copy";
 
 export function WorkstationFilterBar({ 
-  currentFilter, 
-  currentLens 
+  currentFilter
 }: { 
-  currentFilter: WorkstationFilterCategory; 
-  currentLens: WorkstationLens;
+  currentFilter: WorkstationFilterCategory;
 }) {
   const searchParams = useSearchParams();
   const urlState = parseWorkstationUrlState(searchParams);
@@ -36,31 +33,8 @@ export function WorkstationFilterBar({
     { id: "logs", label: "Activity" },
   ];
 
-  const lenses: WorkstationLens[] = ["attention", "today", "waiting", "upcoming", "all"];
-
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
-      <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
-        {lenses.map((l) => {
-          const active = currentLens === l;
-          const href = buildWorkstationUrl(urlState, { lens: l });
-
-          return (
-            <Link
-              key={l}
-              href={href}
-              className={[
-                "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                active
-                  ? "bg-accent text-accent-contrast shadow-sm"
-                  : "text-foreground-muted hover:bg-foreground/[0.05] hover:text-foreground",
-              ].join(" ")}
-            >
-              {WORKSTATION_LENS_LABELS[l]}
-            </Link>
-          );
-        })}
-      </div>
       {filters.map((f) => {
         const active = currentFilter === f.id;
         const href = buildWorkstationUrl(urlState, { filter: f.id });

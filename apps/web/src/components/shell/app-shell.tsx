@@ -13,20 +13,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-lg font-semibold tracking-tight text-foreground">
             Struxient
           </span>
-          <span className="rounded bg-brand-muted px-1.5 py-0.5 text-[0.6rem] font-semibold text-accent">
-            v5
-          </span>
         </Link>
         <SidebarNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-8">
-          <span className="min-w-0 truncate text-sm text-foreground-muted">
-            {/* Org context — wire to session when auth exists */}
-            <span className="text-foreground">Acme Electric</span>
-            <span className="mx-2 text-foreground-subtle">·</span>
-            <span>Office</span>
-          </span>
+          <span className="min-w-0 truncate text-sm text-foreground-muted">Workspace</span>
           <AppearanceControl />
         </header>
         <main className="flex-1 px-8 py-10">{children}</main>

@@ -346,3 +346,25 @@ export function buildQuoteExecutionPlanningContext(
   return buildQuoteExecutionPlanningContextFromManifest(manifest, options);
 }
 
+/** Reusable execution guidance seed for AI planning inputs on a quote line. */
+export function buildQuoteLineExecutionPlanningContextSeed(
+  lineInternalNotes: string | null | undefined,
+): string {
+  return buildQuoteExecutionPlanningContextManifest({
+    userInstructions: "",
+    lineInternalNotes: lineInternalNotes ?? null,
+    customerScopeTitle: null,
+    customerScopeDescription: null,
+    customerIncludedNotes: null,
+    customerExcludedNotes: null,
+    quoteInternalNotes: null,
+    leadNotes: null,
+    priorMissingContext: [],
+  })
+    .items.filter((item) => item.bucket === "reusable_execution_guidance")
+    .map((item) => item.content.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+

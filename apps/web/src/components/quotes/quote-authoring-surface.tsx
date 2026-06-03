@@ -1100,7 +1100,7 @@ export function QuoteAuthoringSurface({
                     <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
+                          <p className="line-clamp-2 text-sm font-medium text-foreground">
                             {line.description}
                           </p>
                           <p className="mt-0.5 text-[0.7rem] text-foreground-subtle tabular-nums">
@@ -1110,14 +1110,6 @@ export function QuoteAuthoringSurface({
                               {formatMoneyCents(line.lineTotalCents)}
                             </span>
                           </p>
-                          <QuoteLineDraftExecutionSummary
-                            quoteId={quoteId}
-                            line={line}
-                            isExecutionEditable
-                            draftTasks={draftTasksByLineId[line.id] ?? []}
-                            reusableOptions={reusableTaskOptions}
-                            stages={stages}
-                          />
                         </div>
                         {!isEditing && (
                           <div className="flex shrink-0 flex-col items-end gap-2 @lg:flex-row @lg:items-center">
@@ -1151,6 +1143,16 @@ export function QuoteAuthoringSurface({
                           </div>
                         )}
                       </div>
+                      {!isEditing ? (
+                        <QuoteLineDraftExecutionSummary
+                          quoteId={quoteId}
+                          line={line}
+                          isExecutionEditable
+                          draftTasks={draftTasksByLineId[line.id] ?? []}
+                          reusableOptions={reusableTaskOptions}
+                          stages={stages}
+                        />
+                      ) : null}
                       {isEditing && (
                         <EditLineItemForm
                           quoteId={quoteId}

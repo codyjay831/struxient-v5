@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { ButtonLink } from "@/components/ui/button";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
@@ -10,9 +9,6 @@ import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
-const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 /**
  * Full Quote page. The page is now a thin host: load via `loadQuoteWorkSurface`
@@ -55,29 +51,21 @@ export default async function QuoteDetailPage({
         <PageHeader
           eyebrow="Sales"
           title="Quote"
-          description="No quote exists for this id in your organization. Links only resolve within your tenant scope—not across organizations."
+          description="This quote could not be found."
           actions={
-            <Link href="/leads" className={listLinkClass}>
+            <ButtonLink href="/leads" variant="muted" size="sm">
               ← Sales pipeline
-            </Link>
+            </ButtonLink>
           }
         />
-        <WorkspacePanel padding="compact" className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-            Requested id
-          </p>
-          <p className="mt-1 break-all font-mono text-sm text-foreground">
-            {quoteId}
-          </p>
-        </WorkspacePanel>
         <EmptyState
           icon={FileText}
           title="Quote not found"
-          description="This id is not a quote record in your organization, or it belongs to another tenant."
+          description="The quote may have been removed, or you may not have access to it."
         >
-          <Link href="/leads" className={listLinkClass}>
+          <ButtonLink href="/leads" variant="muted" size="sm">
             Back to sales pipeline
-          </Link>
+          </ButtonLink>
         </EmptyState>
       </div>
     );

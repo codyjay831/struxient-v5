@@ -22,7 +22,7 @@ export default function OrganizationSettingsPage() {
       />
       <PageHeader
         title="Organization"
-        description="Future company-level profile and defaults—not an admin engine. No persistence, no invitations, and no role or billing tools in this shell."
+        description="Manage company profile and organization-wide defaults for your team."
         actions={
           <>
             <Link href="/settings" className={listLinkClass}>
@@ -40,13 +40,12 @@ export default function OrganizationSettingsPage() {
           Organization configuration
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-          This route is a layout shell for how the company record might look later. It is
-          not HR, not payroll, not permissions, and not subscription management.
+          Keep organization details, branding, and default behavior in one place.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge label="Org shell" tone="neutral" />
+          <StatusBadge label="Organization settings" tone="neutral" />
           <span className="text-xs text-foreground-muted">
-            Read-only placeholders only
+            Company-level defaults
           </span>
         </div>
       </WorkspacePanel>
@@ -55,19 +54,19 @@ export default function OrganizationSettingsPage() {
         <section>
           <SectionHeading
             title="Company profile"
-            description="Legal entity, tax IDs, branding, and service territory—future fields only."
+            description="Legal details, branding, and service territory."
           />
           <WorkspacePanel>
             <EmptyState
               icon={Building2}
               title="No company profile stored"
-              description="Edits will require sign-in and org-scoped storage later. Nothing here writes to disk today."
+              description="Set up legal profile and branding details for your organization."
             >
-              <PlaceholderButton title="No profile store in this build">
-                Edit legal profile (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Edit legal profile
               </PlaceholderButton>
-              <PlaceholderButton title="No brand store in this build">
-                Logo & colors (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Logo & colors
               </PlaceholderButton>
             </EmptyState>
           </WorkspacePanel>
@@ -76,23 +75,22 @@ export default function OrganizationSettingsPage() {
         <section>
           <SectionHeading
             title="Organization defaults"
-            description="High-level knobs for how quoting, Workstation landing, and schedule habits might default org-wide—rules engines are future work."
+            description="Set default behaviors for quoting, Workstation, and scheduling."
           />
           <WorkspacePanel>
             <p className="mb-4 text-sm text-foreground-muted">
-              No defaults are applied in this build. When they exist, they should stay
-              separate from commercial truth on quotes and from individual user
-              preferences.
+              Choose organization defaults without changing customer records or
+              individual user preferences.
             </p>
             <div className="flex flex-wrap gap-2">
-              <PlaceholderButton title="No rules engine in this build">
-                Quote checklist defaults (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Quote checklist defaults
               </PlaceholderButton>
-              <PlaceholderButton title="No preference store in this build">
-                Workstation landing default (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Workstation landing default
               </PlaceholderButton>
-              <PlaceholderButton title="No rules engine in this build">
-                Schedule / work habits (soon)
+              <PlaceholderButton title="Coming in a future update">
+                Schedule / work habits
               </PlaceholderButton>
             </div>
           </WorkspacePanel>
@@ -100,20 +98,20 @@ export default function OrganizationSettingsPage() {
 
         <section>
           <SectionHeading
-            title="Team & access (not built)"
-            description="Employees, invitations, roles, permissions, payroll, billing, and org security controls belong in future admin systems—not in this placeholder."
+            title="Team & access"
+            description="Manage invitations, roles, permissions, and account controls."
           />
           <WorkspacePanel>
             <EmptyState
               icon={Users}
               title="No team or access tools"
-              description="No invites, no role matrix, no seat counts, and no audit policy UI. When Struxient ships real org admin, it will not silently reuse this empty shell as if it were complete."
+              description="Invite teammates and manage permissions as these controls roll out."
             >
-              <PlaceholderButton title="Not built in v5 shell">
-                Invite teammate (future)
+              <PlaceholderButton title="Coming in a future update">
+                Invite teammate
               </PlaceholderButton>
-              <PlaceholderButton title="Not built in v5 shell">
-                Roles & permissions (future)
+              <PlaceholderButton title="Coming in a future update">
+                Roles & permissions
               </PlaceholderButton>
             </EmptyState>
           </WorkspacePanel>

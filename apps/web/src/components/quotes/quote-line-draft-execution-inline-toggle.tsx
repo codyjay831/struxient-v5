@@ -22,6 +22,8 @@ export function QuoteLineDraftExecutionInlineToggle({
   revalidateScope = "quote",
   openLabelOverride,
   initialPlanningContext,
+  panelLayout = "inline",
+  hideAiButton = false,
 }: {
   quoteId: string;
   lineItemId: string;
@@ -34,32 +36,60 @@ export function QuoteLineDraftExecutionInlineToggle({
   openLabelOverride?: string;
   /** Optional seed used for AI planning-context input. */
   initialPlanningContext?: string;
+  /** "inline" keeps panel under the button; "fullWidth" right-aligns button and expands panel full width below. */
+  panelLayout?: "inline" | "fullWidth";
+  /** When true, hide AI controls inside the editor — use a line-level AI button instead. */
+  hideAiButton?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const defaultOpenLabel = taskCount === 0 ? "Add draft execution" : "Edit draft execution";
   const openLabel = openLabelOverride ?? defaultOpenLabel;
 
+  const panel = open ? (
+    <QuoteLineDraftExecutionInlinePanel
+      quoteId={quoteId}
+      lineItemId={lineItemId}
+      tasks={draftTasks}
+      reusableOptions={reusableOptions}
+      stages={stages}
+      revalidateScope={revalidateScope}
+      initialPlanningContext={initialPlanningContext}
+      hideAiButton={hideAiButton}
+      onClose={() => setOpen(false)}
+    />
+  ) : null;
+
+  if (panelLayout === "fullWidth") {
+    return (
+      <>
+        {!open ? (
+          <button
+            type="button"
+            className={workspaceFormSecondaryButtonClass}
+            onClick={() => setOpen(true)}
+            aria-expanded={open}
+          >
+            {openLabel}
+          </button>
+        ) : null}
+        {open ? <div className="mt-3 w-full basis-full">{panel}</div> : null}
+      </>
+    );
+  }
+
   return (
     <div>
-      <button
-        type="button"
-        className={workspaceFormSecondaryButtonClass}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        {open ? "Cancel" : openLabel}
-      </button>
-      {open ? (
-        <QuoteLineDraftExecutionInlinePanel
-          quoteId={quoteId}
-          lineItemId={lineItemId}
-          tasks={draftTasks}
-          reusableOptions={reusableOptions}
-          stages={stages}
-          revalidateScope={revalidateScope}
-          initialPlanningContext={initialPlanningContext}
-        />
+      {!open ? (
+        <button
+          type="button"
+          className={workspaceFormSecondaryButtonClass}
+          onClick={() => setOpen(true)}
+          aria-expanded={open}
+        >
+          {openLabel}
+        </button>
       ) : null}
+      {panel}
     </div>
   );
 }

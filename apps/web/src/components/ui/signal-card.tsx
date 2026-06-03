@@ -22,7 +22,7 @@ export function SignalCard({
   };
 
   return (
-    <div className={["rounded-lg border px-4 py-3 shadow-sm transition-colors", toneClasses[tone]].join(" ")}>
+    <div className={["rounded-[var(--radius-md)] border bg-surface-elevated px-4 py-3 shadow-[var(--shadow-soft)] transition-colors", toneClasses[tone]].join(" ")}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-foreground-subtle">
           {label}

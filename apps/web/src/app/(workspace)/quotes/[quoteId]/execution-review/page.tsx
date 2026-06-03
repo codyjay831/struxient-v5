@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
+import { buildQuoteLineExecutionPlanningContextSeed } from "@/lib/ai/quote-execution-planning-context";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 
@@ -59,6 +60,7 @@ export default async function QuoteExecutionReviewPreviewPage({
             id: true,
             description: true,
             sortOrder: true,
+            internalNotes: true,
             draftExecutionTasks: {
               orderBy: [{ sortOrder: "asc" }],
               select: {
@@ -109,6 +111,7 @@ export default async function QuoteExecutionReviewPreviewPage({
   );
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
+  const planningContextByLineId: Record<string, string> = {};
   for (const line of row.lineItems) {
     draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
       id: t.id,
@@ -127,6 +130,7 @@ export default async function QuoteExecutionReviewPreviewPage({
       requirementsJson: t.requirementsJson,
       partsRequiredJson: t.partsRequiredJson,
     }));
+    planningContextByLineId[line.id] = buildQuoteLineExecutionPlanningContextSeed(line.internalNotes);
   }
 
   const reusableTaskOptions: ReusableTaskPickerOption[] = executionPlanningEditable
@@ -238,6 +242,7 @@ export default async function QuoteExecutionReviewPreviewPage({
         model={model}
         activation={activation}
         draftTasksByLineId={draftTasksByLineId}
+        planningContextByLineId={planningContextByLineId}
         reusableTaskOptions={reusableTaskOptions}
         stages={stages}
       />

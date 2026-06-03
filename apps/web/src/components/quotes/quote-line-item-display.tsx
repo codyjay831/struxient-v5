@@ -5,7 +5,7 @@ import { buildQuoteLineExecutionPlanningSummaryLine } from "@/lib/quote-line-exe
 import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
-import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
+import { buildQuoteLineExecutionPlanningContextSeed } from "@/lib/ai/quote-execution-planning-context";
 
 const lineMetricLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -105,44 +105,31 @@ export function QuoteLineDraftExecutionSummary({
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
 }) {
-  const planningSeed = buildQuoteExecutionPlanningContextManifest({
-    userInstructions: "",
-    lineInternalNotes: line.internalNotes ?? null,
-    customerScopeTitle: null,
-    customerScopeDescription: null,
-    customerIncludedNotes: null,
-    customerExcludedNotes: null,
-    quoteInternalNotes: null,
-    leadNotes: null,
-    priorMissingContext: [],
-  })
-    .items
-    .filter((item) => item.bucket === "reusable_execution_guidance")
-    .map((item) => item.content.trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+  const planningSeed = buildQuoteLineExecutionPlanningContextSeed(line.internalNotes);
   const text = buildQuoteLineExecutionPlanningSummaryLine({
     taskCount: line.executionSummary.taskCount,
     executionSummaryLine: line.executionSummary.summaryLine,
   });
 
   return (
-    <div className="mt-3 space-y-2 border-t border-dashed border-border pt-3">
+    <div className="mt-3 w-full border-t border-dashed border-border pt-3">
       <p className="text-xs text-foreground-subtle">
         <span className="font-medium text-foreground-muted">Internal: </span>
         {text}
       </p>
       {isExecutionEditable ? (
-        <QuoteLineDraftExecutionInlineToggle
-          quoteId={quoteId}
-          lineItemId={line.id}
-          taskCount={line.executionSummary.taskCount}
-          draftTasks={draftTasks}
-          reusableOptions={reusableOptions}
-          stages={stages}
-          initialPlanningContext={planningSeed}
-        />
+        <div className="mt-2 flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
+          <QuoteLineDraftExecutionInlineToggle
+            quoteId={quoteId}
+            lineItemId={line.id}
+            taskCount={line.executionSummary.taskCount}
+            draftTasks={draftTasks}
+            reusableOptions={reusableOptions}
+            stages={stages}
+            initialPlanningContext={planningSeed}
+            panelLayout="fullWidth"
+          />
+        </div>
       ) : null}
     </div>
   );
