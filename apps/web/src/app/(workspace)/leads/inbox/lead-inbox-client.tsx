@@ -218,7 +218,7 @@ export function LeadInboxClient({
             <Loader2 className="size-8 animate-spin text-accent/20" />
           </div>
         ) : selectedLead && payload ? (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col">
             <LeadCommercialSurface
               key={selectedLeadId}
               payload={payload}

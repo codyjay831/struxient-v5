@@ -12,7 +12,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Users, X } from "lucide-react";
+import { ArrowUpRight, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -128,26 +128,18 @@ function WorkspaceContent({
   }, [leadId]);
 
   return (
-    <div className="flex max-h-[88vh] flex-col relative min-h-[400px]">
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close workspace"
-        className="absolute right-4 top-4 z-20 rounded-lg border border-border bg-surface p-2 text-foreground-subtle hover:text-foreground hover:bg-background transition-colors"
-      >
-        <X className="w-5 h-5" strokeWidth={1.5} />
-      </button>
-
+    <div className="flex max-h-[88vh] flex-col min-h-[400px]">
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="size-8 animate-spin text-accent/20" />
         </div>
       ) : payload ? (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col">
           <LeadCommercialSurface
             payload={payload}
             entryPoint="record"
             onMutationSuccess={handleMutationSuccess}
+            onClose={onClose}
           />
         </div>
       ) : (
