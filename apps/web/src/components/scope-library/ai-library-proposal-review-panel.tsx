@@ -184,6 +184,7 @@ export function AILibraryProposalReviewPanel({
   onClose: () => void;
 }) {
   const mounted = useIsClientMounted();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null);
   const assessRequestSeqRef = useRef(0);
   const autoAssessTriggeredRef = useRef(false);
@@ -213,6 +214,36 @@ export function AILibraryProposalReviewPanel({
 
   const isPrelude = !editedProposal;
   const isReplaceMode = applyMode === "replace";
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+    return () => {
+      if (dialog.open) {
+        dialog.close();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    function handleCancel(event: Event) {
+      if (applying) {
+        event.preventDefault();
+        return;
+      }
+      onClose();
+    }
+
+    dialog.addEventListener("cancel", handleCancel);
+    return () => dialog.removeEventListener("cancel", handleCancel);
+  }, [applying, onClose]);
+
   const contextValue = planningContext ?? "";
   const missingContextItems = isPrelude
     ? (contextAssessment?.missingContext ?? [])
@@ -679,8 +710,18 @@ export function AILibraryProposalReviewPanel({
   ) : null;
 
   const panel = (
-    <div className="fixed inset-0 z-[100] flex justify-end bg-black/40 backdrop-blur-sm">
-      <div className="flex h-full w-full max-w-2xl flex-col bg-surface shadow-2xl animate-in slide-in-from-right duration-300">
+    <dialog
+      ref={dialogRef}
+      data-workspace-child-dialog="true"
+      aria-labelledby="ai-execution-plan-title"
+      aria-busy={applying}
+      className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl outline-none [&::backdrop]:bg-black/40 [&:not([open])]:hidden"
+      onClick={(e) => {
+        if (applying) return;
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
@@ -688,7 +729,7 @@ export function AILibraryProposalReviewPanel({
               <Sparkles className="size-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-foreground">
+              <h2 id="ai-execution-plan-title" className="text-lg font-bold text-foreground">
                 {isPrelude ? "Plan execution with AI" : "AI Execution Proposal"}
               </h2>
               <p className="text-xs text-foreground-muted">
@@ -1127,7 +1168,7 @@ export function AILibraryProposalReviewPanel({
           )}
         </div>
       </div>
-    </div>
+    </dialog>
   );
 
   if (!mounted) {
