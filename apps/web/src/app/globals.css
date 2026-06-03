@@ -25,6 +25,15 @@
   --radius-lg: 1rem;
   --shadow-soft: 0 1px 2px rgba(10, 10, 10, 0.08);
   --shadow-elevated: 0 10px 20px rgba(10, 10, 10, 0.06);
+  --mkt-hero-from: #b45309;
+  --mkt-hero-via: #ea7a16;
+  --mkt-hero-to: #0a0a0a;
+  --mkt-glow: rgba(245, 158, 11, 0.35);
+  --mkt-glass: rgba(255, 255, 255, 0.8);
+  --mkt-glass-border: rgba(10, 10, 10, 0.08);
+  --mkt-mesh-a: rgba(180, 83, 9, 0.28);
+  --mkt-mesh-b: rgba(234, 122, 22, 0.22);
+  --mkt-mesh-c: rgba(10, 10, 10, 0.1);
 }
 
 /* Dark palette — applied when `next-themes` sets class `dark` on <html> (user or system). */
@@ -47,6 +56,11 @@
   --warning: #facc15;
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-elevated: 0 12px 24px rgba(0, 0, 0, 0.35);
+  --mkt-glass: rgba(24, 24, 27, 0.78);
+  --mkt-glass-border: rgba(255, 255, 255, 0.14);
+  --mkt-mesh-a: rgba(245, 158, 11, 0.34);
+  --mkt-mesh-b: rgba(251, 146, 60, 0.3);
+  --mkt-mesh-c: rgba(9, 9, 11, 0.45);
 }
 
 @theme inline {
@@ -80,6 +94,38 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+@keyframes marketing-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0);
+  }
+}
+
+@keyframes marketing-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.mkt-float {
+  animation: marketing-float 8s ease-in-out infinite;
+}
+
+.mkt-glow {
+  animation: marketing-glow 6s ease-in-out infinite;
 }
 
 /* Focus visible — keyboard confidence without clutter */

@@ -22,8 +22,14 @@ export async function getRequestContextOrThrow(): Promise<RequestContext> {
   const session = await auth();
 
   if (session?.user?.id) {
+    const activeOrganizationId =
+      typeof session.user.activeOrganizationId === "string" ? session.user.activeOrganizationId : null;
+
     const membership = await db.membership.findFirst({
-      where: { userId: session.user.id },
+      where: {
+        userId: session.user.id,
+        ...(activeOrganizationId ? { organizationId: activeOrganizationId } : {}),
+      },
       include: { organization: true },
     });
 

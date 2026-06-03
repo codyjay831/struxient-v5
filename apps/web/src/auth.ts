@@ -1,39 +1,69 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { db } from "@/lib/db";
+import { compare } from "bcryptjs";
 import Credentials from "next-auth/providers/credentials";
+import { authConfig } from "@/auth.config";
+import { db } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET,
+  ...authConfig,
   adapter: PrismaAdapter(db),
   providers: [
     Credentials({
-      // You can specify which fields should be submitted, by adding keys to the `credentials` object.
-      // e.g. domain, username, password, 2FA token, etc.
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       authorize: async (credentials) => {
-        // This is a placeholder for actual credential validation.
-        // In a real app, you would check the password against a hash in the database.
-        if (process.env.NODE_ENV !== "production") {
-          const user = await db.user.findUnique({
-            where: { email: credentials.email as string },
-          });
-          if (user) return user;
+        const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
+        const password = typeof credentials?.password === "string" ? credentials.password : "";
+
+        if (!email || !password) {
+          return null;
         }
-        return null;
+
+        const user = await db.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            passwordHash: true,
+          },
+        });
+
+        if (!user?.passwordHash) return null;
+
+        const validPassword = await compare(password, user.passwordHash);
+        if (!validPassword) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        };
       },
     }),
   ],
   callbacks: {
-    session: ({ session, user }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: user.id,
-      },
-    }),
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+
+        const membership = await db.membership.findFirst({
+          where: { userId: user.id },
+          select: {
+            organizationId: true,
+            role: true,
+          },
+        });
+
+        token.activeOrganizationId = membership?.organizationId ?? null;
+        token.role = membership?.role ?? null;
+      }
+
+      return token;
+    },
   },
 });

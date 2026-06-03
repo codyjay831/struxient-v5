@@ -1,4 +1,5 @@
 import { PrismaClient, StaffRole, type Prisma } from "@prisma/client";
+import { hashSync } from "bcryptjs";
 import {
   DEFAULT_INTAKE_FORM_DEFINITION,
   type IntakeFormDefinitionShape,
@@ -27,6 +28,10 @@ import {
   readRequest,
   readSignals,
 } from "./lead/lead-projection";
+
+const DEV_USER_EMAIL = "owner@dev.local";
+const DEV_USER_NAME = "Dev Owner";
+const DEV_USER_PASSWORD_HASH = hashSync("devpassword123", 10);
 
 /**
  * Prisma client extension that exposes virtual fields on `Lead` mapped from the
@@ -227,11 +232,16 @@ export async function ensureDevUserAndMembership() {
 
   const devUser = await db.user.upsert({
     where: { id: DEV_USER_ID },
-    update: { email: "dev@struxient.local", name: "Dev User" },
+    update: {
+      email: DEV_USER_EMAIL,
+      name: DEV_USER_NAME,
+      passwordHash: DEV_USER_PASSWORD_HASH,
+    },
     create: {
       id: DEV_USER_ID,
-      email: "dev@struxient.local",
-      name: "Dev User",
+      email: DEV_USER_EMAIL,
+      name: DEV_USER_NAME,
+      passwordHash: DEV_USER_PASSWORD_HASH,
     },
   });
 

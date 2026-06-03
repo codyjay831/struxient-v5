@@ -17,6 +17,7 @@
  */
 
 import { LeadChannel, Prisma, PrismaClient, StaffRole } from "@prisma/client";
+import { hashSync } from "bcryptjs";
 import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedJourneyFixtures } from "./seeds/journey-fixtures";
 import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
@@ -30,6 +31,8 @@ const DEV_ORG_SLUG = "dev-contractor";
 const DEV_USER_ID = "dev-user-id";
 const DEV_USER_EMAIL = "owner@dev.local";
 const DEV_USER_NAME = "Dev Owner";
+const DEV_USER_PASSWORD = "devpassword123";
+const DEV_USER_PASSWORD_HASH = hashSync(DEV_USER_PASSWORD, 10);
 
 const LEGACY_STAGE_NAMES: ReadonlyArray<string> = [
   "Pre-Construction",
@@ -131,8 +134,17 @@ async function seedDefaultOfficeIntakeFormDefinition() {
 async function seedDevOwnerUserAndMembership() {
   await prisma.user.upsert({
     where: { id: DEV_USER_ID },
-    update: { email: DEV_USER_EMAIL, name: DEV_USER_NAME },
-    create: { id: DEV_USER_ID, email: DEV_USER_EMAIL, name: DEV_USER_NAME },
+    update: {
+      email: DEV_USER_EMAIL,
+      name: DEV_USER_NAME,
+      passwordHash: DEV_USER_PASSWORD_HASH,
+    },
+    create: {
+      id: DEV_USER_ID,
+      email: DEV_USER_EMAIL,
+      name: DEV_USER_NAME,
+      passwordHash: DEV_USER_PASSWORD_HASH,
+    },
   });
 
   const existing = await prisma.membership.findUnique({
@@ -174,6 +186,7 @@ async function main() {
   console.log("Seeding dev organization, owner membership, and Stage rows…");
   await seedDevOrganization();
   await seedDevOwnerUserAndMembership();
+  console.log(`Dev login: ${DEV_USER_EMAIL} / ${DEV_USER_PASSWORD}`);
   await seedLegacyStages();
 
   console.log("Seeding public request settings + intake form definitions…");

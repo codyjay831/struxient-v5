@@ -1,0 +1,32 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ogBg" x1="40" y1="20" x2="1120" y2="610" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B45309"/>
+      <stop offset="0.56" stop-color="#EA7A16"/>
+      <stop offset="1" stop-color="#0B0B0D"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#ogBg)"/>
+  <rect x="52" y="52" width="1096" height="526" rx="28" fill="#0B0B0D" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.16"/>
+
+  <text x="96" y="214" fill="white" font-family="Inter, Arial, sans-serif" font-weight="700" font-size="80">
+    Struxient
+  </text>
+  <text x="96" y="286" fill="#E4E4E7" font-family="Inter, Arial, sans-serif" font-size="36">
+    Know what is happening on every job.
+  </text>
+  <text x="96" y="336" fill="#E4E4E7" font-family="Inter, Arial, sans-serif" font-size="36">
+    Tell the right person what should happen next.
+  </text>
+
+  <rect x="96" y="392" width="260" height="58" rx="16" fill="#F59E0B"/>
+  <text x="138" y="430" fill="#0A0A0A" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="600">
+    Get started
+  </text>
+
+  <rect x="704" y="124" width="404" height="374" rx="24" fill="#121215" stroke="#FFFFFF" stroke-opacity="0.14"/>
+  <rect x="734" y="164" width="240" height="16" rx="8" fill="#FFFFFF" fill-opacity="0.24"/>
+  <rect x="734" y="206" width="338" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.18"/>
+  <rect x="734" y="234" width="314" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.18"/>
+  <rect x="734" y="272" width="172" height="34" rx="10" fill="#F59E0B"/>
+</svg>

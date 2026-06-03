@@ -1,0 +1,44 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="80" x2="1520" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B45309"/>
+      <stop offset="0.52" stop-color="#EA7A16"/>
+      <stop offset="1" stop-color="#0A0A0A"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(320 240) rotate(25) scale(360 280)">
+      <stop stop-color="#FBBF24" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FBBF24" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1320 820) rotate(-12) scale(420 260)">
+      <stop stop-color="#FDBA74" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#FDBA74" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blurGlow" x="-120" y="-120" width="1840" height="1240" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="42"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <g filter="url(#blurGlow)">
+    <ellipse cx="320" cy="240" rx="360" ry="280" fill="url(#glowA)"/>
+    <ellipse cx="1320" cy="820" rx="420" ry="260" fill="url(#glowB)"/>
+  </g>
+
+  <path d="M0 720C160 690 330 745 510 720C735 690 860 545 1070 518C1275 491 1430 584 1600 550V1000H0V720Z" fill="#111114" fill-opacity="0.42"/>
+  <path d="M0 772C176 742 336 810 525 785C765 755 900 630 1120 603C1320 578 1472 664 1600 640V1000H0V772Z" fill="#0B0B0D" fill-opacity="0.63"/>
+
+  <g transform="translate(865 180)">
+    <rect x="0" y="0" width="600" height="420" rx="26" fill="#0E0E11" fill-opacity="0.65" stroke="#FFFFFF" stroke-opacity="0.22"/>
+    <rect x="24" y="24" width="552" height="52" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+    <circle cx="54" cy="50" r="7" fill="#F59E0B"/>
+    <circle cx="82" cy="50" r="7" fill="#FFFFFF" fill-opacity="0.35"/>
+    <circle cx="110" cy="50" r="7" fill="#FFFFFF" fill-opacity="0.35"/>
+    <rect x="24" y="100" width="220" height="132" rx="14" fill="#FFFFFF" fill-opacity="0.06"/>
+    <rect x="262" y="100" width="314" height="132" rx="14" fill="#FFFFFF" fill-opacity="0.06"/>
+    <rect x="24" y="248" width="552" height="148" rx="14" fill="#FFFFFF" fill-opacity="0.06"/>
+    <rect x="44" y="270" width="180" height="16" rx="8" fill="#F59E0B" fill-opacity="0.85"/>
+    <rect x="44" y="298" width="304" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.34"/>
+    <rect x="44" y="322" width="248" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.24"/>
+    <rect x="44" y="350" width="130" height="28" rx="10" fill="#F59E0B"/>
+  </g>
+</svg>
