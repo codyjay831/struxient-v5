@@ -1,21 +1,25 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { TagStatus, TagSource } from "@prisma/client";
 import {
   createTagAction,
   updateTagAction,
+  archiveTagAction,
   mergeTagsAction,
   suggestTagMergesAction,
 } from "@/app/(workspace)/settings/scope-library/tag-actions";
 import {
   workspaceFormControlClass,
+  workspaceFormDangerButtonClass,
   workspaceFormFieldLabelClass,
   workspaceFormPrimaryButtonClass,
   workspaceFormSecondaryButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Plus, Info, Sparkles, Loader2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Plus, Info, Sparkles, Loader2, Tag as TagIcon, Edit2, Merge, Archive } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -30,6 +34,7 @@ const fieldLabelClass = workspaceFormFieldLabelClass;
 const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
+const dangerButtonClass = workspaceFormDangerButtonClass;
 
 type TagWithCounts = {
   id: string;
@@ -45,6 +50,7 @@ type TagWithCounts = {
 };
 
 export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts[] }) {
+  const router = useRouter();
   const [editingTag, setEditingId] = useState<TagWithCounts | null>(null);
   const [mergingTag, setMergingTag] = useState<TagWithCounts | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -52,6 +58,16 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
   const [suggestions, setSuggestions] = useState<{ sourceTagId: string; targetTagId: string; reason: string }[]>([]);
 
   const activeTags = initialTags.filter((t) => t.status === "ACTIVE");
+  const archivedTags = initialTags.filter((t) => t.status === "ARCHIVED");
+
+  const handleArchive = async (tagId: string) => {
+    await archiveTagAction(tagId);
+    router.refresh();
+  };
+
+  const handleFormDone = () => {
+    router.refresh();
+  };
 
   const handleSuggestMerges = async () => {
     setIsSuggesting(true);
@@ -133,13 +149,117 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
       )}
 
       <div className="space-y-4">
-        {/* ... table content ... */}
+        {activeTags.length === 0 ? (
+          <EmptyState
+            icon={TagIcon}
+            title="No tags yet"
+            description="Create your first tag to organize line items and tasks across your scope library."
+          />
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+            {activeTags.map((tag) => (
+              <li key={tag.id} className="px-4 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-border"
+                      style={{ backgroundColor: tag.color || "#3b82f6" }}
+                      aria-hidden
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{tag.name}</span>
+                        {tag.source !== "USER_CREATED" ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {tag.source === "AI_SUGGESTED" ? "AI" : tag.source.toLowerCase()}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {tag.aliases.length > 0 ? (
+                        <p className="mt-0.5 text-xs text-foreground-muted">
+                          Aliases: {tag.aliases.join(", ")}
+                        </p>
+                      ) : null}
+                      <p className="mt-0.5 text-xs text-foreground-muted">
+                        {tag._count.lineItemTemplates} line items · {tag._count.taskTemplates} tasks
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => setEditingId(tag)}
+                    >
+                      <Edit2 className="mr-1.5 h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => setMergingTag(tag)}
+                      disabled={activeTags.length < 2}
+                    >
+                      <Merge className="mr-1.5 h-3.5 w-3.5" />
+                      Merge
+                    </button>
+                    <button
+                      type="button"
+                      className={dangerButtonClass}
+                      onClick={() => handleArchive(tag.id)}
+                    >
+                      <Archive className="mr-1.5 h-3.5 w-3.5" />
+                      Archive
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {archivedTags.length > 0 ? (
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              Archived tags
+            </h3>
+            <ul className="divide-y divide-border rounded-lg border border-border bg-surface/50">
+              {archivedTags.map((tag) => (
+                <li key={tag.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-border opacity-50"
+                      style={{ backgroundColor: tag.color || "#3b82f6" }}
+                      aria-hidden
+                    />
+                    <span className="text-sm text-foreground-muted">{tag.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    onClick={() => setEditingId(tag)}
+                  >
+                    Edit
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
 
       {isCreating && (
         <Dialog open={isCreating} onOpenChange={setIsCreating}>
           <DialogContent>
-            <CreateTagForm onDone={() => setIsCreating(false)} />
+            <CreateTagForm
+              onDone={() => {
+                // #region agent log
+                fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:onDone-create',message:'onDone called from CreateTagForm',data:{phase:'callback'},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+                // #endregion
+                setIsCreating(false);
+                handleFormDone();
+              }}
+            />
           </DialogContent>
         </Dialog>
       )}
@@ -147,7 +267,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
       {editingTag && (
         <Dialog open={!!editingTag} onOpenChange={() => setEditingId(null)}>
           <DialogContent>
-            <EditTagForm tag={editingTag} onDone={() => setEditingId(null)} />
+            <EditTagForm tag={editingTag} onDone={() => { setEditingId(null); handleFormDone(); }} />
           </DialogContent>
         </Dialog>
       )}
@@ -158,7 +278,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
             <MergeTagsForm
               sourceTag={mergingTag}
               availableTags={activeTags.filter((t) => t.id !== mergingTag.id)}
-              onDone={() => setMergingTag(null)}
+              onDone={() => { setMergingTag(null); handleFormDone(); }}
             />
           </DialogContent>
         </Dialog>
@@ -170,9 +290,18 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
 function CreateTagForm({ onDone }: { onDone: () => void }) {
   const [state, formAction, isPending] = useActionState(createTagAction, {});
 
-  if (state.success) {
-    onDone();
-  }
+  // #region agent log
+  fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:CreateTagForm-render',message:'CreateTagForm render',data:{success:!!state.success,error:state.error??null,isPending},timestamp:Date.now(),hypothesisId:'A,C',runId:'post-fix'})}).catch(()=>{});
+  // #endregion
+
+  useEffect(() => {
+    if (state.success) {
+      // #region agent log
+      fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:CreateTagForm-onDone-in-effect',message:'calling onDone from useEffect',data:{success:true},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+      // #endregion
+      onDone();
+    }
+  }, [state.success, onDone]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -220,7 +349,11 @@ function EditTagForm({ tag, onDone }: { tag: TagWithCounts; onDone: () => void }
     {},
   );
 
-  if (state.success) onDone();
+  useEffect(() => {
+    if (state.success) {
+      onDone();
+    }
+  }, [state.success, onDone]);
 
   return (
     <form action={formAction} className="space-y-4">

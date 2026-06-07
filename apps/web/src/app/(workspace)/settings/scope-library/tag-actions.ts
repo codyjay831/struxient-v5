@@ -95,7 +95,7 @@ export async function mergeTagsAction(
     await db.$transaction(async (tx) => {
       const sourceTag = await tx.tag.findUnique({
         where: { id: sourceTagId, organizationId: ctx.organizationId },
-        include: { lineItemTemplates: true, taskTemplates: true },
+        include: { lineItemTemplates: true, taskTemplates: true, clarificationQuestionSets: true },
       });
 
       const targetTag = await tx.tag.findUnique({
@@ -128,6 +128,18 @@ export async function mergeTagsAction(
       for (const tt of sourceTag.taskTemplates) {
         await tx.taskTemplate.update({
           where: { id: tt.id },
+          data: {
+            tags: {
+              disconnect: { id: sourceTagId },
+              connect: { id: targetTagId },
+            },
+          },
+        });
+      }
+
+      for (const set of sourceTag.clarificationQuestionSets) {
+        await tx.clarificationQuestionSet.update({
+          where: { id: set.id },
           data: {
             tags: {
               disconnect: { id: sourceTagId },

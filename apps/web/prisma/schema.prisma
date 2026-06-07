@@ -38,6 +38,7 @@ model Organization {
   stages                   Stage[]
   taskTemplates            TaskTemplate[]
   tags                     Tag[]
+  clarificationQuestionSets ClarificationQuestionSet[]
   workstationSettings      WorkstationSettings?
 }
 
@@ -472,11 +473,94 @@ model QuoteLineItem {
   jobStageCopies            JobStage[]
   jobTaskCopies             JobTask[]
   draftExecutionTasks       QuoteLineExecutionTask[]
+  clarifications            QuoteLineClarification[]
   quote                     Quote                    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   sourceLineItemTemplate    LineItemTemplate?        @relation(fields: [sourceLineItemTemplateId], references: [id])
 
   @@index([quoteId])
   @@index([sourceLineItemTemplateId])
+}
+
+/// Org-scoped reusable scope clarification set with versioned questions/options.
+model ClarificationQuestionSet {
+  id             String                         @id @default(cuid())
+  organizationId String
+  key            String
+  version        Int
+  label          String
+  status         ClarificationQuestionSetStatus @default(draft)
+  description    String?
+  aliases        String[]                       @default([])
+  keywords       String[]                       @default([])
+  archivedAt     DateTime?
+  mergedIntoId   String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  organization   Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mergedInto     ClarificationQuestionSet?      @relation("ClarificationQuestionSetMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     ClarificationQuestionSet[]     @relation("ClarificationQuestionSetMerge")
+  questions      ClarificationQuestion[]
+  tags           Tag[]                          @relation("ClarificationQuestionSetToTag")
+  lineAnswers    QuoteLineClarification[]
+
+  @@unique([organizationId, key, version])
+  @@index([organizationId])
+  @@index([organizationId, key])
+  @@index([organizationId, status])
+}
+
+model ClarificationQuestion {
+  id            String                   @id @default(cuid())
+  questionSetId String
+  key           String
+  label         String
+  inputType     ClarificationInputType
+  helpText      String?
+  allowOther    Boolean                  @default(false)
+  unit          String?
+  customerFacing Boolean                 @default(false)
+  sortOrder     Int                      @default(0)
+  aliases       String[]                 @default([])
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  questionSet   ClarificationQuestionSet @relation(fields: [questionSetId], references: [id], onDelete: Cascade)
+  options       ClarificationOption[]
+
+  @@unique([questionSetId, key])
+  @@index([questionSetId, sortOrder])
+}
+
+model ClarificationOption {
+  id         String                @id @default(cuid())
+  questionId String
+  key        String
+  label      String
+  aliases    String[]              @default([])
+  sortOrder  Int                   @default(0)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  question   ClarificationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, key])
+  @@index([questionId, sortOrder])
+}
+
+/// Durable per-line clarification answers with version-safe snapshots.
+model QuoteLineClarification {
+  id                 String                  @id @default(cuid())
+  quoteLineItemId    String
+  clarificationSetId String?
+  questionSetKey     String
+  questionSetVersion Int
+  answersJson        Json
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  quoteLineItem      QuoteLineItem           @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+  clarificationSet   ClarificationQuestionSet? @relation(fields: [clarificationSetId], references: [id], onDelete: SetNull)
+
+  @@unique([quoteLineItemId, questionSetKey, questionSetVersion])
+  @@index([quoteLineItemId])
+  @@index([questionSetKey, questionSetVersion])
 }
 
 /// Draft internal execution tasks for a quote line — independent from [LineItemTemplateTask] and [TaskTemplate] after copy.
@@ -1162,6 +1246,7 @@ model Tag {
   /// Many-to-Many relations
   lineItemTemplates LineItemTemplate[] @relation("LineItemTemplateToTag")
   taskTemplates     TaskTemplate[]     @relation("TaskTemplateToTag")
+  clarificationQuestionSets ClarificationQuestionSet[] @relation("ClarificationQuestionSetToTag")
 
   @@unique([organizationId, name])
 }
@@ -1177,4 +1262,20 @@ enum TagStatus {
   ACTIVE
   ARCHIVED
   MERGED
+}
+
+enum ClarificationInputType {
+  single_choice
+  multi_choice
+  yes_no_unknown
+  short_text
+  number
+  notes
+}
+
+enum ClarificationQuestionSetStatus {
+  draft
+  active
+  archived
+  merged
 }

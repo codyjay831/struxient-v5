@@ -42,6 +42,17 @@ import {
   type QuoteExecutionReviewProposal,
 } from "./quote-execution-review-proposal-schema";
 import {
+  ClarificationAnswerProposalSchema,
+  type ClarificationAnswerGenerationResult,
+  type ClarificationAnswerProposal,
+  type ClarificationAnswerSuggestion,
+} from "./clarification-answer-proposal-schema";
+import {
+  ClarificationQuestionSetProposalSchema,
+  type ClarificationQuestionSetGenerationResult,
+  type ClarificationQuestionSetProposal,
+} from "./clarification-question-set-proposal-schema";
+import {
   ExecutionContextAssessmentSchema,
   type ExecutionContextAssessment,
 } from "./execution-context-assessment-schema";
@@ -1398,6 +1409,416 @@ OUTPUT JSON ONLY:
     });
 
     return normalizeScopeSuggestionGrouping(parsed);
+  }
+
+  /**
+   * AI assist for Scope Clarification. Suggests likely answers for an EXISTING
+   * canonical question set, read from the line text. Strictly review-then-apply:
+   * the model may only reference the provided question/option keys; it never
+   * invents questions or persists anything.
+   */
+  static async generateClarificationAnswerSuggestions(params: {
+    set: {
+      key: string;
+      version: number;
+      label: string;
+      questions: {
+        key: string;
+        label: string;
+        inputType: string;
+        allowOther?: boolean;
+        unit?: string;
+        options?: { key: string; label: string }[];
+      }[];
+    };
+    lineText: string;
+    organizationName?: string;
+  }): Promise<ClarificationAnswerGenerationResult> {
+    const { set } = params;
+    const questionKeySet = new Set(set.questions.map((q) => q.key));
+    const optionKeysByQuestion = new Map(
+      set.questions.map((q) => [q.key, new Set((q.options ?? []).map((o) => o.key))]),
+    );
+    const allowOtherByQuestion = new Map(
+      set.questions.map((q) => [q.key, Boolean(q.allowOther)]),
+    );
+
+    const gemini = this.getGeminiClient();
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateClarificationAnswers(params),
+          generation: this.buildClarificationGenerationMeta(true),
+        };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    const catalog = set.questions
+      .map((q) => {
+        const opts =
+          q.options && q.options.length > 0
+            ? ` options: ${q.options.map((o) => `${o.key}=${o.label}`).join(", ")}`
+            : "";
+        const other = q.allowOther ? " (allows other text)" : "";
+        return `- key: ${q.key} | label: ${q.label} | type: ${q.inputType}${opts}${other}`;
+      })
+      .join("\n");
+
+    const prompt = `
+You help a contractor pre-fill scope clarification answers for a quote line.
+Read the LINE TEXT and suggest the most likely answer for each QUESTION.
+
+STRICT RULES:
+- Only use questionKey values from the QUESTIONS list.
+- For choice questions, only use option keys exactly as listed.
+- For yes/no questions, optionKeys must be ["yes"] or ["no"].
+- If the text does not clearly indicate an answer, set "unknown": true (do not guess wildly).
+- Never invent new questions or options.
+- Put a value in "text" only for short_text/notes questions, or as an "other" value when no option fits and the question allows other.
+
+ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
+
+QUESTION SET: ${set.label} (${set.key})
+
+QUESTIONS:
+${catalog}
+
+LINE TEXT:
+"""
+${params.lineText.slice(0, 4000)}
+"""
+
+OUTPUT JSON ONLY:
+{
+  "suggestions": [
+    { "questionKey": "string", "optionKeys": ["string"], "text": "optional string", "number": null, "unknown": false, "confidence": "high"|"medium"|"low", "reasoning": "optional string" }
+  ],
+  "unresolvedQuestionKeys": ["string"],
+  "notes": ["string"]
+}
+`;
+
+    try {
+      const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+      const model = gemini.getGenerativeModel({ model: modelName });
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const raw = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+
+      const rawSuggestions = Array.isArray(raw.suggestions) ? raw.suggestions : [];
+      const suggestions: ClarificationAnswerSuggestion[] = rawSuggestions
+        .filter(
+          (s: Record<string, unknown>) =>
+            typeof s?.questionKey === "string" && questionKeySet.has(s.questionKey),
+        )
+        .map((s: Record<string, unknown>) => {
+          const questionKey = String(s.questionKey);
+          const allowedOptions = optionKeysByQuestion.get(questionKey) ?? new Set<string>();
+          const rawKeys = Array.isArray(s.optionKeys) ? s.optionKeys : [];
+          const allowOther = allowOtherByQuestion.get(questionKey) ?? false;
+          const optionKeys = rawKeys
+            .filter((k: unknown): k is string => typeof k === "string")
+            .filter(
+              (k: string) =>
+                k === "yes" ||
+                k === "no" ||
+                (k === "__other__" && allowOther) ||
+                allowedOptions.has(k),
+            );
+          return {
+            questionKey,
+            optionKeys,
+            // Free text is valid for short_text/notes questions and "other" values.
+            text: typeof s.text === "string" ? s.text.slice(0, 2000) : null,
+            number: typeof s.number === "number" && Number.isFinite(s.number) ? s.number : null,
+            unknown: Boolean(s.unknown),
+            confidence:
+              s.confidence === "high" || s.confidence === "medium" || s.confidence === "low"
+                ? s.confidence
+                : "medium",
+            reasoning: typeof s.reasoning === "string" ? s.reasoning.slice(0, 500) : null,
+          };
+        });
+
+      const proposal = ClarificationAnswerProposalSchema.parse({
+        questionSetKey: set.key,
+        questionSetVersion: set.version,
+        suggestions,
+        unresolvedQuestionKeys: Array.isArray(raw.unresolvedQuestionKeys)
+          ? raw.unresolvedQuestionKeys.filter(
+              (k: unknown): k is string => typeof k === "string" && questionKeySet.has(k),
+            )
+          : [],
+        notes: Array.isArray(raw.notes)
+          ? raw.notes.filter((n: unknown): n is string => typeof n === "string")
+          : [],
+      });
+
+      return { proposal, generation: this.buildClarificationGenerationMeta(false) };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateClarificationAnswers(params),
+          generation: this.buildClarificationGenerationMeta(true),
+        };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+  }
+
+  private static buildClarificationGenerationMeta(
+    simulated: boolean,
+  ): ClarificationAnswerGenerationResult["generation"] {
+    if (simulated) {
+      const canApply = process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS === "1";
+      return {
+        isSimulated: true,
+        canApply,
+        applyBlockedReason: canApply
+          ? undefined
+          : "This is demo AI output. Apply is disabled until demo apply is explicitly enabled.",
+      };
+    }
+    return { isSimulated: false, canApply: true };
+  }
+
+  static async generateClarificationQuestionSet(params: {
+    lineText: string;
+    organizationName?: string;
+    missingContext?: string[];
+  }): Promise<ClarificationQuestionSetGenerationResult> {
+    const gemini = this.getGeminiClient();
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateClarificationQuestionSetProposal(params),
+          generation: this.buildClarificationGenerationMeta(true),
+        };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    const prompt = `
+You are helping a contractor build a scope clarification question set.
+Generate a reusable, canonical question set from the line text and optional missing context.
+
+RULES:
+- Output keys in stable snake_or_dot style.
+- Keep labels contractor-friendly and mobile-friendly.
+- Prefer click answers (single/multi/yes_no_unknown) when possible.
+- Use short_text/number/notes only when needed.
+- Include aliases/keywords for vocabulary normalization.
+- Suggest tag names (display names) in suggestedTags.
+- Do not include execution tasks.
+
+ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
+LINE TEXT:
+"""
+${params.lineText.slice(0, 4000)}
+"""
+MISSING CONTEXT:
+${(params.missingContext ?? []).join("\n") || "None"}
+
+OUTPUT JSON ONLY:
+{
+  "key": "trade.scope_key",
+  "label": "Question set label",
+  "description": "optional text",
+  "aliases": ["string"],
+  "keywords": ["string"],
+  "suggestedTags": ["string"],
+  "warnings": ["string"],
+  "questions": [
+    {
+      "key": "trade.scope.field",
+      "label": "Question",
+      "inputType": "single_choice|multi_choice|yes_no_unknown|short_text|number|notes",
+      "helpText": null,
+      "allowOther": false,
+      "unit": null,
+      "customerFacing": true,
+      "aliases": ["string"],
+      "options": [{ "key": "choice_key", "label": "Choice", "aliases": [] }]
+    }
+  ]
+}
+`;
+
+    try {
+      const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+      const model = gemini.getGenerativeModel({ model: modelName });
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const raw = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+      const proposal = ClarificationQuestionSetProposalSchema.parse(raw);
+      return {
+        proposal,
+        generation: this.buildClarificationGenerationMeta(false),
+      };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateClarificationQuestionSetProposal(params, {
+            reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+          }),
+          generation: this.buildClarificationGenerationMeta(true),
+        };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+  }
+
+  private static simulateClarificationQuestionSetProposal(
+    params: { lineText: string; missingContext?: string[] },
+    options: { reason?: string } = {},
+  ): ClarificationQuestionSetProposal {
+    const text = params.lineText.toLowerCase();
+    const isService = /service|panel|meter|amperage|underground|trench/.test(text);
+    return ClarificationQuestionSetProposalSchema.parse({
+      key: isService ? "electrical.service_upgrade" : "general.scope_clarification",
+      label: isService ? "Electrical service upgrade" : "Scope clarification",
+      description: "Generated from line description for review.",
+      aliases: isService ? ["service upgrade", "panel upgrade"] : ["scope clarification"],
+      keywords: isService ? ["service upgrade", "panel"] : ["scope"],
+      suggestedTags: isService ? ["service-upgrade", "electrical-service"] : ["scope-clarification"],
+      warnings: [
+        "Demo AI output — not from the live provider.",
+        ...(options.reason ? [`Simulated fallback reason: ${options.reason}`] : []),
+      ],
+      questions: isService
+        ? [
+            {
+              key: "electrical.service.new_service_size",
+              label: "New service size",
+              inputType: "single_choice",
+              allowOther: true,
+              customerFacing: true,
+              aliases: ["new amp size", "service amperage"],
+              options: [
+                { key: "100a", label: "100A", aliases: [] },
+                { key: "125a", label: "125A", aliases: [] },
+                { key: "200a", label: "200A", aliases: [] },
+                { key: "320a", label: "320A", aliases: [] },
+                { key: "400a", label: "400A", aliases: [] },
+              ],
+            },
+            {
+              key: "electrical.service.service_feed",
+              label: "Service feed",
+              inputType: "single_choice",
+              allowOther: false,
+              customerFacing: true,
+              aliases: ["overhead or underground"],
+              options: [
+                { key: "overhead", label: "Overhead", aliases: [] },
+                { key: "underground", label: "Underground", aliases: [] },
+              ],
+            },
+            {
+              key: "electrical.service.trenching_required",
+              label: "Trenching required",
+              inputType: "yes_no_unknown",
+              allowOther: false,
+              customerFacing: true,
+              aliases: ["trench"],
+              options: [],
+            },
+          ]
+        : [
+            {
+              key: "general.scope.notes",
+              label: "Additional scope notes",
+              inputType: "notes",
+              allowOther: false,
+              customerFacing: false,
+              aliases: ["notes"],
+              options: [],
+            },
+          ],
+    });
+  }
+
+  /** Deterministic keyword-based suggestion fallback for local/demo use. */
+  private static simulateClarificationAnswers(params: {
+    set: { key: string; version: number; questions: { key: string; inputType: string }[] };
+    lineText: string;
+  }): ClarificationAnswerProposal {
+    const text = params.lineText.toLowerCase();
+    const suggestions: ClarificationAnswerSuggestion[] = [];
+
+    const push = (s: Partial<ClarificationAnswerSuggestion> & { questionKey: string }) =>
+      suggestions.push({
+        questionKey: s.questionKey,
+        optionKeys: s.optionKeys ?? [],
+        text: s.text ?? null,
+        number: s.number ?? null,
+        unknown: s.unknown ?? false,
+        confidence: s.confidence ?? "medium",
+        reasoning: s.reasoning ?? "Simulated from line text keywords.",
+      });
+
+    const has = (key: string) => params.set.questions.some((q) => q.key === key);
+
+    const ampMatch = text.match(/\b(100|125|200|320|400)\s*a(mp)?\b/);
+    if (ampMatch && has("electrical.service.new_service_size")) {
+      push({
+        questionKey: "electrical.service.new_service_size",
+        optionKeys: [`${ampMatch[1]}a`],
+        confidence: "high",
+      });
+    }
+    if (/underground|trench|ug\b/.test(text)) {
+      if (has("electrical.service.service_feed")) {
+        push({
+          questionKey: "electrical.service.service_feed",
+          optionKeys: ["underground"],
+          confidence: "high",
+        });
+      }
+      if (/trench/.test(text) && has("electrical.service.trenching_required")) {
+        push({
+          questionKey: "electrical.service.trenching_required",
+          optionKeys: ["yes"],
+          confidence: "medium",
+        });
+      }
+    } else if (/overhead|weatherhead|mast/.test(text) && has("electrical.service.service_feed")) {
+      push({
+        questionKey: "electrical.service.service_feed",
+        optionKeys: ["overhead"],
+        confidence: "high",
+      });
+    }
+    if (/permit/.test(text) && has("electrical.service.permit_required")) {
+      push({
+        questionKey: "electrical.service.permit_required",
+        optionKeys: ["yes"],
+        confidence: "medium",
+      });
+    }
+
+    return ClarificationAnswerProposalSchema.parse({
+      questionSetKey: params.set.key,
+      questionSetVersion: params.set.version,
+      suggestions,
+      unresolvedQuestionKeys: [],
+      notes: ["Demo AI output — not from the live provider."],
+    });
   }
 
   /** Compatibility layer for quote-line AI execution planning */

@@ -136,6 +136,7 @@ export function AILibraryProposalReviewPanel({
   selectedKeepTaskIds = [],
   onSelectedKeepTaskIdsChange,
   onApply,
+  onClarifyMissingContext,
   onClose,
 }: {
   proposal?: AILibraryProposal | null;
@@ -181,6 +182,7 @@ export function AILibraryProposalReviewPanel({
     approvedProposal: AILibraryProposal,
     options?: AIProposalApplyOptions,
   ) => Promise<void>;
+  onClarifyMissingContext?: (input: { missingContext: string[] }) => void;
   onClose: () => void;
 }) {
   const mounted = useIsClientMounted();
@@ -520,6 +522,17 @@ export function AILibraryProposalReviewPanel({
               </li>
             ))}
           </ul>
+          {onClarifyMissingContext ? (
+            <div className="pt-1">
+              <button
+                type="button"
+                className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+                onClick={() => onClarifyMissingContext({ missingContext: missingContextItems })}
+              >
+                Clarify these gaps
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

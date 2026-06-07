@@ -19,6 +19,7 @@
 import { LeadChannel, Prisma, PrismaClient, StaffRole } from "@prisma/client";
 import { hashSync } from "bcryptjs";
 import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
+import { seedClarificationQuestionSets } from "./seeds/clarification-question-sets";
 import { seedJourneyFixtures } from "./seeds/journey-fixtures";
 import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
 import { DEFAULT_OFFICE_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-office-intake-form";
@@ -198,6 +199,12 @@ async function main() {
   const presets = await seedTradeLineItemPresets(prisma, DEV_ORG_ID);
   console.log(
     `  ${presets.tradesSeeded} trades, ${presets.lineItemsSeeded} line items, ${presets.tasksSeeded} tasks`,
+  );
+
+  console.log("Seeding scope clarification question sets…");
+  const clarification = await seedClarificationQuestionSets(prisma, DEV_ORG_ID);
+  console.log(
+    `  ${clarification.setsSeeded} sets, ${clarification.questionsSeeded} questions, ${clarification.optionsSeeded} options`,
   );
 
   console.log("Seeding linked journey fixtures (leads → quotes → job)…");

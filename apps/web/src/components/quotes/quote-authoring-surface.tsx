@@ -30,6 +30,30 @@ import {
   generateQuoteScopeSuggestionsAction,
   applyQuoteScopeSuggestionsAction,
 } from "@/app/(workspace)/quotes/quote-line-items-ai-actions";
+import {
+  getClarificationLineModelAction,
+  getClarificationSetByKeyAction,
+  suggestLineClarificationAnswersAction,
+  applyLineClarificationAnswersAction,
+  createClarificationQuestionSetForLineAction,
+  generateClarificationQuestionSetForLineAction,
+  checkClarificationSetKeyAction,
+  updateClarificationQuestionSetForLineAction,
+} from "@/app/(workspace)/quotes/quote-line-clarification-actions";
+import type {
+  ClarificationLineModel,
+  ClarificationSetOption,
+} from "@/app/(workspace)/quotes/quote-line-clarification-types";
+import type {
+  ClarificationAnswerGenerationMeta,
+  ClarificationAnswerProposal,
+} from "@/lib/ai/clarification-answer-proposal-schema";
+import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
+import type { LineClarificationAnswers } from "@/lib/clarification/clarification-types";
+import {
+  ClarifyScopePanel,
+  type ClarificationSetDraftPayload,
+} from "@/components/quotes/quote-line-clarify-scope-panel";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type {
   CommercialLineItemSuggestion,
@@ -695,6 +719,22 @@ export function QuoteAuthoringSurface({
   const [isScopeGenerating, setIsScopeGenerating] = useState(false);
   const [isScopeApplying, setIsScopeApplying] = useState(false);
 
+  // Scope clarification (per-line)
+  const [clarifyLineId, setClarifyLineId] = useState<string | null>(null);
+  const [clarifyModel, setClarifyModel] = useState<ClarificationLineModel | null>(null);
+  const [clarifyAlternatives, setClarifyAlternatives] = useState<ClarificationSetOption[]>([]);
+  const [isClarifyLoading, setIsClarifyLoading] = useState(false);
+  const [clarifyAiProposal, setClarifyAiProposal] = useState<ClarificationAnswerProposal | null>(
+    null,
+  );
+  const [clarifyAiGeneration, setClarifyAiGeneration] =
+    useState<ClarificationAnswerGenerationMeta | null>(null);
+  const [isClarifySuggesting, setIsClarifySuggesting] = useState(false);
+  const [isClarifyApplying, setIsClarifyApplying] = useState(false);
+  const [isClarifySetGenerating, setIsClarifySetGenerating] = useState(false);
+  const [isClarifySetCreating, setIsClarifySetCreating] = useState(false);
+  const [isClarifySetUpdating, setIsClarifySetUpdating] = useState(false);
+
   const hasIntakeNotes = Boolean(lead?.notes?.trim());
   const hasScopeSummary = Boolean(lead?.scopeSummary?.trim());
   const hasInternalNotesForCapture = Boolean(initialInternalNotes?.trim());
@@ -950,6 +990,208 @@ export function QuoteAuthoringSurface({
     }
   };
 
+  const openClarifyScope = async (lineId: string) => {
+    setClarifyLineId(lineId);
+    setClarifyModel(null);
+    setClarifyAlternatives([]);
+    setClarifyAiProposal(null);
+    setClarifyAiGeneration(null);
+    setIsClarifyLoading(true);
+    try {
+      const result = await getClarificationLineModelAction(quoteId, lineId);
+      if (result.error) {
+        toast.error(result.error);
+        setClarifyLineId(null);
+        return;
+      }
+      if (result.model) {
+        setClarifyModel(result.model);
+        setClarifyAlternatives(result.model.alternatives);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load scope clarification.");
+      setClarifyLineId(null);
+    } finally {
+      setIsClarifyLoading(false);
+    }
+  };
+
+  const closeClarifyScope = () => {
+    setClarifyLineId(null);
+    setClarifyModel(null);
+    setClarifyAlternatives([]);
+    setClarifyAiProposal(null);
+    setClarifyAiGeneration(null);
+    setIsClarifySuggesting(false);
+    setIsClarifyApplying(false);
+    setIsClarifySetGenerating(false);
+    setIsClarifySetCreating(false);
+    setIsClarifySetUpdating(false);
+  };
+
+  const handleSelectClarifyAlternative = async (setKey: string) => {
+    setIsClarifyLoading(true);
+    setClarifyAiProposal(null);
+    setClarifyAiGeneration(null);
+    try {
+      const result = await getClarificationSetByKeyAction(setKey);
+      if (result.error || !result.model) {
+        toast.error(result.error ?? "Failed to load that question set.");
+        return;
+      }
+      setClarifyModel((prev) =>
+        prev
+          ? { ...prev, matchedSet: result.model!.matchedSet, savedAnswers: result.model!.savedAnswers }
+          : result.model!,
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load that question set.");
+    } finally {
+      setIsClarifyLoading(false);
+    }
+  };
+
+  const handleSuggestClarifyAnswers = async () => {
+    if (!clarifyLineId || !clarifyModel?.matchedSet) return;
+    setIsClarifySuggesting(true);
+    try {
+      const result = await suggestLineClarificationAnswersAction(
+        quoteId,
+        clarifyLineId,
+        clarifyModel.matchedSet.key,
+      );
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setClarifyAiProposal(result.proposal ?? null);
+      setClarifyAiGeneration(result.generation ?? null);
+    } catch (e) {
+      console.error(e);
+      toast.error(getAiActionErrorMessage(e, "Failed to suggest clarification answers."));
+    } finally {
+      setIsClarifySuggesting(false);
+    }
+  };
+
+  const handleApplyClarifyAnswers = async (answers: LineClarificationAnswers) => {
+    if (!clarifyLineId) return;
+    setIsClarifyApplying(true);
+    try {
+      const result = await applyLineClarificationAnswersAction(quoteId, clarifyLineId, answers);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Scope clarification applied to this line.");
+      await Promise.resolve(onMutated());
+      closeClarifyScope();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to apply scope clarification.");
+    } finally {
+      setIsClarifyApplying(false);
+    }
+  };
+
+  const handleGenerateClarifySetProposal = async (): Promise<ClarificationQuestionSetProposal | null> => {
+    if (!clarifyLineId) return null;
+    setIsClarifySetGenerating(true);
+    try {
+      const result = await generateClarificationQuestionSetForLineAction(quoteId, clarifyLineId);
+      if (result.error || !result.proposal) {
+        toast.error(result.error ?? "Failed to generate clarification questions.");
+        return null;
+      }
+      return result.proposal;
+    } catch (error) {
+      console.error(error);
+      toast.error(getAiActionErrorMessage(error, "Failed to generate clarification questions."));
+      return null;
+    } finally {
+      setIsClarifySetGenerating(false);
+    }
+  };
+
+  const handleCreateClarifySet = async (payload: ClarificationSetDraftPayload) => {
+    if (!clarifyLineId) return;
+    setIsClarifySetCreating(true);
+    try {
+      const result = await createClarificationQuestionSetForLineAction(
+        quoteId,
+        clarifyLineId,
+        payload,
+      );
+      if (result.error || !result.matchedSet) {
+        toast.error(result.error ?? "Failed to create question set.");
+        return;
+      }
+      const matchedSet = result.matchedSet;
+      setClarifyModel((prev) =>
+        prev
+          ? { ...prev, matchedSet, alternatives: [], savedAnswers: null }
+          : {
+              lineId: clarifyLineId,
+              lineDescription:
+                lineItems.find((line) => line.id === clarifyLineId)?.description ?? "",
+              matchedSet,
+              alternatives: [],
+              savedAnswers: null,
+            },
+      );
+      setClarifyAlternatives([]);
+      setClarifyAiProposal(null);
+      setClarifyAiGeneration(null);
+      toast.success("Clarification questions created. Fill answers and apply.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to create clarification questions.");
+    } finally {
+      setIsClarifySetCreating(false);
+    }
+  };
+
+  const handleUpdateClarifySet = async (
+    setKey: string,
+    setVersion: number,
+    payload: Pick<ClarificationSetDraftPayload, "questions">,
+  ): Promise<boolean> => {
+    if (!clarifyLineId) return false;
+    setIsClarifySetUpdating(true);
+    try {
+      const result = await updateClarificationQuestionSetForLineAction(
+        quoteId,
+        clarifyLineId,
+        setKey,
+        setVersion,
+        payload,
+      );
+      if (result.error || !result.matchedSet) {
+        toast.error(result.error ?? "Failed to update questions.");
+        return false;
+      }
+      setClarifyModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              matchedSet: result.matchedSet!,
+              savedAnswers: result.savedAnswers ?? prev.savedAnswers,
+            }
+          : prev,
+      );
+      toast.success("Questions updated.");
+      return true;
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update questions.");
+      return false;
+    } finally {
+      setIsClarifySetUpdating(false);
+    }
+  };
+
   useEffect(() => {
     if (!shouldFocusAddForm) return;
     let cancelled = false;
@@ -1127,6 +1369,17 @@ export function QuoteAuthoringSurface({
                                 onSuccess={onMutated}
                               />
                             </div>
+                            <button
+                              type="button"
+                              disabled={isClarifyLoading && clarifyLineId === line.id}
+                              onClick={() => void openClarifyScope(line.id)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted hover:text-foreground hover:border-border-strong transition-colors disabled:opacity-50"
+                            >
+                              {isClarifyLoading && clarifyLineId === line.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : null}
+                              Clarify scope
+                            </button>
                             <button
                               type="button"
                               disabled={isGenerating === line.id}
@@ -1332,10 +1585,43 @@ export function QuoteAuthoringSurface({
           }))}
           selectedKeepTaskIds={aiKeepTaskIds}
           onSelectedKeepTaskIdsChange={setAiKeepTaskIds}
+          onClarifyMissingContext={({ missingContext }) => {
+            if (!activeAiLineId) return;
+            void openClarifyScope(activeAiLineId);
+            toast.info(
+              missingContext.length > 0
+                ? `Clarify scope opened with ${missingContext.length} gap${missingContext.length === 1 ? "" : "s"} to resolve.`
+                : "Clarify scope opened for this line.",
+            );
+          }}
           onClose={closeAiPanel}
           onApply={handleApplyAiProposal}
         />
       ) : null}
+
+      <ClarifyScopePanel
+        open={clarifyLineId !== null}
+        onClose={closeClarifyScope}
+        lineDescription={clarifyModel?.lineDescription ?? ""}
+        questionSet={clarifyModel?.matchedSet ?? null}
+        savedAnswers={clarifyModel?.savedAnswers ?? null}
+        alternatives={clarifyAlternatives}
+        isLoading={isClarifyLoading}
+        onSelectAlternative={(setKey) => void handleSelectClarifyAlternative(setKey)}
+        aiProposal={clarifyAiProposal}
+        aiGeneration={clarifyAiGeneration}
+        isSuggesting={isClarifySuggesting}
+        onSuggest={handleSuggestClarifyAnswers}
+        isGeneratingSet={isClarifySetGenerating}
+        onGenerateSet={handleGenerateClarifySetProposal}
+        isCreatingSet={isClarifySetCreating}
+        onCreateSet={handleCreateClarifySet}
+        isUpdatingSet={isClarifySetUpdating}
+        onUpdateSet={handleUpdateClarifySet}
+        checkSetKey={checkClarificationSetKeyAction}
+        isApplying={isClarifyApplying}
+        onApply={handleApplyClarifyAnswers}
+      />
 
       <QuoteScopeCapturePanel
         open={scopeCaptureOpen}
