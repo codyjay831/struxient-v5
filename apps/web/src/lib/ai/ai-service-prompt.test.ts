@@ -58,3 +58,28 @@ test("execution prompt uses execution-gate planning posture", () => {
   assert.match(prompt, /"providesSignals": \["string"\]/);
   assert.match(prompt, /"checklist": \[\{"label": "string"\}\]/);
 });
+
+test("payment schedule prompt uses industry default deposit progress final posture", () => {
+  const prompt = AIService.buildPaymentSchedulePromptForTest({
+    quoteId: "quote-1",
+    quoteTotalCents: 10_000_00,
+    contextText: "Main panel upgrade with field work and closeout stages.",
+    allowedStages: [
+      { id: "s1", name: "Preparation" },
+      { id: "s2", name: "Field Work" },
+    ],
+    organizationName: "Acme Electric",
+    userInstructions: "50% deposit",
+  });
+
+  assert.match(prompt, /contractor payment schedule assistant/i);
+  assert.match(prompt, /INDUSTRY DEFAULT/i);
+  assert.match(prompt, /UPON_APPROVAL/);
+  assert.match(prompt, /AFTER_STAGE/);
+  assert.match(prompt, /FINAL_BALANCE/);
+  assert.match(prompt, /prefer percentages/i);
+  assert.match(prompt, /Do NOT create one milestone per line item/i);
+  assert.match(prompt, /NOT execution tasks/i);
+  assert.match(prompt, /50% deposit/);
+  assert.match(prompt, /"milestones": \[/);
+});

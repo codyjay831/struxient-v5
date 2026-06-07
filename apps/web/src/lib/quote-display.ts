@@ -3,6 +3,7 @@ import type {
   QuoteStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import type { LineClarificationAnswers } from "@/lib/clarification/clarification-types";
 
 /** Serializable quote row for list views (server-fetched, org-scoped). */
 export type QuoteListRowPayload = {
@@ -48,6 +49,8 @@ export type QuoteLineItemPayload = {
   unitAmountCents: number;
   lineTotalCents: number;
   internalNotes: string | null;
+  /** Structured scope facts captured via clarification question sets. */
+  clarifications: LineClarificationAnswers[];
   /** Optional internal draft execution — not customer-facing. */
   executionSummary: {
     taskCount: number;

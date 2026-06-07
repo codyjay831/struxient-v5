@@ -32,6 +32,7 @@ import type {
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import { projectLead } from "@/lib/lead/lead-projection";
+import { LineClarificationAnswersSchema } from "@/lib/clarification/clarification-answer-schema";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -105,6 +106,14 @@ export async function loadQuoteWorkSurface(
       lineItems: {
         orderBy: { sortOrder: "asc" },
         include: {
+          clarifications: {
+            orderBy: { updatedAt: "desc" },
+            select: {
+              questionSetKey: true,
+              questionSetVersion: true,
+              answersJson: true,
+            },
+          },
           draftExecutionTasks: {
             orderBy: [{ sortOrder: "asc" }],
             select: {
@@ -361,6 +370,15 @@ export async function loadQuoteWorkSurface(
 
   const lineItems: QuoteLineItemPayload[] = row.lineItems.map((line) => {
     const exec = buildDefaultExecutionSummaryLine(line.draftExecutionTasks);
+    const clarifications = line.clarifications
+      .map((clarification) => {
+        const parsed = LineClarificationAnswersSchema.safeParse(clarification.answersJson);
+        if (!parsed.success) return null;
+        return parsed.data;
+      })
+      .filter((clarification): clarification is NonNullable<typeof clarification> =>
+        clarification != null,
+      );
     return {
       id: line.id,
       sortOrder: line.sortOrder,
@@ -374,6 +392,7 @@ export async function loadQuoteWorkSurface(
       unitAmountCents: line.unitAmountCents,
       lineTotalCents: line.lineTotalCents,
       internalNotes: line.internalNotes,
+      clarifications,
       executionSummary: { taskCount: exec.taskCount, summaryLine: exec.summaryLine },
     };
   });

@@ -1,13 +1,27 @@
 "use client";
 
 import { useEffect, useState, useActionState } from "react";
-import { 
-  Plus, 
-  Trash2, 
+import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Trash2,
   AlertCircle,
   DollarSign,
-  Percent
+  Percent,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
+import {
+  applyQuotePaymentScheduleAIProposalAction,
+  generateQuotePaymentScheduleAIProposalAction,
+} from "@/app/(workspace)/quotes/quote-payment-schedule-ai-actions";
+import { QuotePaymentScheduleAiReviewPanel } from "@/components/quotes/quote-payment-schedule-ai-review-panel";
+import type {
+  QuotePaymentScheduleGenerationMeta,
+  QuotePaymentScheduleProposal,
+} from "@/lib/ai/quote-payment-schedule-proposal-schema";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import { toast } from "sonner";
 import { PaymentScheduleAnchorType } from "@prisma/client";
 import { 
   addPaymentScheduleItemWorkspaceAction,
@@ -42,11 +56,30 @@ type StageOption = {
   name: string;
 };
 
+function resolveMilestoneAmountCents(
+  item: PaymentScheduleItemPayload,
+  quoteTotalCents: number,
+): number | null {
+  if (item.amountCents != null) {
+    return item.amountCents;
+  }
+  if (!item.percentage) {
+    return null;
+  }
+  const pct = Number.parseFloat(item.percentage);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    return null;
+  }
+  return Math.round((quoteTotalCents * pct) / 100);
+}
+
 type PaymentScheduleEditorProps = {
   quoteId: string;
   quoteTotalCents: number;
   items: PaymentScheduleItemPayload[];
   stages: StageOption[];
+  isCommercialEditable?: boolean;
+  hasExistingSchedule?: boolean;
   mode?: "standard" | "compact";
 };
 
@@ -55,14 +88,87 @@ export function QuotePaymentScheduleEditor({
   quoteTotalCents,
   items,
   stages,
+  isCommercialEditable = false,
+  hasExistingSchedule,
 }: PaymentScheduleEditorProps) {
+  const router = useRouter();
   const [isAdding, setIsAdding] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInstructions, setAiInstructions] = useState("");
+  const [aiProposal, setAiProposal] = useState<QuotePaymentScheduleProposal | null>(null);
+  const [aiGeneration, setAiGeneration] =
+    useState<QuotePaymentScheduleGenerationMeta | null>(null);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [isAiApplying, setIsAiApplying] = useState(false);
+
+  const scheduleHasItems = hasExistingSchedule ?? items.length > 0;
+  const canUseAi = isCommercialEditable && quoteTotalCents > 0;
+
+  const openAiPanel = () => {
+    setAiOpen(true);
+    void generateAiProposal();
+  };
+
+  const closeAiPanel = () => {
+    if (isAiGenerating || isAiApplying) return;
+    setAiOpen(false);
+    setAiProposal(null);
+    setAiGeneration(null);
+  };
+
+  const generateAiProposal = async () => {
+    setIsAiGenerating(true);
+    try {
+      const result = await generateQuotePaymentScheduleAIProposalAction(quoteId, {
+        userInstructions: aiInstructions.trim() || undefined,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setAiProposal(result.proposal ?? null);
+      setAiGeneration(result.generation ?? null);
+    } catch (e) {
+      toast.error(getAiActionErrorMessage(e));
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  const applyAiProposal = async (params: {
+    selectedMilestoneTempIds: string[];
+    replaceConfirmed: boolean;
+  }) => {
+    if (!aiProposal) return;
+    setIsAiApplying(true);
+    try {
+      const result = await applyQuotePaymentScheduleAIProposalAction(quoteId, aiProposal, {
+        approved: params,
+        generation: aiGeneration ?? undefined,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.warnings?.length) {
+        toast.warning(result.warnings.join(" "));
+      } else {
+        toast.success("Payment schedule updated.");
+      }
+      closeAiPanel();
+      router.refresh();
+    } catch (e) {
+      toast.error(getAiActionErrorMessage(e, "Failed to apply payment schedule."));
+    } finally {
+      setIsAiApplying(false);
+    }
+  };
 
   // Calculate total scheduled
   const scheduledCents = items.reduce((sum, item) => {
     if (item.anchorType === "FINAL_BALANCE") return sum;
-    return sum + (item.amountCents ?? 0);
+    return sum + (resolveMilestoneAmountCents(item, quoteTotalCents) ?? 0);
   }, 0);
 
   const remainderCents = Math.max(0, quoteTotalCents - scheduledCents);
@@ -75,13 +181,27 @@ export function QuotePaymentScheduleEditor({
           Payment Schedule
         </h3>
         {!isAdding && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-accent hover:text-accent-hover transition-colors"
-          >
-            <Plus className="size-3" />
-            Add Milestone
-          </button>
+          <div className="flex items-center gap-3">
+            {canUseAi ? (
+              <button
+                type="button"
+                onClick={openAiPanel}
+                className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-accent hover:text-accent-hover transition-colors"
+              >
+                <Sparkles className="size-3" />
+                Plan with AI
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setIsAdding(true)}
+              disabled={!isCommercialEditable}
+              className="flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wider text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
+            >
+              <Plus className="size-3" />
+              Add Milestone
+            </button>
+          </div>
         )}
       </div>
 
@@ -116,7 +236,7 @@ export function QuotePaymentScheduleEditor({
                   <div className="text-sm font-bold text-foreground">
                     {item.anchorType === "FINAL_BALANCE" 
                       ? formatMoneyCents(remainderCents)
-                      : formatMoneyCents(item.amountCents ?? 0)}
+                      : formatMoneyCents(resolveMilestoneAmountCents(item, quoteTotalCents) ?? 0)}
                   </div>
                   {item.percentage && (
                     <p className="text-[0.7rem] text-foreground-muted">
@@ -142,9 +262,25 @@ export function QuotePaymentScheduleEditor({
           <div className="p-8 rounded-xl border border-dashed border-border flex flex-col items-center justify-center text-center">
             <DollarSign className="size-8 text-foreground-subtle mb-2" />
             <p className="text-sm text-foreground-muted">No payment milestones defined.</p>
+            {canUseAi ? (
+              <button
+                type="button"
+                onClick={openAiPanel}
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:underline"
+              >
+                {isAiGenerating ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3" />
+                )}
+                Plan with AI
+              </button>
+            ) : null}
             <button
+              type="button"
               onClick={() => setIsAdding(true)}
-              className="mt-3 text-xs font-bold text-accent hover:underline"
+              disabled={!isCommercialEditable}
+              className="mt-3 text-xs font-bold text-accent hover:underline disabled:opacity-50"
             >
               Create a deposit or milestone
             </button>
@@ -168,6 +304,21 @@ export function QuotePaymentScheduleEditor({
           </div>
         </div>
       )}
+
+      <QuotePaymentScheduleAiReviewPanel
+        open={aiOpen}
+        onClose={closeAiPanel}
+        quoteTotalCents={quoteTotalCents}
+        hasExistingSchedule={scheduleHasItems}
+        userInstructions={aiInstructions}
+        onUserInstructionsChange={setAiInstructions}
+        proposal={aiProposal}
+        generation={aiGeneration}
+        isGenerating={isAiGenerating}
+        isApplying={isAiApplying}
+        onGenerate={generateAiProposal}
+        onApply={applyAiProposal}
+      />
     </div>
   );
 }

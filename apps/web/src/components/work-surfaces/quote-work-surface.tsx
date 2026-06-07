@@ -1340,6 +1340,8 @@ function PaymentsTab({
         quoteTotalCents={quote.totalCents}
         items={workspaceTabs.paymentSchedule}
         stages={workspaceTabs.stages}
+        isCommercialEditable={workspaceTabs.isCommercialEditable}
+        hasExistingSchedule={workspaceTabs.paymentSchedule.length > 0}
       />
     </div>
   );

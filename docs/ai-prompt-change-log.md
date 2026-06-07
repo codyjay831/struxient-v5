@@ -27,6 +27,7 @@ This file is implementation guidance, not product canon. For product intent and 
 | `recovery_path_suggestions` | Job issue recovery: suggest recovery tasks | `suggestRecoveryPathAction` in `apps/web/src/app/(workspace)/jobs/recovery-actions.ts` | `AIService.suggestRecoveryPath` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 | `tag_suggestions` | Tag helper API: suggest tags from title/description/context | `POST /api/ai/suggest-tags` in `apps/web/src/app/api/ai/suggest-tags/route.ts` | `AIService.suggestTags` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 | `tag_merge_suggestions` | Scope Library tags: suggest merge candidates | `suggestTagMergesAction` in `apps/web/src/app/(workspace)/settings/scope-library/tag-actions.ts` | `AIService.suggestTagMerges` prompt in `apps/web/src/lib/ai/ai-service.ts` |
+| `payment_schedule_quote` | Quote Payments tab: generate payment schedule milestones | `generateQuotePaymentScheduleAIProposalAction` in `apps/web/src/app/(workspace)/quotes/quote-payment-schedule-ai-actions.ts` | `AIService.generatePaymentScheduleProposal` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 
 Note: `generateDailyJobLogDraft` in `apps/web/src/lib/daily-job-log-helper.ts` is deterministic and does not currently use AI.
 
@@ -60,6 +61,30 @@ Use one section per behavior change.
 ```
 
 ## Change history
+
+## [2026-06-08] payment_schedule_quote - Quote payment schedule generation
+
+- Owner file/function: `apps/web/src/lib/ai/ai-service.ts` / `generatePaymentScheduleProposal`
+- Entry surfaces:
+  - Quote Payments tab: Plan with AI
+- Why this change:
+  - Payment schedules are often empty while scope and execution plans already exist.
+  - Contractors expect industry-standard deposit/progress/final patterns unless quote context says otherwise.
+- Intended behavior:
+  - Propose 2-4 commercial milestones with percentages and stage anchors aligned to execution plan when available.
+  - Review-then-apply with replace confirmation when a schedule already exists.
+- Anti-behavior to block:
+  - Silent persistence of AI milestones.
+  - One milestone per line item.
+  - PAYMENT execution tasks mixed into commercial schedule output.
+- Input assumptions:
+  - Quote total, scope line items, execution draft tasks, lead/quote notes, org stage library.
+- Output expectations:
+  - JSON milestones with anchorType, optional percentage/amountCents, optional anchorStageName.
+  - Exactly one FINAL_BALANCE recommended.
+- Test coverage updates:
+  - `apps/web/src/lib/ai/quote-payment-schedule-ai-plan.test.ts`: stage mapping, replace confirmation, validation.
+  - `apps/web/src/lib/ai/ai-service-prompt.test.ts`: prompt rule assertions.
 
 ## [2026-06-03] execution_review_quote_wide - Whole-quote execution assembly proposals
 

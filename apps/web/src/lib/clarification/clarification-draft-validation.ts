@@ -7,7 +7,12 @@ export type ClarificationDraftQuestion = {
   key: string;
   label: string;
   inputType: string;
-  options?: { key: string; label: string }[];
+  helpText?: string;
+  allowOther?: boolean;
+  unit?: string;
+  customerFacing?: boolean;
+  aliases?: string[];
+  options?: { key: string; label: string; aliases?: string[] }[];
 };
 
 export type ClarificationDraftPayload = {

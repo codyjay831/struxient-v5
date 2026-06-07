@@ -11,7 +11,7 @@
  * ensuring the UI stays open in drawers and popups.
  */
 
-import { useEffect, useRef, useState, useActionState } from "react";
+import { useEffect, useMemo, useRef, useState, useActionState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, ListOrdered, Sparkles, Loader2, X, ChevronDown } from "lucide-react";
 import {
@@ -107,6 +107,8 @@ import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { parseIntakeNotes } from "@/lib/lead-display";
 import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
+import { deriveNeedsForQuoteLines } from "@/lib/derived-needs/derive-needs";
+import type { DerivedNeed } from "@/lib/derived-needs/types";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -146,6 +148,51 @@ function FormError({ message }: { message: string }) {
     >
       {message}
     </p>
+  );
+}
+
+function DerivedNeedsPreview({ needs }: { needs: readonly DerivedNeed[] }) {
+  if (needs.length === 0) return null;
+
+  const grouped = needs.reduce<Record<string, DerivedNeed[]>>((acc, need) => {
+    const key = need.sourceQuoteLineItemId;
+    acc[key] = acc[key] ? [...acc[key], need] : [need];
+    return acc;
+  }, {});
+
+  return (
+    <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] p-3">
+      <div className="mb-2">
+        <p className={sectionLabelClass}>Derived needs preview</p>
+        <p className="mt-1 text-xs text-foreground-subtle">
+          Enter once, derive everywhere: quantities are generated from saved scope facts and
+          should not be re-entered manually.
+        </p>
+      </div>
+      <div className="space-y-3">
+        {Object.entries(grouped).map(([lineId, lineNeeds]) => (
+          <div key={lineId} className="rounded-md border border-border bg-surface px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
+              Line {lineId.slice(-6)}
+            </p>
+            <ul className="mt-1 space-y-1">
+              {lineNeeds.map((need, index) => (
+                <li key={`${need.name}-${index}`} className="text-xs text-foreground-muted">
+                  <span className="font-medium text-foreground">{need.name}</span>: {need.quantity}{" "}
+                  {need.unit}
+                  <span className="ml-1 uppercase text-foreground-subtle">
+                    ({need.confidence.replace("_", " ")})
+                  </span>
+                  {need.orderNote ? (
+                    <span className="ml-1 text-foreground-subtle">- {need.orderNote}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1218,6 +1265,16 @@ export function QuoteAuthoringSurface({
   };
 
   const lineCount = lineItems.length;
+  const derivedNeeds = useMemo(
+    () =>
+      deriveNeedsForQuoteLines(
+        lineItems.map((line) => ({
+          lineId: line.id,
+          clarifications: line.clarifications,
+        })),
+      ),
+    [lineItems],
+  );
 
   return (
     <div className="@container">
@@ -1279,6 +1336,8 @@ export function QuoteAuthoringSurface({
                 hint="Items on this quote"
               />
             </div>
+
+            <DerivedNeedsPreview needs={derivedNeeds} />
 
             {isAddOpen && (
               <div className="mb-6">

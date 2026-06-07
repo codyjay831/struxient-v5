@@ -1,4 +1,10 @@
-import { TaskTemplateCategory, JobIssueType, JobIssueSeverity, StaffRole } from "@prisma/client";
+import {
+  TaskTemplateCategory,
+  JobIssueType,
+  JobIssueSeverity,
+  StaffRole,
+  PaymentScheduleAnchorType,
+} from "@prisma/client";
 import {
   AILibraryProposal,
   AILibraryProposalSchema,
@@ -36,6 +42,12 @@ import {
   type RecommendedTemplateSuggestion,
 } from "./quote-line-items-proposal-schema";
 import { normalizeScopeSuggestionGrouping } from "./normalize-scope-suggestion-grouping";
+import {
+  QuotePaymentScheduleProposalSchema,
+  type PaymentScheduleMilestoneSuggestion,
+  type QuotePaymentScheduleGenerationResult,
+  type QuotePaymentScheduleProposal,
+} from "./quote-payment-schedule-proposal-schema";
 import type { RecommendedTemplateMatch } from "./recommend-line-item-templates";
 import {
   QuoteExecutionReviewProposalSchema,
@@ -61,6 +73,22 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 
 function buildScopeSuggestionsGenerationMeta(simulated: boolean): QuoteScopeSuggestionsGenerationResult["generation"] {
+  if (simulated) {
+    const canApply = process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS === "1";
+    return {
+      isSimulated: true,
+      canApply,
+      applyBlockedReason: canApply
+        ? undefined
+        : "This is demo AI output. Apply is disabled until demo apply is explicitly enabled.",
+    };
+  }
+  return { isSimulated: false, canApply: true };
+}
+
+function buildPaymentScheduleGenerationMeta(
+  simulated: boolean,
+): QuotePaymentScheduleGenerationResult["generation"] {
   if (simulated) {
     const canApply = process.env.AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS === "1";
     return {
@@ -2328,5 +2356,284 @@ Return ONLY a valid JSON object:
     );
 
     return AILibraryProposalSchema.parse(filteredProposal);
+  }
+
+  static buildPaymentSchedulePromptForTest(params: {
+    quoteId: string;
+    quoteTotalCents: number;
+    contextText: string;
+    allowedStages: { id: string; name: string }[];
+    organizationName?: string;
+    userInstructions?: string | null;
+  }): string {
+    return this.buildPaymentSchedulePrompt(params);
+  }
+
+  private static buildPaymentSchedulePrompt(params: {
+    quoteId: string;
+    quoteTotalCents: number;
+    contextText: string;
+    allowedStages: { id: string; name: string }[];
+    organizationName?: string;
+    userInstructions?: string | null;
+  }): string {
+    const stageList = params.allowedStages.map((stage) => `- ${stage.name}`).join("\n");
+    const instructions = params.userInstructions?.trim()
+      ? `\nUSER INSTRUCTIONS:\n"""\n${params.userInstructions.trim()}\n"""`
+      : "";
+
+    return `
+You are Struxient's contractor payment schedule assistant.
+Propose a commercial payment schedule (milestones/deposits) for a quote — NOT execution tasks.
+
+ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
+QUOTE TOTAL CENTS: ${params.quoteTotalCents}
+
+INDUSTRY DEFAULT (use unless quote context explicitly says otherwise):
+- Target 2-4 milestones total.
+- Deposit on UPON_APPROVAL (commonly 25-50%).
+- Progress payment(s) on major execution phases using AFTER_STAGE when an execution plan exists.
+- FINAL_BALANCE for the remainder (no fixed amount or percentage on final balance).
+- Prefer percentages for non-final rows so totals stay aligned with the quote total.
+- Use fixed amountCents only when context specifies a dollar deposit.
+
+CONTEXT OVERRIDES:
+- Honor explicit payment terms in quote/lead notes, customer scope, or user instructions.
+- Examples: "50% upfront", "no deposit", "pay at inspection", "30/40/30".
+
+EXECUTION ALIGNMENT:
+- When draft execution tasks exist, tie progress milestones to significant stage transitions only.
+- Do NOT create one milestone per line item.
+- Use anchorStageName that exactly matches an allowed stage name when anchoring to a stage.
+
+ANCHOR TYPES (use only these):
+- UPON_APPROVAL — deposit due when quote is approved
+- BEFORE_STAGE — due before work in a stage begins
+- AFTER_STAGE — due after a stage completes
+- FINAL_BALANCE — remainder upon completion (exactly one recommended)
+
+CONSTRAINTS:
+- Milestone titles max 200 characters.
+- Non-final milestones need percentage OR amountCents (prefer percentage).
+- Scheduled non-final amounts must not exceed quote total when materialized.
+- Do NOT invent payment terms unsupported by anchors.
+- This is commercial schedule only — do NOT propose PAYMENT execution tasks.
+
+ALLOWED STAGES:
+${stageList || "None configured"}
+
+QUOTE CONTEXT:
+"""
+${params.contextText}
+"""
+${instructions}
+
+OUTPUT JSON ONLY:
+{
+  "scheduleRationale": "string",
+  "assumptions": ["string"],
+  "warnings": ["string"],
+  "missingInfo": ["string"],
+  "milestones": [
+    {
+      "title": "string",
+      "percentage": "optional string like 30 or 30.5",
+      "amountCents": "optional integer cents",
+      "anchorType": "UPON_APPROVAL" | "BEFORE_STAGE" | "AFTER_STAGE" | "FINAL_BALANCE",
+      "anchorStageName": "optional stage name when BEFORE_STAGE or AFTER_STAGE",
+      "reasoning": "optional string"
+    }
+  ]
+}
+`;
+  }
+
+  /**
+   * Generates a reviewable payment schedule proposal for a quote.
+   */
+  static async generatePaymentScheduleProposal(params: {
+    quoteId: string;
+    quoteTotalCents: number;
+    contextText: string;
+    allowedStages: { id: string; name: string }[];
+    organizationName?: string;
+    userInstructions?: string | null;
+  }): Promise<QuotePaymentScheduleGenerationResult> {
+    const gemini = this.getGeminiClient();
+
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        const proposal = this.simulatePaymentScheduleProposal({
+          ...params,
+          reason: "GEMINI_API_KEY is missing.",
+        });
+        return { proposal, generation: buildPaymentScheduleGenerationMeta(true) };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    const prompt = this.buildPaymentSchedulePrompt(params);
+
+    try {
+      const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+      const model = gemini.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      const raw = JSON.parse(jsonStr);
+
+      const parseAnchorType = (value: unknown): PaymentScheduleAnchorType => {
+        if (
+          value === PaymentScheduleAnchorType.UPON_APPROVAL ||
+          value === PaymentScheduleAnchorType.BEFORE_STAGE ||
+          value === PaymentScheduleAnchorType.AFTER_STAGE ||
+          value === PaymentScheduleAnchorType.FINAL_BALANCE
+        ) {
+          return value;
+        }
+        return PaymentScheduleAnchorType.UPON_APPROVAL;
+      };
+
+      const rawMilestones = Array.isArray(raw.milestones) ? raw.milestones : [];
+      const milestones: PaymentScheduleMilestoneSuggestion[] = rawMilestones
+        .filter((item: Record<string, unknown>) => typeof item?.title === "string")
+        .map((item: Record<string, unknown>) => ({
+          tempId: crypto.randomUUID(),
+          title: String(item.title).trim().slice(0, 200),
+          percentage:
+            typeof item.percentage === "string" || typeof item.percentage === "number"
+              ? String(item.percentage).trim().slice(0, 20)
+              : null,
+          amountCents:
+            typeof item.amountCents === "number" && Number.isInteger(item.amountCents)
+              ? Math.max(0, item.amountCents)
+              : null,
+          anchorType: parseAnchorType(item.anchorType),
+          anchorStageName:
+            typeof item.anchorStageName === "string"
+              ? item.anchorStageName.trim().slice(0, 200)
+              : null,
+          reasoning: typeof item.reasoning === "string" ? item.reasoning.slice(0, 2000) : null,
+        }))
+        .filter((item: PaymentScheduleMilestoneSuggestion) => item.title.length > 0);
+
+      const proposal = QuotePaymentScheduleProposalSchema.parse({
+        quoteId: params.quoteId,
+        sourceContextSummary: params.contextText.slice(0, 500),
+        scheduleRationale:
+          typeof raw.scheduleRationale === "string" ? raw.scheduleRationale.slice(0, 5000) : null,
+        assumptions: Array.isArray(raw.assumptions)
+          ? raw.assumptions.filter((v: unknown) => typeof v === "string")
+          : [],
+        warnings: Array.isArray(raw.warnings)
+          ? raw.warnings.filter((v: unknown) => typeof v === "string")
+          : [],
+        missingInfo: Array.isArray(raw.missingInfo)
+          ? raw.missingInfo.filter((v: unknown) => typeof v === "string")
+          : [],
+        milestones,
+      });
+
+      return { proposal, generation: buildPaymentScheduleGenerationMeta(false) };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        const proposal = this.simulatePaymentScheduleProposal({
+          ...params,
+          reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+        });
+        return { proposal, generation: buildPaymentScheduleGenerationMeta(true) };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+  }
+
+  private static simulatePaymentScheduleProposal(params: {
+    quoteId: string;
+    quoteTotalCents: number;
+    contextText: string;
+    allowedStages: { id: string; name: string }[];
+    reason?: string;
+  }): QuotePaymentScheduleProposal {
+    const contextLower = params.contextText.toLowerCase();
+    const milestones: PaymentScheduleMilestoneSuggestion[] = [];
+
+    const depositPct =
+      /\b50\s*%|\b50\/50|\bhalf upfront\b/i.test(contextLower)
+        ? "50"
+        : /\bno deposit\b|\b0%\s*deposit\b/i.test(contextLower)
+          ? null
+          : "30";
+
+    if (depositPct) {
+      milestones.push({
+        tempId: crypto.randomUUID(),
+        title: "Deposit",
+        percentage: depositPct,
+        amountCents: null,
+        anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+        anchorStageName: null,
+        reasoning: "Standard deposit due upon quote approval.",
+      });
+    }
+
+    const progressStage =
+      params.allowedStages.find((stage) => /field|install|production/i.test(stage.name)) ??
+      params.allowedStages.find((stage) => /inspection/i.test(stage.name)) ??
+      params.allowedStages[params.allowedStages.length - 1];
+
+    if (progressStage && milestones.length > 0 && !/\bno progress\b/i.test(contextLower)) {
+      milestones.push({
+        tempId: crypto.randomUUID(),
+        title: "Progress payment",
+        percentage: depositPct === "50" ? "40" : "40",
+        amountCents: null,
+        anchorType: PaymentScheduleAnchorType.AFTER_STAGE,
+        anchorStageName: progressStage.name,
+        reasoning: `Progress payment after ${progressStage.name} completes.`,
+      });
+    } else if (milestones.length === 0) {
+      milestones.push({
+        tempId: crypto.randomUUID(),
+        title: "Deposit",
+        percentage: "50",
+        amountCents: null,
+        anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+        anchorStageName: null,
+        reasoning: "Simulated default deposit.",
+      });
+    }
+
+    milestones.push({
+      tempId: crypto.randomUUID(),
+      title: "Final balance",
+      percentage: null,
+      amountCents: null,
+      anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+      anchorStageName: null,
+      reasoning: "Remainder due upon completion.",
+    });
+
+    return QuotePaymentScheduleProposalSchema.parse({
+      quoteId: params.quoteId,
+      sourceContextSummary: params.contextText.slice(0, 500),
+      scheduleRationale: "Simulated industry-standard deposit, progress, and final balance schedule.",
+      assumptions: ["Simulated: demo payment schedule for local development."],
+      warnings: [
+        "Demo AI output — not from the live provider.",
+        ...(params.reason ? [`Simulated fallback reason: ${params.reason}`] : []),
+      ],
+      missingInfo: [],
+      milestones,
+    });
   }
 }

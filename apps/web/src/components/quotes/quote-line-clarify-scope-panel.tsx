@@ -412,20 +412,15 @@ export function ClarifyScopePanel({
         key: question.key,
         label: question.label,
         inputType: question.inputType as DraftInputType,
-        helpText: "",
-        allowOther: false,
-        unit: "",
-        customerFacing: !(
-          question.key.includes("permit") ||
-          question.key.includes("utility") ||
-          question.key.includes("electrical_upgrade") ||
-          question.key.includes("decking")
-        ),
-        aliases: [],
+        helpText: question.helpText ?? "",
+        allowOther: question.allowOther ?? false,
+        unit: question.unit ?? "",
+        customerFacing: question.customerFacing ?? true,
+        aliases: question.aliases ?? [],
         options: (question.options ?? []).map((option) => ({
           key: option.key,
           label: option.label,
-          aliases: [],
+          aliases: option.aliases ?? [],
         })),
       })),
       attachToTemplateTags: true,
