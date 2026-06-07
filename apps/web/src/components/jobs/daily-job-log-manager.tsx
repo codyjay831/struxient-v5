@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { DailyJobLogStatus } from "@prisma/client";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -38,15 +39,38 @@ type DailyJobLog = {
 export function DailyJobLogManager({
   jobId,
   initialLogs,
+  variant = "page",
+  focusId,
 }: {
   jobId: string;
   initialLogs: DailyJobLog[];
+  variant?: "page" | "embedded";
+  focusId?: string;
 }) {
+  const isEmbedded = variant === "embedded";
+  const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [editSummary, setEditSummary] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  const displayedLogs = isEmbedded && focusId
+    ? initialLogs.filter((log) => log.id === focusId)
+    : initialLogs;
+
+  useEffect(() => {
+    if (!isEmbedded || !focusId) return;
+    const focusedLog = initialLogs.find((log) => log.id === focusId);
+    if (!focusedLog) return;
+    setEditSummary(focusedLog.summary);
+    setEditNotes(focusedLog.internalNotes || "");
+    setExpandedLogId(focusId);
+  }, [isEmbedded, focusId, initialLogs]);
+
+  const refreshAfterAction = () => {
+    if (isEmbedded) router.refresh();
+  };
 
   const handleCreateDraft = async () => {
     setIsSaving(true);
@@ -56,6 +80,7 @@ export function DailyJobLogManager({
         logDate: new Date(),
       });
       setIsCreating(false);
+      refreshAfterAction();
     } catch (error) {
       console.error("Failed to create draft:", error);
       alert("Failed to create draft. Check console for details.");
@@ -73,7 +98,8 @@ export function DailyJobLogManager({
         summary: editSummary,
         internalNotes: editNotes,
       });
-      setExpandedLogId(null);
+      setExpandedLogId(isEmbedded ? focusId ?? null : null);
+      refreshAfterAction();
     } catch (error) {
       console.error("Failed to save edit:", error);
       alert("Failed to save edit.");
@@ -87,6 +113,7 @@ export function DailyJobLogManager({
     setIsSaving(true);
     try {
       await markDailyJobLogReviewedAction(logId);
+      refreshAfterAction();
     } catch (error) {
       console.error("Failed to mark reviewed:", error);
       alert("Failed to mark reviewed.");
@@ -100,6 +127,7 @@ export function DailyJobLogManager({
     setIsSaving(true);
     try {
       await voidDailyJobLogAction(logId);
+      refreshAfterAction();
     } catch (error) {
       console.error("Failed to void log:", error);
       alert("Failed to void log.");
@@ -114,57 +142,18 @@ export function DailyJobLogManager({
     setExpandedLogId(log.id);
   };
 
-  return (
-    <section className="mb-8">
-      <div className="flex items-center justify-between">
-        <SectionHeading
-          title="Daily Logs"
-          description="Official records of what happened on the job site each day."
-        />
-        <button
-          onClick={() => setIsCreating(true)}
-          disabled={isSaving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          <Plus className="size-3.5" />
-          Create today&apos;s log
-        </button>
+  const logList = displayedLogs.length === 0 ? (
+    isEmbedded ? (
+      <p className="text-sm text-foreground-muted">This daily log is no longer available for review.</p>
+    ) : (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <FileText className="mx-auto size-8 text-foreground-subtle/50" />
+        <p className="mt-2 text-sm font-medium text-foreground-subtle">No daily logs created yet</p>
       </div>
-
-      {isCreating && (
-        <WorkspacePanel className="mb-4 border-primary/20 bg-primary/[0.02]">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Create draft for today</p>
-              <p className="text-xs text-foreground-subtle">This will generate a summary from today&apos;s recorded activity.</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setIsCreating(false)}
-                className="text-xs font-medium text-foreground-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateDraft}
-                disabled={isSaving}
-                className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background disabled:opacity-50"
-              >
-                {isSaving ? "Generating..." : "Generate draft"}
-              </button>
-            </div>
-          </div>
-        </WorkspacePanel>
-      )}
-
-      {initialLogs.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <FileText className="mx-auto size-8 text-foreground-subtle/50" />
-          <p className="mt-2 text-sm font-medium text-foreground-subtle">No daily logs created yet</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {initialLogs.map((log) => (
+    )
+  ) : (
+    <div className="space-y-3">
+      {displayedLogs.map((log) => (
             <div
               key={log.id}
               className={`rounded-lg border transition-colors ${
@@ -174,8 +163,12 @@ export function DailyJobLogManager({
               }`}
             >
               <div
-                className="flex cursor-pointer items-center justify-between p-3"
-                onClick={() => expandedLogId === log.id ? setExpandedLogId(null) : startEditing(log)}
+                className={`flex items-center justify-between p-3 ${isEmbedded ? "" : "cursor-pointer"}`}
+                onClick={
+                  isEmbedded
+                    ? undefined
+                    : () => expandedLogId === log.id ? setExpandedLogId(null) : startEditing(log)
+                }
               >
                 <div className="flex items-center gap-3">
                   <div className={`flex size-8 items-center justify-center rounded-full border ${getStatusStyles(log.status).iconBg}`}>
@@ -201,7 +194,7 @@ export function DailyJobLogManager({
                     </div>
                   </div>
                 </div>
-                {expandedLogId === log.id ? <ChevronUp className="size-4 text-foreground-muted" /> : <ChevronDown className="size-4 text-foreground-muted" />}
+                {expandedLogId === log.id && !isEmbedded ? <ChevronUp className="size-4 text-foreground-muted" /> : !isEmbedded ? <ChevronDown className="size-4 text-foreground-muted" /> : null}
               </div>
 
               {expandedLogId === log.id && (
@@ -277,8 +270,57 @@ export function DailyJobLogManager({
               )}
             </div>
           ))}
-        </div>
+    </div>
+  );
+
+  if (isEmbedded) {
+    return logList;
+  }
+
+  return (
+    <section className="mb-8">
+      <div className="flex items-center justify-between">
+        <SectionHeading
+          title="Daily Logs"
+          description="Official records of what happened on the job site each day."
+        />
+        <button
+          onClick={() => setIsCreating(true)}
+          disabled={isSaving}
+          className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus className="size-3.5" />
+          Create today&apos;s log
+        </button>
+      </div>
+
+      {isCreating && (
+        <WorkspacePanel className="mb-4 border-primary/20 bg-primary/[0.02]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Create draft for today</p>
+              <p className="text-xs text-foreground-subtle">This will generate a summary from today&apos;s recorded activity.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsCreating(false)}
+                className="text-xs font-medium text-foreground-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateDraft}
+                disabled={isSaving}
+                className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background disabled:opacity-50"
+              >
+                {isSaving ? "Generating..." : "Generate draft"}
+              </button>
+            </div>
+          </div>
+        </WorkspacePanel>
       )}
+
+      {logList}
     </section>
   );
 }

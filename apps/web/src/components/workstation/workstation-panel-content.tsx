@@ -6,6 +6,9 @@ import { loadJobTaskExecutionPayload } from "@/lib/job-task-execution-loader";
 import { WorkstationJobPanel } from "@/components/workstation/workstation-job-panel";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
 import { IssueRecoveryDetailLoader } from "./issue-recovery-detail-loader";
+import { WorkstationPaymentDetailLoader } from "./workstation-payment-detail-loader";
+import { WorkstationVisitDetailLoader } from "./workstation-visit-detail-loader";
+import { WorkstationDailyLogDetailLoader } from "./workstation-daily-log-detail-loader";
 
 export async function WorkstationPanelContent({
   item,
@@ -26,6 +29,40 @@ export async function WorkstationPanelContent({
         issueId={item.actionIssueId ?? item.recordId}
         actionKind={item.actionKind}
         actionTaskId={item.actionTaskId}
+      />
+    );
+  }
+
+  if (item.kind === "investigate" && item.filterCategory === "payments") {
+    if (!item.parentRecordId) return null;
+    return (
+      <WorkstationPaymentDetailLoader
+        requirementId={item.recordId}
+        jobId={item.parentRecordId}
+      />
+    );
+  }
+
+  if (item.kind === "schedule") {
+    const jobId = item.parentRecordId ?? item.recordId;
+    const scheduleMode = item.id.startsWith("job-unscheduled-")
+      ? "schedule-new"
+      : "focus-visit";
+    return (
+      <WorkstationVisitDetailLoader
+        jobId={jobId}
+        visitId={scheduleMode === "focus-visit" ? item.recordId : undefined}
+        mode={scheduleMode}
+      />
+    );
+  }
+
+  if (item.kind === "daily-log") {
+    if (!item.parentRecordId) return null;
+    return (
+      <WorkstationDailyLogDetailLoader
+        logId={item.recordId}
+        jobId={item.parentRecordId}
       />
     );
   }

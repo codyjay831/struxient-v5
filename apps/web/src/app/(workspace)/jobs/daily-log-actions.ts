@@ -68,6 +68,7 @@ export async function createOrUpdateDailyJobLogDraftAction(input: CreateOrUpdate
   });
 
   revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath("/workstation");
   return { success: true, logId: log.id };
 }
 
@@ -93,6 +94,7 @@ export async function markDailyJobLogReviewedAction(logId: string) {
   });
 
   revalidatePath(`/jobs/${log.jobId}`);
+  revalidatePath("/workstation");
   return { success: true };
 }
 
@@ -116,5 +118,6 @@ export async function voidDailyJobLogAction(logId: string) {
   });
 
   revalidatePath(`/jobs/${log.jobId}`);
+  revalidatePath("/workstation");
   return { success: true };
 }

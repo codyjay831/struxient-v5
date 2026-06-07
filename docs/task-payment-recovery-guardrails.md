@@ -67,7 +67,7 @@ deriveTaskState(input, liveSignals, {
 
 - Client filters like `r.status === "DUE" || r.status === "PENDING"` for operational blocking (display partitioning may use status with server-provided `effectivelyDueRequirementIds`)
 - New `paymentBlockers` column or per-task stored payment flags
-- Duplicate payment cards on Workstation (job page `JobPaymentManager` is the staff surface)
+- Duplicate payment cards on Workstation with **different rules** than the job page — embed `JobPaymentManager` with `variant="embedded"` instead; job page remains the full staff surface for browse-at-length
 
 ### Payment actions
 

@@ -33,7 +33,7 @@ Work items carry:
 ## What Workstation should do
 
 - Surface **ranked signals** across leads, quotes, jobs, tasks, issues, payments, visits, daily logs
-- Open **shared work surfaces** for the selected item (task, lead, quote)
+- Open **shared work surfaces** for the selected item (task, lead, quote, payment, visit, daily log)
 - Use the same **derived readiness** as record pages (`deriveTaskState`, quote/lead readiness helpers)
 - Emit **payment attention** through `getUnsettledEffectivelyDueRequirements` (single payment emission path in query)
 - Keep **job summary** panels lightweight (`workstation-job-panel.tsx`)—counts and next step, not full job editor
@@ -43,7 +43,8 @@ Work items carry:
 - A **raw dump** of all tasks, payments, or leads without ranking
 - A place to **reimplement** quote authoring, lead intake, payment recording, or recovery logic
 - A source of **fake metrics** or placeholder analytics presented as product truth
-- A **duplicate** payment card or task editor with different blocking rules than the job page
+- A **duplicate** task editor with different blocking rules than the job page
+- **Forking** payment/visit/log editors under `components/workstation/` instead of embedding the job-page managers
 
 ## Shared work surfaces (allowed embeds)
 
@@ -52,8 +53,12 @@ Work items carry:
 | Task execution | `components/jobs/task-work-surface.tsx` | `loadJobTaskExecutionPayload()` |
 | Lead commercial | `components/work-surfaces/lead-commercial-surface.tsx` | `loadLeadCommercialSurface()` |
 | Quote | `components/work-surfaces/quote-work-surface.tsx` | `loadQuoteWorkSurface()` |
+| Issue recovery | `components/workstation/issue-recovery-panel.tsx` | `IssueRecoveryDetailLoader` |
+| Payment gate | `components/jobs/job-payment-manager.tsx` (`variant="embedded"`) | `WorkstationPaymentDetailLoader` |
+| Visit / schedule | `components/jobs/job-visit-manager.tsx` (`variant="embedded"`) | `WorkstationVisitDetailLoader` |
+| Daily log review | `components/jobs/daily-job-log-manager.tsx` (`variant="embedded"`) | `WorkstationDailyLogDetailLoader` |
 
-**Rule:** When adding Workstation actions on a work type, **embed or link to these surfaces**—do not fork a second editor under `components/workstation/`.
+**Rule:** When adding Workstation actions on a work type, **embed the canonical job/record managers**—do not fork a second editor under `components/workstation/`. In-panel work is **primary**; footer "Open full record" links are **secondary**.
 
 ## Attention vs full record pages
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { JobPaymentRequirementStatus, type JobStage } from "@prisma/client";
 import {
   createJobPaymentRequirementAction,
@@ -36,12 +37,17 @@ export function JobPaymentManager({
   initialRequirements,
   stages,
   effectivelyDueRequirementIds = [],
+  variant = "page",
+  focusId,
 }: {
   jobId: string;
   initialRequirements: PaymentRequirement[];
   stages: Pick<JobStage, "id" | "title">[];
   effectivelyDueRequirementIds?: string[];
+  variant?: "page" | "embedded";
+  focusId?: string;
 }) {
+  const isEmbedded = variant === "embedded";
   const effectivelyDueSet = new Set(effectivelyDueRequirementIds);
   const [isPending] = useTransition();
   const [showForm, setShowForm] = useState(false);
@@ -54,74 +60,88 @@ export function JobPaymentManager({
     (r) => r.status === "PAID" || r.status === "WAIVED" || r.status === "CANCELED",
   );
 
+  const displayedRequirements = isEmbedded && focusId
+    ? activeRequirements.filter((r) => r.id === focusId)
+    : activeRequirements;
+
+  const content = (
+    <div className="space-y-4">
+      {!isEmbedded && activeRequirements.length === 0 && !showForm ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+          <CreditCard className="mx-auto size-8 text-foreground-subtle/50" />
+          <p className="mt-2 text-sm font-medium text-foreground-subtle">No active payment requirements</p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="mt-4 text-xs font-semibold text-foreground underline-offset-4 hover:underline"
+          >
+            Record your first requirement
+          </button>
+        </div>
+      ) : displayedRequirements.length > 0 ? (
+        <div className="space-y-3">
+          {displayedRequirements.map((req) => (
+            <RequirementCard
+              key={req.id}
+              requirement={req}
+              isPending={isPending}
+              isEffectivelyDue={effectivelyDueSet.has(req.id)}
+              embedded={isEmbedded}
+            />
+          ))}
+        </div>
+      ) : isEmbedded ? (
+        <p className="text-sm text-foreground-muted">This payment requirement is no longer active.</p>
+      ) : null}
+
+      {!isEmbedded && showForm ? (
+        <CreateRequirementForm
+          jobId={jobId}
+          stages={stages}
+          onCancel={() => setShowForm(false)}
+          onSuccess={() => setShowForm(false)}
+        />
+      ) : !isEmbedded && activeRequirements.length > 0 ? (
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-3 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+          Add another requirement
+        </button>
+      ) : null}
+
+      {!isEmbedded && historicalRequirements.length > 0 && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowHistorical(!showHistorical)}
+            className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
+          >
+            {showHistorical ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+            {showHistorical ? "Hide" : "Show"} historical requirements ({historicalRequirements.length})
+          </button>
+          {showHistorical && (
+            <div className="mt-3 space-y-2 opacity-70 transition-opacity hover:opacity-100">
+              {historicalRequirements.map((req) => (
+                <RequirementCard key={req.id} requirement={req} isPending={isPending} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  if (isEmbedded) {
+    return content;
+  }
+
   return (
     <section className="mb-8">
       <SectionHeading
         title="Payments & Gates"
         description="Track financial requirements and blockers for this job. These are internal staff records and do not yet reflect customer-facing invoices."
       />
-
-      <div className="space-y-4">
-        {activeRequirements.length === 0 && !showForm ? (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <CreditCard className="mx-auto size-8 text-foreground-subtle/50" />
-            <p className="mt-2 text-sm font-medium text-foreground-subtle">No active payment requirements</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-4 text-xs font-semibold text-foreground underline-offset-4 hover:underline"
-            >
-              Record your first requirement
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {activeRequirements.map((req) => (
-              <RequirementCard
-                key={req.id}
-                requirement={req}
-                isPending={isPending}
-                isEffectivelyDue={effectivelyDueSet.has(req.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {showForm ? (
-          <CreateRequirementForm
-            jobId={jobId}
-            stages={stages}
-            onCancel={() => setShowForm(false)}
-            onSuccess={() => setShowForm(false)}
-          />
-        ) : activeRequirements.length > 0 ? (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-3 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-          >
-            <Plus className="size-3.5" />
-            Add another requirement
-          </button>
-        ) : null}
-
-        {historicalRequirements.length > 0 && (
-          <div className="mt-6">
-            <button
-              onClick={() => setShowHistorical(!showHistorical)}
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
-            >
-              {showHistorical ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-              {showHistorical ? "Hide" : "Show"} historical requirements ({historicalRequirements.length})
-            </button>
-            {showHistorical && (
-              <div className="mt-3 space-y-2 opacity-70 transition-opacity hover:opacity-100">
-                {historicalRequirements.map((req) => (
-                  <RequirementCard key={req.id} requirement={req} isPending={isPending} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {content}
     </section>
   );
 }
@@ -130,16 +150,24 @@ function RequirementCard({
   requirement,
   isPending,
   isEffectivelyDue = false,
+  embedded = false,
 }: {
   requirement: PaymentRequirement;
   isPending: boolean;
   isEffectivelyDue?: boolean;
+  embedded?: boolean;
 }) {
+  const router = useRouter();
   const [, startTransition] = useTransition();
+
+  const refreshAfterAction = () => {
+    if (embedded) router.refresh();
+  };
 
   const onMarkPaid = () => {
     startTransition(async () => {
       await markJobPaymentRequirementPaidAction(requirement.id);
+      refreshAfterAction();
     });
   };
 
@@ -147,6 +175,7 @@ function RequirementCard({
     if (!confirm("Are you sure you want to waive this payment requirement?")) return;
     startTransition(async () => {
       await waiveJobPaymentRequirementAction(requirement.id);
+      refreshAfterAction();
     });
   };
 
@@ -154,6 +183,7 @@ function RequirementCard({
     if (!confirm("Are you sure you want to cancel this payment requirement?")) return;
     startTransition(async () => {
       await cancelJobPaymentRequirementAction(requirement.id);
+      refreshAfterAction();
     });
   };
 
@@ -197,7 +227,13 @@ function RequirementCard({
         </div>
 
         {!isHistorical && (
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div
+            className={
+              embedded
+                ? "flex items-center gap-1"
+                : "flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+            }
+          >
             <button
               onClick={onMarkPaid}
               disabled={isPending}

@@ -22,6 +22,16 @@ function blockedTaskRecoveryNotice(item: WorkstationWorkItem): string {
   return "This task is blocked. Complete the recovery step below to clear the blocker.";
 }
 
+function fullRecordLinkLabel(item: WorkstationWorkItem): string {
+  if (item.filterCategory === "issues") return "Open issue on job";
+  if (item.filterCategory === "payments") return "Open job payments";
+  if (item.kind === "schedule") return "Open job schedule";
+  if (item.kind === "daily-log") return "Open job logs";
+  if (item.kind === "quote") return "Open quote record";
+  if (item.kind === "lead") return "Open lead workspace";
+  return "Open full record";
+}
+
 export type WorkstationWorkPanelProps = {
   item: WorkstationWorkItem;
   children?: ReactNode;
@@ -111,19 +121,22 @@ export function WorkstationWorkPanel({
       <div className="shrink-0 border-t border-border bg-foreground/[0.01] px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-6">
           {item.href ? (
-            <Link
-              href={item.href}
-              className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {item.filterCategory === "issues"
-                ? "Open issue on job"
-                : item.kind === "quote"
-                  ? "Open quote record"
-                  : item.kind === "lead"
-                    ? "Open lead workspace"
-                    : "Open full record"}
-              <ArrowRight className="size-4" />
-            </Link>
+            children ? (
+              <Link
+                href={item.href}
+                className="text-sm font-bold text-foreground-subtle transition-colors hover:text-foreground"
+              >
+                {fullRecordLinkLabel(item)}
+              </Link>
+            ) : (
+              <Link
+                href={item.href}
+                className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {fullRecordLinkLabel(item)}
+                <ArrowRight className="size-4" />
+              </Link>
+            )
           ) : null}
           <button
             type="button"

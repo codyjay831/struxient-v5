@@ -1,0 +1,97 @@
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { db } from "@/lib/db";
+import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
+import {
+  attachScheduleAnchorsToRequirements,
+  buildPaymentDueContextFromJob,
+  getUnsettledEffectivelyDueRequirements,
+  loadScheduleAnchorsByIds,
+} from "@/lib/job-payment-readiness";
+
+type WorkstationPaymentDetailLoaderProps = {
+  requirementId: string;
+  jobId: string;
+};
+
+export async function WorkstationPaymentDetailLoader({
+  requirementId,
+  jobId,
+}: WorkstationPaymentDetailLoaderProps) {
+  const ctx = await getRequestContextOrThrow();
+
+  const requirement = await db.jobPaymentRequirement.findFirst({
+    where: {
+      id: requirementId,
+      jobId,
+      organizationId: ctx.organizationId,
+    },
+    select: { id: true },
+  });
+
+  if (!requirement) return null;
+
+  const job = await db.job.findFirst({
+    where: { id: jobId, organizationId: ctx.organizationId },
+    include: {
+      stages: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          stageId: true,
+          tasks: {
+            select: { status: true, recoveryFlowId: true },
+          },
+        },
+      },
+      paymentRequirements: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          status: true,
+          notes: true,
+          requiredBeforeStageId: true,
+          sourcePaymentScheduleItemId: true,
+          paidAt: true,
+          waivedAt: true,
+          canceledAt: true,
+          requiredBeforeStage: { select: { title: true } },
+        },
+      },
+    },
+  });
+
+  if (!job) return null;
+
+  const paymentScheduleAnchors = await loadScheduleAnchorsByIds(
+    job.paymentRequirements.map((r) => r.sourcePaymentScheduleItemId),
+  );
+  const paymentRequirementsWithAnchors = attachScheduleAnchorsToRequirements(
+    job.paymentRequirements,
+    paymentScheduleAnchors,
+  );
+
+  const paymentDueContext = buildPaymentDueContextFromJob({
+    status: job.status,
+    stages: job.stages,
+    paymentRequirements: paymentRequirementsWithAnchors,
+  });
+  const effectivelyDueRequirements = getUnsettledEffectivelyDueRequirements(
+    paymentRequirementsWithAnchors,
+    paymentDueContext,
+  );
+
+  return (
+    <JobPaymentManager
+      jobId={jobId}
+      initialRequirements={paymentRequirementsWithAnchors}
+      stages={job.stages.map((s) => ({ id: s.id, title: s.title }))}
+      effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
+      variant="embedded"
+      focusId={requirementId}
+    />
+  );
+}
