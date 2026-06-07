@@ -1,4 +1,5 @@
 import { JobIssueStatus, JobIssueSeverity, JobTaskStatus } from "@prisma/client";
+import { includesEquivalentSignal } from "@/lib/signal-key";
 
 export type TaskDerivedState =
   | "COMPLETED"
@@ -6,6 +7,11 @@ export type TaskDerivedState =
   | "BLOCKED_BY_SIGNAL"
   | "NEEDS_PROOF"
   | "READY";
+
+/** Tasks the user can work on in TaskWorkSurface (unblocked or missing completion proof only). */
+export function isActionableTaskState(state: TaskDerivedState): boolean {
+  return state === "READY" || state === "NEEDS_PROOF";
+}
 
 export type ChecklistItem = {
   id: string;
@@ -135,7 +141,7 @@ export function deriveTaskState(
   // 3. Check for missing signals (Task level)
   if (task.requiresSignals.length > 0) {
     const missingTaskSignals = task.requiresSignals.filter(
-      (s) => !liveSignals.includes(s)
+      (s) => !includesEquivalentSignal(liveSignals, s),
     );
     if (missingTaskSignals.length > 0) {
       return "BLOCKED_BY_SIGNAL";

@@ -2,6 +2,7 @@ import type {
   QuoteStatus,
   TaskTemplateCategory,
 } from "@prisma/client";
+import { normalizeSignalKey } from "@/lib/signal-key";
 import type { TaskCompletionRequirements } from "./task-readiness";
 import type { TaskResourceRequirement } from "./task-resource";
 
@@ -47,8 +48,11 @@ export type QuoteExecutionReviewHandshake = {
 export type QuoteExecutionReviewOrphan = {
   signal: string;
   isHard: boolean;
+  consumerLineId: string;
+  consumerStageId: string | null;
   consumerTaskId: string;
   consumerTaskTitle: string;
+  consumerTaskRequiresSignalCount: number;
   consumerLineDescription: string;
 };
 
@@ -82,6 +86,20 @@ export type QuoteExecutionReviewPreviewModel = {
   }[];
 };
 
+function uniqueSignalsByEquivalence(signals: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const signal of signals) {
+    const normalized = normalizeSignalKey(signal);
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    unique.push(signal);
+  }
+  return unique;
+}
+
 export function buildQuoteExecutionReviewPreviewModel(
   quote: QuoteExecutionReviewQuoteInput,
 ): QuoteExecutionReviewPreviewModel {
@@ -92,8 +110,11 @@ export function buildQuoteExecutionReviewPreviewModel(
   const providedSignalsMap = new Map<string, typeof allTasks[number][]>();
   for (const t of allTasks) {
     for (const s of t.providesSignals) {
-      if (!providedSignalsMap.has(s)) providedSignalsMap.set(s, []);
-      providedSignalsMap.get(s)!.push(t);
+      const normalizedSignal = normalizeSignalKey(s);
+      if (!providedSignalsMap.has(normalizedSignal)) {
+        providedSignalsMap.set(normalizedSignal, []);
+      }
+      providedSignalsMap.get(normalizedSignal)!.push(t);
     }
   }
 
@@ -102,7 +123,7 @@ export function buildQuoteExecutionReviewPreviewModel(
 
   for (const consumer of allTasks) {
     for (const signal of consumer.requiresSignals) {
-      const providers = providedSignalsMap.get(signal);
+      const providers = providedSignalsMap.get(normalizeSignalKey(signal));
       if (providers && providers.length > 0) {
         for (const provider of providers) {
           handshakes.push({
@@ -119,8 +140,11 @@ export function buildQuoteExecutionReviewPreviewModel(
         orphans.push({
           signal,
           isHard: consumer.hardSignal,
+          consumerLineId: consumer.lineId,
+          consumerStageId: consumer.stageId,
           consumerTaskId: consumer.id,
           consumerTaskTitle: consumer.title,
+          consumerTaskRequiresSignalCount: consumer.requiresSignals.length,
           consumerLineDescription: consumer.lineDescription,
         });
       }
@@ -144,8 +168,8 @@ export function buildQuoteExecutionReviewPreviewModel(
       lineId: l.id,
       description: l.description,
       taskCount: l.tasks.length,
-      providesSignals: Array.from(new Set(l.tasks.flatMap((t) => t.providesSignals))),
-      requiresSignals: Array.from(new Set(l.tasks.flatMap((t) => t.requiresSignals))),
+      providesSignals: uniqueSignalsByEquivalence(l.tasks.flatMap((t) => t.providesSignals)),
+      requiresSignals: uniqueSignalsByEquivalence(l.tasks.flatMap((t) => t.requiresSignals)),
       checklistCount,
       equipmentCount,
     };
@@ -195,7 +219,9 @@ export function buildQuoteExecutionReviewPreviewModel(
       totalLines: quote.lines.length,
       totalTasks: allTasks.length,
       providedSignalCount: providedSignalsMap.size,
-      requiredSignalCount: new Set(allTasks.flatMap((t) => t.requiresSignals)).size,
+      requiredSignalCount: new Set(
+        allTasks.flatMap((t) => t.requiresSignals.map((signal) => normalizeSignalKey(signal))),
+      ).size,
       orphanCount: orphans.length,
       hardOrphanCount: orphans.filter((o) => o.isHard).length,
     },

@@ -50,6 +50,23 @@ test("deriveTaskState: READY when task requirement met", () => {
   assert.equal(state, "READY");
 });
 
+test("deriveTaskState: READY when equivalent signal spelling is live", () => {
+  const state = deriveTaskState(
+    {
+      status: JobTaskStatus.TODO,
+      completedAt: null,
+      completionNote: null,
+      completionRequirementsJson: {},
+      attachments: [],
+      requiresSignals: ["permit.approved"],
+      issues: [],
+      stage: { requiresSignals: [], issues: [] },
+    },
+    ["permit-approved"],
+  );
+  assert.equal(state, "READY");
+});
+
 test("deriveTaskState: ignores stage signal requirements in v5 MVP", () => {
   const state = deriveTaskState({
     status: JobTaskStatus.TODO,

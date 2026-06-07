@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { QuoteLineExecutionRevalidateScope } from "@/app/(workspace)/quotes/quote-line-execution-types";
 import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
   QuoteLineDraftExecutionInlinePanel,
   type QuoteLineDraftExecutionTaskRow,
 } from "@/components/quotes/quote-line-draft-execution-panel";
+import { useQuoteExecutionReviewFocusOptional } from "@/components/quotes/quote-execution-review-focus";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 
 /**
@@ -42,8 +43,19 @@ export function QuoteLineDraftExecutionInlineToggle({
   hideAiButton?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const focusContext = useQuoteExecutionReviewFocusOptional();
   const defaultOpenLabel = taskCount === 0 ? "Add draft execution" : "Edit draft execution";
   const openLabel = openLabelOverride ?? defaultOpenLabel;
+
+  useEffect(() => {
+    const focus = focusContext?.focus;
+    if (!focus || focus.lineId !== lineItemId) {
+      return;
+    }
+    setOpen(true);
+    setEditingTaskId(focus.taskId);
+  }, [focusContext?.focus, lineItemId]);
 
   const panel = open ? (
     <QuoteLineDraftExecutionInlinePanel
@@ -55,7 +67,12 @@ export function QuoteLineDraftExecutionInlineToggle({
       revalidateScope={revalidateScope}
       initialPlanningContext={initialPlanningContext}
       hideAiButton={hideAiButton}
-      onClose={() => setOpen(false)}
+      initialEditingTaskId={editingTaskId}
+      onClose={() => {
+        setOpen(false);
+        setEditingTaskId(null);
+        focusContext?.clearFocus();
+      }}
     />
   ) : null;
 

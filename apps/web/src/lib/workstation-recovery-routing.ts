@@ -10,6 +10,7 @@ import {
   shouldShowResumeOriginalPathAction,
   type RecoveryIssueUiFlowIssue,
 } from "@/lib/recovery-issue-ui-flow";
+import { isActionableTaskState, type TaskDerivedState } from "@/lib/task-readiness";
 
 export type WorkstationRecoveryActionKind =
   | "plan-recovery"
@@ -86,6 +87,15 @@ export function mapHealthActionToWorkstationRoute(
       return {
         actionKind: "plan-recovery",
         actionIssueId: issueId,
+        actionLabel: action.label,
+        nextStep: action.label,
+      };
+    }
+    case "review_health": {
+      if (!action.targetId) return null;
+      return {
+        actionKind: "do-recovery-task",
+        actionTaskId: action.targetId,
         actionLabel: action.label,
         nextStep: action.label,
       };
@@ -230,14 +240,64 @@ export function deriveBlockedTaskRecoveryRoute(
   return route;
 }
 
-/** Recovery-related health action types that warrant WS action fields on job-health items. */
-export function isRecoveryRelatedHealthAction(
+export type StuckJobTaskInput = {
+  id: string;
+  title: string;
+  jobStageId: string;
+  completedAt: Date | null;
+  derivedState: TaskDerivedState;
+};
+
+/** Fallback routing when health recommends review with no target or mapping missed a task id. */
+export function deriveStuckJobWorkstationRoute(
+  tasks: StuckJobTaskInput[],
+  candidates: BlockingIssueCandidate[],
+): WorkstationRecoveryRoute | null {
+  for (const task of tasks) {
+    if (task.completedAt) continue;
+
+    if (isActionableTaskState(task.derivedState)) {
+      return {
+        actionKind: "do-recovery-task",
+        actionTaskId: task.id,
+        actionLabel: `Start: ${task.title}`,
+        nextStep: `Start: ${task.title}`,
+      };
+    }
+
+    if (task.derivedState === "BLOCKED_BY_ISSUE") {
+      const route = deriveBlockedTaskRecoveryRoute(task.id, task.jobStageId, candidates);
+      if (route) return route;
+    }
+  }
+
+  const firstOpen = tasks.find((t) => !t.completedAt);
+  if (!firstOpen) return null;
+
+  return {
+    actionKind: "do-recovery-task",
+    actionTaskId: firstOpen.id,
+    actionLabel: `Open: ${firstOpen.title}`,
+    nextStep: `Open: ${firstOpen.title}`,
+  };
+}
+
+/** Health action types that warrant WS action fields on job-health items. */
+export function isWorkstationRoutableHealthAction(
   type: ExecutionHealthRecommendedActionType,
 ): boolean {
   return (
     type === "complete_task" ||
     type === "resume_path" ||
     type === "activate_recovery" ||
-    type === "resolve_issue"
+    type === "resolve_issue" ||
+    type === "review_health"
   );
+}
+
+/** @deprecated Use isWorkstationRoutableHealthAction */
+export function isRecoveryRelatedHealthAction(
+  type: ExecutionHealthRecommendedActionType,
+): boolean {
+  return isWorkstationRoutableHealthAction(type);
 }

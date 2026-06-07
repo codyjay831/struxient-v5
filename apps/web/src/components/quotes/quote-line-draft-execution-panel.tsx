@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   addQuoteLineExecutionTaskCustomAction,
   addQuoteLineExecutionTaskFromReusableAction,
@@ -199,6 +199,7 @@ function StageTaskRow({
   isFirstInStage,
   isLastInStage,
   revalidateScope,
+  initialEditing = false,
 }: {
   quoteId: string;
   lineItemId: string;
@@ -207,8 +208,15 @@ function StageTaskRow({
   isFirstInStage: boolean;
   isLastInStage: boolean;
   revalidateScope: QuoteLineExecutionRevalidateScope;
+  initialEditing?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
+
+  useEffect(() => {
+    if (initialEditing) {
+      setEditing(true);
+    }
+  }, [initialEditing]);
   const [deleteState, deleteAction, deletePending] = useActionState(
     deleteQuoteLineExecutionTaskAction.bind(null, quoteId, lineItemId, task.id),
     initialFormState,
@@ -223,7 +231,10 @@ function StageTaskRow({
   );
 
   return (
-    <li className="rounded-md border border-border bg-background/40 px-3 py-3">
+    <li
+      id={`execution-task-${task.id}`}
+      className="rounded-md border border-border bg-background/40 px-3 py-3 scroll-mt-24"
+    >
       <div className="flex flex-col gap-3">
         <div className="min-w-0 break-words">
           <p className="text-sm font-medium text-foreground">{task.title}</p>
@@ -485,6 +496,7 @@ function StageSection({
   addMode,
   setAddMode,
   revalidateScope,
+  initialEditingTaskId,
 }: {
   quoteId: string;
   lineItemId: string;
@@ -495,6 +507,7 @@ function StageSection({
   addMode: AddMode;
   setAddMode: (next: AddMode) => void;
   revalidateScope: QuoteLineExecutionRevalidateScope;
+  initialEditingTaskId?: string | null;
 }) {
   const isAddingCustom = addMode?.stageId === stage.id && addMode.mode === "custom";
   const isAddingReusable = addMode?.stageId === stage.id && addMode.mode === "reusable";
@@ -523,6 +536,7 @@ function StageSection({
               isFirstInStage={idx === 0}
               isLastInStage={idx === tasks.length - 1}
               revalidateScope={revalidateScope}
+              initialEditing={task.id === initialEditingTaskId}
             />
           ))}
         </ul>
@@ -583,6 +597,7 @@ export function QuoteLineDraftExecutionInlinePanel({
   revalidateScope = "quote",
   initialPlanningContext = "",
   hideAiButton = false,
+  initialEditingTaskId = null,
   onClose,
 }: {
   quoteId: string;
@@ -594,6 +609,8 @@ export function QuoteLineDraftExecutionInlinePanel({
   initialPlanningContext?: string;
   /** When true, skip AI controls — caller provides a line-level AI entry point. */
   hideAiButton?: boolean;
+  /** When set, open this task in edit mode when the panel mounts or the id changes. */
+  initialEditingTaskId?: string | null;
   /** When set, show Close in the panel header (toggle lives outside the panel). */
   onClose?: () => void;
 }) {
@@ -689,6 +706,7 @@ export function QuoteLineDraftExecutionInlinePanel({
             addMode={addMode}
             setAddMode={setAddMode}
             revalidateScope={revalidateScope}
+            initialEditingTaskId={initialEditingTaskId}
           />
         ))}
       </div>

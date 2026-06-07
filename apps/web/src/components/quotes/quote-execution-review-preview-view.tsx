@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { QuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { jobDetailPath } from "@/lib/job-path";
@@ -5,6 +7,14 @@ import type {
   QuoteJobActivationReadiness,
 } from "@/lib/quote-job-activation-readiness";
 import { QuoteActivateJobForm } from "@/components/quotes/quote-activate-job-form";
+import { QuoteBlockedActivationPanel } from "@/components/quotes/quote-blocked-activation-panel";
+import {
+  QuoteCrossLineWiringReviewPanel,
+  QuoteCrossLineWiringReviewScope,
+  QuoteCrossLineWiringReviewTrigger,
+} from "@/components/quotes/quote-cross-line-wiring-review";
+import { QuoteExecutionDependencyGapsPanel } from "@/components/quotes/quote-execution-dependency-gaps-panel";
+import { QuoteExecutionReviewFocusProvider } from "@/components/quotes/quote-execution-review-focus";
 import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
 import { QuoteLineExecutionAiDrawerButton } from "@/components/quotes/quote-line-execution-ai-drawer";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
@@ -13,7 +23,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
-import { Briefcase, CheckCircle2, ClipboardList, Info, ShieldAlert, Zap, Package, Hammer, ListChecks } from "lucide-react";
+import type { ReactNode } from "react";
+import { Briefcase, CheckCircle2, ClipboardList, Info, Zap, Package, Hammer, ListChecks } from "lucide-react";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -48,10 +59,17 @@ export function QuoteExecutionReviewPreviewView({
   stages: { id: string; name: string }[];
 }) {
   const { summary, handshakes, orphans, lineReadiness, equipmentRollup } = model;
+  const showCrossLineReview =
+    executionPlanningEditable && summary.totalLines > 0 && summary.totalTasks > 0;
 
-  return (
-    <div className="space-y-6">
-      <ActivationPanel activation={activation} quoteId={quoteId} />
+  const reviewContent = (
+    <>
+      <ActivationPanel
+        activation={activation}
+        quoteId={quoteId}
+        showCrossLineReview={showCrossLineReview}
+        hardOrphanCount={summary.hardOrphanCount}
+      />
 
       {summary.totalLines === 0 ? (
         <WorkspacePanel>
@@ -71,6 +89,11 @@ export function QuoteExecutionReviewPreviewView({
             <SectionHeading
               title="Readiness checks"
               description={`Quote “${quoteTitle}”. Review task dependencies across line items so the team has a clear path to start and continue work.`}
+              actions={
+                showCrossLineReview ? (
+                  <QuoteCrossLineWiringReviewTrigger label="Review whole execution flow" />
+                ) : null
+              }
             />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <SignalCard label="Line items" value={String(summary.totalLines)} hint="Commercial scope rows." />
@@ -85,35 +108,25 @@ export function QuoteExecutionReviewPreviewView({
               <SignalCard label="Outputs" value={String(summary.providedSignalCount)} hint="Unique completion outputs." />
               <SignalCard label="Dependencies needed" value={String(summary.requiredSignalCount)} hint="Unique prerequisites across tasks." />
             </div>
+            {showCrossLineReview && orphans.length === 0 ? (
+              <div className="mt-4">
+                <QuoteCrossLineWiringReviewPanel />
+              </div>
+            ) : null}
           </WorkspacePanel>
 
           {orphans.length > 0 && (
             <WorkspacePanel className="border-l-[3px] border-l-warning bg-warning/5">
-              <div className="flex gap-3">
-                <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" />
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Dependency gaps</h3>
-                  <p className="mt-1 text-xs text-foreground-muted leading-relaxed">
-                    These task dependencies are required but do not yet have an upstream task in this quote.
-                    <strong> Auto-resolved gaps</strong> are handled during job creation.
-                    <strong> Required gaps</strong> must be resolved before creating the job.
-                  </p>
-                  <ul className="mt-4 space-y-3">
-                    {orphans.map((o, i) => (
-                      <li key={i} className="rounded-lg border border-border bg-background/50 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${o.isHard ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'}`}>
-                            {o.isHard ? 'Required gap' : 'Auto-resolved gap'}
-                          </span>
-                          <span className="font-mono text-[10px] text-foreground-subtle">{o.signal}</span>
-                        </div>
-                        <p className="mt-2 text-xs font-medium text-foreground">{o.consumerTaskTitle}</p>
-                        <p className="text-[10px] text-foreground-muted">Line: {o.consumerLineDescription}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+              <QuoteExecutionDependencyGapsPanel
+                quoteId={quoteId}
+                orphans={orphans}
+                executionPlanningEditable={executionPlanningEditable}
+                showCrossLineReview={showCrossLineReview}
+                lineLabelById={Object.fromEntries(
+                  lineReadiness.map((line) => [line.lineId, line.description]),
+                )}
+                draftTasksByLineId={draftTasksByLineId}
+              />
             </WorkspacePanel>
           )}
 
@@ -214,7 +227,11 @@ export function QuoteExecutionReviewPreviewView({
                 const planningContext = planningContextByLineId[row.lineId] ?? "";
                 const aiTaskChoices = draftTasks.map((task) => ({ id: task.id, title: task.title }));
                 return (
-                  <li key={row.lineId} className="px-4 py-4">
+                  <li
+                    key={row.lineId}
+                    id={`execution-line-${row.lineId}`}
+                    className="scroll-mt-20 px-4 py-4"
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">{row.description}</p>
                       <div className="mt-1 flex items-center gap-3 text-xs text-foreground-muted">
@@ -304,16 +321,54 @@ export function QuoteExecutionReviewPreviewView({
           </p>
         </div>
       </WorkspacePanel>
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      {wrapExecutionReviewProviders({
+        quoteId,
+        showCrossLineReview,
+        executionPlanningEditable,
+        children: reviewContent,
+      })}
     </div>
   );
+}
+
+function wrapExecutionReviewProviders({
+  quoteId,
+  showCrossLineReview,
+  executionPlanningEditable,
+  children,
+}: {
+  quoteId: string;
+  showCrossLineReview: boolean;
+  executionPlanningEditable: boolean;
+  children: ReactNode;
+}) {
+  let wrapped = children;
+  if (executionPlanningEditable) {
+    wrapped = <QuoteExecutionReviewFocusProvider>{wrapped}</QuoteExecutionReviewFocusProvider>;
+  }
+  if (showCrossLineReview) {
+    wrapped = (
+      <QuoteCrossLineWiringReviewScope quoteId={quoteId}>{wrapped}</QuoteCrossLineWiringReviewScope>
+    );
+  }
+  return wrapped;
 }
 
 function ActivationPanel({
   activation,
   quoteId,
+  showCrossLineReview,
+  hardOrphanCount,
 }: {
   activation: QuoteActivationStatus;
   quoteId: string;
+  showCrossLineReview: boolean;
+  hardOrphanCount: number;
 }) {
   if (activation.state === "activated") {
     return (
@@ -369,37 +424,12 @@ function ActivationPanel({
 
   const r = activation.readiness;
   return (
-    <WorkspacePanel className="border-l-[3px] border-l-accent/70 bg-accent/[0.04]">
-      <SectionHeading
-        title="Needs review before job creation"
-        description={
-          activation.quoteIsApproved
-            ? "Resolve the items below before creating the job from this approved quote."
-            : "Job creation is available after quote approval. Resolve any planning gaps now so it is ready once approval is recorded."
-        }
-      />
-      <ul className="space-y-3">
-        {r.blockReasons.map((reason) => (
-          <li key={reason.code} className="rounded-md border border-border bg-background/40 px-3 py-2">
-            <p className="text-sm font-medium text-foreground">{reason.message}</p>
-            {reason.code === "TASK_MISSING_STAGE" ? (
-              <Link
-                href={`/quotes/${quoteId}`}
-                className="mt-2 inline-flex text-xs font-medium text-primary hover:underline"
-              >
-                Assign stages on the quote
-              </Link>
-            ) : null}
-            {reason.details && reason.details.length > 0 ? (
-              <ul className="mt-1 space-y-1 text-xs text-foreground-muted">
-                {reason.details.map((detail) => (
-                  <li key={detail}>· {detail}</li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </WorkspacePanel>
+    <QuoteBlockedActivationPanel
+      quoteId={quoteId}
+      readiness={r}
+      quoteIsApproved={activation.quoteIsApproved}
+      showCrossLineReview={showCrossLineReview}
+      hardOrphanCount={hardOrphanCount}
+    />
   );
 }

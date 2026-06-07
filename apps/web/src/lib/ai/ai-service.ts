@@ -38,6 +38,10 @@ import {
 import { normalizeScopeSuggestionGrouping } from "./normalize-scope-suggestion-grouping";
 import type { RecommendedTemplateMatch } from "./recommend-line-item-templates";
 import {
+  QuoteExecutionReviewProposalSchema,
+  type QuoteExecutionReviewProposal,
+} from "./quote-execution-review-proposal-schema";
+import {
   ExecutionContextAssessmentSchema,
   type ExecutionContextAssessment,
 } from "./execution-context-assessment-schema";
@@ -76,6 +80,44 @@ export type AIExecutionPlanContext = {
   existingStages: { id: string; name: string }[];
   existingSignals: string[];
   userInstructions?: string;
+};
+
+export type AIQuoteExecutionReviewContext = {
+  quoteId: string;
+  quoteTitle: string;
+  organizationId: string;
+  existingStages: { id: string; name: string }[];
+  lines: {
+    id: string;
+    description: string;
+    tasks: {
+      id: string;
+      title: string;
+      category: string;
+      stageId: string | null;
+      stageName: string | null;
+      providesSignals: string[];
+      requiresSignals: string[];
+      hardSignal: boolean;
+    }[];
+  }[];
+  currentSummary: {
+    totalTasks: number;
+    orphanCount: number;
+    hardOrphanCount: number;
+  };
+  deterministicSuggestions: {
+    signal: string;
+    consumerTaskId: string;
+    providerTaskId: string;
+    consumerTaskTitle: string;
+    providerTaskTitle: string;
+  }[];
+};
+
+export type AIQuoteExecutionReviewProposalGenerationResult = {
+  proposal: QuoteExecutionReviewProposal;
+  generation: AILibraryProposalGenerationResult["generation"];
 };
 
 export class AIService {
@@ -1378,6 +1420,131 @@ OUTPUT JSON ONLY:
       existingSignals,
       userInstructions,
     });
+  }
+
+  static async generateQuoteExecutionReviewProposal(
+    context: AIQuoteExecutionReviewContext,
+    mode: "signals" | "tasks" = "signals",
+  ): Promise<AIQuoteExecutionReviewProposalGenerationResult> {
+    const gemini = this.getGeminiClient();
+    if (!gemini) {
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+
+    const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+    const model = gemini.getGenerativeModel({
+      model: modelName,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    const stageList = context.existingStages
+      .map((stage) => `- ${stage.name} (id: ${stage.id})`)
+      .join("\n");
+    const lineContext = context.lines
+      .map((line) => {
+        const taskLines = line.tasks
+          .map(
+            (task) =>
+              `  - Task ${task.id}: "${task.title}" [${task.category}] stage=${task.stageName ?? "None"}(${task.stageId ?? "None"}) provides=[${task.providesSignals.join(", ")}] requires=[${task.requiresSignals.join(", ")}] hard=${task.hardSignal}`,
+          )
+          .join("\n");
+        return `- Line ${line.id}: "${line.description}"\n${taskLines || "  - No tasks"}`;
+      })
+      .join("\n");
+    const deterministicHints = context.deterministicSuggestions
+      .map(
+        (s) =>
+          `- signal=${s.signal} consumer=${s.consumerTaskTitle}(${s.consumerTaskId}) provider=${s.providerTaskTitle}(${s.providerTaskId})`,
+      )
+      .join("\n");
+
+    const prompt = `
+You are the Struxient AI Secretary. Create a WHOLE-QUOTE execution review proposal.
+Current mode: ${mode}.
+
+OUTPUT RULES:
+- Return ONLY valid JSON matching this structure:
+{
+  "quoteId": "string",
+  "summary": "string",
+  "assumptions": ["string"],
+  "warnings": ["string"],
+  "missingContext": ["string"],
+  "operations": [
+    {
+      "opId": "string",
+      "type": "add_task",
+      "lineItemId": "string",
+      "reason": "string",
+      "task": {
+        "title": "string",
+        "category": "GENERAL|PERMIT|INSPECTION|MATERIAL|PAYMENT|CUSTOMER_COMMUNICATION|PHOTO_EVIDENCE|SCHEDULING",
+        "stageId": "string",
+        "instructions": "string|null",
+        "providesSignals": ["string"],
+        "requiresSignals": ["string"],
+        "hardSignal": true,
+        "checklist": [{"label":"string"}],
+        "resources": [{"name":"string","quantity":1,"unit":"string","isEquipment":false}]
+      }
+    },
+    {
+      "opId": "string",
+      "type": "patch_task_signals",
+      "taskId": "string",
+      "reason": "string",
+      "addProvides": ["string"],
+      "removeProvides": ["string"],
+      "addRequires": ["string"],
+      "removeRequires": ["string"]
+    }
+  ],
+  "consolidationHints": [{"hintId":"string","title":"string","taskIds":["string"],"recommendation":"string"}],
+  "manualDecisions": [{"decisionId":"string","title":"string","detail":"string","lineItemId":"string","taskId":"string"}]
+}
+
+BEHAVIOR RULES:
+- In "signals" mode, ONLY return "patch_task_signals" operations.
+- In "tasks" mode, ONLY return "add_task" operations.
+- Prefer minimal, safe operations that reduce activation blockers.
+- Do NOT change commercial line items.
+- Use only stage IDs from the allowed list.
+- For duplicate permit coordination work, prefer consolidationHints unless confidence is very high.
+- Limit operations to at most 8.
+
+QUOTE:
+- id: ${context.quoteId}
+- title: ${context.quoteTitle}
+- totals: tasks=${context.currentSummary.totalTasks}, orphans=${context.currentSummary.orphanCount}, hardOrphans=${context.currentSummary.hardOrphanCount}
+
+ALLOWED STAGES:
+${stageList || "- none"}
+
+CURRENT LINES AND TASKS:
+${lineContext || "- none"}
+
+DETERMINISTIC SIGNAL HINTS:
+${deterministicHints || "- none"}
+`;
+
+    try {
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+      const parsed = JSON.parse(jsonStr);
+      const proposal = QuoteExecutionReviewProposalSchema.parse(parsed);
+      return { proposal, generation: buildValidGenerationMeta() };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      console.error("AI quote execution review proposal failed", e);
+      throw new AiExecutionPlanInvalidError();
+    }
   }
 
   /**

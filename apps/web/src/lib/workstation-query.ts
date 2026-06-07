@@ -42,10 +42,12 @@ import { rank, WorkstationLane } from "./workstation/rank";
 import {
   deriveBlockedTaskRecoveryRoute,
   deriveIssueRecoveryRoute,
-  isRecoveryRelatedHealthAction,
+  deriveStuckJobWorkstationRoute,
+  isWorkstationRoutableHealthAction,
   mapHealthActionToWorkstationRoute,
   type WorkstationRecoveryActionKind,
 } from "./workstation-recovery-routing";
+import { includesEquivalentSignal } from "./signal-key";
 
 export type WorkstationWorkItemKind =
   | "lead"
@@ -580,6 +582,47 @@ export async function queryWorkstationWorkItems(
         : null,
     }));
 
+    const stageIssuesByJobStageId = new Map<
+      string,
+      { id: string; status: JobIssueStatus; severity: JobIssueSeverity }[]
+    >();
+    for (const stage of job.stages) {
+      stageIssuesByJobStageId.set(stage.id, [...stage.issues]);
+    }
+    for (const issue of job.issues) {
+      if (!issue.jobStageId) continue;
+      const list = stageIssuesByJobStageId.get(issue.jobStageId) ?? [];
+      if (!list.some((i) => i.id === issue.id)) {
+        list.push({ id: issue.id, status: issue.status, severity: issue.severity });
+        stageIssuesByJobStageId.set(issue.jobStageId, list);
+      }
+    }
+
+    const sortedTasks = [...job.tasks].sort((a, b) => {
+      if (a.jobStage.sortOrder !== b.jobStage.sortOrder) {
+        return a.jobStage.sortOrder - b.jobStage.sortOrder;
+      }
+      return a.sortOrder - b.sortOrder;
+    });
+
+    const stuckJobTaskStates = sortedTasks.map((task) => {
+      const { jobStage, recoveryFlow, ...readinessTask } = task;
+      const readinessInput = toTaskReadinessInput(readinessTask, {
+        requiresSignals: [],
+        issues: stageIssuesByJobStageId.get(jobStage.id) ?? [],
+      });
+      const derivedState = deriveTaskState(readinessInput, liveSignals, {
+        recoveryFlowIssueId: recoveryFlow?.jobIssueId,
+      });
+      return {
+        id: task.id,
+        title: task.title,
+        jobStageId: jobStage.id,
+        completedAt: task.completedAt,
+        derivedState,
+      };
+    });
+
     if (
       healthWarningStates.includes(executionHealth.primaryState) ||
       !executionHealth.invariantSatisfied
@@ -587,14 +630,14 @@ export async function queryWorkstationWorkItems(
       const recoveryIssueId =
         executionHealth.blockers.find((b) => b.kind === "recovery")?.entityId ??
         executionHealth.blockers.find((b) => b.kind === "issue")?.entityId;
-      const healthRoute = isRecoveryRelatedHealthAction(
-        executionHealth.recommendedNextAction.type,
-      )
-        ? mapHealthActionToWorkstationRoute(
-            executionHealth.recommendedNextAction,
-            recoveryIssueId,
-          )
-        : null;
+      const healthRoute =
+        (isWorkstationRoutableHealthAction(executionHealth.recommendedNextAction.type)
+          ? mapHealthActionToWorkstationRoute(
+              executionHealth.recommendedNextAction,
+              recoveryIssueId,
+            )
+          : null) ??
+        deriveStuckJobWorkstationRoute(stuckJobTaskStates, blockingIssueCandidates);
 
       const { lane, withinLaneRank } = rank(
         {
@@ -742,29 +785,6 @@ export async function queryWorkstationWorkItems(
       }
     }
 
-    const sortedTasks = [...job.tasks].sort((a, b) => {
-      if (a.jobStage.sortOrder !== b.jobStage.sortOrder) {
-        return a.jobStage.sortOrder - b.jobStage.sortOrder;
-      }
-      return a.sortOrder - b.sortOrder;
-    });
-
-    const stageIssuesByJobStageId = new Map<
-      string,
-      { id: string; status: JobIssueStatus; severity: JobIssueSeverity }[]
-    >();
-    for (const stage of job.stages) {
-      stageIssuesByJobStageId.set(stage.id, [...stage.issues]);
-    }
-    for (const issue of job.issues) {
-      if (!issue.jobStageId) continue;
-      const list = stageIssuesByJobStageId.get(issue.jobStageId) ?? [];
-      if (!list.some((i) => i.id === issue.id)) {
-        list.push({ id: issue.id, status: issue.status, severity: issue.severity });
-        stageIssuesByJobStageId.set(issue.jobStageId, list);
-      }
-    }
-
     const primaryTaskId = sortedTasks[0]?.id;
 
     for (const task of sortedTasks) {
@@ -800,7 +820,9 @@ export async function queryWorkstationWorkItems(
         isBlocked,
       }, role, now);
 
-      const missingSignals = task.requiresSignals.filter(s => !liveSignals.includes(s));
+      const missingSignals = task.requiresSignals.filter(
+        (s) => !includesEquivalentSignal(liveSignals, s),
+      );
 
       const taskRecoveryRoute =
         derivedState === "BLOCKED_BY_ISSUE"

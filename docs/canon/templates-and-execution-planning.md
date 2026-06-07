@@ -63,6 +63,8 @@ When **tasks and stages** are attached **during quoting**, systems often blur:
 
 4. **Post-sign refinement is normal; post-activation ops edits are normal** — Refining the internal execution plan **after customer sign** during **Execution Review**, then refining assignments, signal wiring, and adding mobilization / inspection / punch tasks **on the job after activation**, is **expected**—not an exception. Early planning on the quote should **accelerate** delivery planning, not **cement** a wrong plan.
 
+5. **Execution Review is quote-wide assembly** — Mixed template + ad hoc line-item drafts are expected input, not failure. During Execution Review, users may manually edit tasks/signals and use AI Secretary to propose quote-wide task additions and signal rewiring across lines (for example, permit-provider consolidation or missing-provider fixes). AI remains review-then-apply; no silent persistence.
+
 *(Exact UX mechanics—e.g., explicit “draft” toggles, separate tabs, copy-on-activate behaviors—are implementation; **canon** requires the **outcomes** above.)*
 
 ---

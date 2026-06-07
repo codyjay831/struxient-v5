@@ -14,6 +14,7 @@ import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
 import type { TaskPaymentHold } from "@/lib/job-payment-readiness";
 import { getSignalBlockedWaitingCopy, isFieldEventTaskTitle } from "@/lib/field-event-ui";
+import { includesEquivalentSignal } from "@/lib/signal-key";
 import { ChevronRight, Lock, Zap } from "lucide-react";
 
 type Task = JobTaskExecutionTask;
@@ -69,7 +70,9 @@ export function JobTaskCard({
   const totalRecoveryTasks = recoveryTasks.length;
   const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
   const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
-  const missingSignals = task.requiresSignals.filter((s) => !liveSignals.includes(s));
+  const missingSignals = task.requiresSignals.filter(
+    (s) => !includesEquivalentSignal(liveSignals, s),
+  );
   const waitingReason =
     missingSignals.length > 0
       ? getSignalBlockedWaitingCopy(missingSignals)

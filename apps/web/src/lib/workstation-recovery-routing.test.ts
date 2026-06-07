@@ -9,6 +9,7 @@ import {
 import {
   deriveBlockedTaskRecoveryRoute,
   deriveIssueRecoveryRoute,
+  deriveStuckJobWorkstationRoute,
   mapHealthActionToWorkstationRoute,
   pickBlockingIssueForTask,
   type BlockingIssueCandidate,
@@ -63,6 +64,39 @@ test("mapHealthActionToWorkstationRoute: record_payment → null", () => {
     { type: "record_payment", label: "Record payment" },
   );
   assert.equal(route, null);
+});
+
+test("mapHealthActionToWorkstationRoute: review_health with target → do-recovery-task", () => {
+  const route = mapHealthActionToWorkstationRoute(
+    { type: "review_health", label: "Open next task", targetId: "task-stuck" },
+  );
+  assert.equal(route?.actionKind, "do-recovery-task");
+  assert.equal(route?.actionTaskId, "task-stuck");
+});
+
+test("deriveStuckJobWorkstationRoute: opens first actionable task", () => {
+  const route = deriveStuckJobWorkstationRoute(
+    [
+      {
+        id: "task-1",
+        title: "Site prep",
+        jobStageId: "stage-1",
+        completedAt: null,
+        derivedState: "BLOCKED_BY_SIGNAL",
+      },
+      {
+        id: "task-2",
+        title: "Install",
+        jobStageId: "stage-1",
+        completedAt: null,
+        derivedState: "NEEDS_PROOF",
+      },
+    ],
+    [],
+  );
+  assert.equal(route?.actionKind, "do-recovery-task");
+  assert.equal(route?.actionTaskId, "task-2");
+  assert.match(route?.nextStep ?? "", /Install/);
 });
 
 test("deriveIssueRecoveryRoute: no flow → plan-recovery", () => {

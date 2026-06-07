@@ -63,6 +63,32 @@ test("deriveJobExecutionHealth: HEALTHY_ACTIONABLE when main task READY", () => 
   assert.equal(health.invariantSatisfied, true);
 });
 
+test("deriveJobExecutionHealth: HEALTHY_ACTIONABLE when main task NEEDS_PROOF", () => {
+  const ctx = buildJobExecutionContextFromJob(
+    baseJob({
+      stages: [
+        {
+          id: "stage-1",
+          title: "Install",
+          sortOrder: 0,
+          stageId: "org-stage-1",
+          issues: [],
+          tasks: [
+            baseTask({
+              completionRequirementsJson: { noteRequired: true },
+            }),
+          ],
+        },
+      ],
+    }),
+    [],
+  );
+  const health = deriveJobExecutionHealth(ctx);
+  assert.equal(health.primaryState, "HEALTHY_ACTIONABLE");
+  assert.equal(health.nextActionableMainTaskId, "task-1");
+  assert.equal(health.recommendedNextAction.type, "complete_task");
+});
+
 test("deriveJobExecutionHealth: COMPLETE when all main tasks done", () => {
   const ctx = buildJobExecutionContextFromJob(
     baseJob({

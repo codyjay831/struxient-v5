@@ -22,6 +22,7 @@ This file is implementation guidance, not product canon. For product intent and 
 | `execution_plan_scope_library` | Scope Library line item: generate default execution | `generateLineItemTemplateAIProposalAction` in `apps/web/src/app/(workspace)/settings/scope-library/line-item-template-execution-actions.ts` | `AIService.buildContractorRealismPrompt` in `apps/web/src/lib/ai/ai-service.ts` |
 | `execution_context_assessment_quote_line` | Quote line: assess missing execution context | `assessQuoteLineExecutionContextAction` in `apps/web/src/app/(workspace)/quotes/quote-line-execution-actions.ts` | `AIService.buildExecutionContextAssessmentPrompt` in `apps/web/src/lib/ai/ai-service.ts` |
 | `execution_context_assessment_scope_library` | Scope Library line item: assess missing execution context | `assessLineItemTemplateExecutionContextAction` in `apps/web/src/app/(workspace)/settings/scope-library/line-item-template-execution-actions.ts` | `AIService.buildExecutionContextAssessmentPrompt` in `apps/web/src/lib/ai/ai-service.ts` |
+| `execution_review_quote_wide` | Execution Review: whole-quote AI Secretary review | `generateQuoteExecutionReviewAIProposalAction` in `apps/web/src/app/(workspace)/quotes/quote-execution-secretary-actions.ts` | `AIService.generateQuoteExecutionReviewProposal` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 | `quote_scope_suggestions` | Quote authoring: generate line-item scope suggestions | `generateQuoteScopeSuggestionsAction` in `apps/web/src/app/(workspace)/quotes/quote-line-items-ai-actions.ts` | `AIService.generateScopeSuggestions` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 | `recovery_path_suggestions` | Job issue recovery: suggest recovery tasks | `suggestRecoveryPathAction` in `apps/web/src/app/(workspace)/jobs/recovery-actions.ts` | `AIService.suggestRecoveryPath` prompt in `apps/web/src/lib/ai/ai-service.ts` |
 | `tag_suggestions` | Tag helper API: suggest tags from title/description/context | `POST /api/ai/suggest-tags` in `apps/web/src/app/api/ai/suggest-tags/route.ts` | `AIService.suggestTags` prompt in `apps/web/src/lib/ai/ai-service.ts` |
@@ -59,6 +60,34 @@ Use one section per behavior change.
 ```
 
 ## Change history
+
+## [2026-06-03] execution_review_quote_wide - Whole-quote execution assembly proposals
+
+- Owner file/function: `apps/web/src/lib/ai/ai-service.ts` / `generateQuoteExecutionReviewProposal`
+- Entry surfaces:
+  - Execution Review AI Secretary panel
+- Why this change:
+  - Line-level generation plus signal-only cross-line heuristics left real mixed-scope quotes with manual-only cleanup.
+  - Users need quote-wide AI suggestions before activation when templates and ad hoc tasks are combined.
+- Intended behavior:
+  - Generate one quote-level proposal with explicit operations:
+    - add missing provider tasks
+    - patch task signals across lines
+    - report consolidation hints
+    - capture manual-decision items
+  - Keep review-then-apply boundaries with selectable operations.
+- Anti-behavior to block:
+  - Silent mutation of quote execution tasks.
+  - Commercial line-item or pricing changes.
+  - Stage IDs outside allowed organization stages.
+- Output expectations:
+  - `QuoteExecutionReviewProposalSchema` JSON payload with deterministic operation ids.
+  - Clear warnings and missing-context lists when certainty is low.
+- Test coverage updates:
+  - `apps/web/src/lib/ai/quote-execution-review-proposal.test.ts`
+- Validation notes:
+  - Apply-time validation enforces line/task/stage ownership and simulated-output guardrails.
+  - Consolidation remains recommendation-first; destructive merges are not automatic.
 
 ## [2026-06-03] execution_plan_quote_line + execution_plan_scope_library - Execution-gate planning + quality warnings
 

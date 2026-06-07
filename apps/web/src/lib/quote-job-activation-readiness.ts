@@ -1,5 +1,6 @@
 import { PaymentScheduleAnchorType, Prisma, QuoteStatus } from "@prisma/client";
 import { validatePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
+import { normalizeSignalKey, toNormalizedSignalSet } from "@/lib/signal-key";
 
 /**
  * Plain input for {@link evaluateQuoteJobActivationReadiness}
@@ -114,13 +115,15 @@ export function evaluateQuoteJobActivationReadiness(
   }
 
   // 1. Check for Hard Signal Orphans
-  const allProvidedSignals = new Set(allTasks.flatMap((t) => t.providesSignals));
+  const allProvidedSignals = toNormalizedSignalSet(
+    allTasks.flatMap((t) => t.providesSignals),
+  );
   const hardOrphans: string[] = [];
 
   for (const task of allTasks) {
     if (task.hardSignal) {
       for (const req of task.requiresSignals) {
-        if (!allProvidedSignals.has(req)) {
+        if (!allProvidedSignals.has(normalizeSignalKey(req))) {
           hardOrphans.push(`${task.title} requires hard signal "${req}" but no task provides it.`);
         }
       }
@@ -142,9 +145,10 @@ export function evaluateQuoteJobActivationReadiness(
   const signalProviders = new Map<string, string[]>();
   for (const task of allTasks) {
     for (const signal of task.providesSignals) {
-      const providers = signalProviders.get(signal) || [];
+      const normalizedSignal = normalizeSignalKey(signal);
+      const providers = signalProviders.get(normalizedSignal) || [];
       providers.push(task.id);
-      signalProviders.set(signal, providers);
+      signalProviders.set(normalizedSignal, providers);
     }
   }
 
@@ -166,7 +170,7 @@ export function evaluateQuoteJobActivationReadiness(
     const task = allTasks.find(t => t.id === taskId);
     if (task) {
       for (const req of task.requiresSignals) {
-        const providers = signalProviders.get(req) || [];
+        const providers = signalProviders.get(normalizeSignalKey(req)) || [];
         for (const providerId of providers) {
           if (hasCycle(providerId, [...path, taskId])) return true;
         }

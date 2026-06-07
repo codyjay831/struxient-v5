@@ -14,6 +14,7 @@ import {
 } from "@/lib/job-payment-readiness";
 import {
   deriveTaskState,
+  isActionableTaskState,
   toTaskReadinessInput,
   type TaskDerivedState,
   type TaskIssueRef,
@@ -225,6 +226,58 @@ function hasIncompleteWork(
   return hasIncompleteMainWork(mainTasks) || hasIncompleteRecoveryWork(recoveryTasks);
 }
 
+function findNextActionableTaskId(tasks: AnalyzedTask[]): string | null {
+  return tasks.find((t) => isActionableTaskState(t.derivedState))?.id ?? null;
+}
+
+function findFirstIncompleteTaskId(
+  mainTasks: AnalyzedTask[],
+  recoveryTasks: AnalyzedTask[],
+): string | null {
+  const main = mainTasks.find((t) => t.derivedState !== "COMPLETED");
+  if (main) return main.id;
+  return recoveryTasks.find((t) => t.derivedState !== "COMPLETED")?.id ?? null;
+}
+
+function recommendedActionForIncompleteWork(
+  mainTasks: AnalyzedTask[],
+  recoveryTasks: AnalyzedTask[],
+  openBlockingIssues: JobExecutionContextIssue[],
+): ExecutionHealthResult["recommendedNextAction"] {
+  const actionableId =
+    findNextActionableTaskId(mainTasks) ?? findNextActionableTaskId(recoveryTasks);
+  if (actionableId) {
+    return {
+      type: "complete_task",
+      label: "Continue work",
+      targetId: actionableId,
+    };
+  }
+
+  const focusTaskId = findFirstIncompleteTaskId(mainTasks, recoveryTasks);
+  if (!focusTaskId) {
+    return { type: "review_health", label: "Review stuck tasks" };
+  }
+
+  const focusTask = [...mainTasks, ...recoveryTasks].find((t) => t.id === focusTaskId);
+  if (focusTask?.derivedState === "BLOCKED_BY_ISSUE") {
+    const issueId = openBlockingIssues[0]?.id;
+    if (issueId) {
+      return {
+        type: "resolve_issue",
+        label: "Resolve blocker",
+        targetId: issueId,
+      };
+    }
+  }
+
+  return {
+    type: "complete_task",
+    label: "Open next task",
+    targetId: focusTaskId,
+  };
+}
+
 function collectBrokenReferenceWarnings(
   ctx: JobExecutionContext,
   analyzed: AnalyzedTask[],
@@ -270,10 +323,8 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
     ...collectBrokenReferenceWarnings(ctx, analyzed),
   ];
 
-  const nextActionableMainTaskId =
-    mainTasks.find((t) => t.derivedState === "READY")?.id ?? null;
-  const nextActionableRecoveryTaskId =
-    recoveryTasks.find((t) => t.derivedState === "READY")?.id ?? null;
+  const nextActionableMainTaskId = findNextActionableTaskId(mainTasks);
+  const nextActionableRecoveryTaskId = findNextActionableTaskId(recoveryTasks);
 
   const openBlockingIssues = ctx.issues.filter(
     (i) => i.status === JobIssueStatus.OPEN && i.severity === JobIssueSeverity.BLOCKS_WORK,
@@ -381,10 +432,11 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       severity: "warning",
       nextActionableMainTaskId,
       nextActionableRecoveryTaskId,
-      recommendedNextAction: {
-        type: "review_health",
-        label: "Review execution data",
-      },
+      recommendedNextAction: recommendedActionForIncompleteWork(
+        mainTasks,
+        recoveryTasks,
+        openBlockingIssues,
+      ),
       blockers: [
         {
           kind: "data",
@@ -422,10 +474,11 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       severity: "warning",
       nextActionableMainTaskId,
       nextActionableRecoveryTaskId,
-      recommendedNextAction: {
-        type: "review_health",
-        label: "Review job setup",
-      },
+      recommendedNextAction: recommendedActionForIncompleteWork(
+        mainTasks,
+        recoveryTasks,
+        openBlockingIssues,
+      ),
       blockers: [],
       warnings,
       headline: "Recovery status needs review",
@@ -540,6 +593,11 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
   }
 
   if (incompleteWork) {
+    const stuckAction = recommendedActionForIncompleteWork(
+      mainTasks,
+      recoveryTasks,
+      openBlockingIssues,
+    );
     warnings.push({
       code: "NO_NEXT_ACTION",
       message: "Incomplete work exists but no actionable task or clear blocker was identified.",
@@ -549,14 +607,15 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       severity: "warning",
       nextActionableMainTaskId,
       nextActionableRecoveryTaskId,
-      recommendedNextAction: {
-        type: "review_health",
-        label: "Review job setup",
-      },
+      recommendedNextAction: stuckAction,
       blockers: [],
       warnings,
-      headline: "Needs setup review",
-      detail: "No next action is ready. Review blockers, schedule, or task setup.",
+      headline:
+        stuckAction.type === "review_health" ? "Needs attention" : "Continue this job",
+      detail:
+        stuckAction.type === "review_health"
+          ? "Work remains but no clear next step was identified. Open the task list below."
+          : "Open the next task below to keep this job moving.",
       incompleteMain: incompleteWork,
     });
   }

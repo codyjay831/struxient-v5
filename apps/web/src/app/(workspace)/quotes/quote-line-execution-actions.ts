@@ -1,6 +1,6 @@
 "use server";
 
-import { LineItemTemplateTaskSource, Prisma } from "@prisma/client";
+import { LineItemTemplateTaskSource, Prisma, TaskTemplateCategory } from "@prisma/client";
 import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import { validateQuoteAiExecutionPlanForApply } from "@/lib/ai/quote-ai-execution-plan";
@@ -24,6 +24,11 @@ import {
 } from "@/lib/ai/execution-planning-inputs";
 import { buildQuoteExecutionPlanningContextFromManifest } from "@/lib/ai/quote-execution-planning-context";
 import { resolveQuoteLineAiReplaceDeleteIds } from "@/lib/ai/quote-line-ai-replace";
+import { normalizeSignalKey } from "@/lib/signal-key";
+import {
+  buildProviderTaskTitle,
+  signalLooksSchedulingOrAccessRelated,
+} from "@/lib/signal-display-copy";
 import type {
   ExecutionContextAssessment,
   ExecutionPlanningContextManifest,
@@ -963,4 +968,314 @@ export async function applyQuoteLineExecutionAIProposalAction(
     console.error("Failed to apply AI execution plan", e);
     return { error: "Failed to apply AI execution plan." };
   }
+}
+
+type QuoteExecutionGapActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+type EditableQuoteTaskRecord = {
+  id: string;
+  title: string;
+  stageId: string | null;
+  category: TaskTemplateCategory;
+  instructions: string | null;
+  requiresSignals: string[];
+  providesSignals: string[];
+  hardSignal: boolean;
+  quoteLineItemId: string;
+};
+
+function addSignalByEquivalence(existing: string[], signal: string): string[] {
+  const trimmed = signal.trim();
+  if (!trimmed) {
+    return existing;
+  }
+  const normalized = normalizeSignalKey(trimmed);
+  if (existing.some((entry) => normalizeSignalKey(entry) === normalized)) {
+    return existing;
+  }
+  return [...existing, trimmed];
+}
+
+function removeSignalByEquivalence(existing: string[], signal: string): string[] {
+  const normalized = normalizeSignalKey(signal);
+  return existing.filter((entry) => normalizeSignalKey(entry) !== normalized);
+}
+
+async function loadEditableQuoteTask(
+  tx: ExtendedTransactionClient,
+  taskId: string,
+  quoteId: string,
+  organizationId: string,
+): Promise<EditableQuoteTaskRecord | null> {
+  const task = await tx.quoteLineExecutionTask.findFirst({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      stageId: true,
+      category: true,
+      instructions: true,
+      requiresSignals: true,
+      providesSignals: true,
+      hardSignal: true,
+      quoteLineItemId: true,
+      quoteLineItem: {
+        select: {
+          quoteId: true,
+          quote: {
+            select: { organizationId: true, status: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (
+    !task ||
+    task.quoteLineItem.quoteId !== quoteId ||
+    task.quoteLineItem.quote.organizationId !== organizationId ||
+    !QUOTE_STATUSES_EXECUTION_EDITABLE.includes(task.quoteLineItem.quote.status)
+  ) {
+    return null;
+  }
+
+  const quoteHasJob = await tx.job.findFirst({
+    where: { quoteId, organizationId },
+    select: { id: true },
+  });
+  if (quoteHasJob) {
+    return null;
+  }
+
+  return {
+    id: task.id,
+    title: task.title,
+    stageId: task.stageId,
+    category: task.category,
+    instructions: task.instructions,
+    requiresSignals: task.requiresSignals,
+    providesSignals: task.providesSignals,
+    hardSignal: task.hardSignal,
+    quoteLineItemId: task.quoteLineItemId,
+  };
+}
+
+export async function addQuoteLineDependencyProviderTaskAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  signal: string;
+}): Promise<QuoteExecutionGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);
+    if (!consumerTask) {
+      return { ok: false as const };
+    }
+
+    const normalizedSignal = normalizeSignalKey(signal);
+    const existingProviders = await tx.quoteLineExecutionTask.findMany({
+      where: {
+        quoteLineItem: {
+          quoteId: qid,
+          quote: { organizationId: ctx.organizationId },
+        },
+      },
+      select: { providesSignals: true },
+    });
+    if (
+      existingProviders.some((task) =>
+        task.providesSignals.some((entry) => normalizeSignalKey(entry) === normalizedSignal),
+      )
+    ) {
+      await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+      return { ok: true as const };
+    }
+
+    const fallbackStage = await tx.stage.findFirst({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true },
+    });
+    const stageId = consumerTask.stageId ?? fallbackStage?.id ?? null;
+    if (!stageId) {
+      return {
+        ok: false as const,
+        error:
+          "No active stages are available. Add a stage in Scope Library before adding provider tasks.",
+      };
+    }
+
+    const category = signalLooksSchedulingOrAccessRelated(signal)
+      ? TaskTemplateCategory.SCHEDULING
+      : TaskTemplateCategory.GENERAL;
+    const title = buildProviderTaskTitle(signal, consumerTask.title);
+    const sortOrder = await nextSortOrderInStage(tx, consumerTask.quoteLineItemId, stageId);
+
+    await tx.quoteLineExecutionTask.create({
+      data: {
+        quoteLineItemId: consumerTask.quoteLineItemId,
+        sourceLineItemTemplateTaskId: null,
+        sourceTaskTemplateId: null,
+        sourceType: LineItemTemplateTaskSource.CUSTOM,
+        title,
+        stageId,
+        category,
+        instructions: null,
+        providesSignals: [signal],
+        requiresSignals: [],
+        hardSignal: false,
+        requirementsJson: {},
+        partsRequiredJson: {},
+        sortOrder,
+      },
+    });
+
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error ?? QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+  }
+
+  revalidateQuoteLineExecutionSurfaces(qid, "execution-review");
+  return { ok: true };
+}
+
+export async function connectQuoteLineDependencyGapToTaskAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  providerTaskId: string;
+  signal: string;
+}): Promise<QuoteExecutionGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const providerTaskId = params.providerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !providerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+  if (consumerTaskId === providerTaskId) {
+    return { ok: false, error: "Selected task cannot provide its own missing dependency." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  const ok = await db.$transaction(async (tx) => {
+    const [consumerTask, providerTask] = await Promise.all([
+      loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId),
+      loadEditableQuoteTask(tx, providerTaskId, qid, ctx.organizationId),
+    ]);
+    if (!consumerTask || !providerTask) {
+      return false;
+    }
+
+    await tx.quoteLineExecutionTask.update({
+      where: { id: providerTask.id },
+      data: {
+        providesSignals: addSignalByEquivalence(providerTask.providesSignals, signal),
+      },
+    });
+
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+    return true;
+  });
+
+  if (!ok) {
+    return { ok: false, error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+  }
+
+  revalidateQuoteLineExecutionSurfaces(qid, "execution-review");
+  return { ok: true };
+}
+
+export async function removeQuoteLineDependencyRequirementAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  signal: string;
+}): Promise<QuoteExecutionGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  const ok = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);
+    if (!consumerTask) {
+      return false;
+    }
+
+    await tx.quoteLineExecutionTask.update({
+      where: { id: consumerTask.id },
+      data: {
+        requiresSignals: removeSignalByEquivalence(consumerTask.requiresSignals, signal),
+      },
+    });
+
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+    return true;
+  });
+
+  if (!ok) {
+    return { ok: false, error: QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+  }
+
+  revalidateQuoteLineExecutionSurfaces(qid, "execution-review");
+  return { ok: true };
+}
+
+export async function relaxQuoteLineDependencyHardSignalAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+}): Promise<QuoteExecutionGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  if (!qid || !consumerTaskId) {
+    return { ok: false, error: "Missing quote or task." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);
+    if (!consumerTask) {
+      return { ok: false as const };
+    }
+    if (consumerTask.requiresSignals.length !== 1) {
+      return {
+        ok: false as const,
+        error:
+          "This task has multiple required signals. Relaxing would affect all of them.",
+      };
+    }
+
+    await tx.quoteLineExecutionTask.update({
+      where: { id: consumerTask.id },
+      data: { hardSignal: false },
+    });
+
+    await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error ?? QUOTE_LINE_EXECUTION_LOCKED_ERROR };
+  }
+
+  revalidateQuoteLineExecutionSurfaces(qid, "execution-review");
+  return { ok: true };
 }

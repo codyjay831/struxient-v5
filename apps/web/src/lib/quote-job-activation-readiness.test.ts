@@ -147,6 +147,42 @@ test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provide
   assert.equal(readiness.blockReasons[0]?.code, "HARD_SIGNAL_NO_PROVIDER");
 });
 
+test("evaluateQuoteJobActivationReadiness treats equivalent signal keys as satisfied", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [
+        line({
+          tasks: [
+            {
+              id: "task-provider",
+              title: "Confirm permit approval",
+              stageId: "stage-1",
+              providesSignals: ["permit-approved"],
+              requiresSignals: [],
+              hardSignal: false,
+            },
+            {
+              id: "task-consumer",
+              title: "Schedule utility reconnect",
+              stageId: "stage-1",
+              providesSignals: [],
+              requiresSignals: ["permit.approved"],
+              hardSignal: true,
+            },
+          ],
+        }),
+      ],
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+  assert.equal(
+    readiness.blockReasons.some((reason) => reason.code === "HARD_SIGNAL_NO_PROVIDER"),
+    false,
+  );
+});
+
 test("evaluateQuoteJobActivationReadiness detects circular dependencies", () => {
   const readiness = evaluateQuoteJobActivationReadiness(
     readinessInput({

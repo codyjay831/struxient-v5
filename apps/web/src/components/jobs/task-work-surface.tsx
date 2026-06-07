@@ -72,6 +72,7 @@ import {
   isFieldEventTaskTitle,
   shouldShowCancelFieldHold,
 } from "@/lib/field-event-ui";
+import { includesEquivalentSignal } from "@/lib/signal-key";
 
 export type TaskWorkSurfaceProps = JobTaskExecutionPayload & {
   /** When true, completing the task clears Workstation `selectedId` / `selectedKind` and refreshes. */
@@ -224,7 +225,7 @@ export function TaskWorkSurface({
   });
 
   const missingSignals = [
-    ...task.requiresSignals.filter((s) => !liveSignals.includes(s)),
+    ...task.requiresSignals.filter((s) => !includesEquivalentSignal(liveSignals, s)),
   ];
 
   const handleComplete = () => {

@@ -21,6 +21,7 @@ import { recordJobActivity } from "@/lib/job-activity-helper";
 import { publishSignal } from "@/lib/signal-bus";
 import { buildJobTaskSortOrderMap } from "@/lib/quote-job-activation-task-order";
 import { materializePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
+import { normalizeSignalKey, toNormalizedSignalSet } from "@/lib/signal-key";
 
 export type QuoteJobActivationFormState = {
   error?: string;
@@ -258,17 +259,32 @@ async function performActivateQuoteJob(
       }
 
       // 4. Initialize Signal Bus & Auto-satisfy Soft Orphans
-      const allProvidedSignals = new Set(allTasksToActivate.flatMap(t => t.providesSignals));
-      const allRequiredSignals = new Set(allTasksToActivate.flatMap(t => t.requiresSignals));
+      const allProvidedSignals = toNormalizedSignalSet(
+        allTasksToActivate.flatMap((t) => t.providesSignals),
+      );
+      const requiredSignalAliasByKey = new Map<string, string>();
+      for (const task of allTasksToActivate) {
+        for (const requiredSignal of task.requiresSignals) {
+          const requiredKey = normalizeSignalKey(requiredSignal);
+          if (!requiredSignalAliasByKey.has(requiredKey)) {
+            requiredSignalAliasByKey.set(requiredKey, requiredSignal);
+          }
+        }
+      }
 
-      for (const req of allRequiredSignals) {
-        if (!allProvidedSignals.has(req)) {
+      for (const requiredKey of requiredSignalAliasByKey.keys()) {
+        if (!allProvidedSignals.has(requiredKey)) {
           // This is an orphan. If it's not a hard signal, auto-satisfy it.
-          const isHard = allTasksToActivate.some(t => t.hardSignal && t.requiresSignals.includes(req));
+          const isHard = allTasksToActivate.some(
+            (t) =>
+              t.hardSignal &&
+              t.requiresSignals.some((signal) => normalizeSignalKey(signal) === requiredKey),
+          );
           if (!isHard) {
+            const publishName = requiredSignalAliasByKey.get(requiredKey) ?? requiredKey;
             await publishSignal({
               jobId: job.id,
-              name: req,
+              name: publishName,
               tx,
             });
           }

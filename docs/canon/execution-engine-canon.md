@@ -213,6 +213,9 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
 - **Quote-line path:**
   - `generateQuoteLineExecutionAIProposalAction` — returns proposal only (no DB writes)
   - `applyQuoteLineExecutionAIProposalAction` — validates and persists in a transaction
+- **Execution Review quote-wide path:**
+  - `generateQuoteExecutionReviewAIProposalAction` — returns a whole-quote proposal (task additions + signal patches + consolidation hints), no DB writes
+  - `applyQuoteExecutionReviewAIProposalAction` — validates selected operations and persists in one transaction
 - **Library path:** same review-then-apply pattern via library execution review UI.
 - **Simulated / demo AI output** must not be applied unless `AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS=1` (dev-only). Validators belt-and-brace with `resolveGenerationMetaForApply` and `isSimulatedExecutionProposal`.
 - **Corrections-stage tasks** must not appear in normal execution planning; filtered at generation and apply validation.

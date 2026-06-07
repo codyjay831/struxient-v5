@@ -30,20 +30,8 @@ export async function WorkstationPanelContent({
     );
   }
 
-  if (
-    item.kind === "investigate" &&
-    item.id.startsWith("job-health-") &&
-    item.actionKind
-  ) {
-    if (item.actionIssueId) {
-      return (
-        <IssueRecoveryDetailLoader
-          issueId={item.actionIssueId}
-          actionKind={item.actionKind}
-          actionTaskId={item.actionTaskId}
-        />
-      );
-    }
+  if (item.kind === "investigate" && item.id.startsWith("job-health-")) {
+    return <WorkstationJobDetail jobId={item.recordId} />;
   }
 
   if (item.kind === "task") {
@@ -154,7 +142,7 @@ async function WorkstationJobDetail({ jobId }: { jobId: string }) {
     const state = deriveTaskState(readinessInput, liveSignals, {
       recoveryFlowIssueId: recoveryFlow?.jobIssueId,
     });
-    return state === "READY";
+    return state === "READY" || state === "NEEDS_PROOF";
   });
 
   const stageCount = job.stages.length;
