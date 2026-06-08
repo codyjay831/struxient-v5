@@ -124,9 +124,12 @@ export function WorkstationFocusCard({
               <h3 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
                 {item.title}
               </h3>
-              {item.subtitle && (
-                <p className="text-sm font-semibold text-foreground-muted">
-                  {item.subtitle}
+              {(item.contextLine ?? item.parentLabel ?? item.subtitle) && (
+                <p
+                  className="truncate text-sm font-semibold text-foreground-muted"
+                  title={item.contextLine ?? item.parentLabel ?? item.subtitle}
+                >
+                  {item.contextLine ?? item.parentLabel ?? item.subtitle}
                 </p>
               )}
             </div>
@@ -162,6 +165,10 @@ export function WorkstationFocusCard({
   );
 }
 
+function isGenericWorkstationAction(label: string | undefined): boolean {
+  return /^(Complete the task\.?|Resolve blocker\.?)$/i.test(label ?? "");
+}
+
 export function WorkstationQueueItem({ 
   item, 
   isSelected 
@@ -170,6 +177,9 @@ export function WorkstationQueueItem({
   isSelected?: boolean;
 }) {
   const isHighPriority = item.priority === "critical" || item.priority === "high";
+  const contextLine = item.contextLine ?? item.parentLabel ?? item.subtitle;
+  const actionLabel = item.actionLabel ?? item.nextStep;
+  const showAction = Boolean(actionLabel) && !isGenericWorkstationAction(actionLabel);
 
   const itemClass = [
     "group relative flex items-center justify-between rounded-lg border border-border p-4 transition-all hover:bg-foreground/[0.02] hover:border-border-strong",
@@ -212,10 +222,20 @@ export function WorkstationQueueItem({
           <h4 className="truncate text-sm font-bold text-foreground">
             {item.title}
           </h4>
-          <span className="shrink-0 text-xs font-semibold text-foreground">
-            {item.actionLabel ?? item.nextStep}
-          </span>
+          {showAction ? (
+            <span className="shrink-0 text-xs font-semibold text-foreground">
+              {actionLabel}
+            </span>
+          ) : null}
         </div>
+        {contextLine ? (
+          <p
+            className="truncate text-xs text-foreground-muted"
+            title={contextLine}
+          >
+            {contextLine}
+          </p>
+        ) : null}
         <p className="truncate text-xs text-foreground-muted">
           {item.reason}
         </p>

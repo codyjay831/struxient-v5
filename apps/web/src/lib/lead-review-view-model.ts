@@ -130,10 +130,28 @@ export function summarizeLeadEvent(type: string, payload: unknown): { label: str
       return { label: "Lead updated", detail: "Contact or request details changed." };
     case "STATUS_CHANGED": {
       const p = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-      const to = typeof p.to === "string" ? p.to : null;
+      const to =
+        typeof p.to === "string"
+          ? p.to
+          : typeof p.status === "string"
+            ? p.status
+            : null;
       return {
         label: "Pipeline tag changed",
         detail: to ? `Status set to ${to.replaceAll("_", " ").toLowerCase()}.` : undefined,
+      };
+    }
+    case "CLOSED_OR_PAUSED": {
+      const p = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const status = typeof p.status === "string" ? p.status : null;
+      const closeReason = typeof p.closeReason === "string" ? p.closeReason : null;
+      return {
+        label: "Opportunity closed or paused",
+        detail: status
+          ? closeReason
+            ? `Set to ${status.replaceAll("_", " ").toLowerCase()} (${closeReason.replaceAll("_", " ").toLowerCase()}).`
+            : `Set to ${status.replaceAll("_", " ").toLowerCase()}.`
+          : undefined,
       };
     }
     case "LINKED_TO_CUSTOMER":

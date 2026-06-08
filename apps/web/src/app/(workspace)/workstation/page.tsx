@@ -6,6 +6,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
+import { resolveJobActivitySubtitle } from "@/lib/work-item-context";
+import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { db } from "@/lib/db";
 import {
   queryWorkstationWorkItems,
@@ -24,15 +26,13 @@ import {
   WorkstationClearedState,
   WorkstationFilterBar 
 } from "@/components/workstation/workstation-ui";
-import { Plus, ListOrdered, History, Zap } from "lucide-react";
+import { WorkstationActivityRail } from "@/components/workstation/workstation-activity-rail";
+import { Plus, ListOrdered } from "lucide-react";
 import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-settings-drawer";
 
 export const dynamic = "force-dynamic";
 
 const quickActionClass = buttonClassName({ variant: "muted", size: "sm" });
-
-const activityItemClass =
-  "flex items-start gap-3 rounded-lg border border-transparent p-2 transition-colors hover:bg-foreground/[0.02]";
 
 export default async function WorkstationTodayLensPage({
   searchParams,
@@ -64,8 +64,34 @@ export default async function WorkstationTodayLensPage({
     take: 5,
     include: {
       actorUser: { select: { name: true } },
-      job: { select: { title: true } },
+      job: {
+        select: {
+          title: true,
+          customer: { select: { displayName: true } },
+          lead: { select: { contact: true, request: true, address: true, signals: true } },
+        },
+      },
     },
+  });
+
+  const activityItems = recentActivity.map((activity) => {
+    const activityJobsite = resolveJobsiteLineForQuoteOrJob({
+      customerLocations: [],
+      leadRow: activity.job.lead
+        ? { address: activity.job.lead.address, signals: activity.job.lead.signals }
+        : null,
+    });
+    return {
+      id: activity.id,
+      title: activity.title,
+      subtitle: resolveJobActivitySubtitle({
+        jobTitle: activity.job.title,
+        customer: activity.job.customer,
+        lead: activity.job.lead,
+        jobsiteLine: activityJobsite,
+        actorName: activity.actorUser?.name,
+      }),
+    };
   });
 
   const unreviewedIntakesCount = await db.lead.count({
@@ -143,8 +169,8 @@ export default async function WorkstationTodayLensPage({
         </section>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-12">
+      <div className="pr-10">
+        <div className="space-y-12">
           {filteredItems.length > 0 ? (
             <div className="space-y-12">
               {/* Critical Lane */}
@@ -261,49 +287,9 @@ export default async function WorkstationTodayLensPage({
             <WorkstationClearedState lens={lens} filter={filter} />
           )}
         </div>
-
-        {/* Sidebar: Activity */}
-        <aside className="space-y-8">
-          <section className="rounded-xl border border-border bg-foreground/[0.01] p-5">
-            <div className="flex items-center gap-2 mb-6">
-              <History className="size-4 text-foreground-subtle" />
-              <h3 className="text-sm font-semibold text-foreground">
-                Recent activity
-              </h3>
-            </div>
-            
-            {recentActivity.length > 0 ? (
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className={activityItemClass}>
-                    <div className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/5">
-                      <Zap className="size-3 text-foreground-subtle" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-foreground leading-snug">
-                        {activity.title}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-foreground-subtle truncate">
-                        {activity.job.title} · {activity.actorUser?.name || "System"}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <Link 
-                  href="/jobs" 
-                  className="mt-4 block text-center text-sm font-medium text-accent hover:underline"
-                >
-                  Browse jobs
-                </Link>
-              </div>
-            ) : (
-              <p className="text-sm text-foreground-muted">
-                No recent activity.
-              </p>
-            )}
-          </section>
-        </aside>
       </div>
+
+      <WorkstationActivityRail items={activityItems} />
 
       <WorkstationSelectionModal
         item={selectedItem ?? null}

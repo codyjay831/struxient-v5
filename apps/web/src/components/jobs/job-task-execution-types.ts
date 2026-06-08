@@ -16,6 +16,10 @@ export type JobTaskExecutionTask = {
   completedAt: Date | null;
   completionNote: string | null;
   completionRequirementsJson: unknown;
+  dueAt: Date | null;
+  scheduledStartAt: Date | null;
+  scheduledEndAt: Date | null;
+  assignedUserId: string | null;
   attachments: {
     id: string;
     fileName: string;

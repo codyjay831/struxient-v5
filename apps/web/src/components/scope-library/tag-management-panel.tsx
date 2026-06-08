@@ -253,9 +253,6 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
           <DialogContent>
             <CreateTagForm
               onDone={() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:onDone-create',message:'onDone called from CreateTagForm',data:{phase:'callback'},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-                // #endregion
                 setIsCreating(false);
                 handleFormDone();
               }}
@@ -290,15 +287,8 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
 function CreateTagForm({ onDone }: { onDone: () => void }) {
   const [state, formAction, isPending] = useActionState(createTagAction, {});
 
-  // #region agent log
-  fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:CreateTagForm-render',message:'CreateTagForm render',data:{success:!!state.success,error:state.error??null,isPending},timestamp:Date.now(),hypothesisId:'A,C',runId:'post-fix'})}).catch(()=>{});
-  // #endregion
-
   useEffect(() => {
     if (state.success) {
-      // #region agent log
-      fetch('http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'62160e'},body:JSON.stringify({sessionId:'62160e',location:'tag-management-panel.tsx:CreateTagForm-onDone-in-effect',message:'calling onDone from useEffect',data:{success:true},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-      // #endregion
       onDone();
     }
   }, [state.success, onDone]);

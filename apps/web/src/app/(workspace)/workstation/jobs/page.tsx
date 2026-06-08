@@ -128,6 +128,7 @@ export default async function WorkstationJobsLensPage({
                   }),
                   group: attentionItem?.group || "active",
                   recordId: job.id,
+                  parentLabel: job.customer?.displayName || job.lead?.title || undefined,
                   updatedAt: job.updatedAt,
                 }}
                 isSelected={selectedId === itemId}

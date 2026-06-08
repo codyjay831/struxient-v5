@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DailyJobLogStatus } from "@prisma/client";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -59,14 +59,16 @@ export function DailyJobLogManager({
     ? initialLogs.filter((log) => log.id === focusId)
     : initialLogs;
 
-  useEffect(() => {
-    if (!isEmbedded || !focusId) return;
+  const [lastSyncedFocusId, setLastSyncedFocusId] = useState<string | null>(null);
+  if (isEmbedded && focusId && focusId !== lastSyncedFocusId) {
     const focusedLog = initialLogs.find((log) => log.id === focusId);
-    if (!focusedLog) return;
-    setEditSummary(focusedLog.summary);
-    setEditNotes(focusedLog.internalNotes || "");
-    setExpandedLogId(focusId);
-  }, [isEmbedded, focusId, initialLogs]);
+    if (focusedLog) {
+      setLastSyncedFocusId(focusId);
+      setEditSummary(focusedLog.summary);
+      setEditNotes(focusedLog.internalNotes || "");
+      setExpandedLogId(focusId);
+    }
+  }
 
   const refreshAfterAction = () => {
     if (isEmbedded) router.refresh();

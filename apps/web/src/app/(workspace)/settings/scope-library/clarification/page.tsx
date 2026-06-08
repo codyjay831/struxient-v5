@@ -11,38 +11,6 @@ export const dynamic = "force-dynamic";
 export default async function ScopeLibraryClarificationPage() {
   const ctx = await getRequestContextOrThrow();
 
-  // #region agent log
-  {
-    const dbUrl = process.env.DATABASE_URL ?? "";
-    const dbHost = dbUrl.match(/@([^/]+)/)?.[1] ?? "unknown";
-    const dbName = dbUrl.match(/\/([^/?]+)(?:\?|$)/)?.[1] ?? "unknown";
-    const tableCheck = await db.$queryRaw<{ exists: boolean }[]>`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'ClarificationQuestionSet'
-      ) AS "exists"
-    `;
-    fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "27fb01" },
-      body: JSON.stringify({
-        sessionId: "27fb01",
-        runId: "pre-fix",
-        hypothesisId: "A",
-        location: "clarification/page.tsx:pre-query",
-        message: "DB target and ClarificationQuestionSet table existence",
-        data: {
-          dbHost,
-          dbName,
-          tableExists: tableCheck[0]?.exists ?? null,
-          organizationId: ctx.organizationId,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
-
   const [sets, tags] = await Promise.all([
     db.clarificationQuestionSet.findMany({
       where: { organizationId: ctx.organizationId },

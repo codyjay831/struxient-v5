@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { QuoteLineExecutionRevalidateScope } from "@/app/(workspace)/quotes/quote-line-execution-types";
 import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
@@ -42,20 +42,23 @@ export function QuoteLineDraftExecutionInlineToggle({
   /** When true, hide AI controls inside the editor — use a line-level AI button instead. */
   hideAiButton?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const focusContext = useQuoteExecutionReviewFocusOptional();
   const defaultOpenLabel = taskCount === 0 ? "Add draft execution" : "Edit draft execution";
   const openLabel = openLabelOverride ?? defaultOpenLabel;
+  const focus = focusContext?.focus;
+  const focusKey =
+    focus && focus.lineId === lineItemId ? `${focus.lineId}:${focus.taskId ?? ""}` : null;
 
-  useEffect(() => {
-    const focus = focusContext?.focus;
-    if (!focus || focus.lineId !== lineItemId) {
-      return;
-    }
+  const [open, setOpen] = useState(() => focusKey != null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(() =>
+    focusKey != null ? focus?.taskId ?? null : null,
+  );
+  const [lastFocusKey, setLastFocusKey] = useState<string | null>(null);
+  if (focusKey && focusKey !== lastFocusKey) {
+    setLastFocusKey(focusKey);
     setOpen(true);
-    setEditingTaskId(focus.taskId);
-  }, [focusContext?.focus, lineItemId]);
+    setEditingTaskId(focus?.taskId ?? null);
+  }
 
   const panel = open ? (
     <QuoteLineDraftExecutionInlinePanel

@@ -1,4 +1,10 @@
-import type { LeadChannel, LeadStatus, NeededByBucket, LeadVisitRequestStatus } from "@prisma/client";
+import type {
+  LeadChannel,
+  LeadCloseReason,
+  LeadStatus,
+  NeededByBucket,
+  LeadVisitRequestStatus,
+} from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 
 /** Serializable lead visit request (Phase C site visits). */
@@ -46,8 +52,17 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   TRIAGING: "Triaging",
   QUALIFIED: "Qualified",
   CONVERTED: "Converted",
+  ON_HOLD: "On hold",
   LOST: "Lost",
   ARCHIVED: "Archived",
+};
+
+const CLOSE_REASON_LABELS: Record<LeadCloseReason, string> = {
+  CHOSE_ANOTHER: "Chose another contractor",
+  BUDGET_OR_TIMING: "Budget or timing",
+  NO_RESPONSE: "No response",
+  NOT_OUR_TRADE: "Not our trade",
+  OTHER: "Other",
 };
 
 const SOURCE_LABELS: Record<LeadChannel, string> = {
@@ -79,11 +94,15 @@ export const LEAD_SOURCE_FORM_OPTIONS: { value: LeadChannel; label: string }[] =
 
 /** Stable order for status transitions on intake detail (manual lifecycle). */
 export const LEAD_STATUS_FORM_OPTIONS: { value: LeadStatus; label: string }[] = (
-  ["NEW", "TRIAGING", "QUALIFIED", "CONVERTED", "LOST", "ARCHIVED"] as const satisfies readonly LeadStatus[]
+  ["NEW", "TRIAGING", "QUALIFIED", "CONVERTED", "ON_HOLD", "LOST", "ARCHIVED"] as const satisfies readonly LeadStatus[]
 ).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
 /** Counted as “open pipeline” for lightweight org metrics (excludes CONVERTED, LOST, ARCHIVED). */
-export const LEAD_PIPELINE_OPEN_STATUSES = ["NEW", "TRIAGING"] as const satisfies readonly LeadStatus[];
+export const LEAD_PIPELINE_OPEN_STATUSES = ["NEW", "TRIAGING", "ON_HOLD"] as const satisfies readonly LeadStatus[];
+
+export const LEAD_CLOSE_REASON_OPTIONS: { value: LeadCloseReason; label: string }[] = (
+  ["CHOSE_ANOTHER", "BUDGET_OR_TIMING", "NO_RESPONSE", "NOT_OUR_TRADE", "OTHER"] as const satisfies readonly LeadCloseReason[]
+).map((value) => ({ value, label: CLOSE_REASON_LABELS[value] }));
 
 export function formatLeadStatus(status: LeadStatus): string {
   return STATUS_LABELS[status];
@@ -146,12 +165,19 @@ export function leadStatusBadgeTone(status: LeadStatus): StatusBadgeTone {
   switch (status) {
     case "CONVERTED":
       return "approved";
+    case "ON_HOLD":
+      return "warning";
     case "TRIAGING":
     case "QUALIFIED":
       return "draft";
     default:
       return "neutral";
   }
+}
+
+export function formatLeadCloseReason(reason: LeadCloseReason | null | undefined): string | null {
+  if (!reason) return null;
+  return CLOSE_REASON_LABELS[reason] ?? reason.replaceAll("_", " ").toLowerCase();
 }
 
 /**

@@ -13,6 +13,7 @@ import { evaluateLeadReadiness } from "./lead-readiness-heuristics";
 export type LeadCommercialProgressState =
   | "ADD_CONTACT_INFO"
   | "NEEDS_CUSTOMER"
+  | "FOLLOW_UP_LATER"
   | "READY_FOR_QUOTE"
   | "QUOTE_IN_PROGRESS"
   | "SENT_AWAITING_CUSTOMER"
@@ -58,6 +59,7 @@ export type LeadProgressQuoteInput = {
 
 export type LeadProgressInput = {
   status: LeadStatus;
+  followUpAt?: Date | null;
   customerId: string | null;
   contactName: string | null;
   companyName: string | null;
@@ -140,6 +142,7 @@ const TOTAL_STEPS = 5;
 const STATE_STEP_INDEX: Record<LeadCommercialProgressState, number> = {
   ADD_CONTACT_INFO: 0,
   NEEDS_CUSTOMER: 0,
+  FOLLOW_UP_LATER: 0,
   READY_FOR_QUOTE: 0,
   QUOTE_IN_PROGRESS: 1,
   SENT_AWAITING_CUSTOMER: 2,
@@ -153,6 +156,7 @@ const STATE_STEP_INDEX: Record<LeadCommercialProgressState, number> = {
 const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
   ADD_CONTACT_INFO: "draft",
   NEEDS_CUSTOMER: "draft",
+  FOLLOW_UP_LATER: "warning",
   READY_FOR_QUOTE: "sent",
   QUOTE_IN_PROGRESS: "draft",
   SENT_AWAITING_CUSTOMER: "sent",
@@ -166,13 +170,14 @@ const STATE_TONE: Record<LeadCommercialProgressState, StatusBadgeTone> = {
 const STATE_LABEL: Record<LeadCommercialProgressState, string> = {
   ADD_CONTACT_INFO: "Needs request details",
   NEEDS_CUSTOMER: "Needs customer record",
+  FOLLOW_UP_LATER: "On hold — follow up",
   READY_FOR_QUOTE: "Ready to build quote",
   QUOTE_IN_PROGRESS: "Quote draft in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
-  APPROVED_READY_TO_ACTIVATE: "Approved — ready to activate",
-  JOB_ACTIVE: "Job active",
+  APPROVED_READY_TO_ACTIVATE: "Approved — ready to schedule",
+  JOB_ACTIVE: "Awarded",
   CONFLICT_WITH_EXISTING_CUSTOMER: "Customer match needs review",
-  CLOSED_NOT_A_FIT: "Closed — not a fit",
+  CLOSED_NOT_A_FIT: "Closed — lost",
   ARCHIVED: "Archived",
 };
 
@@ -264,6 +269,29 @@ export function getLeadCommercialProgress(
       description: "This opportunity was marked lost. No further commercial action is expected.",
     });
   }
+  if (lead.status === ("ON_HOLD" as LeadStatus)) {
+    const followUpDate = lead.followUpAt
+      ? lead.followUpAt.toLocaleDateString()
+      : null;
+    return {
+      state: "FOLLOW_UP_LATER",
+      label: STATE_LABEL.FOLLOW_UP_LATER,
+      description: followUpDate
+        ? `Follow up on ${followUpDate} to reopen this opportunity.`
+        : "This opportunity is paused. Follow up later when timing is right.",
+      primaryAction: null,
+      secondaryAction: null,
+      activeQuote: null,
+      activeJob: null,
+      stepIndex: STATE_STEP_INDEX.FOLLOW_UP_LATER,
+      totalSteps: TOTAL_STEPS,
+      isTerminal: false,
+      badgeTone: STATE_TONE.FOLLOW_UP_LATER,
+      showsRevisionDrift: false,
+      satisfiedItems: [],
+      requiredItems: [],
+    };
+  }
 
   // Evaluate readiness using smart heuristics
   const report = evaluateLeadReadiness({
@@ -296,7 +324,7 @@ export function getLeadCommercialProgress(
     return {
       state: "JOB_ACTIVE",
       label: STATE_LABEL.JOB_ACTIVE,
-      description: "A job has been activated from the approved quote.",
+      description: "Sold work is on the job board.",
       primaryAction: {
         kind: "OPEN_JOB",
         label: "Open job",
@@ -327,7 +355,7 @@ export function getLeadCommercialProgress(
       return {
         state: "APPROVED_READY_TO_ACTIVATE",
         label: STATE_LABEL.APPROVED_READY_TO_ACTIVATE,
-        description: "The customer approved this quote. Review the job plan to activate work.",
+        description: "The customer approved this quote. Review the job plan to schedule work.",
         primaryAction: {
           kind: "OPEN_EXECUTION_REVIEW",
           label: "Review job plan",

@@ -61,9 +61,9 @@ export function WorkstationWorkPanel({
           >
             {item.title}
           </h2>
-          {item.subtitle ? (
+          {(item.contextLine ?? item.subtitle) ? (
             <p className="mt-1 text-sm font-medium text-foreground-muted">
-              {item.subtitle}
+              {item.contextLine ?? item.subtitle}
             </p>
           ) : null}
         </div>

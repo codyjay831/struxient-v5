@@ -18,7 +18,7 @@ import {
 } from "@/lib/lead-intake-projection";
 import type { LeadVisitRequestPayload } from "@/lib/lead-display";
 
-import { AttachmentStatus, LeadChannel, LeadStatus, NeededByBucket } from "@prisma/client";
+import { AttachmentStatus, LeadChannel, LeadCloseReason, LeadStatus, NeededByBucket } from "@prisma/client";
 
 const CUSTOMER_LINK_FETCH_CAP = 500;
 const LEAD_ATTACHMENT_CAP = 20;
@@ -34,7 +34,10 @@ export interface LeadCommercialSurfacePayload {
     notes: string;
     companyName: string;
     status: LeadStatus;
+    closeReason: LeadCloseReason | null;
     channel: LeadChannel;
+    followUpAt: Date | null;
+    closedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
     address: unknown;
@@ -183,6 +186,7 @@ export async function loadLeadCommercialSurface(
   const progress = getLeadCommercialProgress({
     lead: {
       status: lead.status,
+      followUpAt: lead.followUpAt,
       customerId: lead.customerId,
       contactName: projected.contactName,
       companyName: projected.companyName,
@@ -313,7 +317,10 @@ export async function loadLeadCommercialSurface(
       notes: projected.notes || "",
       companyName: projected.companyName || "",
       status: lead.status,
+      closeReason: lead.closeReason,
       channel: lead.channel,
+      followUpAt: lead.followUpAt,
+      closedAt: lead.closedAt,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
       address: lead.address,

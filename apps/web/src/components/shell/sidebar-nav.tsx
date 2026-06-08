@@ -33,7 +33,7 @@ const relationshipsNav: NavItem[] = [
 /** Work records and scheduling views. */
 const workNav: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: FolderKanban },
-  { href: "/schedule", label: "Schedule", icon: CalendarDays, soon: true },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
 /** Money tracking — coming soon. */

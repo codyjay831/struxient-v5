@@ -117,8 +117,8 @@ const STATE_LABEL: Record<QuoteReadinessState, string> = {
   DRAFT_IN_PROGRESS: "Draft in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
   APPROVED_NEEDS_EXECUTION_REVIEW: "Needs job plan review",
-  APPROVED_READY_TO_ACTIVATE: "Ready to create job",
-  JOB_ACTIVE: "Job active",
+  APPROVED_READY_TO_ACTIVATE: "Approved — ready to schedule",
+  JOB_ACTIVE: "Awarded",
   ARCHIVED: "Archived",
 };
 
@@ -145,7 +145,7 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
     return {
       state: "JOB_ACTIVE",
       label: STATE_LABEL.JOB_ACTIVE,
-      description: "An active job has been created from this approved quote.",
+      description: "Sold work is on the job board.",
       primaryAction: { kind: "OPEN_JOB", label: "Open job", targetJobId: job.id },
       secondaryAction: { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
       stepIndex: STATE_STEP_INDEX.JOB_ACTIVE,
@@ -168,8 +168,8 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
       description: input.revisionDriftSinceLastProof
         ? driftDescription
         : isReady
-          ? "Commercial terms are approved and the work plan is ready. Create the job to begin work."
-          : "Commercial terms are approved. Resolve planning gaps in the job-plan review before creating the job.",
+          ? "Commercial terms are approved and the work plan is ready. Create the job to schedule work."
+          : "Commercial terms are approved. Resolve planning gaps in the job-plan review before scheduling the job.",
       primaryAction: isReady
         ? { kind: "ACTIVATE_JOB", label: "Create job" }
         : { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },

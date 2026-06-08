@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   addQuoteLineExecutionTaskCustomAction,
   addQuoteLineExecutionTaskFromReusableAction,
@@ -211,12 +211,9 @@ function StageTaskRow({
   initialEditing?: boolean;
 }) {
   const [editing, setEditing] = useState(initialEditing);
-
-  useEffect(() => {
-    if (initialEditing) {
-      setEditing(true);
-    }
-  }, [initialEditing]);
+  if (initialEditing && !editing) {
+    setEditing(true);
+  }
   const [deleteState, deleteAction, deletePending] = useActionState(
     deleteQuoteLineExecutionTaskAction.bind(null, quoteId, lineItemId, task.id),
     initialFormState,

@@ -26,7 +26,7 @@ function quoteDisplayFromWorkstationItem(
     primaryIdentity: item.title,
     secondaryIdentity,
     contextLine:
-      item.parentLabel ?? item.subtitle ?? "No customer or lead linked",
+      item.contextLine ?? item.parentLabel ?? item.subtitle ?? "No customer or lead linked",
     statusLabel: formatQuoteStatus(status),
     statusTone: quoteStatusBadgeTone(status),
     readinessLabel: item.workflow?.statusLabel ?? "Review",

@@ -24,6 +24,7 @@ import {
   completeJobTaskAction,
   overrideJobTaskReadinessAction,
   toggleJobTaskChecklistItemAction,
+  updateJobTaskScheduleAction,
 } from "@/app/(workspace)/jobs/job-task-actions";
 import {
   uploadTaskAttachmentAction,
@@ -88,6 +89,17 @@ const addressPrimaryBtnClass =
 const actionBtnBaseClass =
   "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold transition-all disabled:opacity-50 sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs sm:font-semibold";
 
+function toDateTimeLocalValue(value: Date | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
 function formatDependencyLabel(raw: string): string {
   if (/^[A-Z0-9]{12,}$/.test(raw)) {
     return "Required Prior Step";
@@ -126,6 +138,13 @@ export function TaskWorkSurface({
   const [isUploading, setIsUploading] = useState(false);
   const [showNoteForm, setShowForm] = useState(false);
   const [note, setNote] = useState(initialTask.completionNote || "");
+  const [dueAtInput, setDueAtInput] = useState(toDateTimeLocalValue(initialTask.dueAt));
+  const [scheduledStartInput, setScheduledStartInput] = useState(
+    toDateTimeLocalValue(initialTask.scheduledStartAt),
+  );
+  const [scheduledEndInput, setScheduledEndInput] = useState(
+    toDateTimeLocalValue(initialTask.scheduledEndAt),
+  );
 
   const attachmentSyncKey = initialTask.attachments.map((a) => a.id).join(",");
   const issuesSyncKey = initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|");
@@ -135,12 +154,18 @@ export function TaskWorkSurface({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync; avoids stale edits after refresh
     setTask(initialTask);
     setNote(initialTask.completionNote || "");
+    setDueAtInput(toDateTimeLocalValue(initialTask.dueAt));
+    setScheduledStartInput(toDateTimeLocalValue(initialTask.scheduledStartAt));
+    setScheduledEndInput(toDateTimeLocalValue(initialTask.scheduledEndAt));
   }, [
     initialTask,
     initialTask.id,
     initialTask.status,
     initialTask.completedAt,
     initialTask.completionNote,
+    initialTask.dueAt,
+    initialTask.scheduledStartAt,
+    initialTask.scheduledEndAt,
     attachmentSyncKey,
     issuesSyncKey,
   ]);
@@ -421,6 +446,61 @@ export function TaskWorkSurface({
     });
   };
 
+  const handleSaveDueDate = () => {
+    setActionMessage(null);
+    startTransition(async () => {
+      const result = await updateJobTaskScheduleAction({
+        taskId: task.id,
+        dueAt: dueAtInput ? new Date(dueAtInput) : null,
+        assignedUserId: task.assignedUserId ?? null,
+      });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: result.error });
+        return;
+      }
+      setActionMessage({ tone: "success", text: "Task due date updated." });
+      refreshAfterMutation();
+    });
+  };
+
+  const handleSaveScheduledBlock = () => {
+    setActionMessage(null);
+    startTransition(async () => {
+      const result = await updateJobTaskScheduleAction({
+        taskId: task.id,
+        scheduledStartAt: scheduledStartInput ? new Date(scheduledStartInput) : null,
+        scheduledEndAt: scheduledEndInput ? new Date(scheduledEndInput) : null,
+        assignedUserId: task.assignedUserId ?? null,
+      });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: result.error });
+        return;
+      }
+      setActionMessage({ tone: "success", text: "Task schedule block updated." });
+      refreshAfterMutation();
+    });
+  };
+
+  const handleClearScheduledBlock = () => {
+    setActionMessage(null);
+    startTransition(async () => {
+      const result = await updateJobTaskScheduleAction({
+        taskId: task.id,
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        assignedUserId: task.assignedUserId ?? null,
+      });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: result.error });
+        return;
+      }
+      setScheduledStartInput("");
+      setScheduledEndInput("");
+      setActionMessage({ tone: "success", text: "Scheduled block cleared." });
+      refreshAfterMutation();
+    });
+  };
+
   return (
     <>
     <div className="space-y-6">
@@ -515,6 +595,72 @@ export function TaskWorkSurface({
           <p className="mt-2 text-base leading-relaxed text-foreground-muted sm:text-sm">{task.instructions}</p>
         </div>
       )}
+
+      <div className="space-y-3 rounded-xl border border-border bg-surface/20 p-4">
+        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+          Task timing
+        </p>
+        <p className="text-xs text-foreground-muted">
+          Job visits are hard field appointments. Task timing is the deadline or work block for this specific task.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            Due date
+            <input
+              type="datetime-local"
+              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+              value={dueAtInput}
+              onChange={(e) => setDueAtInput(e.target.value)}
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleSaveDueDate}
+              disabled={isPending}
+              className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+            >
+              Save due date
+            </button>
+          </div>
+          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            Scheduled start
+            <input
+              type="datetime-local"
+              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+              value={scheduledStartInput}
+              onChange={(e) => setScheduledStartInput(e.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            Scheduled end
+            <input
+              type="datetime-local"
+              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+              value={scheduledEndInput}
+              onChange={(e) => setScheduledEndInput(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleSaveScheduledBlock}
+            disabled={isPending}
+            className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+          >
+            Save scheduled block
+          </button>
+          <button
+            type="button"
+            onClick={handleClearScheduledBlock}
+            disabled={isPending}
+            className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+          >
+            Clear scheduled block
+          </button>
+        </div>
+      </div>
 
       {showCancelFieldHold && (
         <div className="space-y-3 rounded-xl border border-warning/30 bg-warning/5 p-4">

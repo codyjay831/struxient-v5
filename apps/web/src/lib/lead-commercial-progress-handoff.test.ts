@@ -102,3 +102,24 @@ test("READY_FOR_QUOTE offers Build quote as primary", () => {
   assert.equal(progress.primaryAction?.kind, "START_QUOTE");
   assert.equal(progress.primaryAction?.label, "Build quote");
 });
+
+test("ON_HOLD surfaces follow-up-later state", () => {
+  const progress = getLeadCommercialProgress({
+    lead: {
+      status: "ON_HOLD",
+      followUpAt: new Date("2026-06-20T00:00:00.000Z"),
+      customerId: null,
+      contactName: "Pat",
+      companyName: null,
+      email: "pat@example.com",
+      phone: "55501001234",
+      jobsiteAddressLine: "123 Main St",
+      isAddressVerified: true,
+    },
+    quotes: [],
+  });
+
+  assert.equal(progress.state, "FOLLOW_UP_LATER");
+  assert.equal(progress.label, "On hold — follow up");
+  assert.equal(progress.isTerminal, false);
+});

@@ -17,9 +17,7 @@ import {
   MapPin,
   CheckCircle2,
   ExternalLink,
-  Archive,
   Pencil,
-  Loader2,
   ChevronDown,
   Clock,
   Paperclip,
@@ -29,12 +27,13 @@ import {
 import Link from "next/link";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { archiveLeadInboxAction } from "@/app/(workspace)/leads/lead-workspace-actions";
+import { useEffect, useRef, useState } from "react";
+import { closeOrPauseLeadWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { useRouter } from "next/navigation";
 import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-progress-panel";
 import { LeadQuoteReadinessBar } from "@/components/leads/lead-quote-readiness-bar";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
+import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
@@ -57,9 +56,8 @@ export function LeadCommercialSurface({
   const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel } = payload;
   const router = useRouter();
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
-  const [isPending, startTransition] = useTransition();
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
-  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [closePanelOpen, setClosePanelOpen] = useState(false);
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const customerSectionRef = useRef<HTMLDivElement>(null);
 
@@ -85,25 +83,8 @@ export function LeadCommercialSurface({
     return () => window.removeEventListener("hashchange", handleHash);
   }, []);
 
-  const handleArchive = async () => {
-    if (!archiveConfirmOpen) {
-      setArchiveConfirmOpen(true);
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await archiveLeadInboxAction(lead.id);
-      if (result.success) {
-        setArchiveConfirmOpen(false);
-        setSurfaceError(null);
-        notifyMutationSuccess();
-      } else {
-        setSurfaceError(result.error ?? "Could not archive this request.");
-      }
-    });
-  };
-
   const matches = matchHints?.kind === "checked" ? matchHints.matches : [];
+  const closeOrPauseAction = closeOrPauseLeadWorkspaceAction.bind(null, lead.id);
 
   return (
     <div className="@container flex min-h-full flex-col">
@@ -453,31 +434,38 @@ export function LeadCommercialSurface({
       </div>
 
       <footer className="shrink-0 border-t border-border bg-surface px-4 py-3 sm:px-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          {archiveConfirmOpen ? (
+        <div className="space-y-3">
+          {closePanelOpen ? (
+            <div className="rounded-lg border border-border bg-background p-3">
+              <CloseOrPauseLeadForm
+                currentStatus={lead.status}
+                currentCloseReason={lead.closeReason}
+                currentFollowUpAt={lead.followUpAt}
+                formAction={closeOrPauseAction}
+                onCancel={() => setClosePanelOpen(false)}
+                onSuccess={() => {
+                  setClosePanelOpen(false);
+                  setSurfaceError(null);
+                  notifyMutationSuccess();
+                }}
+              />
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Link
+              href={`/leads/${lead.id}`}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-subtle transition-colors hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto"
+            >
+              Open full record
+            </Link>
             <button
               type="button"
-              onClick={() => setArchiveConfirmOpen(false)}
-              disabled={isPending}
-              className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-subtle transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50 sm:w-auto"
+              onClick={() => setClosePanelOpen((open) => !open)}
+              className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto"
             >
-              Cancel archive
+              {closePanelOpen ? "Hide close options" : "Close or pause"}
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={handleArchive}
-            disabled={isPending}
-            title="Archive this request"
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground disabled:opacity-50 sm:w-auto"
-          >
-            {isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Archive className="size-4" />
-            )}
-            {archiveConfirmOpen ? "Confirm archive request" : "Archive request"}
-          </button>
+          </div>
         </div>
       </footer>
     </div>

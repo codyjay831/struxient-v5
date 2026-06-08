@@ -16,6 +16,7 @@ import { performCreateQuoteDraftFromLead } from "@/app/(workspace)/quotes/quote-
 import {
   CustomerServiceLocationSource,
   LeadChannel,
+  LeadCloseReason,
   LeadStatus,
   Prisma,
 } from "@prisma/client";
@@ -53,6 +54,7 @@ import {
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
 
 const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
+const LEAD_CLOSE_REASON_SET = new Set<string>(Object.values(LeadCloseReason));
 
 export type WorkspaceFormState = {
   error?: string;
@@ -71,7 +73,7 @@ export type CreateQuoteFromLeadWorkspaceResult =
   | { success: true; quoteId: string }
   | { success: false; error: string };
 
-function revalidateLeadAndQuoteSurfaces(leadId: string, quoteId: string | null) {
+function revalidateLeadAndQuoteSurfaces(leadId: string, _quoteId: string | null) {
   const lid = leadId.trim();
   revalidatePath("/leads");
   if (lid) {
@@ -337,10 +339,11 @@ export async function updateLeadStatusWorkspaceAction(
   if (!v || !LEAD_STATUS_SET.has(v)) {
     return {
       error:
-        "That status is not valid. Choose Open, Qualifying, Converted, Lost, or Archived.",
+        "That status is not valid. Choose New, Triaging, Qualified, Converted, On hold, Lost, or Archived.",
     };
   }
   const status = v as LeadStatus;
+  const now = new Date();
 
   const ctx = await getRequestContextOrThrow();
 
@@ -360,7 +363,15 @@ export async function updateLeadStatusWorkspaceAction(
       id,
       organizationId: ctx.organizationId,
     },
-    data: { status },
+    data: {
+      status,
+      closeReason: status === LeadStatus.LOST ? undefined : null,
+      followUpAt: status === LeadStatus.ON_HOLD ? undefined : null,
+      closedAt:
+        status === LeadStatus.LOST || status === LeadStatus.ARCHIVED
+          ? now
+          : null,
+    },
   });
 
   if (result.count === 0) {
@@ -371,6 +382,130 @@ export async function updateLeadStatusWorkspaceAction(
   }
 
   return { success: true };
+}
+
+/**
+ * Guided close/pause flow for sales opportunities.
+ * - ON_HOLD keeps the opportunity active with optional follow-up date.
+ * - LOST requires a close reason and marks closedAt.
+ * - ARCHIVED records closedAt without a close reason.
+ */
+export async function closeOrPauseLeadWorkspaceAction(
+  leadId: string,
+  _prevState: WorkspaceFormState,
+  formData: FormData,
+): Promise<WorkspaceFormState> {
+  const id = leadId.trim();
+  if (!id) return { error: "Missing lead record id." };
+
+  const rawOutcome = formData.get("outcome");
+  if (typeof rawOutcome !== "string") {
+    return { error: "Choose how to close or pause this opportunity." };
+  }
+  const outcome = rawOutcome.trim();
+  if (!outcome || !LEAD_STATUS_SET.has(outcome)) {
+    return { error: "Choose a valid close outcome." };
+  }
+
+  const ctx = await getRequestContextOrThrow();
+  const existing = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true },
+  });
+  if (!existing) return { error: "Opportunity not found in your organization." };
+
+  if (outcome === LeadStatus.ON_HOLD) {
+    const rawFollowUpAt = formData.get("followUpAt");
+    const followUpAt =
+      typeof rawFollowUpAt === "string" && rawFollowUpAt.trim()
+        ? new Date(rawFollowUpAt)
+        : null;
+    if (followUpAt && Number.isNaN(followUpAt.getTime())) {
+      return { error: "Follow-up date is invalid." };
+    }
+    await db.lead.updateMany({
+      where: { id, organizationId: ctx.organizationId },
+      data: {
+        status: LeadStatus.ON_HOLD,
+        followUpAt,
+        closeReason: null,
+        closedAt: null,
+      },
+    });
+    await db.leadEvent.create({
+      data: {
+        leadId: id,
+        type: "CLOSED_OR_PAUSED",
+        payload: {
+          status: LeadStatus.ON_HOLD,
+          followUpAt: followUpAt?.toISOString() ?? null,
+        } as Prisma.InputJsonValue,
+        actorUserId: ctx.userId,
+      },
+    });
+    revalidateLeadAndQuoteSurfaces(id, null);
+    return { success: true };
+  }
+
+  if (outcome === LeadStatus.LOST) {
+    const rawReason = formData.get("closeReason");
+    if (typeof rawReason !== "string" || !LEAD_CLOSE_REASON_SET.has(rawReason.trim())) {
+      return { error: "Choose a close reason before marking this opportunity lost." };
+    }
+    const closeReason = rawReason.trim() as LeadCloseReason;
+    const closedAt = new Date();
+    await db.lead.updateMany({
+      where: { id, organizationId: ctx.organizationId },
+      data: {
+        status: LeadStatus.LOST,
+        closeReason,
+        closedAt,
+        followUpAt: null,
+      },
+    });
+    await db.leadEvent.create({
+      data: {
+        leadId: id,
+        type: "CLOSED_OR_PAUSED",
+        payload: {
+          status: LeadStatus.LOST,
+          closeReason,
+          closedAt: closedAt.toISOString(),
+        } as Prisma.InputJsonValue,
+        actorUserId: ctx.userId,
+      },
+    });
+    revalidateLeadAndQuoteSurfaces(id, null);
+    return { success: true };
+  }
+
+  if (outcome === LeadStatus.ARCHIVED) {
+    const closedAt = new Date();
+    await db.lead.updateMany({
+      where: { id, organizationId: ctx.organizationId },
+      data: {
+        status: LeadStatus.ARCHIVED,
+        closeReason: null,
+        followUpAt: null,
+        closedAt,
+      },
+    });
+    await db.leadEvent.create({
+      data: {
+        leadId: id,
+        type: "CLOSED_OR_PAUSED",
+        payload: {
+          status: LeadStatus.ARCHIVED,
+          closedAt: closedAt.toISOString(),
+        } as Prisma.InputJsonValue,
+        actorUserId: ctx.userId,
+      },
+    });
+    revalidateLeadAndQuoteSurfaces(id, null);
+    return { success: true };
+  }
+
+  return { error: "Choose a valid close outcome." };
 }
 
 /**
@@ -385,9 +520,15 @@ export async function archiveLeadInboxAction(
     return { success: false, error: "Missing lead id." };
   }
   const ctx = await getRequestContextOrThrow();
+  const closedAt = new Date();
   const result = await db.lead.updateMany({
     where: { id, organizationId: ctx.organizationId },
-    data: { status: LeadStatus.ARCHIVED },
+    data: {
+      status: LeadStatus.ARCHIVED,
+      closeReason: null,
+      followUpAt: null,
+      closedAt,
+    },
   });
   if (result.count === 0) {
     return {
@@ -549,6 +690,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     where: { id, organizationId: ctx.organizationId },
     select: {
       status: true,
+      followUpAt: true,
       customerId: true,
       contact: true,
       address: true,
@@ -590,6 +732,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
   const progress = getLeadCommercialProgress({
     lead: {
       status: lead.status,
+      followUpAt: lead.followUpAt,
       customerId: lead.customerId,
       contactName: contact.name,
       companyName: contact.companyName,

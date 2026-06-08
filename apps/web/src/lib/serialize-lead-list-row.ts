@@ -53,6 +53,7 @@ export type SerializedLeadRow = {
   progressState: string;
   progressPrimaryAction: SerializedProgressAction | null;
   progressSecondaryAction: SerializedProgressAction | null;
+  nextStepLabel: string | null;
   satisfiedItems: string[];
   requiredItems: string[];
   activeJobId: string | null;
@@ -75,6 +76,7 @@ export type LeadWithRelations = {
   id: string;
   title: string;
   status: LeadStatus;
+  followUpAt: Date | null;
   channel: LeadChannel;
   contactName: string | null;
   companyName: string | null;
@@ -119,6 +121,7 @@ export function serializeLeadListRow(
   const progress = getLeadCommercialProgress({
     lead: {
       status: lead.status,
+      followUpAt: lead.followUpAt,
       customerId: lead.customerId,
       contactName: lead.contactName,
       companyName: lead.companyName,
@@ -131,6 +134,14 @@ export function serializeLeadListRow(
   });
 
   const signals = readSignals(lead.signals);
+  const activeQuote = progress.activeQuote;
+  const quoteValueLabel =
+    activeQuote && activeQuote.totalCents > 0
+      ? new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(activeQuote.totalCents / 100)
+      : null;
 
   return {
     id: lead.id,
@@ -153,6 +164,7 @@ export function serializeLeadListRow(
       day: "numeric",
     }),
     ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
+    valueLabel: quoteValueLabel,
     progressLabel: progress.label,
     progressDescription: progress.description,
     progressTone: progress.badgeTone,
@@ -163,6 +175,7 @@ export function serializeLeadListRow(
     progressSecondaryAction: serializeLeadProgressAction(progress.secondaryAction, {
       leadId: lead.id,
     }),
+    nextStepLabel: progress.primaryAction?.label ?? null,
     satisfiedItems: progress.satisfiedItems,
     requiredItems: progress.requiredItems,
     activeJobId: progress.activeJob?.id ?? null,

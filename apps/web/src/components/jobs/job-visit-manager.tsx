@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { 
   createJobVisitAction, 
+  rescheduleJobVisitAction,
   cancelJobVisitAction, 
   completeJobVisitAction 
 } from "@/app/(workspace)/jobs/job-visit-actions";
@@ -26,6 +27,7 @@ type Visit = {
   scheduledStartAt: Date;
   scheduledEndAt: Date | null;
   status: JobVisitStatus;
+  assignedUserId?: string | null;
   notes: string | null;
   assignedUser: {
     name: string | null;
@@ -36,12 +38,14 @@ type Visit = {
 export function JobVisitManager({ 
   jobId, 
   initialVisits,
+  members = [],
   variant = "page",
   focusId,
   initialShowScheduleForm = false,
 }: { 
   jobId: string; 
   initialVisits: Visit[];
+  members?: Array<{ id: string; label: string }>;
   variant?: "page" | "embedded";
   focusId?: string;
   initialShowScheduleForm?: boolean;
@@ -54,6 +58,8 @@ export function JobVisitManager({
   // Form state
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [assignedUserId, setAssignedUserId] = useState("");
   const [notes, setNotes] = useState("");
 
   const refreshAfterAction = () => {
@@ -79,10 +85,13 @@ export function JobVisitManager({
     }
 
     const scheduledStartAt = new Date(`${startDate}T${startTime}`);
+    const scheduledEndAt = endTime ? new Date(`${startDate}T${endTime}`) : undefined;
     
     startTransition(async () => {
       const result = await createJobVisitAction(jobId, {
         scheduledStartAt,
+        scheduledEndAt,
+        assignedUserId: assignedUserId || undefined,
         notes: notes || undefined,
       });
       
@@ -92,7 +101,29 @@ export function JobVisitManager({
         setShowForm(false);
         setStartDate("");
         setStartTime("");
+        setEndTime("");
+        setAssignedUserId("");
         setNotes("");
+        refreshAfterAction();
+      }
+    });
+  };
+
+  const handleReschedule = (visit: Visit) => {
+    const nextStart = new Date(visit.scheduledStartAt.getTime() + 24 * 60 * 60 * 1000);
+    const nextEnd = visit.scheduledEndAt
+      ? new Date(visit.scheduledEndAt.getTime() + 24 * 60 * 60 * 1000)
+      : undefined;
+
+    startTransition(async () => {
+      const result = await rescheduleJobVisitAction(visit.id, {
+        scheduledStartAt: nextStart,
+        scheduledEndAt: nextEnd,
+        notes: visit.notes || undefined,
+      });
+      if (result.error) {
+        alert(result.error);
+      } else {
         refreshAfterAction();
       }
     });
@@ -146,6 +177,34 @@ export function JobVisitManager({
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
           />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            End Time (Optional)
+          </label>
+          <input
+            type="time"
+            className="mt-1 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-border-strong focus:outline-none"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            Assignee
+          </label>
+          <select
+            className="mt-1 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-border-strong focus:outline-none"
+            value={assignedUserId}
+            onChange={(e) => setAssignedUserId(e.target.value)}
+          >
+            <option value="">Unassigned</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="sm:col-span-2">
           <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
@@ -221,10 +280,26 @@ export function JobVisitManager({
                   &quot;{visit.notes}&quot;
                 </p>
               )}
+              {visit.scheduledEndAt ? (
+                <p className="mt-1 text-[11px] text-foreground-muted">
+                  Ends {new Date(visit.scheduledEndAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              ) : null}
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleReschedule(visit)}
+              disabled={isPending}
+              className="rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-foreground-muted hover:border-border-strong hover:text-foreground"
+              title="Move to next day"
+            >
+              +1 day
+            </button>
             <button
               onClick={() => handleComplete(visit.id)}
               disabled={isPending}
@@ -292,7 +367,7 @@ export function JobVisitManager({
     <section className="mb-8">
       <SectionHeading
         title="Scheduling"
-        description="Manage job visits and field appointments."
+        description="Job visits are field appointments. Use task timing for task-level deadlines and schedule blocks."
         actions={
           <button
             onClick={() => setShowForm(!showForm)}

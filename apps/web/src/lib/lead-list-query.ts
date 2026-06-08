@@ -6,14 +6,17 @@ export type LeadListSortParam =
   | "created"
   | "title"
   | "age_asc";
+export type LeadListPipelineParam = "active" | "awarded" | "closed";
 
 export const LEAD_LIST_DEFAULT_SORT: LeadListSortParam = "created";
+export const LEAD_LIST_DEFAULT_PIPELINE: LeadListPipelineParam = "active";
 
 const SORT_VALUES: LeadListSortParam[] = [
   "created",
   "title",
   "age_asc",
 ];
+const PIPELINE_VALUES: LeadListPipelineParam[] = ["active", "awarded", "closed"];
 
 function firstSearchParam(value: string | string[] | undefined): string {
   if (typeof value === "string") {
@@ -27,13 +30,17 @@ function firstSearchParam(value: string | string[] | undefined): string {
 
 export function parseLeadListSearchParams(
   record: Record<string, string | string[] | undefined>,
-): { q: string; sort: LeadListSortParam } {
+): { q: string; sort: LeadListSortParam; pipeline: LeadListPipelineParam } {
   const q = firstSearchParam(record.q).slice(0, MAX_QUERY_LEN);
   const rawSort = firstSearchParam(record.sort).toLowerCase();
+  const rawPipeline = firstSearchParam(record.pipeline).toLowerCase();
   const sort: LeadListSortParam = SORT_VALUES.includes(rawSort as LeadListSortParam)
     ? (rawSort as LeadListSortParam)
     : LEAD_LIST_DEFAULT_SORT;
-  return { q, sort };
+  const pipeline: LeadListPipelineParam = PIPELINE_VALUES.includes(rawPipeline as LeadListPipelineParam)
+    ? (rawPipeline as LeadListPipelineParam)
+    : LEAD_LIST_DEFAULT_PIPELINE;
+  return { q, sort, pipeline };
 }
 
 export function leadListWhere(
@@ -100,10 +107,30 @@ export function leadListOrderBy(sort: LeadListSortParam): Prisma.LeadOrderByWith
   }
 }
 
+export function leadRowMatchesPipeline(
+  pipeline: LeadListPipelineParam,
+  progressState: string,
+): boolean {
+  switch (pipeline) {
+    case "awarded":
+      return progressState === "JOB_ACTIVE";
+    case "closed":
+      return progressState === "CLOSED_NOT_A_FIT" || progressState === "ARCHIVED";
+    case "active":
+    default:
+      return (
+        progressState !== "JOB_ACTIVE" &&
+        progressState !== "CLOSED_NOT_A_FIT" &&
+        progressState !== "ARCHIVED"
+      );
+  }
+}
+
 /** Build relative `/leads` query string; omits default sort and empty q. */
 export function serializeLeadListHref(overrides: {
   q?: string;
   sort?: LeadListSortParam;
+  pipeline?: LeadListPipelineParam;
 }): string {
   const params = new URLSearchParams();
   const q = (overrides.q ?? "").trim().slice(0, MAX_QUERY_LEN);
@@ -113,6 +140,10 @@ export function serializeLeadListHref(overrides: {
   const sort = overrides.sort ?? LEAD_LIST_DEFAULT_SORT;
   if (sort !== LEAD_LIST_DEFAULT_SORT) {
     params.set("sort", sort);
+  }
+  const pipeline = overrides.pipeline ?? LEAD_LIST_DEFAULT_PIPELINE;
+  if (pipeline !== LEAD_LIST_DEFAULT_PIPELINE) {
+    params.set("pipeline", pipeline);
   }
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";

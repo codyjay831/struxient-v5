@@ -28,6 +28,7 @@ model Organization {
   leads                    Lead[]
   leadCustomFieldDefs      LeadCustomFieldDef[]
   leadVisitRequests        LeadVisitRequest[]
+  scheduleBlocks           ScheduleBlock[]
   lineItemTemplates        LineItemTemplate[]
   memberships              Membership[]
   publicRequestSettings    PublicRequestSettings?
@@ -35,6 +36,7 @@ model Organization {
   quoteChangeRequests      QuoteChangeRequest[]
   quoteCheckpoints         QuoteCheckpoint[]
   quoteShareTokens         QuoteShareToken[]
+  notificationEvents       NotificationEvent[]
   stages                   Stage[]
   taskTemplates            TaskTemplate[]
   tags                     Tag[]
@@ -160,7 +162,10 @@ model User {
   jobActivities          JobActivity[]
   jobIssues              JobIssue[]
   completedTasks         JobTask[]            @relation("CompletedTasks")
+  assignedTasks          JobTask[]            @relation("AssignedTasks")
   assignedVisits         JobVisit[]           @relation("AssignedVisits")
+  scheduleBlocks         ScheduleBlock[]
+  notificationEvents     NotificationEvent[]
   leadEvents             LeadEvent[]
   memberships            Membership[]
   resolvedChangeRequests QuoteChangeRequest[]
@@ -232,6 +237,9 @@ model Lead {
   assignedToId            String?
   publicClientKey         String?
   convertedAt             DateTime?
+  closeReason             LeadCloseReason?
+  followUpAt              DateTime?
+  closedAt                DateTime?
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
   attachments             Attachment[]
@@ -716,9 +724,14 @@ model JobTask {
   recoveryFlowOrder              Int                        @default(0)
   completedAt                    DateTime?
   completedByUserId              String?
+  assignedUserId                 String?
   completionNote                 String?
   completionRequirementsJson     Json                       @default("{}")
   actualMinutes                  Int?
+  dueAt                          DateTime?
+  scheduledStartAt               DateTime?
+  scheduledEndAt                 DateTime?
+  dueOffsetMinutesAfterReady     Int?
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
   /// Reserved for future job costing.
@@ -734,6 +747,7 @@ model JobTask {
   attachments                    Attachment[]
   issues                         JobIssue[]
   completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
+  assignedUser                   User?                      @relation("AssignedTasks", fields: [assignedUserId], references: [id])
   job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
   recoveryFlow                   JobRecoveryFlow?           @relation(fields: [recoveryFlowId], references: [id])
@@ -746,6 +760,9 @@ model JobTask {
   @@index([jobId])
   @@index([jobStageId, sortOrder])
   @@index([recoveryFlowId])
+  @@index([assignedUserId])
+  @@index([dueAt])
+  @@index([scheduledStartAt])
 }
 
 model JobIssue {
@@ -953,6 +970,55 @@ model LeadVisitRequest {
   @@index([status])
 }
 
+model ScheduleBlock {
+  id               String            @id @default(cuid())
+  organizationId   String
+  userId           String?
+  title            String
+  type             ScheduleBlockType @default(INTERNAL_EVENT)
+  startAt          DateTime
+  endAt            DateTime?
+  allDay           Boolean           @default(false)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([type])
+  @@index([startAt])
+}
+
+model NotificationEvent {
+  id             String              @id @default(cuid())
+  organizationId String
+  userId         String?
+  channel        NotificationChannel @default(IN_APP)
+  status         NotificationStatus  @default(PENDING)
+  kind           String
+  title          String
+  body           String?
+  dedupeKey      String?
+  payloadJson    Json?
+  sendAt         DateTime?
+  sentAt         DateTime?
+  failedAt       DateTime?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@index([sendAt])
+  @@index([createdAt])
+  @@unique([organizationId, dedupeKey])
+}
+
 model LeadCustomFieldDef {
   id                 String                 @id @default(cuid())
   organizationId     String
@@ -1023,8 +1089,17 @@ enum LeadStatus {
   TRIAGING
   QUALIFIED
   CONVERTED
+  ON_HOLD
   LOST
   ARCHIVED
+}
+
+enum LeadCloseReason {
+  CHOSE_ANOTHER
+  BUDGET_OR_TIMING
+  NO_RESPONSE
+  NOT_OUR_TRADE
+  OTHER
 }
 
 enum LeadChannel {
@@ -1119,6 +1194,25 @@ enum JobVisitStatus {
 enum LeadVisitRequestStatus {
   PENDING
   CONFIRMED
+  CANCELED
+}
+
+enum ScheduleBlockType {
+  BUSINESS_HOURS
+  TIME_OFF
+  INTERNAL_EVENT
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
   CANCELED
 }
 

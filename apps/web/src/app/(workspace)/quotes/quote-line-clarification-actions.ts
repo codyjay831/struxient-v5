@@ -612,7 +612,7 @@ export async function updateClarificationQuestionSetForLineAction(
       parsed.questions,
     );
 
-    let targetKey = existing.key;
+    const targetKey = existing.key;
     let targetVersion = existing.version;
 
     if (breaking) {

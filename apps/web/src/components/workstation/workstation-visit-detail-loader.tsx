@@ -37,6 +37,7 @@ export async function WorkstationVisitDetailLoader({
       id: true,
       scheduledStartAt: true,
       scheduledEndAt: true,
+      assignedUserId: true,
       status: true,
       notes: true,
       assignedUser: {
@@ -45,10 +46,22 @@ export async function WorkstationVisitDetailLoader({
     },
   });
 
+  const members = await db.membership.findMany({
+    where: { organizationId: ctx.organizationId },
+    select: {
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
   return (
     <JobVisitManager
       jobId={jobId}
       initialVisits={visits}
+      members={members.map((membership) => ({
+        id: membership.user.id,
+        label: membership.user.name || membership.user.email || "Unnamed user",
+      }))}
       variant="embedded"
       focusId={mode === "focus-visit" ? visitId : undefined}
       initialShowScheduleForm={mode === "schedule-new"}

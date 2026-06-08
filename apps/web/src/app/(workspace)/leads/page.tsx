@@ -19,9 +19,12 @@ import {
   parseLeadListSearchParams,
   leadListWhere,
   leadListOrderBy,
+  leadRowMatchesPipeline,
   serializeLeadListHref,
   LEAD_LIST_DEFAULT_SORT,
+  LEAD_LIST_DEFAULT_PIPELINE,
   type LeadListSortParam,
+  type LeadListPipelineParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Users, Search } from "lucide-react";
@@ -35,6 +38,10 @@ const sortLinkBase =
   "inline-flex items-center rounded-md border px-2.5 py-1 text-[0.7rem] font-medium transition-colors";
 const sortLinkActive = `${sortLinkBase} border-border-strong bg-foreground/[0.04] text-foreground`;
 const sortLinkIdle = `${sortLinkBase} border-transparent text-foreground-muted hover:border-border hover:bg-foreground/[0.02] hover:text-foreground`;
+const pipelineLinkBase =
+  "inline-flex items-center rounded-md border px-2.5 py-1 text-[0.7rem] font-medium transition-colors";
+const pipelineLinkActive = `${pipelineLinkBase} border-border-strong bg-foreground/[0.04] text-foreground`;
+const pipelineLinkIdle = `${pipelineLinkBase} border-transparent text-foreground-muted hover:border-border hover:bg-foreground/[0.02] hover:text-foreground`;
 
 function sortLabel(sort: LeadListSortParam): string {
   switch (sort) {
@@ -54,7 +61,7 @@ export default async function LeadsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const { q, sort } = parseLeadListSearchParams(sp);
+  const { q, sort, pipeline } = parseLeadListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getRequestContextOrThrow();
@@ -63,7 +70,7 @@ export default async function LeadsPage({
   const listWhere = leadListWhere(ctx.organizationId, q);
   const orderBy = leadListOrderBy(sort);
 
-  const [leads, matchingCount, totalInOrg] = await Promise.all([
+  const [leads, totalInOrg] = await Promise.all([
     db.lead.findMany({
       where: listWhere,
       orderBy,
@@ -83,23 +90,36 @@ export default async function LeadsPage({
         },
       },
     }),
-    db.lead.count({ where: listWhere }),
     db.lead.count({ where: { organizationId: ctx.organizationId } }),
   ]);
 
   const serializedLeads: SerializedLeadRow[] = leads.map((lead) =>
     serializeLeadListRow(lead, ctx.organizationId, now),
   );
+  const pipelineLeads = serializedLeads.filter((lead) =>
+    leadRowMatchesPipeline(pipeline, lead.progressState),
+  );
+  const matchingCount = pipelineLeads.length;
 
-  const hasActiveListFilters = q.length > 0 || sort !== LEAD_LIST_DEFAULT_SORT;
+  const hasActiveListFilters =
+    q.length > 0 ||
+    sort !== LEAD_LIST_DEFAULT_SORT ||
+    pipeline !== LEAD_LIST_DEFAULT_PIPELINE;
 
   const sortOptions: LeadListSortParam[] = ["created", "title", "age_asc"];
+  const pipelineOptions: LeadListPipelineParam[] = ["active", "awarded", "closed"];
 
   const sortNavItems = sortOptions.map((s) => ({
     key: s,
-    href: serializeLeadListHref({ q, sort: s }),
+    href: serializeLeadListHref({ q, sort: s, pipeline }),
     label: sortLabel(s),
     active: sort === s,
+  }));
+  const pipelineNavItems = pipelineOptions.map((p) => ({
+    key: p,
+    href: serializeLeadListHref({ q, sort, pipeline: p }),
+    label: p === "active" ? "Active" : p === "awarded" ? "Awarded" : "Closed",
+    active: pipeline === p,
   }));
 
   return (
@@ -107,7 +127,7 @@ export default async function LeadsPage({
       <WorkspaceBreadcrumb items={[{ label: "Sales" }]} />
       <PageHeader
         title="Sales"
-        description="Manage your commercial pipeline from intake to approved quote. Track every opportunity and its associated quotes in one unified view."
+        description="Track open opportunities, awarded work, and closed outcomes."
         actions={
           <>
             {fromWorkstation ? (
@@ -137,6 +157,9 @@ export default async function LeadsPage({
           />
 
           <LeadListFiltersClient
+            pipelineItems={pipelineNavItems}
+            pipelineActiveClass={pipelineLinkActive}
+            pipelineIdleClass={pipelineLinkIdle}
             sortItems={sortNavItems}
             sortActiveClass={sortLinkActive}
             sortIdleClass={sortLinkIdle}
@@ -172,7 +195,7 @@ export default async function LeadsPage({
               </EmptyState>
             </div>
           ) : (
-            <LeadsListClient leads={serializedLeads} orgHasLeads={totalInOrg > 0} />
+            <LeadsListClient leads={pipelineLeads} orgHasLeads={totalInOrg > 0} />
           )}
         </WorkspacePanel>
       </div>

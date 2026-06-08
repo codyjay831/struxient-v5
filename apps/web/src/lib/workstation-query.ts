@@ -1,3 +1,5 @@
+import { appendFileSync } from "fs";
+import { join } from "path";
 import {
   JobStatus,
   LeadStatus,
@@ -17,7 +19,12 @@ import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
-import { jobsiteLineFromLead, isLeadAddressVerified } from "./jobsite-address";
+import {
+  jobsiteLineFromLead,
+  isLeadAddressVerified,
+  resolveJobsiteLineForQuoteOrJob,
+} from "./jobsite-address";
+import { resolveJobWorkContext } from "./work-item-context";
 import {
   buildLeadRecordActionState,
   buildQuoteRecordActionState,
@@ -48,7 +55,8 @@ import {
   type WorkstationRecoveryActionKind,
 } from "./workstation-recovery-routing";
 import { includesEquivalentSignal } from "./signal-key";
-
+import { deriveSchedulingAttentionOverride } from "./workstation-scheduling-attention";
+import { LEAD_PIPELINE_OPEN_STATUSES } from "./lead-display";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
@@ -90,6 +98,8 @@ export type WorkstationWorkItem = {
   kind: WorkstationWorkItemKind;
   title: string;
   subtitle?: string;
+  /** Compact who/what/where for list cards (no workflow stage). */
+  contextLine?: string;
   status?: string;
   priority: WorkstationWorkItemPriority;
   group: WorkstationWorkItemGroup;
@@ -149,7 +159,35 @@ export async function queryWorkstationWorkItems(
   const now = new Date();
   const urgentThreshold = new Date(now.getTime() - urgentThresholdHours * 60 * 60 * 1000);
 
-  const pipelineStatuses = [LeadStatus.NEW, LeadStatus.TRIAGING];
+  const knownLeadStatuses = new Set(Object.values(LeadStatus));
+  const pipelineStatuses = LEAD_PIPELINE_OPEN_STATUSES.filter((s) =>
+    knownLeadStatuses.has(s),
+  );
+
+  // #region agent log
+  try {
+    appendFileSync(
+      join(process.cwd(), "..", "..", "debug-07001e.log"),
+      `${JSON.stringify({
+        sessionId: "07001e",
+        runId: "post-fix-2",
+        hypothesisId: "A",
+        location: "workstation-query.ts:pipelineStatuses",
+        message: "resolved pipeline statuses vs loaded LeadStatus enum",
+        data: {
+          requested: [...LEAD_PIPELINE_OPEN_STATUSES],
+          resolved: pipelineStatuses,
+          loadedLeadStatusValues: Object.values(LeadStatus),
+          onHoldInClient: knownLeadStatuses.has("ON_HOLD"),
+          dropped: LEAD_PIPELINE_OPEN_STATUSES.filter((s) => !knownLeadStatuses.has(s)),
+        },
+        timestamp: Date.now(),
+      })}\n`,
+    );
+  } catch {
+    /* ignore */
+  }
+  // #endregion
 
   // 1. Opportunities
   const leads = await db.lead.findMany({
@@ -178,6 +216,7 @@ export async function queryWorkstationWorkItems(
     const progress = getLeadCommercialProgress({
       lead: {
         status: lead.status,
+        followUpAt: lead.followUpAt,
         customerId: lead.customerId,
         contactName: lead.contactName,
         companyName: lead.companyName,
@@ -398,14 +437,29 @@ export async function queryWorkstationWorkItems(
   const jobs = await db.job.findMany({
     where: { organizationId, status: JobStatus.ACTIVE },
     include: {
-      customer: true,
+      customer: {
+        select: {
+          id: true,
+          displayName: true,
+          organizationId: true,
+          serviceLocations: {
+            orderBy: { isPrimary: "desc" },
+            select: { formattedAddress: true, addressLine1: true, isPrimary: true },
+          },
+        },
+      },
       lead: true,
       tasks: {
         where: { completedAt: null },
         select: {
           id: true,
           title: true,
+          category: true,
           updatedAt: true,
+          dueAt: true,
+          scheduledStartAt: true,
+          scheduledEndAt: true,
+          assignedUserId: true,
           sortOrder: true,
           status: true,
           completedAt: true,
@@ -424,6 +478,9 @@ export async function queryWorkstationWorkItems(
           attachments: {
             where: { status: "READY" },
             select: { id: true },
+          },
+          assignedUser: {
+            select: { id: true, name: true, email: true },
           },
           issues: {
             where: { status: JobIssueStatus.OPEN },
@@ -510,8 +567,24 @@ export async function queryWorkstationWorkItems(
       job.paymentRequirements,
       jobPaymentScheduleAnchors,
     );
-    const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
-    const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
+    const jobsiteLine = resolveJobsiteLineForQuoteOrJob({
+      customerLocations: job.customer?.serviceLocations ?? [],
+      leadRow: job.lead
+        ? { address: job.lead.address, signals: job.lead.signals }
+        : null,
+    });
+    const {
+      customerName: jobCustomerName,
+      scopeLabel: jobScopeLabel,
+      contextLine: jobContextLine,
+      parentLabel: jobParentLabel,
+    } = resolveJobWorkContext({
+      jobTitle: job.title,
+      customer: job.customer,
+      lead: job.lead,
+      jobsiteLine,
+    });
+    const jobCardTitle = jobScopeLabel || jobCustomerName || job.title;
 
     const stagesForHealth = job.stages.map((stage) => ({
       id: stage.id,
@@ -654,7 +727,7 @@ export async function queryWorkstationWorkItems(
         id: `job-health-${job.id}`,
         kind: "investigate",
         title: executionHealth.headline,
-        subtitle: primaryJobIdentity,
+        subtitle: jobCardTitle,
         status: executionHealth.primaryState,
         priority: "critical",
         group: "investigate",
@@ -666,7 +739,8 @@ export async function queryWorkstationWorkItems(
         nextStep: healthRoute?.nextStep ?? executionHealth.recommendedNextAction.label,
         recordId: job.id,
         parentRecordId: job.customerId || job.leadId || undefined,
-        parentLabel: primaryJobIdentity,
+        parentLabel: jobParentLabel ?? undefined,
+        contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
         executionHealthState: executionHealth.primaryState,
@@ -699,7 +773,7 @@ export async function queryWorkstationWorkItems(
         id: `visit-missed-${visit.id}`,
         kind: "schedule",
         title: `Missed Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
-        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+        subtitle: jobCardTitle,
         status: "Missed",
         priority: "high",
         group: "investigate",
@@ -711,7 +785,8 @@ export async function queryWorkstationWorkItems(
         nextStep: "Complete, reschedule, or cancel visit.",
         recordId: visit.id,
         parentRecordId: job.id,
-        parentLabel: primaryJobIdentity,
+        parentLabel: jobParentLabel ?? undefined,
+        contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: visit.updatedAt,
       });
@@ -733,7 +808,7 @@ export async function queryWorkstationWorkItems(
         id: `visit-upcoming-${visit.id}`,
         kind: "schedule",
         title: `Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
-        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+        subtitle: jobCardTitle,
         status: isToday ? "Today" : "Upcoming",
         priority,
         group,
@@ -745,7 +820,8 @@ export async function queryWorkstationWorkItems(
         nextStep: "Prepare for visit.",
         recordId: visit.id,
         parentRecordId: job.id,
-        parentLabel: primaryJobIdentity,
+        parentLabel: jobParentLabel ?? undefined,
+        contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: visit.updatedAt,
       });
@@ -766,7 +842,7 @@ export async function queryWorkstationWorkItems(
           id: `job-unscheduled-${job.id}`,
           kind: "schedule",
           title: "Unscheduled Job",
-          subtitle: primaryJobIdentity,
+          subtitle: jobCardTitle,
           status: "Needs Schedule",
           priority: "medium",
           group: "ready",
@@ -778,7 +854,8 @@ export async function queryWorkstationWorkItems(
           nextStep: "Schedule a job visit.",
           recordId: job.id,
           parentRecordId: job.customerId || job.leadId || undefined,
-          parentLabel: primaryJobIdentity,
+          parentLabel: jobParentLabel ?? undefined,
+          contextLine: jobContextLine ?? undefined,
           href: `/jobs/${job.id}`,
           updatedAt: job.updatedAt,
         });
@@ -789,8 +866,6 @@ export async function queryWorkstationWorkItems(
 
     for (const task of sortedTasks) {
       const isPrimary = task.id === primaryTaskId;
-      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
-      const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
 
       const { jobStage, recoveryFlow, ...readinessTask } = task;
       const readinessInput = toTaskReadinessInput(readinessTask, {
@@ -810,7 +885,35 @@ export async function queryWorkstationWorkItems(
       }
 
       const isBlocked = derivedState === "BLOCKED_BY_ISSUE" || derivedState === "BLOCKED_BY_SIGNAL";
-      const group: WorkstationWorkItemGroup = isBlocked ? "blocked" : "active";
+      const taskIsDueToday =
+        task.dueAt && task.dueAt.toDateString() === now.toDateString();
+      const taskIsOverdue = Boolean(task.dueAt && task.dueAt < now);
+      const taskIsScheduledSoon =
+        task.scheduledStartAt && task.scheduledStartAt > now;
+      const schedulingAttentionOverride = deriveSchedulingAttentionOverride({
+        category: task.category,
+        derivedState,
+        dueAt: task.dueAt,
+        scheduledStartAt: task.scheduledStartAt,
+      });
+
+      if (taskIsOverdue && !isBlocked) {
+        priority = "critical";
+      } else if (taskIsDueToday && !isBlocked) {
+        priority = "high";
+      }
+      if (schedulingAttentionOverride) {
+        priority = schedulingAttentionOverride.priority;
+      }
+
+      let group: WorkstationWorkItemGroup = isBlocked
+        ? "blocked"
+        : taskIsScheduledSoon
+          ? "scheduled"
+          : "active";
+      if (schedulingAttentionOverride) {
+        group = schedulingAttentionOverride.group;
+      }
 
       const { lane, withinLaneRank } = rank({
         kind: "task",
@@ -833,23 +936,50 @@ export async function queryWorkstationWorkItems(
         id: `task-${task.id}`,
         kind: "task",
         title: task.title,
-        subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""} · ${task.jobStage.title}`,
-        status: taskStateLabel(derivedState),
+        subtitle: task.jobStage.title,
+        status: taskIsOverdue
+          ? "Overdue"
+          : taskIsDueToday
+            ? "Due today"
+            : taskIsScheduledSoon
+              ? "Scheduled"
+              : schedulingAttentionOverride?.status ?? taskStateLabel(derivedState),
         priority,
         group,
-        lens: derivedState === "BLOCKED_BY_SIGNAL" ? "waiting" : "attention",
+        lens: schedulingAttentionOverride
+          ? schedulingAttentionOverride.lens
+          : taskIsOverdue || taskIsDueToday
+            ? "today"
+            : derivedState === "BLOCKED_BY_SIGNAL"
+              ? "waiting"
+              : taskIsScheduledSoon
+                ? "upcoming"
+                : "attention",
         lane,
         withinLaneRank,
         filterCategory: "tasks",
-        reason: derivedState === "BLOCKED_BY_ISSUE" ? "Blocked by an open issue." :
-                derivedState === "BLOCKED_BY_SIGNAL" ? `Waiting for: ${missingSignals.map(formatDependencyLabel).join(", ")}` :
-                derivedState === "NEEDS_PROOF" ? "Task needs completion proof." :
-                "Task is ready to complete.",
+        reason: schedulingAttentionOverride
+          ? schedulingAttentionOverride.reason
+          : taskIsOverdue
+            ? "Task due date has passed and needs action."
+            : taskIsDueToday
+              ? "Task is due today."
+              : derivedState === "BLOCKED_BY_ISSUE"
+                ? "Blocked by an open issue."
+                : derivedState === "BLOCKED_BY_SIGNAL"
+                  ? `Waiting for: ${missingSignals.map(formatDependencyLabel).join(", ")}`
+                  : derivedState === "NEEDS_PROOF"
+                    ? "Task needs completion proof."
+                    : taskIsScheduledSoon
+                      ? "Task has upcoming scheduled work."
+                      : "Task is ready to complete.",
         nextStep: taskRecoveryRoute?.nextStep ??
-          (isBlocked ? "Resolve blocker." : "Complete the task."),
+          (schedulingAttentionOverride?.nextStep ??
+            (isBlocked ? "Resolve blocker." : "Complete the task.")),
         recordId: task.id,
         parentRecordId: job.id,
-        parentLabel: primaryJobIdentity,
+        parentLabel: jobParentLabel ?? undefined,
+        contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: task.updatedAt,
         isBlocked,
@@ -864,9 +994,6 @@ export async function queryWorkstationWorkItems(
     }
 
     if (job.tasks.length === 0) {
-      const primaryJobIdentity = job.lead?.title || job.customer?.displayName || job.title;
-      const secondaryJobIdentity = job.title !== primaryJobIdentity ? job.title : null;
-
       const { lane, withinLaneRank } = rank({
         kind: "job",
         priority: "medium",
@@ -878,8 +1005,8 @@ export async function queryWorkstationWorkItems(
       items.push({
         id: `job-${job.id}`,
         kind: "job",
-        title: primaryJobIdentity,
-        subtitle: secondaryJobIdentity || job.customer?.displayName || undefined,
+        title: jobCardTitle,
+        subtitle: jobCustomerName ?? undefined,
         status: job.status,
         priority: "medium",
         group: "investigate",
@@ -891,7 +1018,8 @@ export async function queryWorkstationWorkItems(
         nextStep: "Review job completion or add tasks.",
         recordId: job.id,
         parentRecordId: job.customerId || job.leadId || undefined,
-        parentLabel: primaryJobIdentity,
+        parentLabel: jobParentLabel ?? undefined,
+        contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: job.updatedAt,
         isBlocked: isJobExecutionBlocked,
@@ -935,8 +1063,18 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const issue of issues) {
-    const primaryJobIdentity = issue.job.lead?.title || issue.job.customer?.displayName || issue.job.title;
-    const secondaryJobIdentity = issue.job.title !== primaryJobIdentity ? issue.job.title : null;
+    const issueJobsite = resolveJobsiteLineForQuoteOrJob({
+      customerLocations: [],
+      leadRow: issue.job.lead
+        ? { address: issue.job.lead.address, signals: issue.job.lead.signals }
+        : null,
+    });
+    const issueWorkContext = resolveJobWorkContext({
+      jobTitle: issue.job.title,
+      customer: issue.job.customer,
+      lead: issue.job.lead,
+      jobsiteLine: issueJobsite,
+    });
 
     let priority: WorkstationWorkItemPriority = "high";
 
@@ -981,7 +1119,7 @@ export async function queryWorkstationWorkItems(
       id: `issue-${issue.id}`,
       kind: "investigate",
       title: issue.title,
-      subtitle: `Issue: ${issue.type.replace(/_/g, " ")} · ${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+      subtitle: `Issue: ${issue.type.replace(/_/g, " ")}`,
       status: issue.status,
       priority,
       group: "investigate",
@@ -993,7 +1131,8 @@ export async function queryWorkstationWorkItems(
       nextStep: recoveryRoute.nextStep,
       recordId: issue.id,
       parentRecordId: issue.jobId,
-      parentLabel: primaryJobIdentity,
+      parentLabel: issueWorkContext.parentLabel ?? undefined,
+      contextLine: issueWorkContext.contextLine,
       href: `/jobs/${issue.jobId}#job-issues`,
       updatedAt: issue.updatedAt,
       actionKind: recoveryRoute.actionKind,
@@ -1069,8 +1208,18 @@ export async function queryWorkstationWorkItems(
     if (!dueOnJob.some((r) => r.id === payment.id)) continue;
     if (emittedPaymentIds.has(payment.id)) continue;
     emittedPaymentIds.add(payment.id);
-    const primaryJobIdentity = payment.job.lead?.title || payment.job.customer?.displayName || payment.job.title;
-    const secondaryJobIdentity = payment.job.title !== primaryJobIdentity ? payment.job.title : null;
+    const paymentJobsite = resolveJobsiteLineForQuoteOrJob({
+      customerLocations: [],
+      leadRow: payment.job.lead
+        ? { address: payment.job.lead.address, signals: payment.job.lead.signals }
+        : null,
+    });
+    const paymentWorkContext = resolveJobWorkContext({
+      jobTitle: payment.job.title,
+      customer: payment.job.customer,
+      lead: payment.job.lead,
+      jobsiteLine: paymentJobsite,
+    });
 
     const amountLabel = payment.amountCents
       ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
@@ -1089,7 +1238,7 @@ export async function queryWorkstationWorkItems(
       id: `payment-${payment.id}`,
       kind: "investigate",
       title: payment.title,
-      subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}${amountLabel ? ` · ${amountLabel}` : ""}`,
+      subtitle: amountLabel ?? undefined,
       status: payment.status,
       priority: "high",
       group: "investigate",
@@ -1103,7 +1252,8 @@ export async function queryWorkstationWorkItems(
       nextStep: "Record payment or waive requirement.",
       recordId: payment.id,
       parentRecordId: payment.jobId,
-      parentLabel: primaryJobIdentity,
+      parentLabel: paymentWorkContext.parentLabel ?? undefined,
+      contextLine: paymentWorkContext.contextLine,
       href: `/jobs/${payment.jobId}`,
       updatedAt: payment.updatedAt,
     });
@@ -1128,8 +1278,18 @@ export async function queryWorkstationWorkItems(
   });
 
   for (const log of draftLogs) {
-    const primaryJobIdentity = log.job.lead?.title || log.job.customer?.displayName || log.job.title;
-    const secondaryJobIdentity = log.job.title !== primaryJobIdentity ? log.job.title : null;
+    const logJobsite = resolveJobsiteLineForQuoteOrJob({
+      customerLocations: [],
+      leadRow: log.job.lead
+        ? { address: log.job.lead.address, signals: log.job.lead.signals }
+        : null,
+    });
+    const logWorkContext = resolveJobWorkContext({
+      jobTitle: log.job.title,
+      customer: log.job.customer,
+      lead: log.job.lead,
+      jobsiteLine: logJobsite,
+    });
 
     const { lane, withinLaneRank } = rank({
       kind: "daily-log",
@@ -1142,7 +1302,7 @@ export async function queryWorkstationWorkItems(
       id: `log-${log.id}`,
       kind: "daily-log",
       title: `Daily Log: ${log.logDate.toLocaleDateString()}`,
-      subtitle: `${primaryJobIdentity}${secondaryJobIdentity ? ` (${secondaryJobIdentity})` : ""}`,
+      subtitle: logWorkContext.customerName ?? undefined,
       status: log.status,
       priority: "medium",
       group: "investigate",
@@ -1154,7 +1314,8 @@ export async function queryWorkstationWorkItems(
       nextStep: "Review and approve log.",
       recordId: log.id,
       parentRecordId: log.jobId,
-      parentLabel: primaryJobIdentity,
+      parentLabel: logWorkContext.parentLabel ?? undefined,
+      contextLine: logWorkContext.contextLine,
       href: `/jobs/${log.jobId}`, // No popup for now, link to job
       updatedAt: log.updatedAt,
     });

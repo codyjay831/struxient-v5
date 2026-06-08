@@ -10,7 +10,8 @@
  */
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, type KeyboardEvent } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -29,15 +30,38 @@ function LeadRow({
   active: boolean;
   onOpen: () => void;
 }) {
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen();
+    }
+  };
+  const toneDotClass =
+    lead.progressTone === "approved"
+      ? "bg-success"
+      : lead.progressTone === "sent"
+        ? "bg-accent"
+        : lead.progressTone === "warning"
+          ? "bg-warning"
+          : "bg-foreground-subtle";
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={onKeyDown}
+      aria-label={`Open opportunity: ${lead.title}`}
       className={[
-        "w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors",
-        active ? "bg-background" : "hover:bg-background/60",
+        "w-full cursor-pointer border-l-2 px-4 py-3.5 text-left transition-colors",
+        active
+          ? "border-accent bg-background"
+          : "border-transparent hover:bg-background/60",
       ].join(" ")}
     >
+      <div className="flex items-start gap-3">
+        <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-0.5">
           <span className="text-sm font-semibold text-foreground leading-snug">
@@ -63,16 +87,31 @@ function LeadRow({
           {lead.customerDisplayName && (
             <>
               <span>·</span>
-              <span>{lead.customerDisplayName}</span>
+              {lead.customerHref ? (
+                <Link
+                  href={lead.customerHref}
+                  onClick={(event) => event.stopPropagation()}
+                  className="underline-offset-2 hover:underline hover:text-foreground"
+                >
+                  {lead.customerDisplayName}
+                </Link>
+              ) : (
+                <span>{lead.customerDisplayName}</span>
+              )}
             </>
           )}
         </div>
+        {lead.nextStepLabel ? (
+          <p className="mt-1 text-xs text-foreground-muted">
+            Next: {lead.nextStepLabel}
+          </p>
+        ) : null}
       </div>
       <div className="flex items-center gap-1 shrink-0 mt-0.5 rounded-md border border-border px-2 py-1 text-xs text-foreground-subtle hover:border-border-strong hover:text-foreground transition-colors">
         Open
         <ArrowUpRight className="w-3 h-3 ml-0.5" strokeWidth={1.5} />
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -81,9 +120,6 @@ function LeadRow({
 const primaryLinkClass =
   "inline-flex items-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
 
-const mutedLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
-
 export function LeadsListClient({
   leads,
   orgHasLeads,
@@ -91,15 +127,35 @@ export function LeadsListClient({
   leads: SerializedLeadRow[];
   orgHasLeads: boolean;
 }) {
-  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const leadIds = useMemo(() => new Set(leads.map((lead) => lead.id)), [leads]);
+  const openParam = searchParams.get("open");
+  const openLeadId = openParam && leadIds.has(openParam) ? openParam : null;
+
+  const writeOpenParam = useCallback(
+    (leadId: string | null, mode: "push" | "replace") => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (leadId) params.set("open", leadId);
+      else params.delete("open");
+      const nextHref = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+      if (mode === "push") {
+        router.push(nextHref, { scroll: false });
+      } else {
+        router.replace(nextHref, { scroll: false });
+      }
+    },
+    [pathname, router, searchParams],
+  );
 
   const openWorkspace = useCallback((id: string) => {
-    setOpenLeadId(id);
-  }, []);
+    writeOpenParam(id, "push");
+  }, [writeOpenParam]);
 
   const closeWorkspace = useCallback(() => {
-    setOpenLeadId(null);
-  }, []);
+    writeOpenParam(null, "replace");
+  }, [writeOpenParam]);
 
   return (
     <>

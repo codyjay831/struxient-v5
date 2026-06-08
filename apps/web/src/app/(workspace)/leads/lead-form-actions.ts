@@ -110,7 +110,7 @@ export async function updateLeadStatusAction(
   if (!v || !LEAD_STATUS_SET.has(v)) {
     return {
       error:
-        "That status is not valid. Choose Open, Qualifying, Converted, Lost, or Archived.",
+        "That status is not valid. Choose New, Triaging, Qualified, Converted, On hold, Lost, or Archived.",
     };
   }
   const status = v as LeadStatus;
@@ -119,7 +119,7 @@ export async function updateLeadStatusAction(
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!exists) {
     return {
@@ -128,19 +128,31 @@ export async function updateLeadStatusAction(
     };
   }
 
+  const now = new Date();
   const result = await db.lead.updateMany({
     where: {
       id,
       organizationId: ctx.organizationId,
     },
-    data: { status },
+    data: {
+      status,
+      closeReason: status === LeadStatus.LOST ? undefined : null,
+      followUpAt: status === LeadStatus.ON_HOLD ? undefined : null,
+      closedAt:
+        status === LeadStatus.LOST || status === LeadStatus.ARCHIVED
+          ? now
+          : null,
+    },
   });
 
   await db.leadEvent.create({
     data: {
       leadId: id,
       type: "STATUS_CHANGED",
-      payload: { status } as Prisma.InputJsonValue,
+      payload: {
+        from: exists.status,
+        to: status,
+      } as Prisma.InputJsonValue,
       actorUserId: ctx.userId,
     },
   });

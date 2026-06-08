@@ -1065,7 +1065,7 @@ export function ClarifyScopePanel({
                                     })
                                   }
                                 />
-                                Allow "Other"
+                                Allow &quot;Other&quot;
                               </label>
                             </div>
                           </div>
@@ -1135,7 +1135,7 @@ export function ClarifyScopePanel({
                           )
                         }
                       />
-                      Attach to this line template's tags
+                      Attach to this line template&apos;s tags
                     </label>
                     <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
                       <input

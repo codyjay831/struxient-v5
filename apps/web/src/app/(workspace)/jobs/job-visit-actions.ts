@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 
 export type JobVisitActionState = {
   error?: string;
@@ -63,10 +64,32 @@ export async function createJobVisitAction(
         },
         tx
       );
+
+      await enqueueNotification(
+        {
+          organizationId,
+          userId: data.assignedUserId ?? null,
+          kind: "JOB_VISIT_SCHEDULED",
+          title: `Visit scheduled: ${job.title}`,
+          body: data.notes || undefined,
+          dedupeKey: `job-visit-scheduled-${visit.id}-${data.scheduledStartAt.toISOString()}`,
+          payloadJson: {
+            visitId: visit.id,
+            jobId,
+            scheduledStartAt: data.scheduledStartAt.toISOString(),
+            scheduledEndAt: data.scheduledEndAt?.toISOString() ?? null,
+            assignedUserId: data.assignedUserId ?? null,
+            actorUserId: session.userId,
+          },
+        },
+        tx,
+      );
     });
 
     revalidatePath(`/jobs/${jobId}`);
+    revalidatePath("/schedule");
     revalidatePath("/workstation");
+    revalidatePath("/workstation/schedule");
 
     return { success: true };
   } catch (e) {
@@ -124,10 +147,30 @@ export async function rescheduleJobVisitAction(
         },
         tx
       );
+
+      await enqueueNotification(
+        {
+          organizationId,
+          kind: "JOB_VISIT_RESCHEDULED",
+          title: "Visit rescheduled",
+          body: data.notes || undefined,
+          dedupeKey: `job-visit-rescheduled-${visit.id}-${data.scheduledStartAt.toISOString()}`,
+          payloadJson: {
+            visitId: visit.id,
+            jobId: visit.jobId,
+            scheduledStartAt: data.scheduledStartAt.toISOString(),
+            scheduledEndAt: data.scheduledEndAt?.toISOString() ?? null,
+            actorUserId: session.userId,
+          },
+        },
+        tx,
+      );
     });
 
     revalidatePath(`/jobs/${visit.jobId}`);
+    revalidatePath("/schedule");
     revalidatePath("/workstation");
+    revalidatePath("/workstation/schedule");
 
     return { success: true };
   } catch (e) {
@@ -172,10 +215,28 @@ export async function cancelJobVisitAction(
         },
         tx
       );
+
+      await enqueueNotification(
+        {
+          organizationId,
+          kind: "JOB_VISIT_CANCELED",
+          title: `Visit canceled`,
+          body: reason || undefined,
+          dedupeKey: `job-visit-canceled-${visit.id}`,
+          payloadJson: {
+            visitId: visit.id,
+            jobId: visit.jobId,
+            actorUserId: session.userId,
+          },
+        },
+        tx,
+      );
     });
 
     revalidatePath(`/jobs/${visit.jobId}`);
+    revalidatePath("/schedule");
     revalidatePath("/workstation");
+    revalidatePath("/workstation/schedule");
 
     return { success: true };
   } catch (e) {
@@ -223,10 +284,28 @@ export async function completeJobVisitAction(
         },
         tx
       );
+
+      await enqueueNotification(
+        {
+          organizationId,
+          kind: "JOB_VISIT_COMPLETED",
+          title: `Visit completed`,
+          body: notes || undefined,
+          dedupeKey: `job-visit-completed-${visit.id}`,
+          payloadJson: {
+            visitId: visit.id,
+            jobId: visit.jobId,
+            actorUserId: session.userId,
+          },
+        },
+        tx,
+      );
     });
 
     revalidatePath(`/jobs/${visit.jobId}`);
+    revalidatePath("/schedule");
     revalidatePath("/workstation");
+    revalidatePath("/workstation/schedule");
 
     return { success: true };
   } catch (e) {

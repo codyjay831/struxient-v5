@@ -66,7 +66,7 @@ export default async function JobDetailPage({
   const ctx = await getRequestContextOrThrow();
   const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
 
-  const [job, liveSignals] = await Promise.all([
+  const [job, liveSignals, members] = await Promise.all([
     db.job.findFirst({
       where: { id, organizationId: ctx.organizationId },
       select: {
@@ -84,6 +84,7 @@ export default async function JobDetailPage({
             scheduledStartAt: true,
             scheduledEndAt: true,
             status: true,
+            assignedUserId: true,
             notes: true,
             assignedUser: { select: { name: true, email: true } },
           },
@@ -165,6 +166,10 @@ export default async function JobDetailPage({
                 completedAt: true,
                 completionNote: true,
                 completionRequirementsJson: true,
+                dueAt: true,
+                scheduledStartAt: true,
+                scheduledEndAt: true,
+                assignedUserId: true,
                 providesSignals: true,
                 requiresSignals: true,
                 hardSignal: true,
@@ -257,6 +262,13 @@ export default async function JobDetailPage({
       },
     }),
     getLiveSignals(id),
+    db.membership.findMany({
+      where: { organizationId: ctx.organizationId },
+      select: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   if (!job) {
@@ -506,6 +518,10 @@ export default async function JobDetailPage({
       <JobVisitManager
         jobId={job.id}
         initialVisits={job.visits}
+        members={members.map((membership) => ({
+          id: membership.user.id,
+          label: membership.user.name || membership.user.email || "Unnamed user",
+        }))}
       />
 
       <JobActivityFeed activities={job.activities} />

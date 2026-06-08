@@ -30,11 +30,20 @@ import {
   validateAddJobTaskInput,
   type AddJobTaskInput,
 } from "@/lib/job-task-add-guard";
+import { setTaskScheduleActionCore, syncTaskDueDatesAfterReadiness } from "@/lib/task-timing";
 
 export type JobTaskActionState = {
   error?: string;
   success?: boolean;
   taskId?: string;
+};
+
+export type JobTaskScheduleActionInput = {
+  taskId: string;
+  dueAt?: Date | null;
+  scheduledStartAt?: Date | null;
+  scheduledEndAt?: Date | null;
+  assignedUserId?: string | null;
 };
 
 export async function addJobTaskAction(
@@ -125,6 +134,8 @@ export async function addJobTaskAction(
 
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");
+    revalidatePath("/schedule");
+    revalidatePath("/workstation/schedule");
     revalidatePath(`/jobs/${jobStage.jobId}`);
 
     return { success: true, taskId: task.id };
@@ -241,8 +252,16 @@ export async function completeJobTaskAction(
       await promotePendingPaymentsToDue(task.jobId, tx);
     });
 
+    await syncTaskDueDatesAfterReadiness({
+      organizationId,
+      jobId: task.jobId,
+      actorUserId: session.userId,
+    });
+
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");
+    revalidatePath("/schedule");
+    revalidatePath("/workstation/schedule");
     revalidatePath(`/jobs/${task.jobId}`);
 
     return { success: true };
@@ -342,8 +361,16 @@ export async function updateJobTaskStatusAction(
       });
     }
 
+    await syncTaskDueDatesAfterReadiness({
+      organizationId,
+      jobId: task.jobId,
+      actorUserId: session.userId,
+    });
+
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");
+    revalidatePath("/schedule");
+    revalidatePath("/workstation/schedule");
     revalidatePath(`/jobs/${task.jobId}`);
 
     return {};
@@ -433,14 +460,83 @@ export async function overrideJobTaskReadinessAction(
       await promotePendingPaymentsToDue(task.jobId, tx);
     });
 
+    await syncTaskDueDatesAfterReadiness({
+      organizationId,
+      jobId: task.jobId,
+      actorUserId: session.userId,
+    });
+
     revalidatePath("/workstation");
     revalidatePath("/workstation/tasks");
+    revalidatePath("/schedule");
+    revalidatePath("/workstation/schedule");
     revalidatePath(`/jobs/${task.jobId}`);
 
     return { success: true };
   } catch (e) {
     console.error("Failed to override task", e);
     return { error: "Failed to override task. Please try again." };
+  }
+}
+
+export async function updateJobTaskScheduleAction(
+  input: JobTaskScheduleActionInput,
+): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  try {
+    const updateResult = await db.$transaction(async (tx) => {
+      const result = await setTaskScheduleActionCore(
+        {
+          organizationId,
+          taskId: input.taskId,
+          dueAt: input.dueAt,
+          scheduledStartAt: input.scheduledStartAt,
+          scheduledEndAt: input.scheduledEndAt,
+          assignedUserId: input.assignedUserId,
+        },
+        tx,
+      );
+
+      if ("error" in result) return result;
+
+      const task = await tx.jobTask.findUnique({
+        where: { id: input.taskId },
+        select: { jobId: true, title: true },
+      });
+      if (!task) return { error: "Task not found." };
+
+      await recordJobActivity(
+        {
+          organizationId,
+          jobId: task.jobId,
+          type: JobActivityType.ISSUE_FOLLOW_UP_TASK_CREATED,
+          title: `Task timing updated: ${task.title}`,
+          details: "Due date/schedule was updated.",
+          entityType: "JobTask",
+          entityId: input.taskId,
+          actorUserId: session.userId,
+          metadataJson: { activityKind: "TASK_TIMING_UPDATED" },
+        },
+        tx,
+      );
+
+      return { success: true, jobId: task.jobId as string };
+    });
+
+    if ("error" in updateResult) return { error: updateResult.error };
+
+    revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
+    revalidatePath("/schedule");
+    revalidatePath("/workstation/schedule");
+    if ("jobId" in updateResult) revalidatePath(`/jobs/${updateResult.jobId}`);
+
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to update task schedule", e);
+    return { error: "Failed to update task schedule." };
   }
 }
 
