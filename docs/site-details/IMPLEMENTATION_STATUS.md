@@ -173,16 +173,49 @@
 - Next phase (if green): Phase 2
 
 ### Phase 2 — Reusable site-knowledge model
-- Status: In progress
+- Status: Completed
 - Objective: introduce minimal typed reusable knowledge entities with strict ownership and idempotent seeds.
+- Files changed:
+  - `apps/web/prisma/schema.prisma`
+  - `apps/web/prisma/migrations/20260610181323_site_details_phase2_knowledge_model/migration.sql`
+  - `apps/web/prisma/seeds/site-details-knowledge.ts`
+  - `apps/web/prisma/seed.ts`
+- Migration involved: Yes (typed site knowledge + audit/review entities)
+- Verification commands:
+  - `npm exec prisma format`
+  - `npm exec prisma validate`
+  - `npx prisma migrate dev --name site_details_phase2_knowledge_model --create-only --skip-seed`
+  - `npx prisma migrate deploy`
+  - `npx prisma generate`
+  - `npx prisma db seed` (twice for idempotency)
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Minimal typed knowledge model added (`Utility`, `UtilityCoverage`, `Jurisdiction`, `CountyAssessorResource`).
+  - Site-detail status/audit/review entities added without polymorphic generic resource architecture.
+  - Idempotent seed flow added and verified by repeat execution.
+- Problems found:
+  - Migration checksum mismatch due to previously repaired historical migration file.
+- Fixes applied:
+  - Reconciled `_prisma_migrations` checksum metadata to avoid destructive reset while preserving data.
+- Commit: Pending
+- Next phase (if green): Phase 3
+
+### Phase 3 — Database-first resolver + actions
+- Status: In progress
+- Objective: add canonical read/edit/review/research actions with DB-first resolution and org-scope enforcement.
 - Files changed: Pending
-- Migration involved: Yes (new typed knowledge tables and enums)
+- Migration involved: No
 - Verification commands: Pending
 - Results: Pending
 - Problems found: None yet
 - Fixes applied: N/A
 - Commit: Pending
-- Next phase (if green): Phase 3
+- Next phase (if green): Phase 4
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.

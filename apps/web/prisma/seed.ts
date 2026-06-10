@@ -21,6 +21,7 @@ import { hashSync } from "bcryptjs";
 import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedClarificationQuestionSets } from "./seeds/clarification-question-sets";
 import { seedJourneyFixtures } from "./seeds/journey-fixtures";
+import { seedSiteDetailsKnowledge } from "./seeds/site-details-knowledge";
 import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
 import { DEFAULT_OFFICE_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-office-intake-form";
 
@@ -222,6 +223,12 @@ async function main() {
       `  quote[${key}] lines=${summary.lineCount} total=$${(summary.totalCents / 100).toFixed(2)}${jobNote}`,
     );
   }
+
+  console.log("Seeding Site Details reusable knowledge (typed MVP)…");
+  const siteDetailsKnowledge = await seedSiteDetailsKnowledge(prisma, DEV_ORG_ID);
+  console.log(
+    `  utilities=${siteDetailsKnowledge.utilitiesSeeded}, coverage=${siteDetailsKnowledge.coverageSeeded}, jurisdictions=${siteDetailsKnowledge.jurisdictionsSeeded}, assessorResources=${siteDetailsKnowledge.assessorsSeeded}`,
+  );
 
   console.log("Done.");
 }

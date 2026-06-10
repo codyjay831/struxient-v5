@@ -8,14 +8,14 @@ datasource db {
 }
 
 model Organization {
-  id                        String                     @id @default(cuid())
+  id                        String                      @id @default(cuid())
   name                      String
-  createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime                   @updatedAt
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
   /// Lowercase public handle for `/request/[slug]` — optional until configured.
-  slug                      String?                    @unique
+  slug                      String?                     @unique
   /// IANA timezone for deadline date-only EOD resolution and schedule display.
-  timezone                  String                     @default("America/Los_Angeles")
+  timezone                  String                      @default("America/Los_Angeles")
   attachments               Attachment[]
   customers                 Customer[]
   customerServiceLocations  CustomerServiceLocation[]
@@ -45,6 +45,12 @@ model Organization {
   tags                      Tag[]
   clarificationQuestionSets ClarificationQuestionSet[]
   workstationSettings       WorkstationSettings?
+  utilities                 Utility[]
+  utilityCoverage           UtilityCoverage[]
+  jurisdictions             Jurisdiction[]
+  countyAssessorResources   CountyAssessorResource[]
+  serviceLocationAudits     ServiceLocationAuditEvent[]
+  siteDetailsReviews        SiteDetailsReview[]
 }
 
 model Stage {
@@ -143,6 +149,14 @@ model CustomerServiceLocation {
   /// Set when property details must be re-reviewed due to material address edits.
   staleAt            DateTime?
   staleReason        String?
+  apn                String?
+  utilityId          String?
+  jurisdictionId     String?
+  detailsStatus      SiteDetailsStatus             @default(UNVERIFIED)
+  detailsSource      SiteDetailsSource             @default(DATABASE_MATCH)
+  detailsLastChecked DateTime?
+  detailsReviewedAt  DateTime?
+  detailsReviewedBy  String?
   createdAt          DateTime                      @default(now())
   updatedAt          DateTime                      @updatedAt
   createdFromLeadId  String?
@@ -151,6 +165,10 @@ model CustomerServiceLocation {
   leads              Lead[]                        @relation("LeadServiceLocation")
   quotes             Quote[]                       @relation("QuoteServiceLocation")
   jobs               Job[]                         @relation("JobServiceLocation")
+  utility            Utility?                      @relation(fields: [utilityId], references: [id], onDelete: SetNull)
+  jurisdiction       Jurisdiction?                 @relation(fields: [jurisdictionId], references: [id], onDelete: SetNull)
+  auditEvents        ServiceLocationAuditEvent[]
+  reviews            SiteDetailsReview[]
   organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -159,32 +177,36 @@ model CustomerServiceLocation {
   @@index([createdFromLeadId])
   @@index([organizationId, addressFingerprint])
   @@index([organizationId, googlePlaceId])
+  @@index([utilityId])
+  @@index([jurisdictionId])
 }
 
 model User {
-  id                     String               @id @default(cuid())
-  email                  String?              @unique
-  name                   String?
-  passwordHash           String?
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
-  emailVerified          DateTime?
-  image                  String?
-  accounts               Account[]
-  uploadedAttachments    Attachment[]         @relation("UploadedAttachments")
-  reviewedDailyJobLogs   DailyJobLog[]        @relation("ReviewedBy")
-  jobActivities          JobActivity[]
-  jobIssues              JobIssue[]
-  completedTasks         JobTask[]            @relation("CompletedTasks")
-  assignedTasks          JobTask[]            @relation("AssignedTasks")
-  assignedVisits         JobVisit[]           @relation("AssignedVisits")
-  leadScheduleEvents     JobScheduleEvent[]   @relation("LeadScheduleEvents")
-  scheduleBlocks         ScheduleBlock[]
-  notificationEvents     NotificationEvent[]
-  leadEvents             LeadEvent[]
-  memberships            Membership[]
-  resolvedChangeRequests QuoteChangeRequest[]
-  sessions               Session[]
+  id                         String                      @id @default(cuid())
+  email                      String?                     @unique
+  name                       String?
+  passwordHash               String?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  emailVerified              DateTime?
+  image                      String?
+  accounts                   Account[]
+  uploadedAttachments        Attachment[]                @relation("UploadedAttachments")
+  reviewedDailyJobLogs       DailyJobLog[]               @relation("ReviewedBy")
+  jobActivities              JobActivity[]
+  jobIssues                  JobIssue[]
+  completedTasks             JobTask[]                   @relation("CompletedTasks")
+  assignedTasks              JobTask[]                   @relation("AssignedTasks")
+  assignedVisits             JobVisit[]                  @relation("AssignedVisits")
+  leadScheduleEvents         JobScheduleEvent[]          @relation("LeadScheduleEvents")
+  scheduleBlocks             ScheduleBlock[]
+  notificationEvents         NotificationEvent[]
+  leadEvents                 LeadEvent[]
+  memberships                Membership[]
+  resolvedChangeRequests     QuoteChangeRequest[]
+  sessions                   Session[]
+  siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
+  serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
 }
 
 model Account {
@@ -1162,6 +1184,141 @@ model LeadEvent {
   @@index([leadId])
 }
 
+model Utility {
+  id                     String                    @id @default(cuid())
+  organizationId         String
+  name                   String
+  utilityType            UtilityType               @default(ELECTRIC)
+  officialWebsite        String?
+  serviceUpgradeUrl      String?
+  applicationPortalUrl   String?
+  disconnectReconnectUrl String?
+  officialSourceUrl      String?
+  officialSourceTitle    String?
+  sourceStatus           SourceStatus              @default(UNVERIFIED)
+  lastResearchedAt       DateTime?
+  lastCheckedAt          DateTime?
+  isActive               Boolean                   @default(true)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  coverage               UtilityCoverage[]
+  serviceLocations       CustomerServiceLocation[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model UtilityCoverage {
+  id             String              @id @default(cuid())
+  organizationId String
+  utilityId      String
+  coverageType   UtilityCoverageType @default(ZIP)
+  coverageValue  String
+  state          String
+  city           String?
+  county         String?
+  sourceUrl      String?
+  sourceTitle    String?
+  sourceStatus   SourceStatus        @default(UNVERIFIED)
+  confidence     CoverageConfidence  @default(MEDIUM)
+  importedAt     DateTime            @default(now())
+  lastCheckedAt  DateTime?
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  utility        Utility             @relation(fields: [utilityId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([utilityId])
+  @@index([organizationId, coverageType, coverageValue, state])
+}
+
+model Jurisdiction {
+  id                     String                    @id @default(cuid())
+  organizationId         String
+  name                   String
+  jurisdictionType       JurisdictionType
+  state                  String
+  county                 String?
+  officialWebsite        String?
+  buildingDepartmentName String?
+  buildingDepartmentUrl  String?
+  permitPortalUrl        String?
+  sourceUrl              String?
+  sourceTitle            String?
+  sourceStatus           SourceStatus              @default(UNVERIFIED)
+  lastResearchedAt       DateTime?
+  lastCheckedAt          DateTime?
+  isActive               Boolean                   @default(true)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceLocations       CustomerServiceLocation[]
+
+  @@unique([organizationId, name, state, jurisdictionType])
+  @@index([organizationId])
+}
+
+model CountyAssessorResource {
+  id                String       @id @default(cuid())
+  organizationId    String
+  county            String
+  state             String
+  assessorSearchUrl String
+  parcelGisUrl      String?
+  sourceUrl         String?
+  sourceTitle       String?
+  sourceStatus      SourceStatus @default(UNVERIFIED)
+  lastResearchedAt  DateTime?
+  lastCheckedAt     DateTime?
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, county, state])
+  @@index([organizationId])
+}
+
+model SiteDetailsReview {
+  id                String                  @id @default(cuid())
+  organizationId    String
+  serviceLocationId String
+  status            SiteDetailsStatus       @default(USER_REVIEWED)
+  source            SiteDetailsSource       @default(USER_REVIEWED)
+  notes             String?
+  reviewedByUserId  String?
+  reviewedAt        DateTime                @default(now())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceLocation   CustomerServiceLocation @relation(fields: [serviceLocationId], references: [id], onDelete: Cascade)
+  reviewedBy        User?                   @relation("SiteDetailsReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([serviceLocationId, reviewedAt])
+}
+
+model ServiceLocationAuditEvent {
+  id                String                   @id @default(cuid())
+  organizationId    String
+  serviceLocationId String
+  eventType         ServiceLocationAuditType
+  oldValueJson      Json?
+  newValueJson      Json?
+  sourceReason      String?
+  actorUserId       String?
+  createdAt         DateTime                 @default(now())
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceLocation   CustomerServiceLocation  @relation(fields: [serviceLocationId], references: [id], onDelete: Cascade)
+  actor             User?                    @relation("ServiceLocationAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([serviceLocationId, createdAt])
+}
+
 enum LeadStatus {
   NEW
   TRIAGING
@@ -1359,6 +1516,72 @@ enum AttachmentStatus {
 enum CustomerServiceLocationSource {
   google_places
   manual
+}
+
+enum UtilityType {
+  ELECTRIC
+  GAS
+  WATER
+  OTHER
+}
+
+enum UtilityCoverageType {
+  ZIP
+  CITY
+  COUNTY
+}
+
+enum CoverageConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum JurisdictionType {
+  CITY
+  COUNTY
+  UNINCORPORATED_COUNTY
+  DISTRICT
+}
+
+enum SourceStatus {
+  UNVERIFIED
+  OFFICIAL
+  STALE
+  BROKEN
+}
+
+enum SiteDetailsStatus {
+  DATABASE_MATCH
+  AI_FOUND
+  USER_REVIEWED
+  USER_CORRECTED
+  UNVERIFIED
+  CONFLICT
+  STALE
+}
+
+enum SiteDetailsSource {
+  DATABASE_MATCH
+  AI_FOUND
+  USER_REVIEWED
+  USER_CORRECTED
+}
+
+enum ServiceLocationAuditType {
+  APN_SET
+  APN_CORRECTED
+  UTILITY_SET
+  UTILITY_CORRECTED
+  JURISDICTION_SET
+  JURISDICTION_CORRECTED
+  ADDRESS_UPDATED
+  QUOTE_REASSIGNED
+  JOB_REASSIGNED
+  REVIEW_STATUS_CHANGED
+  AI_VALUE_ACCEPTED
+  AI_VALUE_REJECTED
+  AI_VALUE_REPLACED
 }
 
 enum StaffRole {
