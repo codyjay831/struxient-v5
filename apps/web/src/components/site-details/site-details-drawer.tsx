@@ -46,7 +46,7 @@ export function SiteDetailsDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-0 sm:items-stretch sm:p-0">
-      <div className="h-[92vh] w-full border-l border-border bg-background sm:h-full sm:max-w-md">
+      <div className="flex h-[92vh] min-h-0 w-full flex-col overflow-hidden border-l border-border bg-background sm:h-full sm:max-w-md">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-foreground">Site details</h3>
           <button
@@ -58,24 +58,26 @@ export function SiteDetailsDrawer({
             <X className="size-4" />
           </button>
         </div>
-        <div className="space-y-4 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div className="rounded-lg border border-border bg-surface p-3 text-sm text-foreground">
             <p className="font-medium">{data.line || "No service location linked."}</p>
             <p className="mt-1 text-xs text-foreground-muted">Status: {data.detailsStatus}</p>
           </div>
 
           <dl className="space-y-2 rounded-lg border border-border bg-surface p-3 text-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <dt className="text-foreground-muted">APN</dt>
-              <dd className="font-medium text-foreground">{summary.apn}</dd>
+              <dd className="max-w-[65%] break-words text-right font-medium text-foreground">{summary.apn}</dd>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <dt className="text-foreground-muted">Utility</dt>
-              <dd className="font-medium text-foreground">{summary.utility}</dd>
+              <dd className="max-w-[65%] break-words text-right font-medium text-foreground">{summary.utility}</dd>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <dt className="text-foreground-muted">Jurisdiction</dt>
-              <dd className="font-medium text-foreground">{summary.jurisdiction}</dd>
+              <dd className="max-w-[65%] break-words text-right font-medium text-foreground">
+                {summary.jurisdiction}
+              </dd>
             </div>
           </dl>
 
