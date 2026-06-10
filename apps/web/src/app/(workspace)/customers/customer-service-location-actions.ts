@@ -173,6 +173,9 @@ export async function updateCustomerServiceLocationAction(
     data: write,
   });
 
+  if (!existing.customerId) {
+    return { error: "This service location is not linked to a customer profile yet." };
+  }
   revalidateCustomerSurfaces(existing.customerId);
   return { success: true };
 }
