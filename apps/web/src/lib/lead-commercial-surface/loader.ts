@@ -17,6 +17,7 @@ import {
   type LeadIntakeProjection,
 } from "@/lib/lead-intake-projection";
 import type { LeadVisitRequestPayload } from "@/lib/lead-display";
+import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 
 import { AttachmentStatus, LeadChannel, LeadCloseReason, LeadStatus, NeededByBucket } from "@prisma/client";
 
@@ -48,6 +49,43 @@ export interface LeadCommercialSurfacePayload {
     scopeSummary: string | null;
     neededByBucket: NeededByBucket | null;
     neededByDate: Date | null;
+    serviceLocationId: string | null;
+    siteDetails: {
+      apn: string | null;
+      apnSourceTitle?: string | null;
+      apnSourceUrl?: string | null;
+      apnVerificationUrl?: string | null;
+      apnConflict?: {
+        value: string;
+        sourceTitle: string | null;
+        sourceUrl: string | null;
+      } | null;
+      utilityName: string | null;
+      utilityOfficialWebsite?: string | null;
+      utilityServiceUpgradeUrl?: string | null;
+      utilityCoverageSourceTitle?: string | null;
+      utilityCoverageSourceUrl?: string | null;
+      jurisdictionName: string | null;
+      jurisdictionBuildingDepartmentName?: string | null;
+      jurisdictionOfficialWebsite?: string | null;
+      jurisdictionBuildingDepartmentUrl?: string | null;
+      jurisdictionPermitPortalUrl?: string | null;
+      jurisdictionFormsUrl?: string | null;
+      jurisdictionInspectionsUrl?: string | null;
+      assessorCounty?: string | null;
+      assessorState?: string | null;
+      assessorSearchUrl?: string | null;
+      assessorParcelGisUrl?: string | null;
+      detailsStatus:
+        | "DATABASE_MATCH"
+        | "AI_FOUND"
+        | "USER_REVIEWED"
+        | "USER_CORRECTED"
+        | "UNVERIFIED"
+        | "CONFLICT"
+        | "STALE";
+      missingScopes: string[];
+    } | null;
   };
   customer: {
     id: string;
@@ -80,6 +118,16 @@ export async function loadLeadCommercialSurface(
     where: { id: leadId, organizationId: ctx.organizationId },
     include: {
       customer: { select: { id: true, displayName: true } },
+      serviceLocation: {
+        select: {
+          id: true,
+          organizationId: true,
+          apn: true,
+          detailsStatus: true,
+          utility: { select: { name: true } },
+          jurisdiction: { select: { name: true } },
+        },
+      },
       visitRequests: {
         where: { status: "PENDING" },
         orderBy: { createdAt: "desc" },
@@ -113,6 +161,50 @@ export async function loadLeadCommercialSurface(
     address: lead.address,
     signals: lead.signals,
   });
+  const safeServiceLocation =
+    lead.serviceLocation && lead.serviceLocation.organizationId === ctx.organizationId
+      ? lead.serviceLocation
+      : null;
+  const resolvedSiteDetails = safeServiceLocation
+    ? await resolveSiteDetailsForServiceLocation(
+        db as unknown as Parameters<typeof resolveSiteDetailsForServiceLocation>[0],
+        { organizationId: ctx.organizationId, serviceLocationId: safeServiceLocation.id },
+      )
+    : null;
+  const siteDetails = resolvedSiteDetails
+    ? {
+        apn: resolvedSiteDetails.apn,
+        apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
+        apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
+        apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
+        apnConflict: resolvedSiteDetails.apnConflict
+          ? {
+              value: resolvedSiteDetails.apnConflict.value,
+              sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
+              sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
+            }
+          : null,
+        utilityName: resolvedSiteDetails.utility?.name ?? null,
+        utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
+        utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
+        utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
+        utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
+        jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
+        jurisdictionBuildingDepartmentName:
+          resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
+        jurisdictionOfficialWebsite: resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
+        jurisdictionBuildingDepartmentUrl: resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
+        jurisdictionPermitPortalUrl: resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
+        jurisdictionFormsUrl: null,
+        jurisdictionInspectionsUrl: null,
+        assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
+        assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
+        assessorSearchUrl: resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
+        assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
+        detailsStatus: resolvedSiteDetails.detailsStatus,
+        missingScopes: resolvedSiteDetails.missingScopes,
+      }
+    : null;
 
   const [linkedQuotes, attachments, leadEvents] = await Promise.all([
     db.quote.findMany({
@@ -331,6 +423,8 @@ export async function loadLeadCommercialSurface(
       scopeSummary: requestJson.scope,
       neededByBucket: requestJson.neededByBucket,
       neededByDate,
+      serviceLocationId: lead.serviceLocationId,
+      siteDetails,
     },
     customer: lead.customer
       ? {

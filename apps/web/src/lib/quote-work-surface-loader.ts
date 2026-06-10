@@ -33,6 +33,7 @@ import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import { projectLead } from "@/lib/lead/lead-projection";
 import { LineClarificationAnswersSchema } from "@/lib/clarification/clarification-answer-schema";
+import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -67,7 +68,16 @@ export async function loadQuoteWorkSurface(
       customerId: true,
       serviceLocationId: true,
       serviceLocation: {
-        select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+        select: {
+          id: true,
+          organizationId: true,
+          formattedAddress: true,
+          addressLine1: true,
+          apn: true,
+          detailsStatus: true,
+          utility: { select: { name: true } },
+          jurisdiction: { select: { name: true } },
+        },
       },
       customer: {
         select: {
@@ -159,6 +169,46 @@ export async function loadQuoteWorkSurface(
     row.lead && row.lead.organizationId === orgId ? row.lead : null;
   const rawServiceLocation =
     row.serviceLocation && row.serviceLocation.organizationId === orgId ? row.serviceLocation : null;
+  const resolvedSiteDetails = rawServiceLocation
+    ? await resolveSiteDetailsForServiceLocation(
+        db as unknown as Parameters<typeof resolveSiteDetailsForServiceLocation>[0],
+        { organizationId: orgId, serviceLocationId: rawServiceLocation.id },
+      )
+    : null;
+  const siteDetails = resolvedSiteDetails
+    ? {
+        apn: resolvedSiteDetails.apn,
+        apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
+        apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
+        apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
+        apnConflict: resolvedSiteDetails.apnConflict
+          ? {
+              value: resolvedSiteDetails.apnConflict.value,
+              sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
+              sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
+            }
+          : null,
+        utilityName: resolvedSiteDetails.utility?.name ?? null,
+        utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
+        utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
+        utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
+        utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
+        jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
+        jurisdictionBuildingDepartmentName:
+          resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
+        jurisdictionOfficialWebsite: resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
+        jurisdictionBuildingDepartmentUrl: resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
+        jurisdictionPermitPortalUrl: resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
+        jurisdictionFormsUrl: null,
+        jurisdictionInspectionsUrl: null,
+        assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
+        assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
+        assessorSearchUrl: resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
+        assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
+        detailsStatus: resolvedSiteDetails.detailsStatus,
+        missingScopes: resolvedSiteDetails.missingScopes,
+      }
+    : null;
   const leadProjection = rawLead
     ? projectLead({
         id: rawLead.id,
@@ -346,6 +396,8 @@ export async function loadQuoteWorkSurface(
     proposalPreviewHref: `/quotes/${row.id}/preview`,
     executionReviewHref: `/quotes/${row.id}/execution-review`,
     jobsiteAddressLine,
+    serviceLocationId: row.serviceLocationId ?? null,
+    siteDetails,
     jobsiteMissing,
     canAddServiceAddress,
     customerEmail: customer?.email ?? null,

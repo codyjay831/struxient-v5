@@ -46,6 +46,21 @@ test("buildQuoteExecutionPlanningContext includes prior missing context hints", 
   assert.match(context!, /Provide charger model/);
 });
 
+test("buildQuoteExecutionPlanningContext includes status-qualified site details by default", () => {
+  const context = buildQuoteExecutionPlanningContext({
+    userInstructions: "Keep plan clean.",
+    siteDetailsSummary:
+      "- Status: USER_CORRECTED\n- APN (USER_CORRECTED): 123-123-123\n- Utility (USER_CORRECTED): PG&E",
+    siteDetailsUnresolved: ["Jurisdiction assignment not verified for this site"],
+  });
+
+  assert.ok(context);
+  assert.match(context!, /Site details \(status-qualified\)/i);
+  assert.match(context!, /APN \(USER_CORRECTED\): 123-123-123/i);
+  assert.match(context!, /Site details unresolved checks/i);
+  assert.match(context!, /Jurisdiction assignment not verified/i);
+});
+
 test("context manifest classifies internal notes sections with defaults", () => {
   const manifest = buildQuoteExecutionPlanningContextManifest({
     lineInternalNotes:

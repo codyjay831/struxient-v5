@@ -850,6 +850,39 @@ export type LeadServiceLocationRowPayload = {
   longitude: number | null;
   source: CustomerServiceLocationSource;
   isPrimary: boolean;
+  apn?: string | null;
+  apnSourceTitle?: string | null;
+  apnSourceUrl?: string | null;
+  apnVerificationUrl?: string | null;
+  apnConflict?: {
+    value: string;
+    sourceTitle: string | null;
+    sourceUrl: string | null;
+  } | null;
+  utilityName?: string | null;
+  utilityOfficialWebsite?: string | null;
+  utilityServiceUpgradeUrl?: string | null;
+  utilityCoverageSourceTitle?: string | null;
+  utilityCoverageSourceUrl?: string | null;
+  jurisdictionName?: string | null;
+  jurisdictionBuildingDepartmentName?: string | null;
+  jurisdictionOfficialWebsite?: string | null;
+  jurisdictionBuildingDepartmentUrl?: string | null;
+  jurisdictionPermitPortalUrl?: string | null;
+  jurisdictionFormsUrl?: string | null;
+  jurisdictionInspectionsUrl?: string | null;
+  assessorCounty?: string | null;
+  assessorState?: string | null;
+  assessorSearchUrl?: string | null;
+  assessorParcelGisUrl?: string | null;
+  detailsStatus?:
+    | "DATABASE_MATCH"
+    | "AI_FOUND"
+    | "USER_REVIEWED"
+    | "USER_CORRECTED"
+    | "UNVERIFIED"
+    | "CONFLICT"
+    | "STALE";
   /** `channel` is the new field name; legacy `source` retained as an alias so callers can pick. */
   createdFromLead: { id: string; title: string; channel: LeadChannel; source?: LeadChannel } | null;
 };
@@ -926,6 +959,10 @@ export async function loadLeadServiceAddressContextAction(
               longitude: true,
               source: true,
               isPrimary: true,
+              apn: true,
+              detailsStatus: true,
+              utility: { select: { name: true } },
+              jurisdiction: { select: { name: true } },
               createdFromLead: { select: { id: true, title: true, channel: true } },
             },
           },
@@ -966,6 +1003,28 @@ export async function loadLeadServiceAddressContextAction(
             longitude: loc.longitude,
             source: loc.source,
             isPrimary: loc.isPrimary,
+            apn: loc.apn,
+            apnSourceTitle: null,
+            apnSourceUrl: null,
+            apnVerificationUrl: null,
+            apnConflict: null,
+            utilityName: loc.utility?.name ?? null,
+            utilityOfficialWebsite: null,
+            utilityServiceUpgradeUrl: null,
+            utilityCoverageSourceTitle: null,
+            utilityCoverageSourceUrl: null,
+            jurisdictionName: loc.jurisdiction?.name ?? null,
+            jurisdictionBuildingDepartmentName: null,
+            jurisdictionOfficialWebsite: null,
+            jurisdictionBuildingDepartmentUrl: null,
+            jurisdictionPermitPortalUrl: null,
+            jurisdictionFormsUrl: null,
+            jurisdictionInspectionsUrl: null,
+            assessorCounty: null,
+            assessorState: null,
+            assessorSearchUrl: null,
+            assessorParcelGisUrl: null,
+            detailsStatus: loc.detailsStatus,
             createdFromLead: loc.createdFromLead
               ? {
                   id: loc.createdFromLead.id,

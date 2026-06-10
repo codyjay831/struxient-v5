@@ -99,6 +99,7 @@ function getSourceLabel(source: string): string {
   if (source === "lead_intake") return "Lead intake";
   if (source === "manual") return "Manual input";
   if (source === "prior_missing") return "Prior missing";
+  if (source === "site_details") return "Site details";
   return source;
 }
 
@@ -591,6 +592,14 @@ export function AILibraryProposalReviewPanel({
                 onChange={(e) => setContextFlag("includePriorMissingContext", e.target.checked)}
               />
               Prior missing context
+            </label>
+            <label className="flex items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={contextSourceFlags?.includeSiteDetailsFacts !== false}
+                onChange={(e) => setContextFlag("includeSiteDetailsFacts", e.target.checked)}
+              />
+              Site details facts
             </label>
           </div>
           <p className="text-[10px] text-foreground-subtle">

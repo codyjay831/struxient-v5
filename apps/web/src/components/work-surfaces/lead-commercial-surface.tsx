@@ -34,6 +34,8 @@ import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-
 import { LeadQuoteReadinessBar } from "@/components/leads/lead-quote-readiness-bar";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
 import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
+import { SiteDetailsRow } from "@/components/site-details/site-details-row";
+import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
@@ -59,7 +61,37 @@ export function LeadCommercialSurface({
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
   const [closePanelOpen, setClosePanelOpen] = useState(false);
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
+  const [siteDrawerOpen, setSiteDrawerOpen] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
+  const siteData = {
+    serviceLocationId: lead.serviceLocationId,
+    line: lead.jobsiteAddressLine || null,
+    apn: lead.siteDetails?.apn ?? null,
+    apnSourceTitle: lead.siteDetails?.apnSourceTitle ?? null,
+    apnSourceUrl: lead.siteDetails?.apnSourceUrl ?? null,
+    apnVerificationUrl: lead.siteDetails?.apnVerificationUrl ?? null,
+    apnConflict: lead.siteDetails?.apnConflict ?? null,
+    utilityName: lead.siteDetails?.utilityName ?? null,
+    utilityOfficialWebsite: lead.siteDetails?.utilityOfficialWebsite ?? null,
+    utilityServiceUpgradeUrl: lead.siteDetails?.utilityServiceUpgradeUrl ?? null,
+    utilityCoverageSourceTitle: lead.siteDetails?.utilityCoverageSourceTitle ?? null,
+    utilityCoverageSourceUrl: lead.siteDetails?.utilityCoverageSourceUrl ?? null,
+    jurisdictionName: lead.siteDetails?.jurisdictionName ?? null,
+    jurisdictionBuildingDepartmentName:
+      lead.siteDetails?.jurisdictionBuildingDepartmentName ?? null,
+    jurisdictionOfficialWebsite: lead.siteDetails?.jurisdictionOfficialWebsite ?? null,
+    jurisdictionBuildingDepartmentUrl:
+      lead.siteDetails?.jurisdictionBuildingDepartmentUrl ?? null,
+    jurisdictionPermitPortalUrl: lead.siteDetails?.jurisdictionPermitPortalUrl ?? null,
+    jurisdictionFormsUrl: lead.siteDetails?.jurisdictionFormsUrl ?? null,
+    jurisdictionInspectionsUrl: lead.siteDetails?.jurisdictionInspectionsUrl ?? null,
+    assessorCounty: lead.siteDetails?.assessorCounty ?? null,
+    assessorState: lead.siteDetails?.assessorState ?? null,
+    assessorSearchUrl: lead.siteDetails?.assessorSearchUrl ?? null,
+    assessorParcelGisUrl: lead.siteDetails?.assessorParcelGisUrl ?? null,
+    detailsStatus: lead.siteDetails?.detailsStatus ?? "UNVERIFIED",
+    missingScopes: lead.siteDetails?.missingScopes ?? ["APN", "UTILITY", "JURISDICTION"],
+  } as const;
 
   const compact = entryPoint === "workstation";
   const editHref = `/leads/${lead.id}/edit`;
@@ -310,6 +342,7 @@ export function LeadCommercialSurface({
                     ) : null}
                   </div>
                 </div>
+                <SiteDetailsRow data={siteData} onOpen={() => setSiteDrawerOpen(true)} />
 
                 {customer ? (
                   <div className="flex items-center gap-2 rounded-lg bg-foreground/[0.02] p-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
@@ -324,6 +357,11 @@ export function LeadCommercialSurface({
                   </div>
                 ) : null}
               </div>
+              <SiteDetailsDrawer
+                open={siteDrawerOpen}
+                onClose={() => setSiteDrawerOpen(false)}
+                data={siteData}
+              />
             </section>
 
             {/* Files */}

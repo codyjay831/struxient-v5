@@ -93,7 +93,11 @@
 - Add dedicated `researchSiteDetails(...)` in existing AI boundary.
 - Ground only missing reusable scopes.
 - Persist grounded sources + official verification links.
-- Never generate APN.
+- Allow evidence-constrained APN discovery:
+  - explicit APN shown on exact-address source
+  - preserved source title + URL
+  - official county verification path required
+  - null candidate when evidence is uncertain or ungrounded
 - Never overwrite reviewed/corrected values.
 - Persist AI usage/cost telemetry.
 
@@ -141,7 +145,6 @@ Each audit event must include:
 - UI phase gates: desktop/mobile, loading/empty/partial/error states, keyboard/focus behavior, non-dominant modal footprint.
 
 ## Deferred scope
-- Parcel APIs/APN auto extraction
 - GIS boundary matching
 - Nationwide utility coverage ingestion
 - Automatic permit conclusions

@@ -95,6 +95,8 @@ import {
 } from "@/lib/quote-readiness";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
+import { SiteDetailsRow } from "@/components/site-details/site-details-row";
+import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
 import type {
   QuoteWorkspaceCheckpointPayload,
   QuoteWorkspaceTabData,
@@ -877,8 +879,38 @@ function QuoteJobsiteCallout({
   onRequestServiceAddress?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [siteOpen, setSiteOpen] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
+  const siteData = {
+    serviceLocationId: quote.serviceLocationId,
+    line: quote.jobsiteAddressLine,
+    apn: quote.siteDetails?.apn ?? null,
+    apnSourceTitle: quote.siteDetails?.apnSourceTitle ?? null,
+    apnSourceUrl: quote.siteDetails?.apnSourceUrl ?? null,
+    apnVerificationUrl: quote.siteDetails?.apnVerificationUrl ?? null,
+    apnConflict: quote.siteDetails?.apnConflict ?? null,
+    utilityName: quote.siteDetails?.utilityName ?? null,
+    utilityOfficialWebsite: quote.siteDetails?.utilityOfficialWebsite ?? null,
+    utilityServiceUpgradeUrl: quote.siteDetails?.utilityServiceUpgradeUrl ?? null,
+    utilityCoverageSourceTitle: quote.siteDetails?.utilityCoverageSourceTitle ?? null,
+    utilityCoverageSourceUrl: quote.siteDetails?.utilityCoverageSourceUrl ?? null,
+    jurisdictionName: quote.siteDetails?.jurisdictionName ?? null,
+    jurisdictionBuildingDepartmentName:
+      quote.siteDetails?.jurisdictionBuildingDepartmentName ?? null,
+    jurisdictionOfficialWebsite: quote.siteDetails?.jurisdictionOfficialWebsite ?? null,
+    jurisdictionBuildingDepartmentUrl:
+      quote.siteDetails?.jurisdictionBuildingDepartmentUrl ?? null,
+    jurisdictionPermitPortalUrl: quote.siteDetails?.jurisdictionPermitPortalUrl ?? null,
+    jurisdictionFormsUrl: quote.siteDetails?.jurisdictionFormsUrl ?? null,
+    jurisdictionInspectionsUrl: quote.siteDetails?.jurisdictionInspectionsUrl ?? null,
+    assessorCounty: quote.siteDetails?.assessorCounty ?? null,
+    assessorState: quote.siteDetails?.assessorState ?? null,
+    assessorSearchUrl: quote.siteDetails?.assessorSearchUrl ?? null,
+    assessorParcelGisUrl: quote.siteDetails?.assessorParcelGisUrl ?? null,
+    detailsStatus: quote.siteDetails?.detailsStatus ?? "UNVERIFIED",
+    missingScopes: quote.siteDetails?.missingScopes ?? ["APN", "UTILITY", "JURISDICTION"],
+  } as const;
 
   /* When the Quote is embedded inside the Lead workspace AND the Lead
    * shell already shows the address prominently, suppress the present-
@@ -953,6 +985,9 @@ function QuoteJobsiteCallout({
           </div>
         </div>
       </div>
+      <div className="mt-2">
+        <SiteDetailsRow data={siteData} onOpen={() => setSiteOpen(true)} />
+      </div>
       {quote.customerId && quote.canAddServiceAddress ? (
         <AddOrEditServiceLocationDialog
           open={open}
@@ -963,6 +998,7 @@ function QuoteJobsiteCallout({
           onSaved={onMutated}
         />
       ) : null}
+      <SiteDetailsDrawer open={siteOpen} onClose={() => setSiteOpen(false)} data={siteData} />
     </>
   );
 }

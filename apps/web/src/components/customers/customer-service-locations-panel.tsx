@@ -8,6 +8,8 @@ import { MapPin } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
+import { SiteDetailsRow } from "@/components/site-details/site-details-row";
+import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
 import {
   setPrimaryCustomerServiceLocationAction,
   type CustomerServiceLocationFormState,
@@ -72,6 +74,39 @@ export type CustomerServiceLocationRow = {
   source: CustomerServiceLocationSource;
   isPrimary: boolean;
   createdFromLead: { id: string; title: string; channel: LeadChannel; source?: LeadChannel } | null;
+  apn: string | null;
+  apnSourceTitle?: string | null;
+  apnSourceUrl?: string | null;
+  apnVerificationUrl?: string | null;
+  apnConflict?: {
+    value: string;
+    sourceTitle: string | null;
+    sourceUrl: string | null;
+  } | null;
+  utilityName: string | null;
+  utilityOfficialWebsite?: string | null;
+  utilityServiceUpgradeUrl?: string | null;
+  utilityCoverageSourceTitle?: string | null;
+  utilityCoverageSourceUrl?: string | null;
+  jurisdictionName: string | null;
+  jurisdictionBuildingDepartmentName?: string | null;
+  jurisdictionOfficialWebsite?: string | null;
+  jurisdictionBuildingDepartmentUrl?: string | null;
+  jurisdictionPermitPortalUrl?: string | null;
+  jurisdictionFormsUrl?: string | null;
+  jurisdictionInspectionsUrl?: string | null;
+  assessorCounty?: string | null;
+  assessorState?: string | null;
+  assessorSearchUrl?: string | null;
+  assessorParcelGisUrl?: string | null;
+  detailsStatus:
+    | "DATABASE_MATCH"
+    | "AI_FOUND"
+    | "USER_REVIEWED"
+    | "USER_CORRECTED"
+    | "UNVERIFIED"
+    | "CONFLICT"
+    | "STALE";
 };
 
 export function CustomerServiceLocationsPanel({
@@ -86,6 +121,44 @@ export function CustomerServiceLocationsPanel({
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CustomerServiceLocationRow | null>(null);
+  const [siteDrawerData, setSiteDrawerData] = useState<{
+    serviceLocationId: string | null;
+    line: string | null;
+    apn: string | null;
+    apnSourceTitle?: string | null;
+    apnSourceUrl?: string | null;
+    apnVerificationUrl?: string | null;
+    apnConflict?: {
+      value: string;
+      sourceTitle: string | null;
+      sourceUrl: string | null;
+    } | null;
+    utilityName: string | null;
+    utilityOfficialWebsite?: string | null;
+    utilityServiceUpgradeUrl?: string | null;
+    utilityCoverageSourceTitle?: string | null;
+    utilityCoverageSourceUrl?: string | null;
+    jurisdictionName: string | null;
+    jurisdictionBuildingDepartmentName?: string | null;
+    jurisdictionOfficialWebsite?: string | null;
+    jurisdictionBuildingDepartmentUrl?: string | null;
+    jurisdictionPermitPortalUrl?: string | null;
+    jurisdictionFormsUrl?: string | null;
+    jurisdictionInspectionsUrl?: string | null;
+    assessorCounty?: string | null;
+    assessorState?: string | null;
+    assessorSearchUrl?: string | null;
+    assessorParcelGisUrl?: string | null;
+    detailsStatus:
+      | "DATABASE_MATCH"
+      | "AI_FOUND"
+      | "USER_REVIEWED"
+      | "USER_CORRECTED"
+      | "UNVERIFIED"
+      | "CONFLICT"
+      | "STALE";
+    missingScopes: string[];
+  } | null>(null);
 
   return (
     <>
@@ -150,6 +223,78 @@ export function CustomerServiceLocationsPanel({
                       >
                         Edit service address
                       </button>
+                      <div className="min-w-[220px] flex-1">
+                        <SiteDetailsRow
+                          data={{
+                            serviceLocationId: loc.id,
+                            line: loc.formattedAddress.trim() || loc.addressLine1 || null,
+                            apn: loc.apn,
+                            apnSourceTitle: loc.apnSourceTitle ?? null,
+                            apnSourceUrl: loc.apnSourceUrl ?? null,
+                            apnVerificationUrl: loc.apnVerificationUrl ?? null,
+                            apnConflict: loc.apnConflict ?? null,
+                            utilityName: loc.utilityName,
+                            utilityOfficialWebsite: loc.utilityOfficialWebsite ?? null,
+                            utilityServiceUpgradeUrl: loc.utilityServiceUpgradeUrl ?? null,
+                            utilityCoverageSourceTitle: loc.utilityCoverageSourceTitle ?? null,
+                            utilityCoverageSourceUrl: loc.utilityCoverageSourceUrl ?? null,
+                            jurisdictionName: loc.jurisdictionName,
+                            jurisdictionBuildingDepartmentName:
+                              loc.jurisdictionBuildingDepartmentName ?? null,
+                            jurisdictionOfficialWebsite: loc.jurisdictionOfficialWebsite ?? null,
+                            jurisdictionBuildingDepartmentUrl:
+                              loc.jurisdictionBuildingDepartmentUrl ?? null,
+                            jurisdictionPermitPortalUrl: loc.jurisdictionPermitPortalUrl ?? null,
+                            jurisdictionFormsUrl: loc.jurisdictionFormsUrl ?? null,
+                            jurisdictionInspectionsUrl: loc.jurisdictionInspectionsUrl ?? null,
+                            assessorCounty: loc.assessorCounty ?? null,
+                            assessorState: loc.assessorState ?? null,
+                            assessorSearchUrl: loc.assessorSearchUrl ?? null,
+                            assessorParcelGisUrl: loc.assessorParcelGisUrl ?? null,
+                            detailsStatus: loc.detailsStatus,
+                            missingScopes: [
+                              ...(loc.apn?.trim() ? [] : ["APN"]),
+                              ...(loc.utilityName ? [] : ["UTILITY"]),
+                              ...(loc.jurisdictionName ? [] : ["JURISDICTION"]),
+                            ],
+                          }}
+                          onOpen={() =>
+                            setSiteDrawerData({
+                              serviceLocationId: loc.id,
+                              line: loc.formattedAddress.trim() || loc.addressLine1 || null,
+                              apn: loc.apn,
+                              apnSourceTitle: loc.apnSourceTitle ?? null,
+                              apnSourceUrl: loc.apnSourceUrl ?? null,
+                              apnVerificationUrl: loc.apnVerificationUrl ?? null,
+                              apnConflict: loc.apnConflict ?? null,
+                              utilityName: loc.utilityName,
+                              utilityOfficialWebsite: loc.utilityOfficialWebsite ?? null,
+                              utilityServiceUpgradeUrl: loc.utilityServiceUpgradeUrl ?? null,
+                              utilityCoverageSourceTitle: loc.utilityCoverageSourceTitle ?? null,
+                              utilityCoverageSourceUrl: loc.utilityCoverageSourceUrl ?? null,
+                              jurisdictionName: loc.jurisdictionName,
+                              jurisdictionBuildingDepartmentName:
+                                loc.jurisdictionBuildingDepartmentName ?? null,
+                              jurisdictionOfficialWebsite: loc.jurisdictionOfficialWebsite ?? null,
+                              jurisdictionBuildingDepartmentUrl:
+                                loc.jurisdictionBuildingDepartmentUrl ?? null,
+                              jurisdictionPermitPortalUrl: loc.jurisdictionPermitPortalUrl ?? null,
+                              jurisdictionFormsUrl: loc.jurisdictionFormsUrl ?? null,
+                              jurisdictionInspectionsUrl: loc.jurisdictionInspectionsUrl ?? null,
+                              assessorCounty: loc.assessorCounty ?? null,
+                              assessorState: loc.assessorState ?? null,
+                              assessorSearchUrl: loc.assessorSearchUrl ?? null,
+                              assessorParcelGisUrl: loc.assessorParcelGisUrl ?? null,
+                              detailsStatus: loc.detailsStatus,
+                              missingScopes: [
+                                ...(loc.apn?.trim() ? [] : ["APN"]),
+                                ...(loc.utilityName ? [] : ["UTILITY"]),
+                                ...(loc.jurisdictionName ? [] : ["JURISDICTION"]),
+                              ],
+                            })
+                          }
+                        />
+                      </div>
                       {!loc.isPrimary ? (
                         <SetPrimaryServiceLocationButton
                           customerId={customerId}
@@ -210,6 +355,13 @@ export function CustomerServiceLocationsPanel({
             setEditTarget(null);
             router.refresh();
           }}
+        />
+      ) : null}
+      {siteDrawerData ? (
+        <SiteDetailsDrawer
+          open
+          onClose={() => setSiteDrawerData(null)}
+          data={siteDrawerData}
         />
       ) : null}
     </>

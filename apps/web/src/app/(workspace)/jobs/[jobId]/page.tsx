@@ -49,6 +49,7 @@ import {
 } from "@/lib/job-execution-health";
 import { JobExecutionHealthBanner } from "@/components/jobs/job-execution-health-banner";
 import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
+import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,16 @@ export default async function JobDetailPage({
         quoteId: true,
         serviceLocationId: true,
         serviceLocation: {
-          select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+          select: {
+            id: true,
+            organizationId: true,
+            formattedAddress: true,
+            addressLine1: true,
+            apn: true,
+            detailsStatus: true,
+            utility: { select: { name: true } },
+            jurisdiction: { select: { name: true } },
+          },
         },
         visits: {
           orderBy: [{ scheduledStartAt: "desc" }],
@@ -293,6 +303,12 @@ export default async function JobDetailPage({
     job.serviceLocation && job.serviceLocation.organizationId === ctx.organizationId
       ? job.serviceLocation
       : null;
+  const resolvedSiteDetails = safeServiceLocation
+    ? await resolveSiteDetailsForServiceLocation(
+        db as unknown as Parameters<typeof resolveSiteDetailsForServiceLocation>[0],
+        { organizationId: ctx.organizationId, serviceLocationId: safeServiceLocation.id },
+      )
+    : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
     serviceLocation: safeServiceLocation
@@ -448,6 +464,47 @@ export default async function JobDetailPage({
         jobsiteAddressLine={jobsiteAddressLine}
         customerId={jobCustomerId}
         leadEditHref={jobLeadEditHref}
+        siteDetails={
+          resolvedSiteDetails
+            ? {
+                serviceLocationId: resolvedSiteDetails.serviceLocationId,
+                apn: resolvedSiteDetails.apn,
+                apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
+                apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
+                apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
+                apnConflict: resolvedSiteDetails.apnConflict
+                  ? {
+                      value: resolvedSiteDetails.apnConflict.value,
+                      sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
+                      sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
+                    }
+                  : null,
+                utilityName: resolvedSiteDetails.utility?.name ?? null,
+                utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
+                utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
+                utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
+                utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
+                jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
+                jurisdictionBuildingDepartmentName:
+                  resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
+                jurisdictionOfficialWebsite:
+                  resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
+                jurisdictionBuildingDepartmentUrl:
+                  resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
+                jurisdictionPermitPortalUrl:
+                  resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
+                jurisdictionFormsUrl: null,
+                jurisdictionInspectionsUrl: null,
+                assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
+                assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
+                assessorSearchUrl:
+                  resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
+                assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
+                detailsStatus: resolvedSiteDetails.detailsStatus,
+                missingScopes: resolvedSiteDetails.missingScopes,
+              }
+            : null
+        }
       />
 
       <WorkspacePanel padding="compact" className="mb-6">

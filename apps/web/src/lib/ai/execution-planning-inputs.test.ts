@@ -16,6 +16,12 @@ test("buildQuoteLineExecutionPlanningContextFromLine merges quote line and quote
       quote: {
         internalNotes: "Customer wants morning schedule.",
         lead: { notes: "Panel appears to be 100A." },
+        serviceLocation: {
+          detailsStatus: "USER_REVIEWED",
+          apn: "123-456-789",
+          utility: { name: "Pacific Gas & Electric" },
+          jurisdiction: { name: "City of San Jose" },
+        },
       },
     },
     userInstructions: "Use 200A replacement panel.",
@@ -32,6 +38,8 @@ test("buildQuoteLineExecutionPlanningContextFromLine merges quote line and quote
   assert.match(context!, /Customer included notes/i);
   assert.match(context!, /Quote internal notes/i);
   assert.match(context!, /Confirm utility disconnect window/i);
+  assert.match(context!, /Site details \(status-qualified\)/i);
+  assert.match(context!, /APN \(USER_REVIEWED\): 123-456-789/i);
 });
 
 test("buildQuoteLineExecutionPlanningContextFromLine keeps job details off by default", () => {

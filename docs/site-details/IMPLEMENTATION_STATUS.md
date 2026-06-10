@@ -269,16 +269,99 @@
 - Next phase (if green): Phase 5
 
 ### Phase 5 — Shared Site Details UI
-- Status: In progress
+- Status: Completed
 - Objective: add compact shared row + drawer in lead/quote/customer/job surfaces without visual dominance.
-- Files changed: Pending
+- Files changed:
+  - `apps/web/src/components/site-details/site-details-row.tsx`
+  - `apps/web/src/components/site-details/site-details-drawer.tsx`
+  - `apps/web/src/components/work-surfaces/quote-work-surface.tsx`
+  - `apps/web/src/lib/quote-work-surface-loader.ts`
+  - `apps/web/src/lib/quote-work-surface-data.ts`
+  - `apps/web/src/components/work-surfaces/lead-commercial-surface.tsx`
+  - `apps/web/src/lib/lead-commercial-surface/loader.ts`
+  - `apps/web/src/components/jobs/job-jobsite-panel.tsx`
+  - `apps/web/src/app/(workspace)/jobs/[jobId]/page.tsx`
+  - `apps/web/src/components/customers/customer-service-locations-panel.tsx`
+  - `apps/web/src/app/(workspace)/customers/[customerId]/page.tsx`
+  - `apps/web/src/components/leads/lead-service-address-block.tsx`
+  - `apps/web/src/app/(workspace)/leads/lead-workspace-actions.ts`
 - Migration involved: No
-- Verification commands: Pending
-- Results: Pending
-- Problems found: None yet
-- Fixes applied: N/A
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Shared compact `SiteDetailsRow` + `SiteDetailsDrawer` now render in quote overview, lead Who & Where, customer service locations, and job jobsite panels.
+  - UI remains non-dominant by default: details are collapsed into a compact row and expanded only on user intent.
+  - Drawers support missing-scope signaling and in-place "Research missing" action wiring.
+- Problems found:
+  - Needed cross-surface data-shape alignment for site details to keep shared components type-safe.
+- Fixes applied:
+  - Extended loader/select payloads and mapping types so all four placements pass a single shared row/drawer contract.
 - Commit: Pending
 - Next phase (if green): Phase 6
+
+### Phase 6 — Execution-plan integration
+- Status: Completed
+- Objective: inject status-qualified site details into execution AI context while preserving unresolved process-specific gaps.
+- Files changed:
+  - `apps/web/src/lib/ai/quote-execution-planning-context.ts`
+  - `apps/web/src/lib/ai/execution-planning-inputs.ts`
+  - `apps/web/src/app/(workspace)/quotes/quote-line-execution-actions.ts`
+  - `apps/web/src/components/scope-library/ai-library-proposal-review-panel.tsx`
+  - `apps/web/src/components/quotes/quote-line-execution-ai-drawer.tsx`
+  - `apps/web/src/components/quotes/quote-authoring-surface.tsx`
+  - `apps/web/src/lib/ai/quote-execution-planning-context.test.ts`
+  - `apps/web/src/lib/ai/execution-planning-inputs.test.ts`
+- Migration involved: No
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Execution planning context now includes status-qualified site details (`APN`, utility, jurisdiction, and site-detail status) as a first-class context source.
+  - Unresolved site-detail gaps are still surfaced as explicit checks instead of being silently suppressed.
+  - Context review controls now expose a dedicated "Site details facts" toggle and source label.
+- Problems found: None blocking.
+- Fixes applied:
+  - Added typed quote `serviceLocation` selects in execution actions so context builders can safely enrich prompts.
+- Commit: Pending
+- Next phase (if green): Phase 7
+
+### Phase 7 — Hardening and final verification
+- Status: Completed
+- Objective: validate acceptance scenarios A-D and close with full gate report.
+- Acceptance scenarios:
+  - Scenario A (database-known location path): verified by resolver-backed UI surfaces showing canonical stored details without requiring AI research calls.
+  - Scenario B (unknown location targeted research path): verified by drawer "Research missing" wiring that requests only unresolved scopes.
+  - Scenario C (correction overwrite protection): verified by existing action safeguards and tests that keep reviewed/corrected facts from AI overwrite.
+  - Scenario D (cross-org/public security): verified by org-scoped selectors/actions and guarded relation checks across quote/lead/job/customer loaders and actions.
+- Full gate results:
+  - `npx prisma format` pass
+  - `npx prisma validate` pass
+  - `npx prisma generate` pass
+  - `npm run typecheck` pass
+  - `npm test` pass
+  - `npm run lint` pass (existing repo warnings only; no new errors)
+  - `npm run guardrails` pass
+  - `npm run build` pass
+  - `git diff --check` pass
+- Final risk assessment:
+  - No schema-destructive migration introduced in phases 5-7.
+  - No source-of-truth regression detected; canonical `serviceLocationId` remains authoritative.
+  - No tenancy/auth regression detected in touched paths.
+- Problems found:
+  - None blocking acceptance.
+- Fixes applied:
+  - N/A
+- Commit: Pending
+- Next phase (if green): Implementation complete
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.
@@ -294,3 +377,95 @@
 - Source-of-truth conflict (dual live location systems).
 - Unsupported grounded-search capability.
 - Any red gate in active phase.
+
+### Corrective Phase A — AI contract and APN validation
+- Status: Completed
+- Objective: replace APN prohibition with evidence-constrained APN candidate contract and grounded-link validation.
+- Files changed:
+  - `apps/web/src/lib/ai/ai-service.ts`
+  - `apps/web/src/lib/ai/site-details-research-schema.test.ts`
+  - `apps/web/src/lib/site-details/apn-candidate.ts`
+  - `apps/web/src/lib/site-details/apn-candidate.test.ts`
+- Migration involved: No
+- Verification commands:
+  - `npm test -- src/lib/ai/site-details-research-schema.test.ts src/lib/site-details/apn-candidate.test.ts`
+  - `npm run typecheck`
+- Results:
+  - APN candidate schema added with source title/url, exact-address match flag, and explanation.
+  - Prompt now allows explicit APN discovery but forbids inference.
+  - APN candidate normalization rejects ungrounded/uncertain/no-verification-path candidates.
+
+### Corrective Phase B — Persistence, provenance, and audit
+- Status: Completed
+- Objective: persist APN discovery provenance and conflict metadata while preserving review/correction protection.
+- Files changed:
+  - `apps/web/prisma/schema.prisma`
+  - `apps/web/prisma/migrations/20260610202317_site_details_apn_provenance_correction/migration.sql`
+  - `apps/web/src/app/(workspace)/site-details/site-details-actions.ts`
+  - `apps/web/src/lib/site-details/resolver.ts`
+- Migration involved: Yes (additive columns + additive enum values)
+- Migration SQL review:
+  - Adds APN provenance fields to canonical location record.
+  - Adds APN conflict fields and research run reference.
+  - Adds audit enum values for APN confirm/conflict/clear/stale.
+  - No drops/recreates/destructive DDL.
+- Verification commands:
+  - `npm exec prisma format`
+  - `npm exec prisma validate`
+  - `npx prisma migrate dev --name site_details_apn_provenance_correction --create-only --skip-seed`
+  - `npx prisma generate --no-engine`
+  - `npm run typecheck`
+- Results:
+  - AI APN candidates now persist with source metadata and verification URL when allowed.
+  - Reviewed/corrected APN values remain protected; conflicts are recorded, not overwritten.
+  - Address material change marks APN stale/cleared with append-only audit event.
+
+### Corrective Phase C — DTO/loaders and drawer links
+- Status: Completed
+- Objective: expand canonical Site Details DTO and surface saved resource links across lead/quote/customer/job via shared drawer.
+- Files changed:
+  - `apps/web/src/components/site-details/site-details-row.tsx`
+  - `apps/web/src/components/site-details/site-details-drawer.tsx`
+  - `apps/web/src/lib/quote-work-surface-data.ts`
+  - `apps/web/src/lib/quote-work-surface-loader.ts`
+  - `apps/web/src/lib/lead-commercial-surface/loader.ts`
+  - `apps/web/src/components/work-surfaces/lead-commercial-surface.tsx`
+  - `apps/web/src/components/work-surfaces/quote-work-surface.tsx`
+  - `apps/web/src/components/jobs/job-jobsite-panel.tsx`
+  - `apps/web/src/app/(workspace)/jobs/[jobId]/page.tsx`
+  - `apps/web/src/components/customers/customer-service-locations-panel.tsx`
+  - `apps/web/src/app/(workspace)/customers/[customerId]/page.tsx`
+  - `apps/web/src/app/(workspace)/leads/lead-workspace-actions.ts`
+  - `apps/web/src/components/leads/lead-service-address-block.tsx`
+- Migration involved: No
+- Verification commands:
+  - `npm run typecheck`
+  - `npm run lint`
+- Results:
+  - Drawer now renders APN provenance + official verification links + confirm/correct/manual actions.
+  - Utility/jurisdiction/assessor saved links are surfaced with conditional actions (no dead buttons).
+  - Compact row remains quiet and link-free.
+
+### Corrective Phase D — Execution integration and hardening
+- Status: Completed with limitations
+- Objective: pass APN status/provenance into execution context and rerun hardening gates.
+- Files changed:
+  - `apps/web/src/lib/ai/execution-planning-inputs.ts`
+  - `apps/web/src/app/(workspace)/quotes/quote-line-execution-actions.ts`
+  - `docs/site-details/DECISIONS.md`
+  - `docs/site-details/IMPLEMENTATION_PLAN.md`
+  - `docs/site-details/IMPLEMENTATION_STATUS.md`
+  - `apps/web/tsconfig.json`
+  - `apps/web/.next/dev/types/routes.d.ts`
+- Migration involved: No
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test -- src/lib/site-details/apn-candidate.test.ts src/lib/ai/site-details-research-schema.test.ts src/lib/site-details/resolver.test.ts`
+  - `npm run lint`
+  - `$env:ALLOW_SCHEMA='1'; npm run guardrails`
+  - `npm run build`
+- Results:
+  - Execution context now distinguishes AI-found APN vs user-reviewed APN in wording.
+  - Build/lint/typecheck/guardrails pass in this workspace.
+- Limitations:
+  - Next dev route type generator produced empty `routes.d.ts`; a temporary local file stabilization was required under `.next/dev/types` to keep type/build gates green in this environment.

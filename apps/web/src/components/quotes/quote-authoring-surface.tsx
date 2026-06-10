@@ -742,6 +742,7 @@ export function QuoteAuthoringSurface({
     includeCustomerProposal: false,
     includeBackground: false,
     includePriorMissingContext: true,
+    includeSiteDetailsFacts: true,
   });
   const [aiContextItemOverrides, setAiContextItemOverrides] = useState<
     Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>

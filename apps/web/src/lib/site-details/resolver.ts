@@ -33,9 +33,46 @@ export type SiteDetailsResolved = {
   organizationId: string;
   addressLine: string | null;
   apn: string | null;
-  utility: { id: string; name: string } | null;
-  jurisdiction: { id: string; name: string } | null;
-  assessorResource: { county: string; state: string; assessorSearchUrl: string } | null;
+  apnSourceTitle: string | null;
+  apnSourceUrl: string | null;
+  apnDiscoveredAt: Date | null;
+  apnResearchUsageLogId: string | null;
+  apnVerificationUrl: string | null;
+  apnConflict: {
+    value: string;
+    sourceTitle: string | null;
+    sourceUrl: string | null;
+    detectedAt: Date | null;
+  } | null;
+  utility: {
+    id: string;
+    name: string;
+    officialWebsite: string | null;
+    serviceUpgradeUrl: string | null;
+    applicationPortalUrl: string | null;
+    coverageSourceTitle: string | null;
+    coverageSourceUrl: string | null;
+    officialSourceTitle: string | null;
+    officialSourceUrl: string | null;
+  } | null;
+  jurisdiction: {
+    id: string;
+    name: string;
+    buildingDepartmentName: string | null;
+    officialWebsite: string | null;
+    buildingDepartmentUrl: string | null;
+    permitPortalUrl: string | null;
+    sourceTitle: string | null;
+    sourceUrl: string | null;
+  } | null;
+  assessorResource: {
+    county: string;
+    state: string;
+    assessorSearchUrl: string;
+    parcelGisUrl: string | null;
+    sourceTitle: string | null;
+    sourceUrl: string | null;
+  } | null;
   detailsStatus: SiteDetailsStatus;
   detailsSource: SiteDetailsSource;
   missingScopes: SiteDetailsMissingScope[];
@@ -43,7 +80,7 @@ export type SiteDetailsResolved = {
 
 type ResolverDb = Pick<
   PrismaClient,
-  "customerServiceLocation" | "countyAssessorResource" | "quote" | "lead" | "job"
+  "customerServiceLocation" | "countyAssessorResource" | "utilityCoverage" | "quote" | "lead" | "job"
 >;
 
 export async function resolveSiteDetailsForServiceLocation(
@@ -57,10 +94,44 @@ export async function resolveSiteDetailsForServiceLocation(
       organizationId: true,
       formattedAddress: true,
       addressLine1: true,
+      city: true,
       state: true,
+      postalCode: true,
       apn: true,
-      utility: { select: { id: true, name: true } },
-      jurisdiction: { select: { id: true, name: true, county: true, state: true } },
+      apnSourceTitle: true,
+      apnSourceUrl: true,
+      apnDiscoveredAt: true,
+      apnResearchUsageLogId: true,
+      apnVerificationUrl: true,
+      apnConflictValue: true,
+      apnConflictSourceTitle: true,
+      apnConflictSourceUrl: true,
+      apnConflictDetectedAt: true,
+      utility: {
+        select: {
+          id: true,
+          name: true,
+          officialWebsite: true,
+          serviceUpgradeUrl: true,
+          applicationPortalUrl: true,
+          officialSourceTitle: true,
+          officialSourceUrl: true,
+        },
+      },
+      jurisdiction: {
+        select: {
+          id: true,
+          name: true,
+          county: true,
+          state: true,
+          buildingDepartmentName: true,
+          officialWebsite: true,
+          buildingDepartmentUrl: true,
+          permitPortalUrl: true,
+          sourceTitle: true,
+          sourceUrl: true,
+        },
+      },
       detailsStatus: true,
       detailsSource: true,
     },
@@ -76,7 +147,14 @@ export async function resolveSiteDetailsForServiceLocation(
           state: assessorState || "",
           isActive: true,
         },
-        select: { county: true, state: true, assessorSearchUrl: true },
+        select: {
+          county: true,
+          state: true,
+          assessorSearchUrl: true,
+          parcelGisUrl: true,
+          sourceTitle: true,
+          sourceUrl: true,
+        },
       })
     : null;
 
@@ -86,13 +164,77 @@ export async function resolveSiteDetailsForServiceLocation(
   if (!row.jurisdiction) missing.push("JURISDICTION");
   if (!assessor) missing.push("ASSESSOR_RESOURCE");
 
+  const utilityCoverage = row.utility
+    ? await db.utilityCoverage.findFirst({
+        where: {
+          organizationId: params.organizationId,
+          utilityId: row.utility.id,
+          isActive: true,
+          OR: [
+            {
+              coverageType: "ZIP",
+              coverageValue: row.postalCode,
+              state: row.state,
+            },
+            {
+              coverageType: "CITY",
+              coverageValue: row.city,
+              state: row.state,
+            },
+            {
+              coverageType: "COUNTY",
+              coverageValue: row.jurisdiction?.county ?? "",
+              state: row.state,
+            },
+          ],
+        },
+        select: { sourceTitle: true, sourceUrl: true },
+      })
+    : null;
+
   return {
     serviceLocationId: row.id,
     organizationId: row.organizationId,
     addressLine: row.formattedAddress.trim() || row.addressLine1.trim() || null,
     apn: row.apn?.trim() || null,
-    utility: row.utility ? { id: row.utility.id, name: row.utility.name } : null,
-    jurisdiction: row.jurisdiction ? { id: row.jurisdiction.id, name: row.jurisdiction.name } : null,
+    apnSourceTitle: row.apnSourceTitle?.trim() || null,
+    apnSourceUrl: row.apnSourceUrl?.trim() || null,
+    apnDiscoveredAt: row.apnDiscoveredAt ?? null,
+    apnResearchUsageLogId: row.apnResearchUsageLogId ?? null,
+    apnVerificationUrl: row.apnVerificationUrl?.trim() || assessor?.assessorSearchUrl || null,
+    apnConflict: row.apnConflictValue
+      ? {
+          value: row.apnConflictValue,
+          sourceTitle: row.apnConflictSourceTitle?.trim() || null,
+          sourceUrl: row.apnConflictSourceUrl?.trim() || null,
+          detectedAt: row.apnConflictDetectedAt ?? null,
+        }
+      : null,
+    utility: row.utility
+      ? {
+          id: row.utility.id,
+          name: row.utility.name,
+          officialWebsite: row.utility.officialWebsite?.trim() || null,
+          serviceUpgradeUrl: row.utility.serviceUpgradeUrl?.trim() || null,
+          applicationPortalUrl: row.utility.applicationPortalUrl?.trim() || null,
+          coverageSourceTitle: utilityCoverage?.sourceTitle?.trim() || null,
+          coverageSourceUrl: utilityCoverage?.sourceUrl?.trim() || null,
+          officialSourceTitle: row.utility.officialSourceTitle?.trim() || null,
+          officialSourceUrl: row.utility.officialSourceUrl?.trim() || null,
+        }
+      : null,
+    jurisdiction: row.jurisdiction
+      ? {
+          id: row.jurisdiction.id,
+          name: row.jurisdiction.name,
+          buildingDepartmentName: row.jurisdiction.buildingDepartmentName?.trim() || null,
+          officialWebsite: row.jurisdiction.officialWebsite?.trim() || null,
+          buildingDepartmentUrl: row.jurisdiction.buildingDepartmentUrl?.trim() || null,
+          permitPortalUrl: row.jurisdiction.permitPortalUrl?.trim() || null,
+          sourceTitle: row.jurisdiction.sourceTitle?.trim() || null,
+          sourceUrl: row.jurisdiction.sourceUrl?.trim() || null,
+        }
+      : null,
     assessorResource: assessor,
     detailsStatus: row.detailsStatus,
     detailsSource: row.detailsSource,

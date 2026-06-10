@@ -713,7 +713,22 @@ export async function generateQuoteLineExecutionAIProposalAction(
         customerScopeDescription: true,
         customerIncludedNotes: true,
         customerExcludedNotes: true,
-        quote: { select: { organizationId: true, internalNotes: true, lead: { select: { notes: true } } } },
+        quote: {
+          select: {
+            organizationId: true,
+            internalNotes: true,
+            lead: { select: { notes: true } },
+            serviceLocation: {
+              select: {
+                apn: true,
+                apnSourceTitle: true,
+                detailsStatus: true,
+                utility: { select: { name: true } },
+                jurisdiction: { select: { name: true } },
+              },
+            },
+          },
+        },
         sourceLineItemTemplate: { select: { tags: { select: { name: true } } } },
       },
     });
@@ -823,7 +838,22 @@ export async function assessQuoteLineExecutionContextAction(
         customerScopeDescription: true,
         customerIncludedNotes: true,
         customerExcludedNotes: true,
-        quote: { select: { organizationId: true, internalNotes: true, lead: { select: { notes: true } } } },
+        quote: {
+          select: {
+            organizationId: true,
+            internalNotes: true,
+            lead: { select: { notes: true } },
+            serviceLocation: {
+              select: {
+                apn: true,
+                apnSourceTitle: true,
+                detailsStatus: true,
+                utility: { select: { name: true } },
+                jurisdiction: { select: { name: true } },
+              },
+            },
+          },
+        },
         sourceLineItemTemplate: { select: { tags: { select: { name: true } } } },
       },
     });

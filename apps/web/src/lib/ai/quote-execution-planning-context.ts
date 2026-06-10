@@ -14,7 +14,8 @@ export type ExecutionPlanningContextSource =
   | "quote_internal_notes"
   | "lead_intake"
   | "manual"
-  | "prior_missing";
+  | "prior_missing"
+  | "site_details";
 
 export type ExecutionPlanningContextSourceFlags = {
   includeReusableExecutionGuidance?: boolean;
@@ -23,6 +24,7 @@ export type ExecutionPlanningContextSourceFlags = {
   includeCustomerProposal?: boolean;
   includeBackground?: boolean;
   includePriorMissingContext?: boolean;
+  includeSiteDetailsFacts?: boolean;
 };
 
 export type ExecutionPlanningContextItem = {
@@ -53,6 +55,8 @@ type BuildQuoteExecutionPlanningContextInput = {
   quoteInternalNotes?: string | null;
   leadNotes?: string | null;
   priorMissingContext?: string[];
+  siteDetailsSummary?: string | null;
+  siteDetailsUnresolved?: string[];
 };
 
 function trimOrNull(value: string | null | undefined): string | null {
@@ -116,6 +120,9 @@ export function resolveExecutionPlanningContextItemIncluded(
       if (source === "prior_missing") {
         return sourceFlags?.includePriorMissingContext !== false;
       }
+      if (source === "site_details") {
+        return sourceFlags?.includeSiteDetailsFacts !== false;
+      }
       return sourceFlags?.includeJobTechnicalDetails === true;
     case "site_access_schedule":
       return sourceFlags?.includeSiteAccessSchedule === true;
@@ -151,6 +158,7 @@ export function buildQuoteExecutionPlanningContextManifest(
     lead_intake: 0,
     manual: 0,
     prior_missing: 0,
+    site_details: 0,
   };
 
   const userInstructions = trimOrNull(input.userInstructions);
@@ -308,6 +316,28 @@ export function buildQuoteExecutionPlanningContextManifest(
     });
   }
 
+  const siteDetailsSummary = trimOrNull(input.siteDetailsSummary);
+  if (siteDetailsSummary) {
+    addItem(items, counters, {
+      source: "site_details",
+      bucket: "job_technical_detail",
+      label: "Site details (status-qualified)",
+      content: siteDetailsSummary,
+      includedByDefault: true,
+    });
+  }
+
+  const siteDetailsUnresolved = dedupeNonEmpty(input.siteDetailsUnresolved ?? []);
+  if (siteDetailsUnresolved.length > 0) {
+    addItem(items, counters, {
+      source: "site_details",
+      bucket: "job_technical_detail",
+      label: "Site details unresolved checks",
+      content: siteDetailsUnresolved.map((item) => `- ${item}`).join("\n"),
+      includedByDefault: true,
+    });
+  }
+
   return { items: items.filter((item) => trimOrNull(item.content)) };
 }
 
@@ -360,6 +390,8 @@ export function buildQuoteLineExecutionPlanningContextSeed(
     quoteInternalNotes: null,
     leadNotes: null,
     priorMissingContext: [],
+    siteDetailsSummary: null,
+    siteDetailsUnresolved: [],
   })
     .items.filter((item) => item.bucket === "reusable_execution_guidance")
     .map((item) => item.content.trim())

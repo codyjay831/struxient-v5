@@ -71,36 +71,116 @@ export async function saveSiteDetailsApnAction(
   if (!id) return { error: "Missing service location id." };
   const existing = await db.customerServiceLocation.findFirst({
     where: { id, organizationId: ctx.organizationId },
-    select: { id: true, apn: true, detailsStatus: true, detailsSource: true },
+    select: {
+      id: true,
+      apn: true,
+      detailsStatus: true,
+      detailsSource: true,
+      apnSourceTitle: true,
+      apnSourceUrl: true,
+      apnDiscoveredAt: true,
+      apnVerificationUrl: true,
+    },
   });
   if (!existing) return { error: "Service location not found." };
+  const existingApn = existing.apn?.trim() || null;
+  const normalizedApn = apn || null;
   const nextStatus =
-    apn && existing.apn && existing.apn !== apn
+    normalizedApn && existingApn && existingApn !== normalizedApn
       ? SiteDetailsStatus.USER_CORRECTED
       : pickHigherPriorityStatus(existing.detailsStatus, SiteDetailsStatus.USER_REVIEWED);
   const nextSource =
-    apn && existing.apn && existing.apn !== apn
+    normalizedApn && existingApn && existingApn !== normalizedApn
       ? SiteDetailsSource.USER_CORRECTED
       : SiteDetailsSource.USER_REVIEWED;
 
   await db.customerServiceLocation.update({
     where: { id },
     data: {
-      apn: apn || null,
+      apn: normalizedApn,
       detailsStatus: nextStatus,
       detailsSource: nextSource,
       detailsReviewedAt: new Date(),
       detailsReviewedBy: ctx.userId,
+      apnConflictValue: null,
+      apnConflictSourceTitle: null,
+      apnConflictSourceUrl: null,
+      apnConflictDetectedAt: null,
     },
   });
   await appendServiceLocationAuditEvent(auditDb, {
     organizationId: ctx.organizationId,
     serviceLocationId: id,
     actorUserId: ctx.userId,
-    eventType: existing.apn && existing.apn !== apn ? ServiceLocationAuditType.APN_CORRECTED : ServiceLocationAuditType.APN_SET,
-    oldValue: { apn: existing.apn },
-    newValue: { apn },
+    eventType:
+      !normalizedApn
+        ? ServiceLocationAuditType.APN_CLEARED
+        : existingApn && existingApn !== normalizedApn
+          ? ServiceLocationAuditType.APN_CORRECTED
+          : ServiceLocationAuditType.APN_SET,
+    oldValue: {
+      apn: existingApn,
+      sourceTitle: existing.apnSourceTitle,
+      sourceUrl: existing.apnSourceUrl,
+      discoveredAt: existing.apnDiscoveredAt,
+      verificationUrl: existing.apnVerificationUrl,
+    },
+    newValue: { apn: normalizedApn, preservedDiscoverySource: true },
     sourceReason: reason,
+  });
+  revalidateLocationSurfaces(id);
+  return { success: true };
+}
+
+export async function confirmSiteDetailsApnAction(
+  serviceLocationId: string,
+): Promise<SiteDetailsActionState> {
+  const ctx = await getRequestContextOrThrow();
+  const id = serviceLocationId.trim();
+  if (!id) return { error: "Missing service location id." };
+  const existing = await db.customerServiceLocation.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: {
+      id: true,
+      apn: true,
+      detailsStatus: true,
+      detailsSource: true,
+      apnSourceTitle: true,
+      apnSourceUrl: true,
+      apnVerificationUrl: true,
+    },
+  });
+  if (!existing) return { error: "Service location not found." };
+  if (!existing.apn?.trim()) return { error: "No APN to confirm." };
+  const nextStatus = pickHigherPriorityStatus(existing.detailsStatus, SiteDetailsStatus.USER_REVIEWED);
+  await db.customerServiceLocation.update({
+    where: { id },
+    data: {
+      detailsStatus: nextStatus,
+      detailsSource: SiteDetailsSource.USER_REVIEWED,
+      detailsReviewedAt: new Date(),
+      detailsReviewedBy: ctx.userId,
+      apnConflictValue: null,
+      apnConflictSourceTitle: null,
+      apnConflictSourceUrl: null,
+      apnConflictDetectedAt: null,
+    },
+  });
+  await appendServiceLocationAuditEvent(auditDb, {
+    organizationId: ctx.organizationId,
+    serviceLocationId: id,
+    actorUserId: ctx.userId,
+    eventType: ServiceLocationAuditType.APN_CONFIRMED,
+    oldValue: { detailsStatus: existing.detailsStatus, detailsSource: existing.detailsSource },
+    newValue: {
+      detailsStatus: nextStatus,
+      detailsSource: SiteDetailsSource.USER_REVIEWED,
+      apn: existing.apn.trim(),
+      sourceTitle: existing.apnSourceTitle,
+      sourceUrl: existing.apnSourceUrl,
+      verificationUrl: existing.apnVerificationUrl,
+    },
+    sourceReason: "manual_apn_confirm",
   });
   revalidateLocationSurfaces(id);
   return { success: true };
@@ -285,6 +365,7 @@ export async function updateServiceLocationAddressAction(
       postalCode: true,
       country: true,
       addressFingerprint: true,
+      apn: true,
     },
   });
   if (!existing) return { error: "Service location not found." };
@@ -310,8 +391,24 @@ export async function updateServiceLocationAddressAction(
       staleAt: changed ? new Date() : null,
       staleReason: changed ? "material_address_change" : null,
       detailsStatus: changed ? SiteDetailsStatus.STALE : undefined,
+      apn: changed ? null : undefined,
+      apnConflictValue: changed ? null : undefined,
+      apnConflictSourceTitle: changed ? null : undefined,
+      apnConflictSourceUrl: changed ? null : undefined,
+      apnConflictDetectedAt: changed ? null : undefined,
     },
   });
+  if (changed && existing.apn?.trim()) {
+    await appendServiceLocationAuditEvent(auditDb, {
+      organizationId: ctx.organizationId,
+      serviceLocationId: id,
+      actorUserId: ctx.userId,
+      eventType: ServiceLocationAuditType.APN_MARKED_STALE,
+      oldValue: { apn: existing.apn },
+      newValue: { apn: null, reason: "material_address_change" },
+      sourceReason: "material_address_change",
+    });
+  }
   await appendServiceLocationAuditEvent(auditDb, {
     organizationId: ctx.organizationId,
     serviceLocationId: id,
@@ -327,6 +424,7 @@ export async function updateServiceLocationAddressAction(
 
 export async function requestSiteDetailsResearchAction(
   serviceLocationId: string,
+  requestedScopes?: string[],
 ): Promise<SiteDetailsActionState> {
   const ctx = await getRequestContextOrThrow();
   const id = serviceLocationId.trim();
@@ -343,11 +441,23 @@ export async function requestSiteDetailsResearchAction(
       serviceLocationId: id,
     });
     if (!before) return null;
-    if (before.missingScopes.length === 0) return before;
+    const requested = Array.isArray(requestedScopes)
+      ? before.missingScopes.filter((scope) => requestedScopes.includes(scope))
+      : before.missingScopes;
+    if (requested.length === 0) return before;
     const location = await db.customerServiceLocation.findFirst({
       where: { id, organizationId: ctx.organizationId },
       select: {
         id: true,
+        apn: true,
+        apnSourceTitle: true,
+        apnSourceUrl: true,
+        apnDiscoveredAt: true,
+        apnVerificationUrl: true,
+        apnConflictValue: true,
+        apnConflictSourceTitle: true,
+        apnConflictSourceUrl: true,
+        apnConflictDetectedAt: true,
         detailsStatus: true,
         detailsSource: true,
       },
@@ -358,14 +468,28 @@ export async function requestSiteDetailsResearchAction(
       organizationId: ctx.organizationId,
       serviceLocationId: id,
       addressLine: before.addressLine ?? "",
-      missingScopes: before.missingScopes,
+      missingScopes: requested,
+      existingOfficialVerificationUrl: before.assessorResource?.assessorSearchUrl ?? null,
     });
+    const requestedSet = new Set(requested);
 
     let utilityId: string | null = null;
     let jurisdictionId: string | null = null;
     let assessorUpserted = false;
+    const existingApn = location.apn?.trim() || null;
+    const apnCandidate = research.apnCandidate;
+    const assessorVerificationUrl =
+      research.countyAssessorSearchUrl ??
+      before.assessorResource?.assessorSearchUrl ??
+      null;
+    const apnSourceTitle = apnCandidate?.sourceTitle ?? null;
+    const apnSourceUrl = apnCandidate?.sourceUrl ?? null;
+    const apnValue = apnCandidate?.value.trim() || null;
+    let apnConflictDetected = false;
+    let apnDiscovered = false;
+    let apnRefreshed = false;
 
-    if (research.utilityName) {
+    if (requestedSet.has("UTILITY") && research.utilityName) {
       const utility = await db.utility.upsert({
         where: {
           organizationId_name: {
@@ -391,7 +515,7 @@ export async function requestSiteDetailsResearchAction(
       utilityId = utility.id;
     }
 
-    if (research.jurisdictionName && research.jurisdictionType) {
+    if (requestedSet.has("JURISDICTION") && research.jurisdictionName && research.jurisdictionType) {
       const jurisdiction = await db.jurisdiction.upsert({
         where: {
           organizationId_name_state_jurisdictionType: {
@@ -420,6 +544,7 @@ export async function requestSiteDetailsResearchAction(
     }
 
     if (
+      requestedSet.has("ASSESSOR_RESOURCE") &&
       research.countyAssessorCounty &&
       research.countyAssessorState &&
       research.countyAssessorSearchUrl
@@ -453,15 +578,49 @@ export async function requestSiteDetailsResearchAction(
       location.detailsStatus === SiteDetailsStatus.USER_REVIEWED ||
       location.detailsStatus === SiteDetailsStatus.USER_CORRECTED;
     if (!shouldProtectReviewed) {
+      const updates: Prisma.CustomerServiceLocationUncheckedUpdateInput = {
+        utilityId: utilityId ?? undefined,
+        jurisdictionId: jurisdictionId ?? undefined,
+        detailsStatus: pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND),
+        detailsSource: SiteDetailsSource.AI_FOUND,
+        detailsLastChecked: new Date(),
+      };
+
+      if (apnValue && !existingApn) {
+        updates.apn = apnValue;
+        updates.apnSourceTitle = apnSourceTitle;
+        updates.apnSourceUrl = apnSourceUrl;
+        updates.apnDiscoveredAt = new Date();
+        updates.apnResearchUsageLogId = research.usageLogId ?? undefined;
+        updates.apnVerificationUrl = assessorVerificationUrl;
+        updates.apnConflictValue = null;
+        updates.apnConflictSourceTitle = null;
+        updates.apnConflictSourceUrl = null;
+        updates.apnConflictDetectedAt = null;
+        apnDiscovered = true;
+      } else if (apnValue && existingApn && existingApn === apnValue) {
+        updates.apnSourceTitle = apnSourceTitle ?? location.apnSourceTitle;
+        updates.apnSourceUrl = apnSourceUrl ?? location.apnSourceUrl;
+        updates.apnDiscoveredAt = new Date();
+        updates.apnResearchUsageLogId = research.usageLogId ?? undefined;
+        updates.apnVerificationUrl = assessorVerificationUrl ?? location.apnVerificationUrl;
+        updates.apnConflictValue = null;
+        updates.apnConflictSourceTitle = null;
+        updates.apnConflictSourceUrl = null;
+        updates.apnConflictDetectedAt = null;
+        apnRefreshed = true;
+      } else if (apnValue && existingApn && existingApn !== apnValue) {
+        updates.detailsStatus = SiteDetailsStatus.CONFLICT;
+        updates.apnConflictValue = apnValue;
+        updates.apnConflictSourceTitle = apnSourceTitle;
+        updates.apnConflictSourceUrl = apnSourceUrl;
+        updates.apnConflictDetectedAt = new Date();
+        apnConflictDetected = true;
+      }
+
       await db.customerServiceLocation.update({
         where: { id },
-        data: {
-          utilityId: utilityId ?? undefined,
-          jurisdictionId: jurisdictionId ?? undefined,
-          detailsStatus: pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND),
-          detailsSource: SiteDetailsSource.AI_FOUND,
-          detailsLastChecked: new Date(),
-        },
+        data: updates,
       });
       if (utilityId || jurisdictionId || assessorUpserted) {
         await appendServiceLocationAuditEvent(auditDb, {
@@ -476,13 +635,78 @@ export async function requestSiteDetailsResearchAction(
           newValue: {
             utilityId,
             jurisdictionId,
+            apn: apnDiscovered || apnRefreshed ? apnValue : existingApn,
             assessorCounty: research.countyAssessorCounty,
             assessorState: research.countyAssessorState,
           },
           sourceReason: "site_details_missing_scope_research",
         });
       }
+      if (apnDiscovered || apnRefreshed) {
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.APN_SET,
+          oldValue: {
+            apn: existingApn,
+            sourceTitle: location.apnSourceTitle,
+            sourceUrl: location.apnSourceUrl,
+            discoveredAt: location.apnDiscoveredAt,
+            verificationUrl: location.apnVerificationUrl,
+          },
+          newValue: {
+            apn: apnValue,
+            sourceTitle: apnSourceTitle,
+            sourceUrl: apnSourceUrl,
+            discoveredAt: new Date(),
+            verificationUrl: assessorVerificationUrl,
+          },
+          sourceReason: apnDiscovered ? "ai_apn_discovered" : "ai_apn_refreshed",
+        });
+      }
+      if (apnConflictDetected) {
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.APN_CONFLICT_DETECTED,
+          oldValue: { apn: existingApn },
+          newValue: {
+            existingApn,
+            candidateApn: apnValue,
+            sourceTitle: apnSourceTitle,
+            sourceUrl: apnSourceUrl,
+          },
+          sourceReason: "ai_apn_conflict_detected",
+        });
+      }
     } else {
+      if (apnValue && existingApn && apnValue !== existingApn) {
+        await db.customerServiceLocation.update({
+          where: { id },
+          data: {
+            apnConflictValue: apnValue,
+            apnConflictSourceTitle: apnSourceTitle,
+            apnConflictSourceUrl: apnSourceUrl,
+            apnConflictDetectedAt: new Date(),
+            detailsLastChecked: new Date(),
+          },
+        });
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.APN_CONFLICT_DETECTED,
+          oldValue: { apn: existingApn, detailsStatus: location.detailsStatus },
+          newValue: {
+            candidateApn: apnValue,
+            sourceTitle: apnSourceTitle,
+            sourceUrl: apnSourceUrl,
+          },
+          sourceReason: "ai_conflict_recorded_reviewed_apn_preserved",
+        });
+      }
       await appendServiceLocationAuditEvent(auditDb, {
         organizationId: ctx.organizationId,
         serviceLocationId: id,

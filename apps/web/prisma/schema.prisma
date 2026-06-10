@@ -129,49 +129,58 @@ model Customer {
 
 /// Canonical service location record (legacy model name retained for safe additive migration).
 model CustomerServiceLocation {
-  id                 String                        @id @default(cuid())
-  organizationId     String
-  customerId         String?
-  formattedAddress   String
-  addressLine1       String                        @default("")
-  addressLine2       String                        @default("")
-  city               String                        @default("")
-  state              String                        @default("")
-  postalCode         String                        @default("")
-  country            String                        @default("")
-  googlePlaceId      String                        @default("")
-  latitude           Float?
-  longitude          Float?
-  source             CustomerServiceLocationSource
+  id                     String                        @id @default(cuid())
+  organizationId         String
+  customerId             String?
+  formattedAddress       String
+  addressLine1           String                        @default("")
+  addressLine2           String                        @default("")
+  city                   String                        @default("")
+  state                  String                        @default("")
+  postalCode             String                        @default("")
+  country                String                        @default("")
+  googlePlaceId          String                        @default("")
+  latitude               Float?
+  longitude              Float?
+  source                 CustomerServiceLocationSource
   /// Normalized deterministic key for dedup/reconciliation.
-  addressFingerprint String                        @default("")
-  label              String?
-  isPrimary          Boolean                       @default(false)
+  addressFingerprint     String                        @default("")
+  label                  String?
+  isPrimary              Boolean                       @default(false)
   /// Set when property details must be re-reviewed due to material address edits.
-  staleAt            DateTime?
-  staleReason        String?
-  apn                String?
-  utilityId          String?
-  jurisdictionId     String?
-  detailsStatus      SiteDetailsStatus             @default(UNVERIFIED)
-  detailsSource      SiteDetailsSource             @default(DATABASE_MATCH)
-  detailsLastChecked DateTime?
-  detailsReviewedAt  DateTime?
-  detailsReviewedBy  String?
-  createdAt          DateTime                      @default(now())
-  updatedAt          DateTime                      @updatedAt
-  createdFromLeadId  String?
-  createdFromLead    Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id])
-  customer           Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  leads              Lead[]                        @relation("LeadServiceLocation")
-  quotes             Quote[]                       @relation("QuoteServiceLocation")
-  jobs               Job[]                         @relation("JobServiceLocation")
-  utility            Utility?                      @relation(fields: [utilityId], references: [id], onDelete: SetNull)
-  jurisdiction       Jurisdiction?                 @relation(fields: [jurisdictionId], references: [id], onDelete: SetNull)
-  auditEvents        ServiceLocationAuditEvent[]
-  reviews            SiteDetailsReview[]
-  aiUsageLogs        AiUsageLog[]
-  organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  staleAt                DateTime?
+  staleReason            String?
+  apn                    String?
+  apnSourceTitle         String?
+  apnSourceUrl           String?
+  apnDiscoveredAt        DateTime?
+  apnResearchUsageLogId  String?
+  apnVerificationUrl     String?
+  apnConflictValue       String?
+  apnConflictSourceTitle String?
+  apnConflictSourceUrl   String?
+  apnConflictDetectedAt  DateTime?
+  utilityId              String?
+  jurisdictionId         String?
+  detailsStatus          SiteDetailsStatus             @default(UNVERIFIED)
+  detailsSource          SiteDetailsSource             @default(DATABASE_MATCH)
+  detailsLastChecked     DateTime?
+  detailsReviewedAt      DateTime?
+  detailsReviewedBy      String?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  createdFromLeadId      String?
+  createdFromLead        Lead?                         @relation("ServiceLocationCreatedFromLead", fields: [createdFromLeadId], references: [id])
+  customer               Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  leads                  Lead[]                        @relation("LeadServiceLocation")
+  quotes                 Quote[]                       @relation("QuoteServiceLocation")
+  jobs                   Job[]                         @relation("JobServiceLocation")
+  utility                Utility?                      @relation(fields: [utilityId], references: [id], onDelete: SetNull)
+  jurisdiction           Jurisdiction?                 @relation(fields: [jurisdictionId], references: [id], onDelete: SetNull)
+  auditEvents            ServiceLocationAuditEvent[]
+  reviews                SiteDetailsReview[]
+  aiUsageLogs            AiUsageLog[]
+  organization           Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
@@ -1597,7 +1606,11 @@ enum SiteDetailsSource {
 
 enum ServiceLocationAuditType {
   APN_SET
+  APN_CONFIRMED
   APN_CORRECTED
+  APN_CONFLICT_DETECTED
+  APN_CLEARED
+  APN_MARKED_STALE
   UTILITY_SET
   UTILITY_CORRECTED
   JURISDICTION_SET

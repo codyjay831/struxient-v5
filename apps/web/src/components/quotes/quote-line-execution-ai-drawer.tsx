@@ -77,6 +77,7 @@ export function QuoteLineExecutionAiDrawer({
     includeCustomerProposal: false,
     includeBackground: false,
     includePriorMissingContext: true,
+    includeSiteDetailsFacts: true,
   });
   const [contextItemOverrides, setContextItemOverrides] = useState<
     Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>
