@@ -25,6 +25,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer";
 import {
   attachIntakeServiceLocationToCustomerFromLead,
+  ensureServiceLocationForLeadFromSnapshot,
   intakeSnapshotForCustomerFromLead,
 } from "@/lib/customer-service-location-from-lead";
 import { findCustomerMatchHints, type LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
@@ -198,13 +199,19 @@ export async function createCustomerFromLeadWorkspaceAction(
         );
       }
 
-      await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
         leadId: id,
         leadChannel: lead.channel,
         snapshot: intakeSnapshotForCustomerFromLead(lead),
       });
+      if (attached.locationId) {
+        await tx.lead.update({
+          where: { id },
+          data: { serviceLocationId: attached.locationId },
+        });
+      }
     });
   } catch (e) {
     if (e instanceof WorkspaceTxError) return { error: e.message };
@@ -293,13 +300,19 @@ export async function linkLeadToCustomerWorkspaceAction(
           "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
         leadId: id,
         leadChannel: lead.channel,
         snapshot: intakeSnapshotForCustomerFromLead(lead),
       });
+      if (attached.locationId) {
+        await tx.lead.update({
+          where: { id },
+          data: { serviceLocationId: attached.locationId },
+        });
+      }
     });
   } catch (e) {
     if (e instanceof WorkspaceTxError) return { error: e.message };
@@ -1043,12 +1056,41 @@ export async function updateLeadServiceAddressWorkspaceAction(
     };
   }
 
-  const result = await db.lead.updateMany({
-    where: { id, organizationId: ctx.organizationId },
-    data: { address },
+  const writeResult = await db.$transaction(async (tx) => {
+    const existingLead = await tx.lead.findFirst({
+      where: { id, organizationId: ctx.organizationId },
+      select: { customerId: true, channel: true, serviceLocationId: true },
+    });
+    if (!existingLead) {
+      return { updated: false as const, locationId: null as string | null };
+    }
+    let resolvedLocationId: string | null = existingLead.serviceLocationId;
+    if (savedSnapshot) {
+      resolvedLocationId = await ensureServiceLocationForLeadFromSnapshot(tx, {
+        organizationId: ctx.organizationId,
+        leadId: id,
+        leadChannel: existingLead.channel,
+        customerId: existingLead.customerId,
+        snapshot: savedSnapshot,
+      });
+    }
+    const writeResult = await tx.lead.updateMany({
+      where: { id, organizationId: ctx.organizationId },
+      data: { address },
+    });
+    if (writeResult.count === 0) {
+      return { updated: false as const, locationId: null as string | null };
+    }
+    if (savedSnapshot) {
+      await tx.lead.update({
+        where: { id },
+        data: { serviceLocationId: resolvedLocationId },
+      });
+    }
+    return { updated: true as const, locationId: resolvedLocationId };
   });
 
-  if (result.count === 0) {
+  if (!writeResult.updated) {
     return { error: "Opportunity not found or could not be updated." };
   }
 
@@ -1059,18 +1101,24 @@ export async function updateLeadServiceAddressWorkspaceAction(
   if (savedSnapshot) {
     const linked = await db.lead.findFirst({
       where: { id, organizationId: ctx.organizationId },
-      select: { customerId: true, channel: true },
+      select: { customerId: true, channel: true, serviceLocationId: true },
     });
     if (linked?.customerId) {
       try {
         await db.$transaction(async (tx) => {
-          await attachIntakeServiceLocationToCustomerFromLead(tx, {
+          const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
             organizationId: ctx.organizationId,
             customerId: linked.customerId as string,
             leadId: id,
             leadChannel: linked.channel,
             snapshot: savedSnapshot,
           });
+          if (attached.locationId && linked.serviceLocationId !== attached.locationId) {
+            await tx.lead.update({
+              where: { id },
+              data: { serviceLocationId: attached.locationId },
+            });
+          }
         });
       } catch {
         /* Soft-fail propagation — lead update already succeeded; the user can

@@ -80,7 +80,7 @@ function serviceLocationLabelFromLeadChannel(channel: LeadChannel): string {
 
 export type UpsertCustomerServiceLocationSnapshotParams = {
   organizationId: string;
-  customerId: string;
+  customerId: string | null;
   snapshot: PublicIntakeServiceLocationV1;
   /** Optional row label (e.g. intake provenance). */
   label: string | null;
@@ -96,7 +96,7 @@ export type UpsertCustomerServiceLocationSnapshotParams = {
 export async function upsertCustomerServiceLocationFromIntakeSnapshot(
   tx: ExtendedTransactionClient,
   params: UpsertCustomerServiceLocationSnapshotParams,
-): Promise<{ created: boolean; skippedDuplicate: boolean }> {
+): Promise<{ created: boolean; skippedDuplicate: boolean; locationId: string | null }> {
   const { organizationId, customerId, snapshot, label, createdFromLeadId } = params;
 
   const placeId = snapshot.googlePlaceId?.trim() ?? "";
@@ -105,12 +105,20 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
   const formatted =
     snapshot.formattedAddress.trim() || snapshot.addressLine1.trim() || snapshot.addressLine1;
   if (!formatted.trim()) {
-    return { created: false, skippedDuplicate: false };
+    return { created: false, skippedDuplicate: false, locationId: null };
   }
 
+  const whereCustomer = customerId != null ? { customerId } : {};
   const existing = await tx.customerServiceLocation.findMany({
-    where: { organizationId, customerId },
-    select: { id: true, formattedAddress: true, googlePlaceId: true, createdFromLeadId: true },
+    where: { organizationId, ...whereCustomer },
+    select: {
+      id: true,
+      formattedAddress: true,
+      addressLine1: true,
+      googlePlaceId: true,
+      createdFromLeadId: true,
+      customerId: true,
+    },
   });
 
   async function stampProvenanceOnDuplicate(dupId: string, dupCreatedFromLeadId: string | null) {
@@ -126,35 +134,48 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
     const dup = existing.find((e) => (e.googlePlaceId ?? "").trim() === placeId);
     if (dup) {
       await stampProvenanceOnDuplicate(dup.id, dup.createdFromLeadId);
-      return { created: false, skippedDuplicate: true };
+      if (customerId != null && dup.customerId == null) {
+        await tx.customerServiceLocation.update({
+          where: { id: dup.id },
+          data: { customerId, isPrimary: true },
+        });
+      }
+      return { created: false, skippedDuplicate: true, locationId: dup.id };
     }
   }
   if (dedupFmt.length > 0) {
     const dup = existing.find(
-      (e) => normalizeAddressDedupKey(e.formattedAddress, "") === dedupFmt,
+      (e) => normalizeAddressDedupKey(e.formattedAddress, e.addressLine1) === dedupFmt,
     );
     if (dup) {
       await stampProvenanceOnDuplicate(dup.id, dup.createdFromLeadId);
-      return { created: false, skippedDuplicate: true };
+      if (customerId != null && dup.customerId == null) {
+        await tx.customerServiceLocation.update({
+          where: { id: dup.id },
+          data: { customerId, isPrimary: true },
+        });
+      }
+      return { created: false, skippedDuplicate: true, locationId: dup.id };
     }
   }
 
   const count = await tx.customerServiceLocation.count({
-    where: { organizationId, customerId },
+    where: { organizationId, ...whereCustomer },
   });
-  const isPrimary = count === 0;
+  const isPrimary = customerId != null ? count === 0 : false;
 
   const sourceEnum =
     snapshot.source === "google_places"
       ? CustomerServiceLocationSource.google_places
       : CustomerServiceLocationSource.manual;
 
-  await tx.customerServiceLocation.create({
+  const created = await tx.customerServiceLocation.create({
     data: {
       organizationId,
       customerId,
       createdFromLeadId,
       formattedAddress: formatted,
+      addressFingerprint: dedupFmt,
       addressLine1: snapshot.addressLine1.trim() || formatted,
       addressLine2: snapshot.addressLine2 ?? "",
       city: snapshot.city ?? "",
@@ -170,7 +191,7 @@ export async function upsertCustomerServiceLocationFromIntakeSnapshot(
     },
   });
 
-  return { created: true, skippedDuplicate: false };
+  return { created: true, skippedDuplicate: false, locationId: created.id };
 }
 
 /**
@@ -186,10 +207,10 @@ export async function attachIntakeServiceLocationToCustomerFromLead(
     leadChannel: LeadChannel;
     snapshot: PublicIntakeServiceLocationV1 | null;
   },
-): Promise<{ created: boolean; skippedDuplicate: boolean }> {
+): Promise<{ created: boolean; skippedDuplicate: boolean; locationId: string | null }> {
   const { organizationId, customerId, leadId, leadChannel, snapshot } = params;
   if (!snapshot) {
-    return { created: false, skippedDuplicate: false };
+    return { created: false, skippedDuplicate: false, locationId: null };
   }
 
   return upsertCustomerServiceLocationFromIntakeSnapshot(tx, {
@@ -207,6 +228,30 @@ export function formatPrimaryServiceLocationLineForQuoteNotes(
   if (!loc) return null;
   const line = loc.formattedAddress.trim() || loc.addressLine1.trim();
   return line.length > 0 ? line : null;
+}
+
+export async function ensureServiceLocationForLeadFromSnapshot(
+  tx: ExtendedTransactionClient,
+  params: {
+    organizationId: string;
+    leadId: string;
+    leadChannel: LeadChannel;
+    customerId: string | null;
+    snapshot: PublicIntakeServiceLocationV1 | null;
+  },
+): Promise<string | null> {
+  if (!params.snapshot) return null;
+  const result = await upsertCustomerServiceLocationFromIntakeSnapshot(tx, {
+    organizationId: params.organizationId,
+    customerId: params.customerId,
+    snapshot: params.snapshot,
+    label:
+      params.customerId == null
+        ? "From intake"
+        : serviceLocationLabelFromLeadChannel(params.leadChannel),
+    createdFromLeadId: params.leadId,
+  });
+  return result.locationId;
 }
 
 type DbLike = Pick<ExtendedTransactionClient, "customerServiceLocation">;

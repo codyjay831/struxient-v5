@@ -102,16 +102,87 @@
 - Next phase (if green): Phase 1C
 
 ### Phase 1C — Canonical read/write cutover
-- Status: In progress
+- Status: Completed
 - Objective: route writes and reads through explicit serviceLocationId while preserving org isolation and audit readiness.
-- Files changed: Pending
+- Files changed:
+  - `apps/web/src/lib/customer-service-location-from-lead.ts`
+  - `apps/web/src/lib/lead/promote-to-quote.ts`
+  - `apps/web/src/app/(workspace)/leads/lead-workspace-actions.ts`
+  - `apps/web/src/app/(workspace)/leads/lead-form-actions.ts`
+  - `apps/web/src/lib/jobsite-address.ts`
+  - `apps/web/src/lib/quote-work-surface-loader.ts`
+  - `apps/web/src/app/(workspace)/quotes/quote-job-activation-actions.ts`
+  - `apps/web/src/app/(workspace)/jobs/[jobId]/page.tsx`
+  - `apps/web/src/lib/job-task-execution-loader.ts`
+  - `apps/web/src/app/(workspace)/workstation/page.tsx`
+  - `apps/web/src/lib/workstation-query.ts`
+- Migration involved: No (cutover to existing additive fields)
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - New canonical linkage writes are now set in lead/customer conversion and quote/job lifecycles.
+  - Quote creation now sets `Quote.serviceLocationId` and no longer writes operational jobsite copy into quote notes.
+  - Job activation copies `serviceLocationId` from quote.
+  - Jobsite line resolver now prefers explicit service location where present.
+  - Build/typecheck/tests/guardrails pass.
+- Problems found:
+  - Initial type error from `LeadUpdateManyMutationInput` lacking `serviceLocationId` setter path.
+- Fixes applied:
+  - Split lead update flow into `updateMany` for guarded write + explicit `update` for `serviceLocationId`.
+- Commit: Pending
+- Next phase (if green): Phase 1D
+
+### Phase 1D — Legacy freeze and removal
+- Status: Completed
+- Objective: freeze legacy address snapshot semantics and remove fallback write behavior once parity is confirmed.
+- Files changed:
+  - `apps/web/src/lib/lead/promote-to-quote.ts`
+  - `apps/web/src/lib/customer-service-location-from-lead.ts`
+  - `apps/web/src/app/(workspace)/leads/lead-workspace-actions.ts`
+  - `apps/web/src/app/(workspace)/leads/lead-form-actions.ts`
+  - `apps/web/src/lib/jobsite-address.ts`
+  - `apps/web/src/lib/quote-work-surface-loader.ts`
+  - `apps/web/src/app/(workspace)/quotes/quote-job-activation-actions.ts`
+  - `apps/web/src/app/(workspace)/jobs/[jobId]/page.tsx`
+  - `apps/web/src/lib/job-task-execution-loader.ts`
+  - `apps/web/src/app/(workspace)/workstation/page.tsx`
+  - `apps/web/src/lib/workstation-query.ts`
 - Migration involved: No
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Quote note-based operational address write path removed.
+  - Canonical linkage now flows lead -> quote -> job via explicit `serviceLocationId`.
+  - Resolver now prioritizes explicit location row before legacy customer-primary/lead snapshot fallbacks.
+  - Legacy lead snapshot remains for intake/audit continuity.
+- Problems found:
+  - none that block Phase 1D gates.
+- Fixes applied:
+  - none beyond expected cutover adjustments.
+- Commit: Pending
+- Next phase (if green): Phase 2
+
+### Phase 2 — Reusable site-knowledge model
+- Status: In progress
+- Objective: introduce minimal typed reusable knowledge entities with strict ownership and idempotent seeds.
+- Files changed: Pending
+- Migration involved: Yes (new typed knowledge tables and enums)
 - Verification commands: Pending
 - Results: Pending
 - Problems found: None yet
 - Fixes applied: N/A
 - Commit: Pending
-- Next phase (if green): Phase 1D
+- Next phase (if green): Phase 3
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.

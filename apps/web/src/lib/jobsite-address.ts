@@ -57,12 +57,18 @@ export function isLeadAddressVerified(row: {
  * Prefer customer profile locations; otherwise fall back to the linked lead's intake address.
  */
 export function resolveJobsiteLineForQuoteOrJob(params: {
+  serviceLocation: { formattedAddress: string; addressLine1: string } | null;
   customerLocations: CustomerJobsiteLocationRow[];
   leadRow: {
     address: Prisma.JsonValue | null;
     signals: Prisma.JsonValue | null;
   } | null;
 }): string | null {
+  if (params.serviceLocation) {
+    const line =
+      params.serviceLocation.formattedAddress.trim() || params.serviceLocation.addressLine1.trim();
+    if (line) return line;
+  }
   const fromCustomer = jobsiteLineFromCustomerLocations(params.customerLocations);
   if (fromCustomer) {
     return fromCustomer;

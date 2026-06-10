@@ -418,6 +418,9 @@ export async function queryWorkstationWorkItems(
   const jobs = await db.job.findMany({
     where: { organizationId, status: JobStatus.ACTIVE },
     include: {
+      serviceLocation: {
+        select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+      },
       customer: {
         select: {
           id: true,
@@ -564,6 +567,13 @@ export async function queryWorkstationWorkItems(
       jobPaymentScheduleAnchors,
     );
     const jobsiteLine = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation:
+        job.serviceLocation && job.serviceLocation.organizationId === organizationId
+          ? {
+              formattedAddress: job.serviceLocation.formattedAddress,
+              addressLine1: job.serviceLocation.addressLine1,
+            }
+          : null,
       customerLocations: job.customer?.serviceLocations ?? [],
       leadRow: job.lead
         ? { address: job.lead.address, signals: job.lead.signals }
@@ -1035,6 +1045,7 @@ export async function queryWorkstationWorkItems(
 
   for (const issue of issues) {
     const issueJobsite = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation: null,
       customerLocations: [],
       leadRow: issue.job.lead
         ? { address: issue.job.lead.address, signals: issue.job.lead.signals }
@@ -1180,6 +1191,7 @@ export async function queryWorkstationWorkItems(
     if (emittedPaymentIds.has(payment.id)) continue;
     emittedPaymentIds.add(payment.id);
     const paymentJobsite = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation: null,
       customerLocations: [],
       leadRow: payment.job.lead
         ? { address: payment.job.lead.address, signals: payment.job.lead.signals }
@@ -1250,6 +1262,7 @@ export async function queryWorkstationWorkItems(
 
   for (const log of draftLogs) {
     const logJobsite = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation: null,
       customerLocations: [],
       leadRow: log.job.lead
         ? { address: log.job.lead.address, signals: log.job.lead.signals }

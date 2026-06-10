@@ -529,13 +529,19 @@ export async function linkLeadToCustomerAction(
           "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
         );
       }
-      await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
         leadId: id,
         leadChannel: lead.channel,
         snapshot: intakeSnapshotForCustomerFromLead(lead),
       });
+      if (attached.locationId) {
+        await tx.lead.update({
+          where: { id },
+          data: { serviceLocationId: attached.locationId },
+        });
+      }
 
       await tx.leadEvent.create({
         data: {
@@ -644,13 +650,19 @@ export async function createCustomerFromLeadAction(
         );
       }
 
-      await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
         organizationId: ctx.organizationId,
         customerId: customer.id,
         leadId: id,
         leadChannel: lead.channel,
         snapshot: intakeSnapshotForCustomerFromLead(lead),
       });
+      if (attached.locationId) {
+        await tx.lead.update({
+          where: { id },
+          data: { serviceLocationId: attached.locationId },
+        });
+      }
 
       await tx.leadEvent.create({
         data: {

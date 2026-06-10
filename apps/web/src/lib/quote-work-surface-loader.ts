@@ -65,6 +65,10 @@ export async function loadQuoteWorkSurface(
       createdAt: true,
       updatedAt: true,
       customerId: true,
+      serviceLocationId: true,
+      serviceLocation: {
+        select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+      },
       customer: {
         select: {
           id: true,
@@ -153,6 +157,8 @@ export async function loadQuoteWorkSurface(
     : null;
   const rawLead =
     row.lead && row.lead.organizationId === orgId ? row.lead : null;
+  const rawServiceLocation =
+    row.serviceLocation && row.serviceLocation.organizationId === orgId ? row.serviceLocation : null;
   const leadProjection = rawLead
     ? projectLead({
         id: rawLead.id,
@@ -182,6 +188,12 @@ export async function loadQuoteWorkSurface(
     : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    serviceLocation: rawServiceLocation
+      ? {
+          formattedAddress: rawServiceLocation.formattedAddress,
+          addressLine1: rawServiceLocation.addressLine1,
+        }
+      : null,
     customerLocations: rawCustomer?.serviceLocations ?? [],
     leadRow: rawLead
       ? {

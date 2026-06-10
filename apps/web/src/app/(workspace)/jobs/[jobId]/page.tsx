@@ -83,6 +83,10 @@ export default async function JobDetailPage({
         createdAt: true,
         updatedAt: true,
         quoteId: true,
+        serviceLocationId: true,
+        serviceLocation: {
+          select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+        },
         visits: {
           orderBy: [{ scheduledStartAt: "desc" }],
           select: {
@@ -285,8 +289,18 @@ export default async function JobDetailPage({
   const safeCustomer =
     job.customer && job.customer.organizationId === ctx.organizationId ? job.customer : null;
   const safeLead = job.lead && job.lead.organizationId === ctx.organizationId ? job.lead : null;
+  const safeServiceLocation =
+    job.serviceLocation && job.serviceLocation.organizationId === ctx.organizationId
+      ? job.serviceLocation
+      : null;
 
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    serviceLocation: safeServiceLocation
+      ? {
+          formattedAddress: safeServiceLocation.formattedAddress,
+          addressLine1: safeServiceLocation.addressLine1,
+        }
+      : null,
     customerLocations: safeCustomer?.serviceLocations ?? [],
     leadRow: safeLead
       ? {

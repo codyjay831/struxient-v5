@@ -76,6 +76,7 @@ export default async function WorkstationTodayLensPage({
 
   const activityItems = recentActivity.map((activity) => {
     const activityJobsite = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation: null,
       customerLocations: [],
       leadRow: activity.job.lead
         ? { address: activity.job.lead.address, signals: activity.job.lead.signals }

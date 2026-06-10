@@ -8,8 +8,8 @@ import {
 import { prepareCustomerFromLead } from "../lead-create-customer";
 import {
   attachIntakeServiceLocationToCustomerFromLead,
+  ensureServiceLocationForLeadFromSnapshot,
   intakeSnapshotForCustomerFromLead,
-  formatPrimaryServiceLocationLineForQuoteNotes,
 } from "../customer-service-location-from-lead";
 import { readContact, readRequest, readSignals } from "./lead-projection";
 import { jobsiteLineFromLead, isLeadAddressVerified } from "../jobsite-address";
@@ -135,6 +135,14 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         }
 
         let resolvedCustomerId = lead.customerId;
+        const intakeSnapshot = intakeSnapshotForCustomerFromLead(lead);
+        let resolvedServiceLocationId = await ensureServiceLocationForLeadFromSnapshot(tx, {
+          organizationId: ctx.organizationId,
+          leadId: lead.id,
+          leadChannel: lead.channel,
+          customerId: resolvedCustomerId ?? null,
+          snapshot: intakeSnapshot,
+        });
 
         // 1. Atomic Promotion: Create customer if missing
         if (!resolvedCustomerId) {
@@ -161,13 +169,16 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           resolvedCustomerId = customer.id;
 
           // Carry forward service location
-          await attachIntakeServiceLocationToCustomerFromLead(tx, {
+          const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
             organizationId: ctx.organizationId,
             customerId: customer.id,
             leadId: lead.id,
             leadChannel: lead.channel,
-            snapshot: intakeSnapshotForCustomerFromLead(lead),
+            snapshot: intakeSnapshot,
           });
+          if (attached.locationId) {
+            resolvedServiceLocationId = attached.locationId;
+          }
 
           // Log event
           await tx.leadEvent.create({
@@ -187,6 +198,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           data: {
             organizationId: ctx.organizationId,
             customerId: resolvedCustomerId,
+            serviceLocationId: resolvedServiceLocationId,
             leadId: lead.id,
             status: QuoteStatus.DRAFT,
             title: quoteTitle,
@@ -200,6 +212,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           where: { id: lead.id },
           data: {
             customerId: resolvedCustomerId,
+            serviceLocationId: resolvedServiceLocationId,
             status: "CONVERTED",
             convertedAt: new Date(),
           },
@@ -210,26 +223,6 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         if (suggestedTemplateIds.length > 0) {
           for (const tid of suggestedTemplateIds) {
             await performApplyLineItemTemplateToQuoteTx(tx, quote.id, tid, ctx.organizationId);
-          }
-        }
-
-        // 4. Carry Forward Service Location to Quote Notes
-        if (resolvedCustomerId) {
-          const primaryLoc = await tx.customerServiceLocation.findFirst({
-            where: {
-              organizationId: ctx.organizationId,
-              customerId: resolvedCustomerId,
-              isPrimary: true,
-            },
-            select: { formattedAddress: true, addressLine1: true },
-          });
-          const line = formatPrimaryServiceLocationLineForQuoteNotes(primaryLoc);
-          if (line) {
-            const prefix = `Primary service location:\n${line}\n\n`;
-            await tx.quote.update({
-              where: { id: quote.id },
-              data: { internalNotes: prefix },
-            });
           }
         }
 

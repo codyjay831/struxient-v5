@@ -82,6 +82,9 @@ export async function loadJobTaskExecutionPayload(
           id: true,
           title: true,
           status: true,
+          serviceLocation: {
+            select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
+          },
           stages: {
             select: {
               id: true,
@@ -175,7 +178,17 @@ export async function loadJobTaskExecutionPayload(
     job.customer && job.customer.organizationId === organizationId ? job.customer : null;
   const safeLead =
     job.lead && job.lead.organizationId === organizationId ? job.lead : null;
+  const safeServiceLocation =
+    job.serviceLocation && job.serviceLocation.organizationId === organizationId
+      ? job.serviceLocation
+      : null;
   const jobsiteAddressLine = resolveJobsiteLineForQuoteOrJob({
+    serviceLocation: safeServiceLocation
+      ? {
+          formattedAddress: safeServiceLocation.formattedAddress,
+          addressLine1: safeServiceLocation.addressLine1,
+        }
+      : null,
     customerLocations: safeCustomer?.serviceLocations ?? [],
     leadRow: safeLead
       ? {
