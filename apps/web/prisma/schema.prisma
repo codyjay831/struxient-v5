@@ -51,6 +51,7 @@ model Organization {
   countyAssessorResources   CountyAssessorResource[]
   serviceLocationAudits     ServiceLocationAuditEvent[]
   siteDetailsReviews        SiteDetailsReview[]
+  aiUsageLogs               AiUsageLog[]
 }
 
 model Stage {
@@ -169,6 +170,7 @@ model CustomerServiceLocation {
   jurisdiction       Jurisdiction?                 @relation(fields: [jurisdictionId], references: [id], onDelete: SetNull)
   auditEvents        ServiceLocationAuditEvent[]
   reviews            SiteDetailsReview[]
+  aiUsageLogs        AiUsageLog[]
   organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -1317,6 +1319,31 @@ model ServiceLocationAuditEvent {
 
   @@index([organizationId, createdAt])
   @@index([serviceLocationId, createdAt])
+}
+
+model AiUsageLog {
+  id                String                   @id @default(cuid())
+  organizationId    String
+  serviceLocationId String?
+  feature           String
+  provider          String
+  model             String
+  requestKind       String
+  status            String
+  promptChars       Int                      @default(0)
+  responseChars     Int                      @default(0)
+  requestPayload    Json?
+  responsePayload   Json?
+  errorMessage      String?
+  startedAt         DateTime                 @default(now())
+  finishedAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceLocation   CustomerServiceLocation? @relation(fields: [serviceLocationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([serviceLocationId, createdAt])
+  @@index([feature, createdAt])
 }
 
 enum LeadStatus {

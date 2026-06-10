@@ -235,16 +235,50 @@
 - Next phase (if green): Phase 4
 
 ### Phase 4 — Grounded Gemini research + usage logging
-- Status: In progress
+- Status: Completed
 - Objective: implement targeted missing-scope research in AI boundary and persist usage logs.
+- Files changed:
+  - `apps/web/prisma/schema.prisma`
+  - `apps/web/prisma/migrations/20260610183538_site_details_phase4_ai_usage_logging/migration.sql`
+  - `apps/web/src/lib/ai/ai-service.ts`
+  - `apps/web/src/app/(workspace)/site-details/site-details-actions.ts`
+  - `apps/web/src/lib/ai/site-details-research-schema.test.ts`
+- Migration involved: Yes (`AiUsageLog` + relations)
+- Verification commands:
+  - `npm exec prisma format`
+  - `npm exec prisma validate`
+  - `npx prisma migrate dev --name site_details_phase4_ai_usage_logging --create-only --skip-seed`
+  - `npx prisma migrate deploy`
+  - `npx prisma generate`
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Added dedicated `AIService.researchSiteDetails(...)` method in existing AI boundary.
+  - Added targeted missing-scope research prompt/schema with explicit APN prohibition.
+  - Added persistent AI usage logging table and runtime writes for start/success/error lifecycle.
+  - Wired research action to preserve reviewed/corrected values and audit accepted/rejected AI data.
+- Problems found:
+  - Missing Prisma namespace import after adding usage-log payload typing.
+- Fixes applied:
+  - Added Prisma type import and reran all phase gates.
+- Commit: Pending
+- Next phase (if green): Phase 5
+
+### Phase 5 — Shared Site Details UI
+- Status: In progress
+- Objective: add compact shared row + drawer in lead/quote/customer/job surfaces without visual dominance.
 - Files changed: Pending
-- Migration involved: Yes (AI usage logging table)
+- Migration involved: No
 - Verification commands: Pending
 - Results: Pending
 - Problems found: None yet
 - Fixes applied: N/A
 - Commit: Pending
-- Next phase (if green): Phase 5
+- Next phase (if green): Phase 6
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.

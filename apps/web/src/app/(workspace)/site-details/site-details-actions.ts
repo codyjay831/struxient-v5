@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   ServiceLocationAuditType,
+  SourceStatus,
   SiteDetailsSource,
   SiteDetailsStatus,
   type Prisma,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/site-details/resolver";
 import { appendServiceLocationAuditEvent } from "@/lib/site-details/audit";
 import { normalizeAddressDedupKey } from "@/lib/customer-service-location-from-lead";
+import { AIService } from "@/lib/ai/ai-service";
 
 export type SiteDetailsActionState = {
   error?: string;
@@ -336,6 +338,162 @@ export async function requestSiteDetailsResearchAction(
     return { success: true, siteDetails };
   }
   const pending = (async () => {
+    const before = await resolveSiteDetailsForServiceLocation(resolverDb, {
+      organizationId: ctx.organizationId,
+      serviceLocationId: id,
+    });
+    if (!before) return null;
+    if (before.missingScopes.length === 0) return before;
+    const location = await db.customerServiceLocation.findFirst({
+      where: { id, organizationId: ctx.organizationId },
+      select: {
+        id: true,
+        detailsStatus: true,
+        detailsSource: true,
+      },
+    });
+    if (!location) return before;
+
+    const research = await AIService.researchSiteDetails({
+      organizationId: ctx.organizationId,
+      serviceLocationId: id,
+      addressLine: before.addressLine ?? "",
+      missingScopes: before.missingScopes,
+    });
+
+    let utilityId: string | null = null;
+    let jurisdictionId: string | null = null;
+    let assessorUpserted = false;
+
+    if (research.utilityName) {
+      const utility = await db.utility.upsert({
+        where: {
+          organizationId_name: {
+            organizationId: ctx.organizationId,
+            name: research.utilityName,
+          },
+        },
+        update: {
+          officialWebsite: research.utilityOfficialWebsite,
+          serviceUpgradeUrl: research.utilityServiceUpgradeUrl,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+        create: {
+          organizationId: ctx.organizationId,
+          name: research.utilityName,
+          utilityType: "OTHER",
+          officialWebsite: research.utilityOfficialWebsite,
+          serviceUpgradeUrl: research.utilityServiceUpgradeUrl,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+        select: { id: true, name: true },
+      });
+      utilityId = utility.id;
+    }
+
+    if (research.jurisdictionName && research.jurisdictionType) {
+      const jurisdiction = await db.jurisdiction.upsert({
+        where: {
+          organizationId_name_state_jurisdictionType: {
+            organizationId: ctx.organizationId,
+            name: research.jurisdictionName,
+            state: research.countyAssessorState ?? "UNKNOWN",
+            jurisdictionType: research.jurisdictionType,
+          },
+        },
+        update: {
+          officialWebsite: research.jurisdictionOfficialWebsite,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+        create: {
+          organizationId: ctx.organizationId,
+          name: research.jurisdictionName,
+          jurisdictionType: research.jurisdictionType,
+          state: research.countyAssessorState ?? "UNKNOWN",
+          county: research.countyAssessorCounty,
+          officialWebsite: research.jurisdictionOfficialWebsite,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+        select: { id: true, name: true },
+      });
+      jurisdictionId = jurisdiction.id;
+    }
+
+    if (
+      research.countyAssessorCounty &&
+      research.countyAssessorState &&
+      research.countyAssessorSearchUrl
+    ) {
+      await db.countyAssessorResource.upsert({
+        where: {
+          organizationId_county_state: {
+            organizationId: ctx.organizationId,
+            county: research.countyAssessorCounty,
+            state: research.countyAssessorState,
+          },
+        },
+        update: {
+          assessorSearchUrl: research.countyAssessorSearchUrl,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+        create: {
+          organizationId: ctx.organizationId,
+          county: research.countyAssessorCounty,
+          state: research.countyAssessorState,
+          assessorSearchUrl: research.countyAssessorSearchUrl,
+          sourceUrl: research.sourceLinks[0]?.url ?? null,
+          sourceTitle: research.sourceLinks[0]?.title ?? null,
+          sourceStatus: SourceStatus.UNVERIFIED,
+        },
+      });
+      assessorUpserted = true;
+    }
+
+    const shouldProtectReviewed =
+      location.detailsStatus === SiteDetailsStatus.USER_REVIEWED ||
+      location.detailsStatus === SiteDetailsStatus.USER_CORRECTED;
+    if (!shouldProtectReviewed) {
+      await db.customerServiceLocation.update({
+        where: { id },
+        data: {
+          utilityId: utilityId ?? undefined,
+          jurisdictionId: jurisdictionId ?? undefined,
+          detailsStatus: pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND),
+          detailsSource: SiteDetailsSource.AI_FOUND,
+          detailsLastChecked: new Date(),
+        },
+      });
+      if (utilityId || jurisdictionId || assessorUpserted) {
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.AI_VALUE_ACCEPTED,
+          oldValue: {
+            utilityId: before.utility?.id ?? null,
+            jurisdictionId: before.jurisdiction?.id ?? null,
+          },
+          newValue: {
+            utilityId,
+            jurisdictionId,
+            assessorCounty: research.countyAssessorCounty,
+            assessorState: research.countyAssessorState,
+          },
+          sourceReason: "site_details_missing_scope_research",
+        });
+      }
+    } else {
+      await appendServiceLocationAuditEvent(auditDb, {
+        organizationId: ctx.organizationId,
+        serviceLocationId: id,
+        actorUserId: ctx.userId,
+        eventType: ServiceLocationAuditType.AI_VALUE_REJECTED,
+        oldValue: { detailsStatus: location.detailsStatus },
+        newValue: { preserved: true },
+        sourceReason: "reviewed_or_corrected_values_protected",
+      });
+    }
+
     const siteDetails = await resolveSiteDetailsForServiceLocation(resolverDb, {
       organizationId: ctx.organizationId,
       serviceLocationId: id,
