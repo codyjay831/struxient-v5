@@ -71,16 +71,47 @@
 - Next phase (if green): Phase 1B
 
 ### Phase 1B — Backfill and reconciliation
-- Status: In progress
+- Status: Completed
 - Objective: backfill canonical location links and report matched/created/ambiguous/failed counts without silent ambiguity assignment.
+- Files changed:
+  - `apps/web/src/lib/site-details/service-location-backfill.ts`
+  - `apps/web/src/lib/site-details/service-location-backfill.test.ts`
+  - `apps/web/scripts/site-details-phase1b-backfill.ts`
+- Migration involved: No (data backfill + reconciliation only)
+- Verification commands:
+  - `SITE_DETAILS_PHASE1B_BACKFILL=1 npx tsx scripts/site-details-phase1b-backfill.ts`
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Backfill script runs with hard stop protection for ambiguity.
+  - Reconciliation output captured:
+    - first run: leads matched=1 created=0 ambiguous=0 failed=7; quotes matched=1 created=0 ambiguous=0 failed=5; jobs matched=0 created=0 ambiguous=0 failed=2.
+    - second run (idempotency): no new creations/matches except already-linked skips.
+  - No ambiguous records were silently assigned.
+- Problems found:
+  - TypeScript deep-comparison error when passing extended Prisma client type to backfill function.
+  - Runtime datasource mismatch after temporary `--no-engine` client generation.
+- Fixes applied:
+  - Introduced narrow `BackfillDb` interface and explicit cast at backfill script boundary.
+  - Regenerated full Prisma client after resolving local query-engine lock.
+- Commit: Pending
+- Next phase (if green): Phase 1C
+
+### Phase 1C — Canonical read/write cutover
+- Status: In progress
+- Objective: route writes and reads through explicit serviceLocationId while preserving org isolation and audit readiness.
 - Files changed: Pending
-- Migration involved: No (data backfill + reconciliation logic)
+- Migration involved: No
 - Verification commands: Pending
 - Results: Pending
 - Problems found: None yet
 - Fixes applied: N/A
 - Commit: Pending
-- Next phase (if green): Phase 1C
+- Next phase (if green): Phase 1D
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.
