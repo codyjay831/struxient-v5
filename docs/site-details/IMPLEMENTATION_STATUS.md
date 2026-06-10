@@ -206,16 +206,45 @@
 - Next phase (if green): Phase 3
 
 ### Phase 3 — Database-first resolver + actions
-- Status: In progress
+- Status: Completed
 - Objective: add canonical read/edit/review/research actions with DB-first resolution and org-scope enforcement.
-- Files changed: Pending
+- Files changed:
+  - `apps/web/src/lib/site-details/resolver.ts`
+  - `apps/web/src/lib/site-details/audit.ts`
+  - `apps/web/src/lib/site-details/resolver.test.ts`
+  - `apps/web/src/app/(workspace)/site-details/site-details-actions.ts`
 - Migration involved: No
+- Verification commands:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run lint`
+  - `ALLOW_SCHEMA=1 npm run guardrails`
+  - `npm run build`
+  - `git diff --check`
+- Results:
+  - Added DB-first resolver for service-location scoped site details.
+  - Added org-scoped server actions for APN/utility/jurisdiction updates, review marking, address updates, and quote/job location reassignment.
+  - Added append-only audit helper and wired event coverage for required action types.
+  - Added in-memory per-location dedup lock for research request action.
+- Problems found:
+  - Type recursion issues when passing extended Prisma client type into helper modules.
+- Fixes applied:
+  - Introduced narrow boundary casts at helper call sites to avoid recursive type-depth failures.
+  - Updated resolver to derive assessor lookup county from linked jurisdiction when available.
+- Commit: Pending
+- Next phase (if green): Phase 4
+
+### Phase 4 — Grounded Gemini research + usage logging
+- Status: In progress
+- Objective: implement targeted missing-scope research in AI boundary and persist usage logs.
+- Files changed: Pending
+- Migration involved: Yes (AI usage logging table)
 - Verification commands: Pending
 - Results: Pending
 - Problems found: None yet
 - Fixes applied: N/A
 - Commit: Pending
-- Next phase (if green): Phase 4
+- Next phase (if green): Phase 5
 
 ## Amendment log (approved changes integrated)
 - Split canonical spine into independently gated Phase 1A/1B/1C/1D.
