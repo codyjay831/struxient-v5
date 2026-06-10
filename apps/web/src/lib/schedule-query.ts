@@ -1,15 +1,17 @@
 import {
   JobIssueSeverity,
   JobIssueStatus,
-  JobStatus,
+  JobScheduleEventStatus,
   JobTaskStatus,
   JobVisitStatus,
   LeadVisitRequestStatus,
+  TaskSchedulingRequirement,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getLiveSignals } from "@/lib/signal-bus";
 import { deriveTaskState, toTaskReadinessInput } from "@/lib/task-readiness";
 import { deriveUnscheduledTaskItems, type ReadyUnscheduledTaskCandidate } from "@/lib/schedule-unscheduled-tasks";
+import { deriveScheduleConflicts as deriveCanonicalScheduleConflicts } from "@/lib/scheduling/scheduling-derivation";
 
 export type ScheduleView = "month" | "week" | "day" | "agenda" | "dispatch";
 
@@ -65,7 +67,7 @@ export async function queryOrganizationSchedule(
   organizationId: string,
   range: { startAt: Date; endAt: Date },
 ): Promise<ScheduleQueryResult> {
-  const [leadRequests, visits, blocks, jobs, tasksInRange, readyTaskCandidates] = await Promise.all([
+  const [leadRequests, visits, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
     db.leadVisitRequest.findMany({
       where: {
         organizationId,
@@ -110,6 +112,32 @@ export async function queryOrganizationSchedule(
       },
       orderBy: { scheduledStartAt: "asc" },
     }),
+    db.jobScheduleEvent.findMany({
+      where: {
+        organizationId,
+        status: {
+          in: [
+            JobScheduleEventStatus.TENTATIVE,
+            JobScheduleEventStatus.CONFIRMED,
+            JobScheduleEventStatus.COMPLETED,
+          ],
+        },
+        startAt: { lte: range.endAt },
+        endAt: { gte: range.startAt },
+      },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        title: true,
+        startAt: true,
+        endAt: true,
+        leadUserId: true,
+        leadUser: { select: { id: true, name: true, email: true } },
+        job: { select: { id: true, title: true } },
+      },
+      orderBy: { startAt: "asc" },
+    }),
     db.scheduleBlock.findMany({
       where: {
         organizationId,
@@ -127,23 +155,6 @@ export async function queryOrganizationSchedule(
         user: { select: { id: true, name: true, email: true } },
       },
       orderBy: { startAt: "asc" },
-    }),
-    db.job.findMany({
-      where: { organizationId, status: JobStatus.ACTIVE },
-      select: {
-        id: true,
-        title: true,
-        customerId: true,
-        updatedAt: true,
-        visits: {
-          where: { status: JobVisitStatus.SCHEDULED, scheduledStartAt: { gt: new Date() } },
-          select: { id: true },
-        },
-        tasks: {
-          where: { status: JobTaskStatus.TODO },
-          select: { id: true },
-        },
-      },
     }),
     db.jobTask.findMany({
       where: {
@@ -190,20 +201,28 @@ export async function queryOrganizationSchedule(
       where: {
         job: { organizationId },
         status: JobTaskStatus.TODO,
-        scheduledStartAt: null,
+        schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
       },
       select: {
         id: true,
         title: true,
         status: true,
-        category: true,
+        schedulingRequirement: true,
         dueAt: true,
-        scheduledStartAt: true,
-        scheduledEndAt: true,
         updatedAt: true,
-        assignedUserId: true,
-        assignedUser: { select: { id: true, name: true, email: true } },
         requiresSignals: true,
+        scheduleEventLinks: {
+          select: {
+            jobScheduleEvent: {
+              select: {
+                id: true,
+                status: true,
+                startAt: true,
+                endAt: true,
+              },
+            },
+          },
+        },
         issues: {
           where: { status: JobIssueStatus.OPEN, severity: JobIssueSeverity.BLOCKS_WORK },
           select: { id: true, status: true, severity: true },
@@ -244,6 +263,24 @@ export async function queryOrganizationSchedule(
       recordHref: `/jobs/${visit.job.id}`,
       recordId: visit.id,
       parentId: visit.job.id,
+    });
+  }
+
+  for (const canonicalEvent of scheduleEvents) {
+    events.push({
+      id: `schedule-event-${canonicalEvent.id}`,
+      kind: "task",
+      title: canonicalEvent.title ?? canonicalEvent.job.title,
+      subtitle: canonicalEvent.kind.replaceAll("_", " "),
+      status: canonicalEvent.status,
+      startAt: canonicalEvent.startAt,
+      endAt: canonicalEvent.endAt,
+      assigneeUserId: canonicalEvent.leadUserId,
+      assigneeLabel:
+        canonicalEvent.leadUser?.name ?? canonicalEvent.leadUser?.email ?? null,
+      recordHref: `/jobs/${canonicalEvent.job.id}`,
+      recordId: canonicalEvent.id,
+      parentId: canonicalEvent.job.id,
     });
   }
 
@@ -355,28 +392,15 @@ export async function queryOrganizationSchedule(
       title: task.title,
       jobId: task.job.id,
       jobTitle: task.job.title,
-      category: task.category,
+      schedulingRequirement: task.schedulingRequirement,
       dueAt: task.dueAt,
       updatedAt: task.updatedAt,
+      linkedEvents: task.scheduleEventLinks.map((link) => link.jobScheduleEvent),
       state,
     });
   }
 
   const unscheduled: UnscheduledScheduleItem[] = [];
-  for (const job of jobs) {
-    if (job.tasks.length > 0 && job.visits.length === 0) {
-      unscheduled.push({
-        id: `job-needs-visit-${job.id}`,
-        kind: "job-needs-visit",
-        title: job.title,
-        reason: "Active job has open tasks but no future scheduled visit.",
-        actionLabel: "Schedule visit",
-        recordHref: `/jobs/${job.id}`,
-        recordId: job.id,
-      });
-    }
-  }
-
   for (const request of leadRequests) {
     if (request.status === LeadVisitRequestStatus.PENDING) {
       unscheduled.push({
@@ -395,7 +419,23 @@ export async function queryOrganizationSchedule(
 
   unscheduled.push(...deriveUnscheduledTaskItems(readyTaskStates));
 
-  const conflicts = deriveScheduleConflicts(events);
+  const conflicts = deriveScheduleConflicts(events).concat(
+    deriveCanonicalScheduleConflicts(
+      scheduleEvents.map((event) => ({
+        eventId: event.id,
+        assigneeUserId: event.leadUserId,
+        assigneeLabel: event.leadUser?.name ?? event.leadUser?.email ?? null,
+        status: event.status,
+        startAt: event.startAt,
+        endAt: event.endAt,
+      })),
+    ).map((conflict) => ({
+      userId: conflict.userId,
+      userLabel: conflict.userLabel,
+      eventIds: conflict.eventIds,
+      reason: conflict.reason,
+    })),
+  );
 
   return { events, unscheduled, conflicts };
 }

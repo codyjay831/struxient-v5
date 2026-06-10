@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -23,6 +23,7 @@ import { getOverrideBlockedByIssueError } from "@/lib/job-task-override-guard";
 import {
   completeJobTaskAction,
   overrideJobTaskReadinessAction,
+  saveJobTaskCompletionNoteAction,
   toggleJobTaskChecklistItemAction,
   updateJobTaskScheduleAction,
 } from "@/app/(workspace)/jobs/job-task-actions";
@@ -35,6 +36,7 @@ import { createJobIssueAction } from "@/app/(workspace)/jobs/job-issue-actions";
 import { resolveIssueAndResumeAction } from "@/app/(workspace)/jobs/recovery-actions";
 import { removeJobEventAction } from "@/app/(workspace)/jobs/job-event-actions";
 import { formatJobIssueSeverity, formatJobIssueType } from "@/lib/job-issue-display";
+import { formatDeadlineProvenance } from "@/lib/scheduling/scheduling-derivation";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
 import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -133,11 +135,21 @@ export function TaskWorkSurface({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const initialRequirements =
+    (initialTask.completionRequirementsJson as TaskCompletionRequirements) || {};
+
   const [task, setTask] = useState(initialTask);
   const [isPending, startTransition] = useTransition();
   const [isUploading, setIsUploading] = useState(false);
-  const [showNoteForm, setShowForm] = useState(false);
+  const [showNoteForm, setShowForm] = useState(
+    () => Boolean(initialTask.completionNote) || Boolean(initialRequirements.noteRequired),
+  );
   const [note, setNote] = useState(initialTask.completionNote || "");
+  const noteRef = useRef(note);
+  const noteDirtyRef = useRef(false);
+  const lastSavedNoteRef = useRef(initialTask.completionNote || "");
+  const saveNoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [dueAtInput, setDueAtInput] = useState(toDateTimeLocalValue(initialTask.dueAt));
   const [scheduledStartInput, setScheduledStartInput] = useState(
     toDateTimeLocalValue(initialTask.scheduledStartAt),
@@ -145,6 +157,16 @@ export function TaskWorkSurface({
   const [scheduledEndInput, setScheduledEndInput] = useState(
     toDateTimeLocalValue(initialTask.scheduledEndAt),
   );
+  const [showTimingEditor, setShowTimingEditor] = useState(
+    Boolean(initialTask.dueAt || initialTask.scheduledStartAt),
+  );
+
+  const deadlineProvenance = formatDeadlineProvenance({
+    dueMode: task.dueMode ?? "NONE",
+    dueAnchor: task.dueAnchor ?? null,
+    dueOffsetDays: task.dueOffsetDays ?? null,
+    dueGranularity: task.dueGranularity ?? null,
+  });
 
   const attachmentSyncKey = initialTask.attachments.map((a) => a.id).join(",");
   const issuesSyncKey = initialTask.issues.map((i) => `${i.status}:${i.severity}`).join("|");
@@ -153,7 +175,12 @@ export function TaskWorkSurface({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync; avoids stale edits after refresh
     setTask(initialTask);
-    setNote(initialTask.completionNote || "");
+    if (!noteDirtyRef.current) {
+      const serverNote = initialTask.completionNote || "";
+      setNote(serverNote);
+      noteRef.current = serverNote;
+      lastSavedNoteRef.current = serverNote;
+    }
     setDueAtInput(toDateTimeLocalValue(initialTask.dueAt));
     setScheduledStartInput(toDateTimeLocalValue(initialTask.scheduledStartAt));
     setScheduledEndInput(toDateTimeLocalValue(initialTask.scheduledEndAt));
@@ -169,6 +196,52 @@ export function TaskWorkSurface({
     attachmentSyncKey,
     issuesSyncKey,
   ]);
+
+  /* Autosave completion note draft while the task is still open. */
+  useEffect(() => {
+    if (task.status === JobTaskStatus.DONE) return;
+
+    const normalized = note.trim();
+    const lastSaved = lastSavedNoteRef.current.trim();
+    if (normalized === lastSaved) {
+      noteDirtyRef.current = false;
+      return;
+    }
+
+    noteDirtyRef.current = true;
+    if (saveNoteTimerRef.current) clearTimeout(saveNoteTimerRef.current);
+
+    saveNoteTimerRef.current = setTimeout(() => {
+      void (async () => {
+        const result = await saveJobTaskCompletionNoteAction(task.id, noteRef.current);
+        if (!result.error) {
+          const saved = noteRef.current.trim() || "";
+          lastSavedNoteRef.current = saved;
+          noteDirtyRef.current = false;
+          setTask((t) => ({
+            ...t,
+            completionNote: saved || null,
+          }));
+        }
+      })();
+    }, 700);
+
+    return () => {
+      if (saveNoteTimerRef.current) clearTimeout(saveNoteTimerRef.current);
+    };
+  }, [note, task.id, task.status]);
+
+  /* Flush unsaved note on unmount (e.g. closing the workstation panel). */
+  useEffect(() => {
+    const taskId = task.id;
+    const taskStatus = task.status;
+    return () => {
+      if (saveNoteTimerRef.current) clearTimeout(saveNoteTimerRef.current);
+      if (noteDirtyRef.current && taskStatus !== JobTaskStatus.DONE) {
+        void saveJobTaskCompletionNoteAction(taskId, noteRef.current);
+      }
+    };
+  }, [task.id, task.status]);
   const [actionMessage, setActionMessage] = useState<{
     tone: "success" | "error";
     text: string;
@@ -597,69 +670,133 @@ export function TaskWorkSurface({
       )}
 
       <div className="space-y-3 rounded-xl border border-border bg-surface/20 p-4">
-        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-          Task timing
-        </p>
-        <p className="text-xs text-foreground-muted">
-          Job visits are hard field appointments. Task timing is the deadline or work block for this specific task.
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-            Due date
-            <input
-              type="datetime-local"
-              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
-              value={dueAtInput}
-              onChange={(e) => setDueAtInput(e.target.value)}
-            />
-          </label>
-          <div className="flex items-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+            Task timing
+          </p>
+          {!showTimingEditor ? (
             <button
               type="button"
-              onClick={handleSaveDueDate}
-              disabled={isPending}
-              className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+              onClick={() => setShowTimingEditor(true)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground"
             >
-              Save due date
+              {task.dueAt || task.scheduledStartAt ? "Edit timing" : "Set deadline or crew block"}
             </button>
-          </div>
-          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-            Scheduled start
-            <input
-              type="datetime-local"
-              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
-              value={scheduledStartInput}
-              onChange={(e) => setScheduledStartInput(e.target.value)}
-            />
-          </label>
-          <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-            Scheduled end
-            <input
-              type="datetime-local"
-              className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
-              value={scheduledEndInput}
-              onChange={(e) => setScheduledEndInput(e.target.value)}
-            />
-          </label>
+          ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleSaveScheduledBlock}
-            disabled={isPending}
-            className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
-          >
-            Save scheduled block
-          </button>
-          <button
-            type="button"
-            onClick={handleClearScheduledBlock}
-            disabled={isPending}
-            className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
-          >
-            Clear scheduled block
-          </button>
-        </div>
+        {task.dueAt ? (
+          <p className="text-sm text-foreground">
+            Deadline: {new Date(task.dueAt).toLocaleString()}
+            {deadlineProvenance ? (
+              <span className="mt-1 block text-xs text-foreground-muted">{deadlineProvenance}</span>
+            ) : null}
+          </p>
+        ) : (
+          <p className="text-xs text-foreground-muted">No deadline set.</p>
+        )}
+        {task.scheduledStartAt ? (
+          <p className="text-xs text-foreground-muted">
+            Crew block: {new Date(task.scheduledStartAt).toLocaleString()}
+            {task.scheduledEndAt
+              ? ` – ${new Date(task.scheduledEndAt).toLocaleString()}`
+              : null}
+          </p>
+        ) : null}
+        {showTimingEditor ? (
+          <>
+            <p className="text-xs text-foreground-muted">
+              Deadlines are attention triggers. Crew blocks create confirmed schedule events.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                Deadline
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+                  value={dueAtInput}
+                  onChange={(e) => setDueAtInput(e.target.value)}
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveDueDate}
+                  disabled={isPending}
+                  className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+                >
+                  Save deadline
+                </button>
+                {task.dueAt ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDueAtInput("");
+                      startTransition(async () => {
+                        const result = await updateJobTaskScheduleAction({
+                          taskId: task.id,
+                          dueAt: null,
+                        });
+                        if (result.error) {
+                          setActionMessage({ tone: "error", text: result.error });
+                          return;
+                        }
+                        setActionMessage({ tone: "success", text: "Deadline cleared." });
+                        refreshAfterMutation();
+                      });
+                    }}
+                    disabled={isPending}
+                    className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                Crew block start
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+                  value={scheduledStartInput}
+                  onChange={(e) => setScheduledStartInput(e.target.value)}
+                />
+              </label>
+              <label className="space-y-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                Crew block end
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+                  value={scheduledEndInput}
+                  onChange={(e) => setScheduledEndInput(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSaveScheduledBlock}
+                disabled={isPending}
+                className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+              >
+                Save crew block
+              </button>
+              <button
+                type="button"
+                onClick={handleClearScheduledBlock}
+                disabled={isPending}
+                className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-50"
+              >
+                Clear crew block
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTimingEditor(false)}
+                className="rounded-md px-3 py-2 text-xs font-semibold text-foreground-muted hover:text-foreground"
+              >
+                Done
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {showCancelFieldHold && (
@@ -1016,7 +1153,7 @@ export function TaskWorkSurface({
         </div>
       )}
 
-      {showNoteForm && !isCompleted && (
+      {(showNoteForm || requirements.noteRequired || task.completionNote) && !isCompleted && (
         <div className="space-y-3 border-t border-border pt-4">
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
@@ -1027,7 +1164,12 @@ export function TaskWorkSurface({
               rows={3}
               placeholder="What was the outcome?"
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                noteRef.current = value;
+                noteDirtyRef.current = true;
+                setNote(value);
+              }}
             />
           </label>
         </div>

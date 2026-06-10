@@ -248,3 +248,37 @@ test("validateTaskCompletionReadiness: accepts complete checklist", () => {
   });
   assert.equal(result.ok, true);
 });
+
+test("deriveTaskState: NEEDS_PROOF when note required and missing", () => {
+  const state = deriveTaskState(
+    {
+      status: JobTaskStatus.TODO,
+      completedAt: null,
+      completionNote: null,
+      completionRequirementsJson: { noteRequired: true },
+      attachments: [],
+      requiresSignals: [],
+      issues: [],
+      stage: { requiresSignals: [], issues: [] },
+    },
+    [],
+  );
+  assert.equal(state, "NEEDS_PROOF");
+});
+
+test("deriveTaskState: READY when note required and draft note is persisted", () => {
+  const state = deriveTaskState(
+    {
+      status: JobTaskStatus.TODO,
+      completedAt: null,
+      completionNote: "Site verified and equipment confirmed.",
+      completionRequirementsJson: { noteRequired: true },
+      attachments: [],
+      requiresSignals: [],
+      issues: [],
+      stage: { requiresSignals: [], issues: [] },
+    },
+    [],
+  );
+  assert.equal(state, "READY");
+});

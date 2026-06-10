@@ -37,6 +37,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | **Working quote vs hidden checkpoints**, job as execution, activity layer; UX/naming guardrails (current-state-first) |
 | [glossary.md](./glossary.md) | Ubiquitous language |
 | [signals.md](./signals.md) | **Signal-based readiness engine**: Provides, Requires, Signal Bus, and AI Secretary |
+| [scheduling-canon.md](./scheduling-canon.md) | **Task timing & calendar**: deadlines, `JobScheduleEvent`, lifecycle, derivation, timezone, AI boundaries |
 
 ## Reading order (suggested)
 

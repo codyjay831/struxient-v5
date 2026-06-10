@@ -14,6 +14,8 @@ model Organization {
   updatedAt                DateTime                  @updatedAt
   /// Lowercase public handle for `/request/[slug]` — optional until configured.
   slug                     String?                   @unique
+  /// IANA timezone for deadline date-only EOD resolution and schedule display.
+  timezone                 String                    @default("America/Los_Angeles")
   attachments              Attachment[]
   customers                Customer[]
   customerServiceLocations CustomerServiceLocation[]
@@ -25,6 +27,7 @@ model Organization {
   jobRecoveryFlows         JobRecoveryFlow[]
   jobPaymentRequirements   JobPaymentRequirement[]
   jobVisits                JobVisit[]
+  jobScheduleEvents        JobScheduleEvent[]
   leads                    Lead[]
   leadCustomFieldDefs      LeadCustomFieldDef[]
   leadVisitRequests        LeadVisitRequest[]
@@ -164,6 +167,7 @@ model User {
   completedTasks         JobTask[]            @relation("CompletedTasks")
   assignedTasks          JobTask[]            @relation("AssignedTasks")
   assignedVisits         JobVisit[]           @relation("AssignedVisits")
+  leadScheduleEvents     JobScheduleEvent[]   @relation("LeadScheduleEvents")
   scheduleBlocks         ScheduleBlock[]
   notificationEvents     NotificationEvent[]
   leadEvents             LeadEvent[]
@@ -653,6 +657,7 @@ model Job {
   stages              JobStage[]
   tasks               JobTask[]
   visits              JobVisit[]
+  scheduleEvents      JobScheduleEvent[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -729,9 +734,19 @@ model JobTask {
   completionRequirementsJson     Json                       @default("{}")
   actualMinutes                  Int?
   dueAt                          DateTime?
+  /// @deprecated Legacy calendar fields — use JobScheduleEvent after canonical cutover.
   scheduledStartAt               DateTime?
+  /// @deprecated Legacy calendar fields — use JobScheduleEvent after canonical cutover.
   scheduledEndAt                 DateTime?
+  /// @deprecated Replaced by dueMode + dueAnchor + dueOffsetDays.
   dueOffsetMinutesAfterReady     Int?
+  dueMode                        TaskDueMode                @default(NONE)
+  dueAnchor                      TaskDueAnchor?
+  dueOffsetDays                  Int?
+  dueGranularity                 TaskDueGranularity?
+  dueResolvedAt                  DateTime?
+  dueFirstReadyAt                DateTime?
+  schedulingRequirement          TaskSchedulingRequirement  @default(NONE)
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
   /// Reserved for future job costing.
@@ -756,6 +771,7 @@ model JobTask {
   sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id])
   sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                          Stage?                     @relation(fields: [stageId], references: [id])
+  scheduleEventLinks             JobScheduleEventTask[]
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
@@ -763,6 +779,48 @@ model JobTask {
   @@index([assignedUserId])
   @@index([dueAt])
   @@index([scheduledStartAt])
+  @@index([schedulingRequirement])
+}
+
+/// Canonical job-related calendar commitment (appointment, crew block, inspection window, etc.).
+model JobScheduleEvent {
+  id               String                 @id @default(cuid())
+  organizationId   String
+  jobId            String
+  kind             JobScheduleEventKind
+  status           JobScheduleEventStatus @default(TENTATIVE)
+  title            String?
+  startAt          DateTime
+  endAt            DateTime
+  leadUserId       String?
+  notes            String?
+  /// Bridge to legacy JobVisit row during migration; null for new-only events.
+  legacyVisitId    String?                @unique
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job              Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  leadUser         User?                  @relation("LeadScheduleEvents", fields: [leadUserId], references: [id], onDelete: SetNull)
+  taskLinks        JobScheduleEventTask[]
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([leadUserId])
+  @@index([status])
+  @@index([startAt])
+  @@index([endAt])
+}
+
+model JobScheduleEventTask {
+  id                 String           @id @default(cuid())
+  jobScheduleEventId String
+  jobTaskId          String
+  createdAt          DateTime         @default(now())
+  jobScheduleEvent   JobScheduleEvent @relation(fields: [jobScheduleEventId], references: [id], onDelete: Cascade)
+  jobTask            JobTask          @relation(fields: [jobTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([jobScheduleEventId, jobTaskId])
+  @@index([jobTaskId])
 }
 
 model JobIssue {
@@ -1191,6 +1249,46 @@ enum JobVisitStatus {
   CANCELED
 }
 
+enum TaskDueMode {
+  NONE
+  MANUAL
+  DERIVED
+}
+
+enum TaskDueAnchor {
+  JOB_ACTIVATION
+  FIRST_READY
+}
+
+enum TaskDueGranularity {
+  DATE_ONLY
+  EXACT
+}
+
+enum TaskSchedulingRequirement {
+  NONE
+  OPTIONAL
+  REQUIRED
+}
+
+enum JobScheduleEventKind {
+  CUSTOMER_APPOINTMENT
+  SITE_VISIT
+  CREW_WORK
+  INSPECTION
+  DELIVERY
+  UTILITY_APPOINTMENT
+  OFFICE_WORK
+  OTHER
+}
+
+enum JobScheduleEventStatus {
+  TENTATIVE
+  CONFIRMED
+  COMPLETED
+  CANCELED
+}
+
 enum LeadVisitRequestStatus {
   PENDING
   CONFIRMED
@@ -1311,6 +1409,16 @@ enum JobActivityType {
   RECOVERY_FLOW_CREATED
   RECOVERY_FLOW_ACTIVATED
   RECOVERY_FLOW_COMPLETED
+  TASK_DEADLINE_UPDATED
+  SCHEDULE_EVENT_CREATED
+  SCHEDULE_EVENT_CONFIRMED
+  SCHEDULE_EVENT_RESCHEDULED
+  SCHEDULE_EVENT_CANCELED
+  SCHEDULE_EVENT_COMPLETED
+  SCHEDULE_EVENT_TASK_LINKED
+  SCHEDULE_EVENT_TASK_UNLINKED
+  JOB_ARCHIVED
+  JOB_SCHEDULE_CLEANUP_COMPLETED
 }
 
 model Tag {

@@ -30,6 +30,10 @@ import {
   validateAddJobTaskInput,
   type AddJobTaskInput,
 } from "@/lib/job-task-add-guard";
+import {
+  normalizeCompletionNoteDraft,
+  validateCompletionNoteDraftSave,
+} from "@/lib/job-task-completion-note-save";
 import { setTaskScheduleActionCore, syncTaskDueDatesAfterReadiness } from "@/lib/task-timing";
 
 export type JobTaskActionState = {
@@ -142,6 +146,46 @@ export async function addJobTaskAction(
   } catch (e) {
     console.error("Failed to add job task", e);
     return { error: "Failed to add task. Please try again." };
+  }
+}
+
+export async function saveJobTaskCompletionNoteAction(
+  taskId: string,
+  completionNote: string,
+): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const organizationId = session.organizationId;
+
+  try {
+    const task = await db.jobTask.findFirst({
+      where: { id: taskId, job: { organizationId } },
+      select: { id: true, status: true, jobId: true },
+    });
+
+    if (!task) {
+      return { error: "Task not found in your organization." };
+    }
+
+    const validation = validateCompletionNoteDraftSave(task);
+    if (!validation.ok) {
+      return { error: validation.error };
+    }
+
+    const normalizedNote = normalizeCompletionNoteDraft(completionNote);
+
+    await db.jobTask.update({
+      where: { id: taskId },
+      data: { completionNote: normalizedNote },
+    });
+
+    revalidatePath("/workstation");
+    revalidatePath("/workstation/tasks");
+    revalidatePath(`/jobs/${task.jobId}`);
+
+    return { success: true, taskId };
+  } catch (e) {
+    console.error("Failed to save completion note", e);
+    return { error: "Failed to save completion note. Please try again." };
   }
 }
 
@@ -495,6 +539,7 @@ export async function updateJobTaskScheduleAction(
           scheduledStartAt: input.scheduledStartAt,
           scheduledEndAt: input.scheduledEndAt,
           assignedUserId: input.assignedUserId,
+          actorUserId: session.userId,
         },
         tx,
       );
@@ -503,24 +548,9 @@ export async function updateJobTaskScheduleAction(
 
       const task = await tx.jobTask.findUnique({
         where: { id: input.taskId },
-        select: { jobId: true, title: true },
+        select: { jobId: true },
       });
       if (!task) return { error: "Task not found." };
-
-      await recordJobActivity(
-        {
-          organizationId,
-          jobId: task.jobId,
-          type: JobActivityType.ISSUE_FOLLOW_UP_TASK_CREATED,
-          title: `Task timing updated: ${task.title}`,
-          details: "Due date/schedule was updated.",
-          entityType: "JobTask",
-          entityId: input.taskId,
-          actorUserId: session.userId,
-          metadataJson: { activityKind: "TASK_TIMING_UPDATED" },
-        },
-        tx,
-      );
 
       return { success: true, jobId: task.jobId as string };
     });

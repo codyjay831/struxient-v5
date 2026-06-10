@@ -23,10 +23,16 @@ import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobVisitManager } from "@/components/jobs/job-visit-manager";
+import { JobScheduleCleanupReview } from "@/components/jobs/job-schedule-cleanup-review";
+import { JobArchiveButton } from "@/components/jobs/job-archive-button";
+import {
+  buildScheduleCleanupReviewItems,
+  loadPendingScheduleCleanupEvents,
+} from "@/lib/scheduling/job-cancel-cleanup";
 import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobEventButton } from "@/components/jobs/job-event-button";
 import { JobTaskAddButton } from "@/components/jobs/job-task-add-button";
-import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
+import { JobIssueSeverity, JobIssueStatus, JobStatus } from "@prisma/client";
 import { getLiveSignals } from "@/lib/signal-bus";
 import {
   attachScheduleAnchorsToRequirements,
@@ -328,6 +334,12 @@ export default async function JobDetailPage({
     paymentDueContext,
   );
 
+  const pendingCleanupEvents =
+    job.status === JobStatus.ARCHIVED
+      ? await loadPendingScheduleCleanupEvents(job.id, ctx.organizationId)
+      : [];
+  const scheduleCleanupReviewItems = buildScheduleCleanupReviewItems(pendingCleanupEvents);
+
   const executionHealth = deriveJobExecutionHealth(
     buildJobExecutionContextFromJob(
       {
@@ -388,17 +400,20 @@ export default async function JobDetailPage({
         eyebrow={
           secondaryIdentity ? (
             <span className="flex items-center gap-2">
-              <span>Active job</span>
+              <span>{job.status === JobStatus.ARCHIVED ? "Archived job" : "Active job"}</span>
               <span className="text-foreground-subtle/50">·</span>
               <span className="text-foreground-subtle">Job title: {secondaryIdentity}</span>
             </span>
+          ) : job.status === JobStatus.ARCHIVED ? (
+            "Archived job"
           ) : (
             "Active job"
           )
         }
         description="This job was created from the approved quote. Manage the work plan, blockers, payments, schedule, and job activity from here."
         actions={
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap items-end justify-end gap-2">
+            {job.status === JobStatus.ACTIVE ? <JobArchiveButton jobId={job.id} /> : null}
             <JobEventButton 
               jobId={job.id} 
               tasks={job.stages.flatMap(s => s.tasks.map(t => ({ id: t.id, title: t.title, stageTitle: s.title })))} 
@@ -513,6 +528,12 @@ export default async function JobDetailPage({
         initialRequirements={paymentRequirementsWithAnchors}
         stages={job.stages}
         effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
+      />
+
+      <JobScheduleCleanupReview
+        jobId={job.id}
+        jobStatus={job.status}
+        reviewItems={scheduleCleanupReviewItems}
       />
 
       <JobVisitManager

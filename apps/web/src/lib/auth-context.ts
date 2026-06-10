@@ -46,6 +46,17 @@ export async function getRequestContextOrThrow(): Promise<RequestContext> {
   }
 
   if (process.env.NODE_ENV !== "production") {
+    const orgExists = await db.organization.findUnique({
+      where: { id: DEV_ORGANIZATION_ID },
+      select: { id: true },
+    });
+
+    if (!orgExists) {
+      throw new Error(
+        "Development organization not found. Run `npx prisma db seed` in apps/web.",
+      );
+    }
+
     // Return the stable dev context for local development
     return {
       organizationId: DEV_ORGANIZATION_ID,

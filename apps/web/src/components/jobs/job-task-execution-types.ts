@@ -17,6 +17,11 @@ export type JobTaskExecutionTask = {
   completionNote: string | null;
   completionRequirementsJson: unknown;
   dueAt: Date | null;
+  dueMode?: import("@prisma/client").TaskDueMode;
+  dueAnchor?: import("@prisma/client").TaskDueAnchor | null;
+  dueOffsetDays?: number | null;
+  dueGranularity?: import("@prisma/client").TaskDueGranularity | null;
+  schedulingRequirement?: import("@prisma/client").TaskSchedulingRequirement;
   scheduledStartAt: Date | null;
   scheduledEndAt: Date | null;
   assignedUserId: string | null;

@@ -107,7 +107,7 @@ CREATE INDEX "ClarificationOption_questionId_sortOrder_idx"
 ON "ClarificationOption"("questionId", "sortOrder");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "QuoteLineClarification_quoteLineItemId_questionSetKey_questionSetVersion_key"
+CREATE UNIQUE INDEX "QuoteLineClarification_quoteLineItemId_questionSetKey_quest_key"
 ON "QuoteLineClarification"("quoteLineItemId", "questionSetKey", "questionSetVersion");
 CREATE INDEX "QuoteLineClarification_quoteLineItemId_idx" ON "QuoteLineClarification"("quoteLineItemId");
 CREATE INDEX "QuoteLineClarification_questionSetKey_questionSetVersion_idx"

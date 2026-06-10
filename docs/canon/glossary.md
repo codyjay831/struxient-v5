@@ -64,6 +64,11 @@
 | **Event / interruption** | Real-world change driving corrections, new tasks, pauses, detours, or return paths. |
 | **Detour** | Temporary alternate path while preserving intent to return when appropriate. |
 | **Return point** | Conceptual resume location after a detour or correction. |
+| **Deadline** | Task-level “should be done by” timestamp; does **not** reserve calendar time — [scheduling-canon.md](./scheduling-canon.md). |
+| **Job schedule event** | Canonical job-related calendar commitment (appointment, crew block, inspection window, etc.) — not a task deadline. |
+| **Scheduling requirement** | Explicit task property: `NONE`, `OPTIONAL`, or `REQUIRED` — whether a confirmed calendar event is required while the task is ready. |
+| **Availability block** | Employee/company unavailability (`ScheduleBlock`); not a job commitment. |
+| **Lead visit request** | Pre-job estimate/site visit scheduling intent; separate from job execution calendar. |
 
 ## Accelerators
 

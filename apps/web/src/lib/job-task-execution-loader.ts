@@ -29,6 +29,30 @@ export async function loadJobTaskExecutionPayload(
       completionNote: true,
       completionRequirementsJson: true,
       dueAt: true,
+      dueMode: true,
+      dueAnchor: true,
+      dueOffsetDays: true,
+      dueGranularity: true,
+      schedulingRequirement: true,
+      scheduleEventLinks: {
+        where: {
+          jobScheduleEvent: {
+            kind: "CREW_WORK",
+            status: { in: ["TENTATIVE", "CONFIRMED"] },
+          },
+        },
+        select: {
+          jobScheduleEvent: {
+            select: {
+              startAt: true,
+              endAt: true,
+              leadUserId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       scheduledStartAt: true,
       scheduledEndAt: true,
       assignedUserId: true,
@@ -192,6 +216,8 @@ export async function loadJobTaskExecutionPayload(
     paymentCtx,
   );
 
+  const crewEvent = task.scheduleEventLinks[0]?.jobScheduleEvent;
+
   return {
     jobId: job.id,
     jobStageId: task.jobStage.id,
@@ -212,9 +238,14 @@ export async function loadJobTaskExecutionPayload(
       completionNote: task.completionNote,
       completionRequirementsJson: task.completionRequirementsJson,
       dueAt: task.dueAt,
-      scheduledStartAt: task.scheduledStartAt,
-      scheduledEndAt: task.scheduledEndAt,
-      assignedUserId: task.assignedUserId,
+      dueMode: task.dueMode,
+      dueAnchor: task.dueAnchor,
+      dueOffsetDays: task.dueOffsetDays,
+      dueGranularity: task.dueGranularity,
+      schedulingRequirement: task.schedulingRequirement,
+      scheduledStartAt: crewEvent?.startAt ?? task.scheduledStartAt,
+      scheduledEndAt: crewEvent?.endAt ?? task.scheduledEndAt,
+      assignedUserId: crewEvent?.leadUserId ?? task.assignedUserId,
       attachments: task.attachments,
       issues: task.issues,
       providesSignals: task.providesSignals,

@@ -152,40 +152,12 @@ export type ExtendedTransactionClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
-function jobTaskDmmfFieldNames(): string[] {
-  const jobTaskModel = Prisma.dmmf.datamodel.models.find((m) => m.name === "JobTask");
-  return jobTaskModel?.fields.map((f) => f.name) ?? [];
-}
-
-function agentDebugLog(payload: Record<string, unknown>) {
-  const entry = { sessionId: "1c71ed", timestamp: Date.now(), ...payload };
-  // #region agent log
-  fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "1c71ed" },
-    body: JSON.stringify(entry),
-  }).catch(() => {});
-  // #endregion
-}
-
 const prismaClientSingleton = () => {
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "DATABASE_URL is not set. Copy apps/web/.env.example to apps/web/.env and set DATABASE_URL for your environment."
     );
   }
-  const fieldNames = jobTaskDmmfFieldNames();
-  agentDebugLog({
-    runId: "post-fix",
-    hypothesisId: "H1-H2",
-    location: "db.ts:prismaClientSingleton",
-    message: "Creating new PrismaClient singleton",
-    data: {
-      hasDueAt: fieldNames.includes("dueAt"),
-      hasScheduledStartAt: fieldNames.includes("scheduledStartAt"),
-      jobTaskFieldCount: fieldNames.length,
-    },
-  });
   return buildExtendedClient(new PrismaClient());
 };
 
@@ -194,22 +166,9 @@ declare global {
 }
 
 function getPrisma(): ExtendedPrismaClient {
-  const reused = Boolean(globalThis.prisma);
   if (!globalThis.prisma) {
     globalThis.prisma = prismaClientSingleton();
   }
-  const fieldNames = jobTaskDmmfFieldNames();
-  agentDebugLog({
-    runId: "post-fix",
-    hypothesisId: "H1",
-    location: "db.ts:getPrisma",
-    message: reused ? "Reusing cached globalThis.prisma" : "Initialized globalThis.prisma",
-    data: {
-      reusedSingleton: reused,
-      hasDueAt: fieldNames.includes("dueAt"),
-      hasScheduledStartAt: fieldNames.includes("scheduledStartAt"),
-    },
-  });
   return globalThis.prisma;
 }
 

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TaskTemplateCategory } from "@prisma/client";
+import {
+  JobScheduleEventStatus,
+  TaskSchedulingRequirement,
+} from "@prisma/client";
 import { deriveUnscheduledTaskItems } from "./schedule-unscheduled-tasks";
 
 test("deriveUnscheduledTaskItems excludes blocked/non-ready tasks", () => {
@@ -10,9 +13,10 @@ test("deriveUnscheduledTaskItems excludes blocked/non-ready tasks", () => {
       title: "Ready task",
       jobId: "job-1",
       jobTitle: "Kitchen Remodel",
-      category: TaskTemplateCategory.GENERAL,
+      schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
       dueAt: null,
       updatedAt: new Date("2026-06-08T08:00:00.000Z"),
+      linkedEvents: [],
       state: "READY",
     },
     {
@@ -20,9 +24,10 @@ test("deriveUnscheduledTaskItems excludes blocked/non-ready tasks", () => {
       title: "Blocked task",
       jobId: "job-1",
       jobTitle: "Kitchen Remodel",
-      category: TaskTemplateCategory.SCHEDULING,
+      schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
       dueAt: null,
       updatedAt: new Date("2026-06-08T09:00:00.000Z"),
+      linkedEvents: [],
       state: "BLOCKED_BY_SIGNAL",
     },
   ]);
@@ -31,32 +36,49 @@ test("deriveUnscheduledTaskItems excludes blocked/non-ready tasks", () => {
   assert.equal(items[0].recordId, "task-ready");
 });
 
-test("deriveUnscheduledTaskItems prioritizes scheduling tasks", () => {
+test("deriveUnscheduledTaskItems ignores OPTIONAL requirement", () => {
   const items = deriveUnscheduledTaskItems([
     {
-      id: "task-general",
-      title: "Prep tools",
+      id: "task-optional",
+      title: "Optional task",
       jobId: "job-1",
-      jobTitle: "Main Panel Upgrade",
-      category: TaskTemplateCategory.GENERAL,
-      dueAt: new Date("2026-06-09T08:00:00.000Z"),
-      updatedAt: new Date("2026-06-08T10:00:00.000Z"),
-      state: "READY",
-    },
-    {
-      id: "task-scheduling",
-      title: "Coordinate utility window",
-      jobId: "job-1",
-      jobTitle: "Main Panel Upgrade",
-      category: TaskTemplateCategory.SCHEDULING,
+      jobTitle: "Kitchen Remodel",
+      schedulingRequirement: TaskSchedulingRequirement.OPTIONAL,
       dueAt: null,
-      updatedAt: new Date("2026-06-08T09:00:00.000Z"),
+      updatedAt: new Date("2026-06-08T08:00:00.000Z"),
+      linkedEvents: [],
       state: "READY",
     },
   ]);
 
-  assert.equal(items.length, 2);
-  assert.equal(items[0].recordId, "task-scheduling");
-  assert.match(items[0].reason, /coordination task/i);
+  assert.equal(items.length, 0);
 });
 
+test("deriveUnscheduledTaskItems ignores tasks with qualifying confirmed event", () => {
+  const now = new Date("2026-06-09T12:00:00.000Z");
+  const items = deriveUnscheduledTaskItems(
+    [
+    {
+      id: "task-scheduled",
+      title: "Scheduled task",
+      jobId: "job-1",
+      jobTitle: "Main Panel Upgrade",
+      schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
+      dueAt: null,
+      updatedAt: new Date("2026-06-08T09:00:00.000Z"),
+      linkedEvents: [
+        {
+          id: "evt-1",
+          status: JobScheduleEventStatus.CONFIRMED,
+          startAt: new Date("2026-06-09T08:00:00.000Z"),
+          endAt: new Date("2026-06-09T14:00:00.000Z"),
+        },
+      ],
+      state: "READY",
+    },
+    ],
+    now,
+  );
+
+  assert.equal(items.length, 0);
+});

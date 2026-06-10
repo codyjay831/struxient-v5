@@ -1,5 +1,3 @@
-import { appendFileSync } from "fs";
-import { join } from "path";
 import {
   JobStatus,
   LeadStatus,
@@ -55,7 +53,10 @@ import {
   type WorkstationRecoveryActionKind,
 } from "./workstation-recovery-routing";
 import { includesEquivalentSignal } from "./signal-key";
-import { deriveSchedulingAttentionOverride } from "./workstation-scheduling-attention";
+import { deriveSchedulingAttentionOverride, mapLinkedEventsFromRows } from "./workstation-scheduling-attention";
+import { deriveTaskOverdue, deriveTaskDueToday } from "./scheduling/scheduling-derivation";
+import { getOrgTimezone } from "./scheduling/deadline-timezone";
+import { queryJobsNeedingScheduleCleanupAttention } from "./scheduling/job-cancel-cleanup";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "./lead-display";
 export type WorkstationWorkItemKind =
   | "lead"
@@ -158,36 +159,16 @@ export async function queryWorkstationWorkItems(
   const items: WorkstationWorkItem[] = [];
   const now = new Date();
   const urgentThreshold = new Date(now.getTime() - urgentThresholdHours * 60 * 60 * 1000);
+  const organization = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { timezone: true },
+  });
+  const orgTimezone = getOrgTimezone(organization?.timezone);
 
   const knownLeadStatuses = new Set(Object.values(LeadStatus));
   const pipelineStatuses = LEAD_PIPELINE_OPEN_STATUSES.filter((s) =>
     knownLeadStatuses.has(s),
   );
-
-  // #region agent log
-  try {
-    appendFileSync(
-      join(process.cwd(), "..", "..", "debug-07001e.log"),
-      `${JSON.stringify({
-        sessionId: "07001e",
-        runId: "post-fix-2",
-        hypothesisId: "A",
-        location: "workstation-query.ts:pipelineStatuses",
-        message: "resolved pipeline statuses vs loaded LeadStatus enum",
-        data: {
-          requested: [...LEAD_PIPELINE_OPEN_STATUSES],
-          resolved: pipelineStatuses,
-          loadedLeadStatusValues: Object.values(LeadStatus),
-          onHoldInClient: knownLeadStatuses.has("ON_HOLD"),
-          dropped: LEAD_PIPELINE_OPEN_STATUSES.filter((s) => !knownLeadStatuses.has(s)),
-        },
-        timestamp: Date.now(),
-      })}\n`,
-    );
-  } catch {
-    /* ignore */
-  }
-  // #endregion
 
   // 1. Opportunities
   const leads = await db.lead.findMany({
@@ -457,8 +438,23 @@ export async function queryWorkstationWorkItems(
           category: true,
           updatedAt: true,
           dueAt: true,
+          dueMode: true,
+          dueGranularity: true,
+          schedulingRequirement: true,
           scheduledStartAt: true,
           scheduledEndAt: true,
+          scheduleEventLinks: {
+            select: {
+              jobScheduleEvent: {
+                select: {
+                  id: true,
+                  status: true,
+                  startAt: true,
+                  endAt: true,
+                },
+              },
+            },
+          },
           assignedUserId: true,
           sortOrder: true,
           status: true,
@@ -759,8 +755,6 @@ export async function queryWorkstationWorkItems(
     const missedVisits = job.visits.filter(
       (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt <= now
     );
-    const hasFutureVisit = upcomingVisits.length > 0;
-
     for (const visit of missedVisits) {
       const { lane, withinLaneRank } = rank({
         kind: "schedule",
@@ -827,41 +821,6 @@ export async function queryWorkstationWorkItems(
       });
     }
 
-    if (!hasFutureVisit && job.status === JobStatus.ACTIVE && !isJobExecutionBlocked) {
-      // Only signal unscheduled if there are tasks to do
-      const hasOpenTasks = job.tasks.length > 0;
-      if (hasOpenTasks) {
-        const { lane, withinLaneRank } = rank({
-          kind: "schedule",
-          priority: "medium",
-          group: "ready",
-          updatedAt: job.updatedAt,
-        }, role, now);
-
-        items.push({
-          id: `job-unscheduled-${job.id}`,
-          kind: "schedule",
-          title: "Unscheduled Job",
-          subtitle: jobCardTitle,
-          status: "Needs Schedule",
-          priority: "medium",
-          group: "ready",
-          lens: "today",
-          lane,
-          withinLaneRank,
-          filterCategory: "jobs",
-          reason: "Active job with open tasks has no upcoming visits.",
-          nextStep: "Schedule a job visit.",
-          recordId: job.id,
-          parentRecordId: job.customerId || job.leadId || undefined,
-          parentLabel: jobParentLabel ?? undefined,
-          contextLine: jobContextLine ?? undefined,
-          href: `/jobs/${job.id}`,
-          updatedAt: job.updatedAt,
-        });
-      }
-    }
-
     const primaryTaskId = sortedTasks[0]?.id;
 
     for (const task of sortedTasks) {
@@ -884,17 +843,29 @@ export async function queryWorkstationWorkItems(
         priority = "low";
       }
 
+      const linkedEvents = mapLinkedEventsFromRows(task.scheduleEventLinks ?? []);
       const isBlocked = derivedState === "BLOCKED_BY_ISSUE" || derivedState === "BLOCKED_BY_SIGNAL";
-      const taskIsDueToday =
-        task.dueAt && task.dueAt.toDateString() === now.toDateString();
-      const taskIsOverdue = Boolean(task.dueAt && task.dueAt < now);
-      const taskIsScheduledSoon =
-        task.scheduledStartAt && task.scheduledStartAt > now;
+      const taskIsOverdue = deriveTaskOverdue(
+        { dueAt: task.dueAt, dueMode: task.dueMode, dueGranularity: task.dueGranularity },
+        orgTimezone,
+        now,
+      );
+      const taskIsDueToday = deriveTaskDueToday(
+        { dueAt: task.dueAt, dueMode: task.dueMode, dueGranularity: task.dueGranularity },
+        orgTimezone,
+        now,
+      );
+      const taskIsScheduledSoon = linkedEvents.some(
+        (event) =>
+          event.endAt > now &&
+          (event.status === "CONFIRMED" || event.status === "TENTATIVE"),
+      );
       const schedulingAttentionOverride = deriveSchedulingAttentionOverride({
-        category: task.category,
         derivedState,
+        schedulingRequirement: task.schedulingRequirement,
+        linkedEvents,
+        dueMode: task.dueMode,
         dueAt: task.dueAt,
-        scheduledStartAt: task.scheduledStartAt,
       });
 
       if (taskIsOverdue && !isBlocked) {
@@ -1318,6 +1289,42 @@ export async function queryWorkstationWorkItems(
       contextLine: logWorkContext.contextLine,
       href: `/jobs/${log.jobId}`, // No popup for now, link to job
       updatedAt: log.updatedAt,
+    });
+  }
+
+  const scheduleCleanupJobs = await queryJobsNeedingScheduleCleanupAttention(organizationId, now);
+  for (const cleanupJob of scheduleCleanupJobs) {
+    const { lane, withinLaneRank } = rank(
+      {
+        kind: "schedule",
+        priority: cleanupJob.externalCount > 0 ? "high" : "medium",
+        group: "investigate",
+        updatedAt: cleanupJob.updatedAt,
+      },
+      role,
+      now,
+    );
+
+    items.push({
+      id: `job-schedule-cleanup-${cleanupJob.jobId}`,
+      kind: "schedule",
+      title: "Schedule cleanup required",
+      subtitle: cleanupJob.jobTitle,
+      status: "Archived job",
+      priority: cleanupJob.externalCount > 0 ? "high" : "medium",
+      group: "investigate",
+      lens: "attention",
+      lane,
+      withinLaneRank,
+      filterCategory: "jobs",
+      reason:
+        cleanupJob.externalCount > 0
+          ? `${cleanupJob.pendingCount} future event(s) remain, including ${cleanupJob.externalCount} external appointment(s) needing explicit review.`
+          : `${cleanupJob.pendingCount} future internal schedule block(s) need cleanup after archive.`,
+      nextStep: "Review and confirm schedule cleanup on the job record.",
+      recordId: cleanupJob.jobId,
+      href: `/jobs/${cleanupJob.jobId}`,
+      updatedAt: cleanupJob.updatedAt,
     });
   }
 

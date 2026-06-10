@@ -1,11 +1,33 @@
 "use server";
 
-import { JobVisitStatus, JobActivityType } from "@prisma/client";
+import {
+  JobVisitStatus,
+  JobActivityType,
+  JobScheduleEventKind,
+  JobScheduleEventStatus,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
+import {
+  cancelScheduleEvent,
+  completeScheduleEvent,
+  createScheduleEvent,
+  rescheduleScheduleEvent,
+} from "@/lib/scheduling/event-service";
+
+async function findCanonicalVisitEvent(
+  organizationId: string,
+  visitId: string,
+  tx: ExtendedTransactionClient,
+) {
+  return tx.jobScheduleEvent.findFirst({
+    where: { organizationId, legacyVisitId: visitId },
+    select: { id: true },
+  });
+}
 
 export type JobVisitActionState = {
   error?: string;
@@ -64,6 +86,32 @@ export async function createJobVisitAction(
         },
         tx
       );
+
+      const endAt =
+        data.scheduledEndAt ??
+        new Date(data.scheduledStartAt.getTime() + 2 * 60 * 60 * 1000);
+
+      const created = await createScheduleEvent(
+        {
+          organizationId,
+          jobId,
+          kind: JobScheduleEventKind.SITE_VISIT,
+          startAt: data.scheduledStartAt,
+          endAt,
+          leadUserId: data.assignedUserId,
+          notes: data.notes,
+          status: JobScheduleEventStatus.CONFIRMED,
+          actorUserId: session.userId,
+        },
+        tx,
+      );
+      if ("error" in created) {
+        throw new Error(created.error);
+      }
+      await tx.jobScheduleEvent.update({
+        where: { id: created.eventId },
+        data: { legacyVisitId: visit.id },
+      });
 
       await enqueueNotification(
         {
@@ -148,6 +196,27 @@ export async function rescheduleJobVisitAction(
         tx
       );
 
+      const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);
+      if (canonical) {
+        const endAt =
+          data.scheduledEndAt ??
+          new Date(data.scheduledStartAt.getTime() + 2 * 60 * 60 * 1000);
+        const rescheduled = await rescheduleScheduleEvent(
+          {
+            organizationId,
+            eventId: canonical.id,
+            startAt: data.scheduledStartAt,
+            endAt,
+            reason: data.notes,
+            actorUserId: session.userId,
+          },
+          tx,
+        );
+        if ("error" in rescheduled) {
+          throw new Error(rescheduled.error);
+        }
+      }
+
       await enqueueNotification(
         {
           organizationId,
@@ -215,6 +284,22 @@ export async function cancelJobVisitAction(
         },
         tx
       );
+
+      const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);
+      if (canonical) {
+        const canceled = await cancelScheduleEvent(
+          {
+            organizationId,
+            eventId: canonical.id,
+            reason: reason?.trim() || "Visit canceled.",
+            actorUserId: session.userId,
+          },
+          tx,
+        );
+        if ("error" in canceled) {
+          throw new Error(canceled.error);
+        }
+      }
 
       await enqueueNotification(
         {
@@ -284,6 +369,21 @@ export async function completeJobVisitAction(
         },
         tx
       );
+
+      const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);
+      if (canonical) {
+        const completed = await completeScheduleEvent(
+          {
+            organizationId,
+            eventId: canonical.id,
+            actorUserId: session.userId,
+          },
+          tx,
+        );
+        if ("error" in completed) {
+          throw new Error(completed.error);
+        }
+      }
 
       await enqueueNotification(
         {

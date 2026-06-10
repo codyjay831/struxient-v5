@@ -102,6 +102,8 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 5. Calendar and scheduling — v1 depth
 
+> **Superseded for scheduling domain (2026-06-08):** [scheduling-canon.md](./scheduling-canon.md) — canonical `JobScheduleEvent`, deadline modes, explicit scheduling requirement, prelaunch migration plan in [scheduling-implementation-plan.md](../plans/scheduling-implementation-plan.md). Rows below remain historical context until fully reconciled in code.
+
 | Topic | v1 decision |
 |--------|-------------|
 | **System of record for “when”** | **Tasks** carry **due / start / end** (as needed); **Appointments** (optional entity or task subtype) for **hard calendar blocks** (customer install window). |

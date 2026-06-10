@@ -1,36 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TaskTemplateCategory } from "@prisma/client";
+import {
+  JobScheduleEventStatus,
+  TaskDueMode,
+  TaskSchedulingRequirement,
+} from "@prisma/client";
 import { deriveSchedulingAttentionOverride } from "./workstation-scheduling-attention";
 
-test("deriveSchedulingAttentionOverride returns attention for ready scheduling task without timing", () => {
+test("deriveSchedulingAttentionOverride flags REQUIRED tasks without confirmed event", () => {
   const result = deriveSchedulingAttentionOverride({
-    category: TaskTemplateCategory.SCHEDULING,
     derivedState: "READY",
+    schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
+    linkedEvents: [],
+    dueMode: TaskDueMode.NONE,
     dueAt: null,
-    scheduledStartAt: null,
   });
 
   assert.ok(result);
   assert.equal(result?.status, "Needs schedule");
-  assert.equal(result?.priority, "high");
 });
 
-test("deriveSchedulingAttentionOverride ignores non-scheduling or already-timed tasks", () => {
-  const nonScheduling = deriveSchedulingAttentionOverride({
-    category: TaskTemplateCategory.GENERAL,
+test("deriveSchedulingAttentionOverride ignores satisfied REQUIRED tasks", () => {
+  const futureEnd = new Date(Date.now() + 60 * 60 * 1000);
+  const result = deriveSchedulingAttentionOverride({
     derivedState: "READY",
-    dueAt: null,
-    scheduledStartAt: null,
-  });
-  const withDue = deriveSchedulingAttentionOverride({
-    category: TaskTemplateCategory.SCHEDULING,
-    derivedState: "READY",
-    dueAt: new Date("2026-06-08T09:00:00.000Z"),
-    scheduledStartAt: null,
+    schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
+    linkedEvents: [
+      {
+        id: "evt-1",
+        status: JobScheduleEventStatus.CONFIRMED,
+        startAt: new Date(),
+        endAt: futureEnd,
+      },
+    ],
+    dueMode: TaskDueMode.MANUAL,
+    dueAt: new Date(),
   });
 
-  assert.equal(nonScheduling, null);
-  assert.equal(withDue, null);
+  assert.equal(result, null);
 });
-

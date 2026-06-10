@@ -34,6 +34,30 @@
 | Promote PENDING → DUE | **Stored update when derived true** | `promotePendingPaymentsToDue()` | Manual status edits fighting auto-promotion |
 | Payment cleared signal | **Stored fact on publish** | `publishSignal()` from `job-payment-actions.ts` | Mismatched signal names vs task `requiresSignals` |
 
+## Scheduling & task timing
+
+> **Canon:** [scheduling-canon.md](./canon/scheduling-canon.md) · **Plan:** [scheduling-implementation-plan.md](./plans/scheduling-implementation-plan.md)
+
+| Concept | Stored or derived? | Canonical location | Risk if duplicated |
+|---------|-------------------|-------------------|-------------------|
+| Resolved task deadline (`dueAt`) | **Stored** | `JobTask` via deadline service (`scheduling/deadline-service.ts` — target) | Per-page overdue calculations |
+| Deadline mode / due rule | **Stored** | Task deadline fields + rule metadata | Hidden `dueOffsetMinutesAfterReady`-only logic |
+| Task scheduling requirement | **Stored** | `JobTask.schedulingRequirement` (`NONE \| OPTIONAL \| REQUIRED`) | Inferring from `TaskTemplateCategory` |
+| Job calendar commitment | **Stored** | `JobScheduleEvent` via event service (`scheduling/event-service.ts` — target) | `JobTask.scheduledStartAt/scheduledEndAt` as parallel truth |
+| Task–event link | **Stored** | Join table via link service | “Job has visit” as proxy for task scheduled |
+| Event lifecycle state | **Stored** | `JobScheduleEvent.status` | Reschedule reopening terminal states in UI |
+| Needs scheduling | **Derived** | `deriveTaskNeedsScheduling()` in `scheduling/scheduling-derivation.ts` (target) | Category/job-no-visit/ready-unscheduled heuristics |
+| Task overdue | **Derived** | `deriveTaskOverdue()` with org-TZ date-only EOD | Raw `dueAt < now` without granularity |
+| Event upcoming / potentially missed | **Derived** | `deriveEventTimingLabels()` | Stored MISSED/IN_PROGRESS in MVP |
+| Schedule conflicts (soft/hard) | **Derived** | `scheduling/scheduling-derivation.ts` (target) | Calendar-only overlap without tentative/confirmed split |
+| Employee unavailability | **Stored** | `ScheduleBlock` | Mixing into job event lifecycle |
+| Lead estimate visit | **Stored** | `LeadVisitRequest` | Conflating with job execution events |
+| Schedule mutation audit | **Stored** | `JobActivity` + mutation metadata envelope | Split audit paths (panel vs calendar) |
+| Legacy job visit | **Stored (deprecated)** | `JobVisit` — bridge only during cutover | Adding permanent behavior to visit model |
+| Legacy task schedule fields | **Stored (deprecated)** | `JobTask.scheduledStartAt/scheduledEndAt` | New writes after canonical cutover |
+
+**Current code (pre-migration):** `task-timing.ts`, `schedule-query.ts`, `workstation-scheduling-attention.ts`, `job-visit-actions.ts` — refactor into targets above during implementation slices.
+
 ## Workstation & attention
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
@@ -95,10 +119,12 @@
 
 ## Related canon
 
+- [scheduling-canon.md](./canon/scheduling-canon.md) — Deadlines, job schedule events, derivation
 - [signals.md](./canon/signals.md) — Signal bus and readiness engine
 - [workstation-canon.md](./canon/workstation-canon.md) — Cockpit role
 - [invariants-and-decision-rules.md](./canon/invariants-and-decision-rules.md) — I2, I6, I8, I9, I10, I16
 
 ---
 
-*Created 2026-05-16 — Guardrails v1 Pass 1.*
+*Created 2026-05-16 — Guardrails v1 Pass 1.*  
+*Updated 2026-06-08 — Scheduling & task timing SoT section.*

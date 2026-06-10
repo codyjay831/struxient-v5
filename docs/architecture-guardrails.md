@@ -23,6 +23,8 @@ These guardrails exist to **steer implementation** toward the architecture alrea
 | Document | Scope |
 |----------|--------|
 | [source-of-truth-map.md](./source-of-truth-map.md) | Stored vs derived concepts and canonical helpers |
+| [canon/scheduling-canon.md](./canon/scheduling-canon.md) | Deadlines, job schedule events, lifecycle, timezone, AI boundaries |
+| [plans/scheduling-implementation-plan.md](./plans/scheduling-implementation-plan.md) | Scheduling migration, slices, matrices, completion checklist |
 | [workstation-guardrails.md](./workstation-guardrails.md) | Workstation as cockpit; attention vs editors |
 | [task-payment-recovery-guardrails.md](./task-payment-recovery-guardrails.md) | Task readiness, payments, issues, recovery flows |
 | [guardrails-pass3-triage.md](./guardrails-pass3-triage.md) | Warn-only backlog: categories, payment decision context, next steps |
