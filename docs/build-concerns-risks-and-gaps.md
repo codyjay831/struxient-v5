@@ -164,7 +164,7 @@ Canon intent from [product-philosophy.md](./canon/product-philosophy.md) and [ex
 |--------------|---------------------------|-----------------|
 | Post-activation **generic job task** add/edit/reorder | **Not built** — recovery + field-event tasks only | Canon lies; ops edits blocked in product |
 | **Task done → customer invoice** send (toggle) | **Not built** — internal `JobPaymentRequirement` only | Commodity promise without delivery |
-| **Schedule** + staff/customer **reminders** | **Placeholder** schedule page; `JobVisit` partial | Flow keeper story breaks on timing |
+| **Schedule** + staff/customer **reminders** | **Historical implementation snapshot:** placeholder schedule page; `JobVisit` partial. Current authority is scheduling canon + implementation plan for canonical event/work-group migration. | Flow keeper story breaks on timing |
 | **“On the way”** customer SMS from navigation | **Not built** | — |
 | **Field intel → AI → apply** job plan adjustment | **Not built** — recovery AI text/graph only | Intelligence layer stays aspirational |
 | Quote → activate → signals → recovery → Workstation | **Largely built** | Core wedge intact |

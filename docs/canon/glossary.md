@@ -65,7 +65,14 @@
 | **Detour** | Temporary alternate path while preserving intent to return when appropriate. |
 | **Return point** | Conceptual resume location after a detour or correction. |
 | **Deadline** | Task-level “should be done by” timestamp; does **not** reserve calendar time — [scheduling-canon.md](./scheduling-canon.md). |
-| **Job schedule event** | Canonical job-related calendar commitment (appointment, crew block, inspection window, etc.) — not a task deadline. |
+| **Work group** | Contractor-readable body of production work (optional in MVP) that organizes tasks for planning/scheduling; internal entity `JobWorkPackage`. |
+| **Planned date range** | Forecast timing on a work group; planning signal only, not a commitment and not a resource reservation. |
+| **Schedule event** | Canonical job-related calendar commitment (`JobScheduleEvent`) such as crew work, customer appointment, inspection, delivery, or office work; not a task deadline. |
+| **Event-task coverage** | Many-to-many relationship (`JobScheduleEventTask`) defining which tasks an occurrence intends to cover. |
+| **Tentative commitment** | Proposed scheduling hold visible for planning; soft-conflict signal only and does not satisfy required scheduling. |
+| **Confirmed commitment** | Operationally committed scheduling occurrence that field/office can rely on; creates hard conflict behavior. |
+| **Event completion outcome** | Outcome captured when an event completes: `WORK_COMPLETED`, `PARTIAL_WORK`, or `NO_WORK_COMPLETED`. |
+| **Return work** | New follow-up event scheduled after a completed event leaves linked tasks open; original event remains historical. |
 | **Scheduling requirement** | Explicit task property: `NONE`, `OPTIONAL`, or `REQUIRED` — whether a confirmed calendar event is required while the task is ready. |
 | **Availability block** | Employee/company unavailability (`ScheduleBlock`); not a job commitment. |
 | **Lead visit request** | Pre-job estimate/site visit scheduling intent; separate from job execution calendar. |
@@ -112,4 +119,5 @@
 *Canon update (2026-05-06): Glossary — **Quote**, **Checkpoint**, **CO** rows aligned with [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); usage note on snapshot wording.*  
 *Canon update (2026-05-06): Quote status path and `SEND` / `APPROVAL` checkpoint kinds; commercial-only payloads.*  
 *Canon update (2026-05-06): Job runtime models (`Job`, `JobStage`, `JobTask`) introduced — one job per quote; stages carry `blockType` (`SHARED` vs `SEPARATE_LINE_ITEM`). Activation copies execution forward; later quote edits do not mutate activated job rows.*  
-*Canon update (2026-05-06): Stage entry rewritten as **preset / container**; added **Stage preset**, **Standard Project (default stage preset)**, **Service Work (reserved preset)**; usage note bans **kanban** and **placement** language for stages (I24).*
+*Canon update (2026-05-06): Stage entry rewritten as **preset / container**; added **Stage preset**, **Standard Project (default stage preset)**, **Service Work (reserved preset)**; usage note bans **kanban** and **placement** language for stages (I24).*  
+*Canon update (2026-06-11): Added scheduling glossary terms for work groups, planned ranges, schedule events, event-task coverage, tentative/confirmed commitments, event completion outcome, and return work.*

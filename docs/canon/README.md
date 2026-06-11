@@ -37,7 +37,15 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | **Working quote vs hidden checkpoints**, job as execution, activity layer; UX/naming guardrails (current-state-first) |
 | [glossary.md](./glossary.md) | Ubiquitous language |
 | [signals.md](./signals.md) | **Signal-based readiness engine**: Provides, Requires, Signal Bus, and AI Secretary |
-| [scheduling-canon.md](./scheduling-canon.md) | **Task timing & calendar**: deadlines, `JobScheduleEvent`, lifecycle, derivation, timezone, AI boundaries |
+| [scheduling-canon.md](./scheduling-canon.md) | **Authoritative scheduling canon**: deadlines vs commitments, `JobScheduleEvent`, `JobScheduleEventTask`, optional `JobWorkPackage`/Work group, lifecycle, derivation, timezone, AI boundaries |
+
+## Scheduling authority chain
+
+When scheduling docs conflict, use this precedence:
+
+1. [scheduling-canon.md](./scheduling-canon.md) (domain authority)
+2. [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md) (implementation order and phase gates)
+3. Historical snapshots/audits/legacy decision notes (context only)
 
 ## Reading order (suggested)
 

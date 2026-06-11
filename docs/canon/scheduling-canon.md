@@ -1,6 +1,6 @@
 # Scheduling and task timing — Struxient v5 canon
 
-> **Status:** Locked for MVP implementation (2026-06-08).  
+> **Status:** Locked for MVP implementation (revised 2026-06-11).  
 > **Scope:** Job execution timing — deadlines, calendar commitments, availability, and scheduling attention.  
 > **Supersedes:** Informal use of `JobVisit` and `JobTask.scheduledStartAt/scheduledEndAt` as parallel calendar truth.  
 > **Related:** [execution-engine-canon.md](./execution-engine-canon.md), [workstation-canon.md](./workstation-canon.md), [locked-decisions-v1.md](./locked-decisions-v1.md) §5 (superseded for scheduling domain by this document).
@@ -64,6 +64,62 @@ Tasks do **not** store canonical calendar start/end after migration. Legacy `Job
 
 ---
 
+## Work groups (optional, MVP)
+
+`JobWorkPackage` (user-facing: **Work group**, pending UX validation) is the optional production-planning layer between tasks and schedule events.
+
+### Purpose
+
+A work group represents a contractor-recognizable body of work that may be executed in one or several occurrences.
+
+Examples: `Solar installation`, `Roof replacement`, `Electrical finish`, `HVAC changeout`, `Service upgrade`.
+
+### Membership rule (MVP)
+
+A task may belong to:
+
+- no work group, or
+- exactly one **primary** work group.
+
+Task-to-event coverage remains many-to-many via `JobScheduleEventTask`.
+
+This prevents:
+
+- duplicate package progress,
+- ambiguous task ownership,
+- duplicate unscheduled attention,
+- inconsistent Workstation placement.
+
+### What a work group stores
+
+- Job identity
+- Contractor-readable title
+- Optional trade/work type
+- Optional planned date range (forecast only)
+- Source/provenance
+- Optional display order
+
+### What a work group must not store
+
+- Independent completion truth
+- Independent percentage complete
+- Independent readiness truth
+- Independent dependency truth
+- Duplicate checklist/proof state
+
+Progress, readiness, remaining work, and risk are derived from tasks + linked events.
+
+### Creation paths (MVP)
+
+- Execution plan proposes work groups and task membership; user approves/adjusts
+- Scheduling selected ungrouped tasks may offer “Create work group”
+- Manual grouping remains available
+- Simple service jobs may schedule directly with no work group
+
+Grouping changes are audited (create, rename, membership, planned-date edits) without adding extra steps to routine scheduling.
+
+---
+
 ## Deadline modes
 
 | Mode | Meaning |
@@ -122,12 +178,19 @@ No generic automation engine in MVP. No sort-order or “previous task” anchor
 - `startAt` and `endAt` — **both required**; no open-ended events.
 - Multi-day events allowed.
 - Default durations may be suggested by UI but must be editable.
+- Optional customer/external window fields may be stored when operationally distinct from internal work time.
+
+`startAt/endAt` remains required for every tentative or confirmed event.
 
 ### Assignment (MVP)
 
-- One **responsible lead user** per event.
+- Optional responsible lead user.
+- Optional internal participants.
+- Optional responsible trade/company reference.
+- Derived “assignment incomplete” warning when kind/policy expects responsibility but none is set.
 - Task assignee remains separate (task accountability ≠ schedule accountability).
-- Additional workers: notes only — no crew/resource engine.
+
+MVP does not include payroll, labor allocation, or full capacity/resource optimization.
 
 ### Task–event relationship
 
@@ -174,6 +237,16 @@ CONFIRMED → CANCELED
 - `COMPLETED` is **terminal** in normal use — mistaken completion requires **restricted audited correction**.
 - Ordinary **reschedule** is an audited mutation; it must **not** silently reopen completed or canceled events.
 
+### Event completion outcome (MVP)
+
+On completion, store one outcome:
+
+- `WORK_COMPLETED`
+- `PARTIAL_WORK`
+- `NO_WORK_COMPLETED`
+
+Events may complete while linked tasks remain open. Original event remains historical; return work is scheduled on a new event.
+
 ### Derived event labels (not stored in MVP)
 
 - Upcoming, happening now, potentially missed, soft/hard conflict — computed at read time.
@@ -191,6 +264,19 @@ CONFIRMED → CANCELED
 | Field worker reliance | Not reliable | Reliable |
 | Satisfies `REQUIRED` | **No** | **Yes** (if `endAt > now`) |
 | AI may draft | Yes (draft only) | Requires human confirmation |
+
+### Planned date range vs event commitment
+
+Planned date range belongs to optional work groups and is forecasting only.
+
+Planned dates must **not**:
+
+- reserve people,
+- create hard conflicts,
+- satisfy `REQUIRED`,
+- notify customers,
+- silently create events,
+- silently move confirmed events.
 
 ### Notifications vs lifecycle
 
@@ -284,6 +370,7 @@ Do not write timing fields via ad-hoc Prisma calls outside approved actions.
 | `dueOffsetMinutesAfterReady` | Replace with explicit due-rule model |
 
 Prelaunch: prefer **one-time backfill + cutover** over prolonged dual-write.
+Phase ordering rule: after safety stabilization, stop creating new legacy schedule truth in runtime paths.
 
 ---
 
@@ -311,4 +398,4 @@ Do not ship in MVP:
 
 ---
 
-*Canon locked 2026-06-08 — scheduling architecture investigation + product decisions.*
+*Canon locked 2026-06-08; revised lock 2026-06-11 for final first-class scheduling model.*

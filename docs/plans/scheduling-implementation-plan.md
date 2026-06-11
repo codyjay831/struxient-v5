@@ -1,398 +1,244 @@
 # Scheduling implementation plan
 
-> **Purpose:** Executable engineering plan for Struxient scheduling MVP.  
-> **Canon:** [scheduling-canon.md](../canon/scheduling-canon.md) (locked 2026-06-08).  
-> **Posture:** Prelaunch fast path — clean cutover over long compatibility bridges.
+> **Purpose:** Executable engineering plan for first-class Struxient scheduling MVP.  
+> **Canon:** [scheduling-canon.md](../canon/scheduling-canon.md) (revised lock 2026-06-11).  
+> **Posture:** Prelaunch fast path — stabilize truth first, then expand capability.
 
 ---
 
-## 1. Source-of-truth matrix
+## 1. Locked architecture contract
 
-| Concept | Canonical entity / field | Stored or derived | Who may write | Primary consumers | Must never duplicate |
-|---------|-------------------------|-------------------|---------------|-------------------|----------------------|
-| Task execution state | `JobTask.status`, completion fields | Stored | Task actions (`completeJobTaskAction`, etc.) | Workstation, job page, readiness | Parallel readiness in UI |
-| Resolved deadline | `JobTask.dueAt` + mode/provenance fields | Stored | Canonical deadline service only | Workstation overdue, schedule due overlay | Per-page overdue math |
-| Due rule policy | Due rule metadata on task (mode, anchor, offset, resolvedAt, granularity) | Stored | Deadline service | Recalc UI, explainability | Hidden offset-only column without provenance |
-| Scheduling requirement | `JobTask.schedulingRequirement` | Stored | Activation copy + explicit admin edit | Needs-scheduling derivation | Category/title inference |
-| Job calendar commitment | `JobScheduleEvent` | Stored | Canonical event service only | Calendar, job page, workstation | `JobTask.scheduled*` after cutover |
-| Task–event link | `JobScheduleEventTask` (join) | Stored | Link service | Needs-scheduling, job/task UI | Implicit “visit = job scheduled” |
-| Event assignee | `JobScheduleEvent.leadUserId` | Stored | Event service | Conflicts, calendar, notifications | Task assignee as event SoT |
-| Employee unavailability | `ScheduleBlock` | Stored | Availability actions | Conflict derivation (hard) | Job event entity |
-| Lead estimate scheduling | `LeadVisitRequest` | Stored | Lead/schedule actions | Pre-job calendar lane | Job event entity |
-| Task readiness | `deriveTaskState()` | Derived | N/A (computed) | Needs-scheduling gate | Duplicate blocking logic |
-| Needs scheduling | `deriveTaskNeedsScheduling()` | Derived | N/A | Workstation, schedule tray | Category/job-no-visit heuristics |
-| Overdue task | `deriveTaskOverdue()` | Derived | N/A | Workstation, tasks lens | Raw date compare in components |
-| Event upcoming / in progress / potentially missed | `deriveEventTimingLabels()` | Derived | N/A | Calendar, workstation | Stored MISSED/IN_PROGRESS in MVP |
-| Soft conflict | Overlap + tentative | Derived | N/A | Calendar warnings | — |
-| Hard conflict | Overlap + confirmed + assignee | Derived | N/A | Calendar warnings, dispatch | — |
-| Payment milestone timing | `JobPaymentRequirement` | Stored + derived due-ness | Payment actions | Payment holds | Workforce calendar |
-| Job scheduling context | Job/customer notes + minimal structured windows | Stored (context) | Job/customer editors | Job page, event creation | Availability block entity |
-| Schedule audit | `JobActivity` + mutation metadata | Stored | All canonical mutations | Job timeline | Wrong activity enum types |
-| Customer notification intent | `NotificationEvent` | Stored | Notification dispatch after commit | Outbox | Lifecycle state field |
+### Source-of-truth boundaries
 
-**Target canonical code locations (to create/refactor):**
+| Concept | Canonical stored truth | Derived truth | Must never duplicate |
+|---------|-------------------------|---------------|----------------------|
+| Task execution | `JobTask` | readiness, blocked, done display | Event state |
+| Deadline | `JobTask.dueAt` + due mode/provenance fields | overdue, due today, urgency labels | Calendar commitment |
+| Work grouping | `JobWorkPackage` + primary `JobTask.workPackageId` | package progress/readiness/risk | Stage/line-item completion truth |
+| Calendar commitment | `JobScheduleEvent` | upcoming/missed/conflict/risk | `JobVisit`, `JobTask.scheduled*` |
+| Event-task coverage | `JobScheduleEventTask` | REQUIRED satisfaction, remaining-work candidates | Work-group membership |
+| Availability | `ScheduleBlock` | availability warnings | Job commitment events |
+| Lead pre-job scheduling | `LeadVisitRequest` | pre-job scheduling attention | Job execution scheduling truth |
 
-| Helper / service | Intended path |
-|------------------|---------------|
-| Deadline mutations | `apps/web/src/lib/scheduling/deadline-service.ts` |
-| Event lifecycle | `apps/web/src/lib/scheduling/event-service.ts` |
-| Task–event links | `apps/web/src/lib/scheduling/event-link-service.ts` |
-| Shared derivation | `apps/web/src/lib/scheduling/scheduling-derivation.ts` |
-| Timezone / EOD | `apps/web/src/lib/scheduling/deadline-timezone.ts` |
-| Schedule query | `apps/web/src/lib/scheduling/schedule-query.ts` (evolve from current) |
+### Membership rule (MVP)
+
+- A task belongs to zero or one **primary** work group.
+- Event coverage remains many-to-many (`JobScheduleEventTask`).
+- Do not introduce many-to-many task-to-work-group membership in MVP.
+
+### Scheduling requirement rule
+
+- `JobTask.schedulingRequirement` remains canonical.
+- Work-group requirement (if introduced) is a creation/default helper only, not independent runtime truth.
 
 ---
 
-## 2. Lifecycle transition matrix — `JobScheduleEvent`
+## 2. Lifecycle and behavior contracts
 
-| From | To | Allowed | Actor | Side effects | Audit reason required |
-|------|-----|---------|-------|--------------|----------------------|
-| — | TENTATIVE | Yes | Authorized user / AI draft apply | May create links | Optional |
-| TENTATIVE | CONFIRMED | Yes | Authorized user | Hard conflict check; may notify customer per policy | Recommended |
-| TENTATIVE | CANCELED | Yes | Authorized user | Unlink satisfaction for REQUIRED tasks | Optional |
-| CONFIRMED | COMPLETED | Yes | Authorized user | Does not auto-complete tasks | Optional |
-| CONFIRMED | CANCELED | Yes | Authorized user | May spawn external follow-up tasks | **Required** |
-| CONFIRMED | CONFIRMED | Yes (reschedule) | Authorized user | Update start/end/assignee; no status reopen | **Required** for material time change |
-| TENTATIVE | TENTATIVE | Yes (reschedule) | Authorized user | Soft conflict check | Optional |
-| COMPLETED | * | No (normal) | — | Use restricted correction workflow | **Required** |
-| CANCELED | * | No | — | Create new event instead | — |
-| COMPLETED | CONFIRMED | Restricted correction only | Admin/manager | Audited correction | **Required** |
+### Event lifecycle (MVP)
 
-**Invalid (must reject):**
+Statuses: `TENTATIVE`, `CONFIRMED`, `COMPLETED`, `CANCELED`
 
-- Reschedule that sets status back to SCHEDULED from COMPLETED/CANCELED without correction workflow
-- Confirm without start/end
-- End ≤ start
+Valid transitions:
 
----
+- `TENTATIVE -> CONFIRMED`
+- `TENTATIVE -> CANCELED`
+- `CONFIRMED -> COMPLETED`
+- `CONFIRMED -> CANCELED`
+- Reschedule preserves `TENTATIVE` or `CONFIRMED`
 
-## 3. Lifecycle transition matrix — deadline mode
+Invalid in normal paths:
 
-| From mode | Action | To mode | `dueAt` behavior | Audit |
-|-----------|--------|---------|------------------|-------|
-| NONE | Set manual date | MANUAL | Set to user value | Yes |
-| NONE | Set derived rule | DERIVED | Resolve on first qualifying transition if already ready; else pending | Yes |
-| MANUAL | Change date | MANUAL | Update | Yes |
-| MANUAL | Clear deadline | NONE | Clear `dueAt` | Yes |
-| MANUAL | Enable rule | DERIVED | Keep manual until explicit “recalculate” OR user chooses replace (audited) | Yes |
-| DERIVED | First ready (or activation anchor) | DERIVED | Resolve once → write `dueAt` | System + provenance |
-| DERIVED | Block/unblock | DERIVED | **No change** to `dueAt` | No |
-| DERIVED | Recalculate (explicit) | DERIVED | Recompute from rule; user reason | **Required** |
-| DERIVED | Set manual date | MANUAL | User value; rule retained but inactive | Yes |
-| DERIVED | Rule anchor/offset change | DERIVED | Mark out-of-sync; do not auto-rewrite | Yes; offer recalc |
+- reopening `COMPLETED` or `CANCELED`
+- status-changing reschedule that bypasses lifecycle guards
 
-**Forbidden:**
+### Event completion outcome
 
-- Derived auto-recalc on every ready transition
-- Derived overwrite of MANUAL `dueAt`
-- Silent shift on org timezone change
+Store one outcome on completion:
+
+- `WORK_COMPLETED`
+- `PARTIAL_WORK`
+- `NO_WORK_COMPLETED`
+
+Completion may occur while linked tasks remain open. Return work is a new event; original event stays historical.
+
+### Planned vs tentative vs confirmed
+
+- Planned range is work-group forecast only.
+- Planned never reserves people, never satisfies REQUIRED, never notifies customers, never creates events, never moves confirmed events.
+- Tentative is visible and creates soft conflict only.
+- Confirmed is operational commitment and creates hard conflict.
 
 ---
 
-## 4. Deadline behavior matrix
+## 3. Immediate safety patch (Phase 0)
 
-| Scenario | Mode | Task state | Expected behavior |
-|----------|------|------------|-------------------|
-| Task first becomes READY | DERIVED (ready anchor) | READY | Resolve `dueAt` once if not yet resolved |
-| Job activates | DERIVED (activation anchor) | Any | Resolve when rule applies and task open; ready-anchor may also apply later |
-| Task blocked after due set | DERIVED or MANUAL | BLOCKED | Keep `dueAt`; show blocked + due/overdue |
-| Task ready again | DERIVED | READY | No auto recalc |
-| User clicks Recalculate | DERIVED | Any open | New `dueAt` from rule; audited |
-| User sets manual date | → MANUAL | Any open | Manual wins |
-| User clears manual | MANUAL → NONE or DERIVED | Any | Explicit choice |
-| Task completed | Any | DONE | Deadline frozen; no recalc |
-| Task reopened | DERIVED | TODO | Keep prior `dueAt` unless user recalc/clear |
-| Job canceled | Any | — | Deadlines historical; tasks non-actionable |
-| Rule changed after resolve | DERIVED | Open | Flag stale; no silent update |
-| Org TZ changed | Any | — | UTC instant preserved; display updates |
-| Date-only “Jun 12” | MANUAL or DERIVED | — | Stored as EOD Jun 12 org TZ with `DATE_ONLY` provenance |
-| Exact datetime | MANUAL or DERIVED | — | Stored exact instant with `EXACT` provenance |
+Fix verified critical truth defects before broader feature work:
 
----
+1. Duplicate calendar entries (bridged visit + canonical event, and legacy timestamp overlap)
+2. Event IDs routed into task actions
+3. Terminal visit/event resurrection paths
+4. Calendar/Workstation representing the same commitment differently
 
-## 5. Needs-scheduling test matrix
+Non-goals:
 
-| Case | REQUIRED satisfied? |
-|------|---------------------|
-| No linked events | **Needs scheduling** |
-| Linked CONFIRMED, `endAt > now` | Satisfied |
-| Linked CONFIRMED, started today, multi-day, `endAt > now` | Satisfied |
-| Linked CONFIRMED, `endAt <= now` (ended) | **Needs scheduling** |
-| Linked TENTATIVE only | **Needs scheduling** (partial UI: “draft scheduled”) |
-| Linked CANCELED | **Needs scheduling** |
-| Linked COMPLETED | **Needs scheduling** if no other qualifying event |
-| Task not READY | Not needs scheduling (blocked/waiting) |
-| `schedulingRequirement OPTIONAL` | Never needs scheduling |
-| One CONFIRMED event linked to many tasks | Satisfies each linked REQUIRED task |
-| One task linked to two events, one qualifying CONFIRMED | Satisfied |
+- no legacy UX polish
+- no new scheduling capabilities
+- no work-group implementation in this phase
+
+Exit criteria:
+
+- no duplicate commitment rows
+- correct action routing by entity type
+- terminal-state guards enforce no ordinary reopen
+- canonical commitment identity parity between Calendar and Workstation
 
 ---
 
-## 6. Phased migration and compatibility strategy
+## 4. Revised phased program
 
-### Prelaunch fast path (recommended)
+## Phase 0 — Schedule truth safety
 
-| Phase | Purpose | Duration intent |
-|-------|---------|-----------------|
-| **0 — Stabilization** | Fix guards, unify audit metadata, remove false heuristics, add tests | 1 sprint slice |
-| **1 — Canon + derivation** | Shared helpers; align workstation + schedule | 1 sprint slice |
-| **2 — Canonical entity** | `JobScheduleEvent` + event service + schema (approved) | 1–2 slices |
-| **3 — Linkage + requirement** | Join table + `schedulingRequirement` on tasks | 1 slice |
-| **4 — Cutover** | One-time backfill; switch all reads/writes | Single controlled window |
-| **5 — Legacy freeze** | Stop `JobTask.scheduled*` writes; bridge reads only | Immediate after cutover QA |
-| **6 — Decommission** | Remove `JobVisit` bridge + legacy fields | After one full QA cycle |
+**User outcome:** Calendar and Workstation stop drifting from each other.  
+**Rule:** stabilization only.
 
-### One-time backfill (dev/staging)
+## Phase 1 — Canonical event cutover foundation
 
-1. Snapshot DB before cutover.
-2. For each `JobVisit` with status SCHEDULED/COMPLETED/CANCELED → map to `JobScheduleEvent` (kind SITE_VISIT or CUSTOMER_APPOINTMENT by notes/heuristic).
-3. For each `JobTask` with `scheduledStartAt` + infer end → create event + link (kind CREW_WORK default).
-4. Preserve legacy IDs in migration metadata for audit replay.
-5. Validate counts and spot-check parity in calendar/workstation.
+**User outcome:** all new schedule truth writes are canonical.
 
-### Backward compatibility
+Deliverables:
 
-| Artifact | Bridge lifetime |
-|----------|-----------------|
-| `JobVisit` API routes | Short — proxy to event service until UI migrated |
-| `JobTask.scheduled*` reads | Until UI fully event-based |
-| `JobVisit` table | Deprecate after cutover; drop in later migration |
+- all new schedule writes through `JobScheduleEvent` service paths
+- stop new authoritative `JobVisit` creation
+- stop new `JobTask.scheduledStartAt/scheduledEndAt` writes
+- lifecycle + outcome enforcement
+- unified org-scoped permission checks for scheduling mutations
+- unified audit envelope
+- deadline service/UI completion for manual/derived controls
+- shared canonical query foundations for Calendar/Workstation
 
-### Rollback (prelaunch)
+## Phase 2 — Work groups and production scheduling (single vertical)
 
-- DB snapshot restore
-- Feature flag: `SCHEDULING_CANONICAL_READS` / `SCHEDULING_CANONICAL_WRITES`
-- Reseed dev DB if needed
-- **Do not** maintain dual-truth beyond one QA cycle
+**User outcome:** grouped, split, and return scheduling works end-to-end.
 
-### Data migration risks
+Deliverables:
 
-| Risk | Mitigation |
-|------|------------|
-| Duplicate events from visit + task schedule | Dedupe script: prefer visit as SITE_VISIT; merge links |
-| Missing end times on legacy visits | Backfill default duration (e.g. 2h) flagged `MIGRATION_INFERRED_END` |
-| Lost audit history | Migration activity row per backfilled event |
-| Wrong REQUIRED satisfaction after link | Re-run derivation tests post-backfill |
+- work-group creation (execution-plan proposal + manual + from selected tasks)
+- primary task membership
+- planned date range
+- schedule all/some group tasks together
+- split by trade/date across multiple occurrences
+- unallocated-task visibility
+- partial completion with remaining-work return scheduling
+- service path remains usable with no work group
 
----
+## Phase 3 — Cross-surface completion
 
-## 7. Implementation slices (vertical end-to-end)
+**User outcome:** job page, calendar, workstation, and task panel use the same scheduling truth.
 
-### Slice 1 — Deadline mode + provenance foundation
+Deliverables:
 
-| Layer | Deliverable |
-|-------|-------------|
-| Model/data | Due mode, anchor, offset, granularity, resolvedAt, timezoneBasis on task (schema approval) |
-| Service | `deadline-service.ts` — set manual, set rule, clear, recalculate |
-| Validation | MANUAL cannot be overwritten by sync; recalc requires open task |
-| Permission | Org-scoped; role gate for override/recalc |
-| Audit | Unified envelope; fix wrong `ISSUE_FOLLOW_UP_TASK_CREATED` usage |
-| UI | Task panel: “Set deadline” button flow; provenance chip |
-| Derivation | `deriveTaskOverdue()` with DATE_ONLY vs EXACT |
-| Tests | Mode transitions, resolve-once, TZ EOD, DST boundaries |
-| Browser QA | Manual/derived/clear/recalc across org TZ |
-| Rollback | Flag to hide new UI; legacy display only |
-| **Exit criteria** | Zero silent due movement; all writes via deadline service |
+- canonical schedule queries across surfaces
+- shared derivation helpers for attention/conflicts/risk
+- consistent identity and links across UI surfaces
+- mobile event view parity for key actions
 
-### Slice 2 — Canonical event lifecycle
+## Phase 4 — Service and external appointment semantics
 
-| Layer | Deliverable |
-|-------|-------------|
-| Model/data | `JobScheduleEvent` + enums (kind, status) |
-| Service | create, confirm, reschedule, cancel, complete, restricted correct |
-| Validation | start/end required; state machine enforced |
-| Permission | Org-scoped mutation checks |
-| Audit | Full before/after on all event mutations |
-| UI | Job page event list + create flow by kind |
-| Derivation | tentative/confirmed labels; soft/hard conflict inputs |
-| Tests | Invalid transition rejection; terminal state guards |
-| Browser QA | Multi-day event; lifecycle buttons |
-| Rollback | Flag off → short-lived visit proxy |
-| **Exit criteria** | All new events via event service |
+**User outcome:** windows and external coordination are modeled safely.
 
-### Slice 3 — Compatibility bridge (`JobVisit`) — short-lived
+Deliverables:
 
-| Layer | Deliverable |
-|-------|-------------|
-| Service | Visit actions proxy read/write to canonical events |
-| Tests | Legacy API contract parity |
-| **Exit criteria** | No production dependency on visit-only reads after cutover |
+- optional customer/external window fields where needed
+- per-kind validation behavior (crew/service/customer/inspection/delivery/utility/office)
+- communication intent policy by kind/status
+- external cancellation cleanup semantics
 
-### Slice 4 — Task requirement + linkage
+## Phase 5 — Existing-data migration and legacy removal
 
-| Layer | Deliverable |
-|-------|-------------|
-| Model/data | `schedulingRequirement` on task; join table |
-| Service | link/unlink; copy requirement at activation from quote execution |
-| UI | Link controls; REQUIRED badge; needs-scheduling messaging |
-| Derivation | `deriveTaskNeedsScheduling()` — canonical formula |
-| Tests | Many-to-many; tentative does not satisfy |
-| **Exit criteria** | No category/job-no-visit inference anywhere |
+**User outcome:** no hidden duplicate scheduling architecture.
 
-### Slice 5 — Notification decoupling
+Deliverables:
 
-| Layer | Deliverable |
-|-------|-------------|
-| Service | Notify after commit; failure isolated |
-| Policy | Kind defaults per canon |
-| Tests | Delivery failure does not rollback event |
-| **Exit criteria** | Policy matrix test-covered |
+- backfill and dedupe existing legacy rows
+- remove legacy schedule reads from runtime paths
+- remove legacy visit UI/runtime dependencies
+- finalize bridge retirement
 
-### Slice 6 — Job cancellation cleanup
+## Phase 6 — Launch hardening
 
-| Layer | Deliverable |
-|-------|-------------|
-| UI | Cleanup review screen with preselection rules |
-| Service | Batch cancel with per-event reasons |
-| Derivation | Workstation cleanup attention items |
-| Tests | Internal preselect vs external explicit confirm |
-| **Exit criteria** | No silent external cancel assumptions |
+**User outcome:** production-safe scheduling launch candidate.
 
-### Slice 7 — Legacy field freeze + bridge removal
+Deliverables:
 
-| Layer | Deliverable |
-|-------|-------------|
-| Service | Reject writes to `JobTask.scheduled*` |
-| UI | Remove task timing datetime editors; event flows only |
-| Decommission | Remove visit bridge code |
-| **Exit criteria** | Zero writes to legacy fields; bridge removed pre-launch |
-
-### Prelaunch slice order
-
-1 → 2 → 4 → 5 → 6 → 3 (minimal) → 7
+- permissions and org isolation verification
+- audit completeness verification
+- concurrency and stale-edit handling
+- notification-failure isolation
+- timezone/DST verification
+- browser/mobile/accessibility/performance QA
+- completion audit against missing-40% contract
 
 ---
 
-## 8. Testing and QA strategy
+## 5. Testing and QA requirements by phase
 
-### Unit tests (required before cutover)
+### Required automated tests
 
-- Deadline mode state machine
-- Resolve-once and explicit recalc
-- Org-TZ EOD for date-only
-- Event lifecycle transitions
-- `deriveTaskNeedsScheduling` matrix (section 5)
-- Soft vs hard conflict detection
+- Event lifecycle + terminal-state guards
+- Event outcome and return-work flow
+- Task REQUIRED satisfaction using event links
+- Planned-vs-tentative-vs-confirmed derivation behavior
+- Permission denials (role + org scope)
+- Audit payload integrity (before/after/reason/source)
+- Notification failure isolation (canonical truth persists)
+- Timezone and DST edge cases
 
-### Integration tests
+### Required browser QA paths
 
-- End-to-end: create event → link task → REQUIRED satisfied
-- Permission denied paths
-- Audit record on every mutation type
-- Notification failure isolation
-- Job cancel cleanup batch
-
-### Browser QA matrix
-
-| Surface | Cases |
-|---------|-------|
-| Task panel | No timing default; set deadline; link event |
-| Job page | Create tentative → confirm; multi-day |
-| Calendar | Event kinds visible; conflicts shown |
-| Workstation | Overdue vs needs scheduling vs upcoming event |
-| Timezone | Org TZ ≠ browser TZ; DST date |
+- Same-day grouped installation
+- Split-trade scheduling
+- Partial completion + return scheduling
+- Simple service appointment without group
+- Inspection/external window workflow
+- Legacy data parity after migration
 
 ---
 
-## 9. Final completion checklist (find the missing 40%)
+## 6. Prelaunch migration strategy
 
-Use after all slices land — every item must be checked before launch candidate.
+Because Struxient is prelaunch, use a simple safe cutover:
 
-### Canon alignment
+1. Snapshot DB
+2. Backfill `JobVisit` and legacy task schedule fields to canonical events + links
+3. Dedupe rows and reconcile links
+4. Switch reads to canonical query
+5. Remove legacy runtime dependencies
+6. Execute schema removals in approved migration review
 
-- [ ] [scheduling-canon.md](../canon/scheduling-canon.md) matches implemented behavior
-- [ ] [source-of-truth-map.md](../source-of-truth-map.md) scheduling section matches code paths
-- [ ] No UI copy says “schedule block” for two different concepts
-- [ ] Glossary scheduling terms present
-
-### Data truth
-
-- [ ] Exactly one canonical entity for job calendar commitments
-- [ ] Zero writes to `JobTask.scheduledStartAt/scheduledEndAt`
-- [ ] `JobVisit` table either migrated or read-only with zero new rows
-- [ ] Due rule provenance stored and displayable
-
-### Service boundary
-
-- [ ] Grep confirms no ad-hoc `jobTask.update({ dueAt|scheduled* })` outside services
-- [ ] All event mutations pass through event service
-- [ ] All deadline mutations pass through deadline service
-
-### Permissions
-
-- [ ] Every mutation org-scoped
-- [ ] Unauthorized paths tested
-- [ ] Restricted correction role-gated
-
-### Audit
-
-- [ ] Actor, before/after, reason, source on all mutations
-- [ ] Recalc and confirmed cancel require reason
-- [ ] No wrong `JobActivityType` for scheduling events
-
-### Derivation parity
-
-- [ ] Schedule board and workstation use same derivation helpers
-- [ ] Needs-scheduling matches canon formula exactly
-- [ ] Overdue respects DATE_ONLY EOD semantics
-- [ ] Removed: job-no-visit unscheduled, category SCHEDULING-only override, ready-unscheduled tray for non-REQUIRED
-
-### Lifecycle integrity
-
-- [ ] Reschedule cannot reopen COMPLETED/CANCELED without correction workflow
-- [ ] Terminal states tested
-- [ ] Canceled job triggers cleanup review (not silent auto-cancel of external events)
-
-### Notifications
-
-- [ ] Tentative never auto-customer-notifies
-- [ ] Kind visibility defaults match canon
-- [ ] Failed notification does not revert event
-
-### Timezone
-
-- [ ] Date-only deadlines use org EOD
-- [ ] DST boundary tests pass
-- [ ] Org TZ change does not rewrite stored instants
-
-### UX
-
-- [ ] Empty timing normal for NONE/OPTIONAL tasks
-- [ ] REQUIRED shows clear “needs confirmed event” state
-- [ ] Tentative vs confirmed visually distinct everywhere
-
-### Migration / prelaunch
-
-- [ ] Backfill script idempotent and logged
-- [ ] Cutover runbook executed on staging
-- [ ] Rollback tested (snapshot + flag)
-- [ ] Legacy bridge code removed before launch freeze
-
-### Operational
-
-- [ ] `npm test` green for scheduling packages
-- [ ] Browser QA matrix signed off
-- [ ] No open critical scheduling drift tickets
+Do not maintain prolonged dual truth after Phase 1.
 
 ---
 
-## 10. Cursor implementation prompt (next session)
+## 7. Completion contract (missing 40% guard)
 
-When starting code, use this scope guard:
+Scheduling cannot be called complete until:
 
-```
-Implement Struxient scheduling MVP per docs/canon/scheduling-canon.md and
-docs/plans/scheduling-implementation-plan.md.
-
-Prelaunch fast path: minimize dual-write. Schema changes require explicit approval.
-
-Slice order: 1 → 2 → 4 → 5 → 6 → 3 (minimal) → 7.
-
-Do not infer scheduling from category, title, or job visit presence.
-Do not silently move deadlines. Do not let AI confirm events without human action.
-All mutations through canonical scheduling services with full audit envelope.
-```
+- Canon + plan match implemented behavior
+- No duplicate commitment truth in runtime
+- All writes through canonical services
+- Work groups support bulk/split/return scheduling
+- Deadlines remain separate from events
+- Planned/tentative/confirmed semantics are consistent
+- Lifecycle invalid transitions are blocked
+- Permissions + org isolation tested
+- Audit envelope complete
+- Notification failure cannot corrupt canonical truth
+- Calendar and Workstation agree on commitment identity/state
+- Timezone/DST tests pass
+- Legacy writes impossible; legacy reads retired per plan
+- Acceptance QA scenarios pass across desktop + mobile paths
 
 ---
 
-*Plan locked 2026-06-08 — paired with scheduling canon.*
+*Plan locked 2026-06-08; revised phase order and architecture lock on 2026-06-11.*

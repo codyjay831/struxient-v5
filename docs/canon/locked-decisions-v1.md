@@ -102,13 +102,13 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 5. Calendar and scheduling — v1 depth
 
-> **Superseded for scheduling domain (2026-06-08):** [scheduling-canon.md](./scheduling-canon.md) — canonical `JobScheduleEvent`, deadline modes, explicit scheduling requirement, prelaunch migration plan in [scheduling-implementation-plan.md](../plans/scheduling-implementation-plan.md). Rows below remain historical context until fully reconciled in code.
+> **Superseded for scheduling domain (revised 2026-06-11):** [scheduling-canon.md](./scheduling-canon.md) is authoritative for scheduling architecture and semantics; implementation order is controlled by [scheduling-implementation-plan.md](../plans/scheduling-implementation-plan.md) (Phase 0 through Phase 6). Rows below are historical v1 context only.
 
 | Topic | v1 decision |
 |--------|-------------|
-| **System of record for “when”** | **Tasks** carry **due / start / end** (as needed); **Appointments** (optional entity or task subtype) for **hard calendar blocks** (customer install window). |
-| **Calendar UI** | **Month/week/day** views reading **task dates + appointments**; **drag reschedule** updates underlying task/appointment **server-side** with permissions. |
-| **Depth** | **No** full resource-leveling engine in v1. **Workstation** and calendar stay consistent: if it’s on the calendar, the **task/appointment** reflects it. |
+| **System of record for “when”** | **Historical (pre-canon):** task start/end + appointments. **Current authority:** deadlines on `JobTask`; commitments on `JobScheduleEvent`; coverage on `JobScheduleEventTask`; optional grouping on `JobWorkPackage` per scheduling canon. |
+| **Calendar UI** | **Historical phrasing only.** Current scheduling canon requires calendar/workstation reads to converge on canonical event identity during phased cutover from `JobVisit` and legacy task schedule fields. |
+| **Depth** | **Still valid constraint:** no full resource-leveling engine in v1/MVP. Scheduling canon defines tentative/confirmed semantics, lifecycle guards, and derived conflict/attention rules. |
 
 ---
 
@@ -260,4 +260,5 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 *Canon update (2026-05-05): §10 — MVP construction issue lifecycle + anchoring + task vs issue closure clarification.*  
 *Canon update (2026-05-06): §2 quote `sent` row + §7 — aligned **approved truth** language with **checkpoint** model and [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md); “administrative revision” → **administrative correction**.*
 *Canon update (2026-05-19): §2 updated runtime `JobTaskStatus` to binary `TODO`/`DONE`; §10 clarified follow-up-task wording vs RecoveryFlow-only blocker mitigation; §14 replaced event-hijack row with issue/recovery wording aligned to execution-engine canon.*  
-*Canon update (2026-05-25): §16 — product phasing (execution before commodity parity), no trigger builder, opinionated automation toggles; link [product-philosophy.md](./product-philosophy.md).*
+*Canon update (2026-05-25): §16 — product phasing (execution before commodity parity), no trigger builder, opinionated automation toggles; link [product-philosophy.md](./product-philosophy.md).*  
+*Canon update (2026-06-11): §5 scheduling rows explicitly marked historical and deferred to [scheduling-canon.md](./scheduling-canon.md) + [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md).*

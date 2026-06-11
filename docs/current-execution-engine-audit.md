@@ -6,7 +6,7 @@
 >
 > **Scope:** Quote line items → execution review → activation → job tasks/stages → readiness/blocking → issues → recovery → payments → workstation → AI execution generation → activity/logs.
 >
-> **Historical note (2026-05-19):** This file is a historical snapshot and is **not** product authority. Where it conflicts with [`docs/canon/execution-engine-canon.md`](./canon/execution-engine-canon.md), the canon doc wins. Known superseded areas include: quote-line AI now follows generate→review→apply boundaries, follow-up issue tasks are deprecated for blocker mitigation, recovery submit is canonically atomic, and runtime task state language is binary `TODO`/`DONE` with derived readiness states (`BLOCKED_BY_SIGNAL`, etc.).
+> **Historical note (2026-05-19):** This file is a historical snapshot and is **not** product authority. Where it conflicts with [`docs/canon/execution-engine-canon.md`](./canon/execution-engine-canon.md), the canon doc wins. For scheduling-specific claims, [`docs/canon/scheduling-canon.md`](./canon/scheduling-canon.md) and [`docs/plans/scheduling-implementation-plan.md`](./plans/scheduling-implementation-plan.md) win. Known superseded areas include: quote-line AI now follows generate→review→apply boundaries, follow-up issue tasks are deprecated for blocker mitigation, recovery submit is canonically atomic, and runtime task state language is binary `TODO`/`DONE` with derived readiness states (`BLOCKED_BY_SIGNAL`, etc.).
 
 ---
 
