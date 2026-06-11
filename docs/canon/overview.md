@@ -43,6 +43,7 @@ What to **salvage from which line** (and what v5 **rejects**) is summarized in [
 | [glossary.md](./glossary.md) | Shared language; internal vs customer-facing naming |
 | [conceptual-model.md](./conceptual-model.md) | Entities, relationships, lifecycle intent; authN vs authZ |
 | [domains-and-boundaries.md](./domains-and-boundaries.md) | Where responsibilities split; internal vs portal seams |
+| [business-profile-and-ai-context-canon.md](./business-profile-and-ai-context-canon.md) | Minimal Business Profile, setup boundaries, AI context hierarchy, provenance, and profile/settings separation |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | End-to-end UX and behavioral requirements (lead → workstation) |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Contractor narrative: intake → completion |
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Templates (line-only vs composite), quote vs post-sign execution planning |

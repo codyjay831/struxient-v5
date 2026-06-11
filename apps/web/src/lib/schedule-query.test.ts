@@ -5,6 +5,7 @@ import {
   TaskSchedulingRequirement,
 } from "@prisma/client";
 import { deriveUnscheduledTaskItems } from "./schedule-unscheduled-tasks";
+import { hasActiveCanonicalTaskScheduleLink } from "./schedule-query";
 
 test("deriveUnscheduledTaskItems excludes blocked/non-ready tasks", () => {
   const items = deriveUnscheduledTaskItems([
@@ -81,4 +82,42 @@ test("deriveUnscheduledTaskItems ignores tasks with qualifying confirmed event",
   );
 
   assert.equal(items.length, 0);
+});
+
+test("hasActiveCanonicalTaskScheduleLink only matches tentative/confirmed links", () => {
+  assert.equal(
+    hasActiveCanonicalTaskScheduleLink([
+      {
+        jobScheduleEvent: {
+          status: JobScheduleEventStatus.TENTATIVE,
+        },
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    hasActiveCanonicalTaskScheduleLink([
+      {
+        jobScheduleEvent: {
+          status: JobScheduleEventStatus.CONFIRMED,
+        },
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    hasActiveCanonicalTaskScheduleLink([
+      {
+        jobScheduleEvent: {
+          status: JobScheduleEventStatus.COMPLETED,
+        },
+      },
+      {
+        jobScheduleEvent: {
+          status: JobScheduleEventStatus.CANCELED,
+        },
+      },
+    ]),
+    false,
+  );
 });

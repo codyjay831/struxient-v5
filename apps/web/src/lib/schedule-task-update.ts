@@ -6,11 +6,19 @@ export type TaskTimingUpdateInput = {
   scheduledEndAt?: Date | null;
 };
 
+function assertTaskTimingTarget(taskId: string) {
+  // Guard against accidental routing of canonical event IDs into task timing mutations.
+  if (taskId.startsWith("schedule-event-")) {
+    throw new Error("Task timing updates require a task ID, not a schedule-event ID.");
+  }
+}
+
 export function buildDueOnlyTaskTimingUpdate(
   taskId: string,
   dueAt: Date | null,
   assignedUserId?: string | null,
 ): TaskTimingUpdateInput {
+  assertTaskTimingTarget(taskId);
   return {
     taskId,
     dueAt,
@@ -26,6 +34,7 @@ export function buildScheduledBlockTaskTimingUpdate(
   scheduledEndAt: Date | null,
   assignedUserId?: string | null,
 ): TaskTimingUpdateInput {
+  assertTaskTimingTarget(taskId);
   return {
     taskId,
     dueAt: undefined,

@@ -1,5 +1,6 @@
 import {
   JobActivityType,
+  JobScheduleEventCompletionOutcome,
   JobScheduleEventKind,
   JobScheduleEventStatus,
   type Prisma,
@@ -20,6 +21,12 @@ export type CreateScheduleEventInput = {
   endAt: Date;
   leadUserId?: string | null;
   notes?: string | null;
+  externalWindowStartAt?: Date | null;
+  externalWindowEndAt?: Date | null;
+  externalWindowLabel?: string | null;
+  externalWindowNotes?: string | null;
+  externalWindowSource?: string | null;
+  customerVisible?: boolean;
   status?: typeof JobScheduleEventStatus.TENTATIVE | typeof JobScheduleEventStatus.CONFIRMED;
 };
 
@@ -31,6 +38,9 @@ export type RescheduleEventInput = {
   endAt: Date;
   leadUserId?: string | null;
   reason?: string;
+  externalWindowStartAt?: Date | null;
+  externalWindowEndAt?: Date | null;
+  expectedUpdatedAt?: Date;
 };
 
 export type CancelEventInput = {
@@ -38,11 +48,35 @@ export type CancelEventInput = {
   eventId: string;
   actorUserId?: string;
   reason: string;
+  expectedUpdatedAt?: Date;
+};
+
+export type CompleteEventInput = {
+  organizationId: string;
+  eventId: string;
+  actorUserId?: string;
+  outcome: JobScheduleEventCompletionOutcome;
+  reason?: string;
+  expectedUpdatedAt?: Date;
 };
 
 function validateWindow(startAt: Date, endAt: Date): EventServiceError | null {
   if (endAt <= startAt) {
     return { error: "Event end time must be after start time." };
+  }
+  return null;
+}
+
+function validateExternalWindow(
+  startAt: Date | null | undefined,
+  endAt: Date | null | undefined,
+): EventServiceError | null {
+  if (!startAt && !endAt) return null;
+  if (!startAt || !endAt) {
+    return { error: "External window requires both start and end." };
+  }
+  if (endAt <= startAt) {
+    return { error: "External window end must be after start." };
   }
   return null;
 }
@@ -63,6 +97,12 @@ async function loadEvent(
       leadUserId: true,
       title: true,
       kind: true,
+      completionOutcome: true,
+      completedAt: true,
+      externalWindowStartAt: true,
+      externalWindowEndAt: true,
+      customerVisible: true,
+      updatedAt: true,
     },
   });
 }
@@ -155,6 +195,11 @@ export async function createScheduleEvent(
 ): Promise<{ success: true; eventId: string } | EventServiceError> {
   const windowError = validateWindow(input.startAt, input.endAt);
   if (windowError) return windowError;
+  const externalWindowError = validateExternalWindow(
+    input.externalWindowStartAt,
+    input.externalWindowEndAt,
+  );
+  if (externalWindowError) return externalWindowError;
 
   const status = input.status ?? JobScheduleEventStatus.TENTATIVE;
   if (status === JobScheduleEventStatus.CONFIRMED) {
@@ -181,6 +226,12 @@ export async function createScheduleEvent(
       endAt: input.endAt,
       leadUserId: input.leadUserId ?? null,
       notes: input.notes?.trim() || null,
+      externalWindowStartAt: input.externalWindowStartAt ?? null,
+      externalWindowEndAt: input.externalWindowEndAt ?? null,
+      externalWindowLabel: input.externalWindowLabel?.trim() || null,
+      externalWindowNotes: input.externalWindowNotes?.trim() || null,
+      externalWindowSource: input.externalWindowSource?.trim() || null,
+      customerVisible: input.customerVisible ?? false,
     },
   });
 
@@ -197,6 +248,9 @@ export async function createScheduleEvent(
         status: event.status,
         startAt: event.startAt.toISOString(),
         endAt: event.endAt.toISOString(),
+        externalWindowStartAt: input.externalWindowStartAt?.toISOString() ?? null,
+        externalWindowEndAt: input.externalWindowEndAt?.toISOString() ?? null,
+        customerVisible: input.customerVisible ?? false,
       },
     },
     tx,
@@ -206,11 +260,22 @@ export async function createScheduleEvent(
 }
 
 export async function confirmScheduleEvent(
-  input: { organizationId: string; eventId: string; actorUserId?: string },
+  input: {
+    organizationId: string;
+    eventId: string;
+    actorUserId?: string;
+    expectedUpdatedAt?: Date;
+  },
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | EventServiceError> {
   const event = await loadEvent(input.organizationId, input.eventId, tx);
   if (!event) return { error: "Schedule event not found." };
+  if (
+    input.expectedUpdatedAt &&
+    event.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+  ) {
+    return { error: "Schedule event changed. Refresh and retry." };
+  }
   if (event.status !== JobScheduleEventStatus.TENTATIVE) {
     return { error: "Only tentative events can be confirmed." };
   }
@@ -240,6 +305,10 @@ export async function confirmScheduleEvent(
       type: JobActivityType.SCHEDULE_EVENT_CONFIRMED,
       title: `Schedule confirmed${event.title ? `: ${event.title}` : ""}`,
       actorUserId: input.actorUserId,
+      metadataJson: {
+        before: { status: event.status },
+        after: { status: JobScheduleEventStatus.CONFIRMED },
+      },
     },
     tx,
   );
@@ -254,6 +323,12 @@ export async function rescheduleScheduleEvent(
   const event = await loadEvent(input.organizationId, input.eventId, tx);
   if (!event) return { error: "Schedule event not found." };
   if (
+    input.expectedUpdatedAt &&
+    event.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+  ) {
+    return { error: "Schedule event changed. Refresh and retry." };
+  }
+  if (
     event.status !== JobScheduleEventStatus.TENTATIVE &&
     event.status !== JobScheduleEventStatus.CONFIRMED
   ) {
@@ -262,6 +337,11 @@ export async function rescheduleScheduleEvent(
 
   const windowError = validateWindow(input.startAt, input.endAt);
   if (windowError) return windowError;
+  const externalWindowError = validateExternalWindow(
+    input.externalWindowStartAt,
+    input.externalWindowEndAt,
+  );
+  if (externalWindowError) return externalWindowError;
 
   const leadUserId =
     input.leadUserId === undefined ? event.leadUserId : input.leadUserId;
@@ -286,6 +366,8 @@ export async function rescheduleScheduleEvent(
       startAt: input.startAt,
       endAt: input.endAt,
       leadUserId,
+      externalWindowStartAt: input.externalWindowStartAt ?? undefined,
+      externalWindowEndAt: input.externalWindowEndAt ?? undefined,
     },
   });
 
@@ -299,8 +381,22 @@ export async function rescheduleScheduleEvent(
       details: input.reason?.trim() || undefined,
       actorUserId: input.actorUserId,
       metadataJson: {
-        startAt: input.startAt.toISOString(),
-        endAt: input.endAt.toISOString(),
+        before: {
+          startAt: event.startAt.toISOString(),
+          endAt: event.endAt.toISOString(),
+          leadUserId: event.leadUserId,
+          status: event.status,
+          externalWindowStartAt: null,
+          externalWindowEndAt: null,
+        },
+        after: {
+          startAt: input.startAt.toISOString(),
+          endAt: input.endAt.toISOString(),
+          leadUserId,
+          status: event.status,
+          externalWindowStartAt: input.externalWindowStartAt?.toISOString() ?? null,
+          externalWindowEndAt: input.externalWindowEndAt?.toISOString() ?? null,
+        },
       },
     },
     tx,
@@ -316,6 +412,12 @@ export async function cancelScheduleEvent(
   const event = await loadEvent(input.organizationId, input.eventId, tx);
   if (!event) return { error: "Schedule event not found." };
   if (
+    input.expectedUpdatedAt &&
+    event.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+  ) {
+    return { error: "Schedule event changed. Refresh and retry." };
+  }
+  if (
     event.status !== JobScheduleEventStatus.TENTATIVE &&
     event.status !== JobScheduleEventStatus.CONFIRMED
   ) {
@@ -327,7 +429,11 @@ export async function cancelScheduleEvent(
 
   await tx.jobScheduleEvent.update({
     where: { id: event.id },
-    data: { status: JobScheduleEventStatus.CANCELED },
+    data: {
+      status: JobScheduleEventStatus.CANCELED,
+      completionOutcome: null,
+      completedAt: null,
+    },
   });
 
   await auditEvent(
@@ -339,6 +445,11 @@ export async function cancelScheduleEvent(
       title: `Schedule canceled${event.title ? `: ${event.title}` : ""}`,
       details: input.reason.trim() || undefined,
       actorUserId: input.actorUserId,
+      metadataJson: {
+        before: { status: event.status },
+        after: { status: JobScheduleEventStatus.CANCELED },
+        reason: input.reason.trim(),
+      },
     },
     tx,
   );
@@ -347,7 +458,7 @@ export async function cancelScheduleEvent(
 }
 
 export async function completeScheduleEvent(
-  input: { organizationId: string; eventId: string; actorUserId?: string },
+  input: CompleteEventInput,
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | EventServiceError> {
   const event = await loadEvent(input.organizationId, input.eventId, tx);
@@ -358,7 +469,11 @@ export async function completeScheduleEvent(
 
   await tx.jobScheduleEvent.update({
     where: { id: event.id },
-    data: { status: JobScheduleEventStatus.COMPLETED },
+    data: {
+      status: JobScheduleEventStatus.COMPLETED,
+      completionOutcome: input.outcome,
+      completedAt: new Date(),
+    },
   });
 
   await auditEvent(
@@ -368,7 +483,83 @@ export async function completeScheduleEvent(
       eventId: event.id,
       type: JobActivityType.SCHEDULE_EVENT_COMPLETED,
       title: `Schedule completed${event.title ? `: ${event.title}` : ""}`,
+      details: input.reason?.trim() || undefined,
       actorUserId: input.actorUserId,
+      metadataJson: {
+        before: {
+          status: event.status,
+          completionOutcome: event.completionOutcome,
+          completedAt: event.completedAt?.toISOString() ?? null,
+        },
+        after: {
+          status: JobScheduleEventStatus.COMPLETED,
+          completionOutcome: input.outcome,
+        },
+      },
+    },
+    tx,
+  );
+
+  return { success: true };
+}
+
+export async function correctTerminalScheduleEvent(
+  input: {
+    organizationId: string;
+    eventId: string;
+    actorUserId?: string;
+    status:
+      | typeof JobScheduleEventStatus.COMPLETED
+      | typeof JobScheduleEventStatus.CANCELED;
+    outcome?: JobScheduleEventCompletionOutcome | null;
+    reason: string;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true } | EventServiceError> {
+  if (!input.reason.trim()) {
+    return { error: "A reason is required to correct a terminal event." };
+  }
+  const event = await loadEvent(input.organizationId, input.eventId, tx);
+  if (!event) return { error: "Schedule event not found." };
+  if (
+    event.status !== JobScheduleEventStatus.COMPLETED &&
+    event.status !== JobScheduleEventStatus.CANCELED
+  ) {
+    return { error: "Only terminal events can be corrected." };
+  }
+
+  await tx.jobScheduleEvent.update({
+    where: { id: event.id },
+    data: {
+      status: input.status,
+      completionOutcome:
+        input.status === JobScheduleEventStatus.COMPLETED ? input.outcome ?? null : null,
+      completedAt: input.status === JobScheduleEventStatus.COMPLETED ? new Date() : null,
+    },
+  });
+
+  await auditEvent(
+    {
+      organizationId: input.organizationId,
+      jobId: event.jobId,
+      eventId: event.id,
+      type: JobActivityType.SCHEDULE_EVENT_RESCHEDULED,
+      title: `Schedule terminal correction${event.title ? `: ${event.title}` : ""}`,
+      details: input.reason.trim(),
+      actorUserId: input.actorUserId,
+      metadataJson: {
+        before: {
+          status: event.status,
+          completionOutcome: event.completionOutcome,
+          completedAt: event.completedAt?.toISOString() ?? null,
+        },
+        after: {
+          status: input.status,
+          completionOutcome:
+            input.status === JobScheduleEventStatus.COMPLETED ? input.outcome ?? null : null,
+        },
+        reason: input.reason.trim(),
+      },
     },
     tx,
   );

@@ -4,11 +4,11 @@ import {
   QuoteStatus,
   JobIssueSeverity,
   JobIssueStatus,
+  JobScheduleEventStatus,
   JobRecoveryFlowStatus,
   JobTaskStatus,
   JobPaymentRequirementStatus,
   DailyJobLogStatus,
-  JobVisitStatus,
   QuoteCheckpointKind,
   QuoteCheckpointSource,
   StaffRole,
@@ -54,7 +54,12 @@ import {
 } from "./workstation-recovery-routing";
 import { includesEquivalentSignal } from "./signal-key";
 import { deriveSchedulingAttentionOverride, mapLinkedEventsFromRows } from "./workstation-scheduling-attention";
-import { deriveTaskOverdue, deriveTaskDueToday } from "./scheduling/scheduling-derivation";
+import {
+  deriveEventPotentiallyMissed,
+  deriveEventUpcoming,
+  deriveTaskOverdue,
+  deriveTaskDueToday,
+} from "./scheduling/scheduling-derivation";
 import { getOrgTimezone } from "./scheduling/deadline-timezone";
 import { queryJobsNeedingScheduleCleanupAttention } from "./scheduling/job-cancel-cleanup";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "./lead-display";
@@ -548,10 +553,26 @@ export async function queryWorkstationWorkItems(
           },
         },
       },
-      visits: {
-        where: { status: { in: [JobVisitStatus.SCHEDULED, JobVisitStatus.COMPLETED] } },
-        orderBy: { scheduledStartAt: "desc" },
-        take: 10,
+      scheduleEvents: {
+        where: {
+          status: {
+            in: [
+              JobScheduleEventStatus.TENTATIVE,
+              JobScheduleEventStatus.CONFIRMED,
+              JobScheduleEventStatus.COMPLETED,
+            ],
+          },
+        },
+        orderBy: { startAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          status: true,
+          startAt: true,
+          endAt: true,
+          title: true,
+          updatedAt: true,
+        },
       },
     },
   });
@@ -758,25 +779,31 @@ export async function queryWorkstationWorkItems(
       });
     }
 
-    // 3a. Scheduling Signals
-    const upcomingVisits = job.visits.filter(
-      (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt > now
+    // 3a. Scheduling signals (canonical commitments)
+    const upcomingCommitments = job.scheduleEvents.filter((event) =>
+      deriveEventUpcoming(
+        { status: event.status, startAt: event.startAt, endAt: event.endAt },
+        now,
+      ),
     );
-    const missedVisits = job.visits.filter(
-      (v) => v.status === JobVisitStatus.SCHEDULED && v.scheduledStartAt <= now
+    const potentiallyMissedCommitments = job.scheduleEvents.filter((event) =>
+      deriveEventPotentiallyMissed(
+        { status: event.status, startAt: event.startAt, endAt: event.endAt },
+        now,
+      ),
     );
-    for (const visit of missedVisits) {
+    for (const event of potentiallyMissedCommitments) {
       const { lane, withinLaneRank } = rank({
         kind: "schedule",
         priority: "high",
         group: "investigate",
-        updatedAt: visit.updatedAt,
+        updatedAt: event.updatedAt,
       }, role, now);
 
       items.push({
-        id: `visit-missed-${visit.id}`,
+        id: `schedule-event-missed-${event.id}`,
         kind: "schedule",
-        title: `Missed Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
+        title: event.title?.trim() || "Potentially missed commitment",
         subtitle: jobCardTitle,
         status: "Missed",
         priority: "high",
@@ -785,19 +812,19 @@ export async function queryWorkstationWorkItems(
         lane,
         withinLaneRank,
         filterCategory: "jobs",
-        reason: "Scheduled visit time has passed without completion.",
-        nextStep: "Complete, reschedule, or cancel visit.",
-        recordId: visit.id,
+        reason: "Confirmed commitment has ended and may require follow-up.",
+        nextStep: "Review event outcome and schedule return work if needed.",
+        recordId: event.id,
         parentRecordId: job.id,
         parentLabel: jobParentLabel ?? undefined,
         contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
-        updatedAt: visit.updatedAt,
+        updatedAt: event.updatedAt,
       });
     }
 
-    for (const visit of upcomingVisits) {
-      const isToday = visit.scheduledStartAt.toDateString() === now.toDateString();
+    for (const event of upcomingCommitments) {
+      const isToday = event.startAt.toDateString() === now.toDateString();
       const priority: WorkstationWorkItemPriority = isToday ? "high" : "medium";
       const group: WorkstationWorkItemGroup = isToday ? "active" : "scheduled";
 
@@ -805,13 +832,13 @@ export async function queryWorkstationWorkItems(
         kind: "schedule",
         priority,
         group,
-        updatedAt: visit.updatedAt,
+        updatedAt: event.updatedAt,
       }, role, now);
 
       items.push({
-        id: `visit-upcoming-${visit.id}`,
+        id: `schedule-event-upcoming-${event.id}`,
         kind: "schedule",
-        title: `Visit: ${visit.scheduledStartAt.toLocaleDateString()}`,
+        title: event.title?.trim() || "Upcoming commitment",
         subtitle: jobCardTitle,
         status: isToday ? "Today" : "Upcoming",
         priority,
@@ -820,14 +847,14 @@ export async function queryWorkstationWorkItems(
         lane,
         withinLaneRank,
         filterCategory: "jobs",
-        reason: isToday ? "Visit scheduled for today." : "Upcoming scheduled visit.",
-        nextStep: "Prepare for visit.",
-        recordId: visit.id,
+        reason: isToday ? "Commitment scheduled for today." : "Upcoming scheduled commitment.",
+        nextStep: "Confirm readiness and assignment before start.",
+        recordId: event.id,
         parentRecordId: job.id,
         parentLabel: jobParentLabel ?? undefined,
         contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
-        updatedAt: visit.updatedAt,
+        updatedAt: event.updatedAt,
       });
     }
 

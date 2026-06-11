@@ -22,7 +22,8 @@ import { JobIssueManager } from "@/components/jobs/job-issue-manager";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
-import { JobVisitManager } from "@/components/jobs/job-visit-manager";
+import { JobScheduleEventsPanel } from "@/components/jobs/job-schedule-events-panel";
+import { JobWorkPackagePanel } from "@/components/jobs/job-work-package-panel";
 import { JobScheduleCleanupReview } from "@/components/jobs/job-schedule-cleanup-review";
 import { JobArchiveButton } from "@/components/jobs/job-archive-button";
 import {
@@ -73,7 +74,7 @@ export default async function JobDetailPage({
   const ctx = await getRequestContextOrThrow();
   const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
 
-  const [job, liveSignals, members] = await Promise.all([
+  const [job, liveSignals] = await Promise.all([
     db.job.findFirst({
       where: { id, organizationId: ctx.organizationId },
       select: {
@@ -97,16 +98,43 @@ export default async function JobDetailPage({
             jurisdiction: { select: { name: true } },
           },
         },
-        visits: {
-          orderBy: [{ scheduledStartAt: "desc" }],
+        workPackages: {
+          orderBy: [{ displayOrder: "asc" }],
           select: {
             id: true,
-            scheduledStartAt: true,
-            scheduledEndAt: true,
+            title: true,
+            workType: true,
+            plannedStartDate: true,
+            plannedEndDate: true,
+            tasks: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+        },
+        scheduleEvents: {
+          orderBy: [{ startAt: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            kind: true,
             status: true,
-            assignedUserId: true,
-            notes: true,
-            assignedUser: { select: { name: true, email: true } },
+            startAt: true,
+            endAt: true,
+            completionOutcome: true,
+            taskLinks: {
+              select: {
+                jobTask: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                  },
+                },
+              },
+            },
           },
         },
         quote: { select: { id: true, title: true, organizationId: true } },
@@ -190,6 +218,7 @@ export default async function JobDetailPage({
                 scheduledStartAt: true,
                 scheduledEndAt: true,
                 assignedUserId: true,
+                workPackageId: true,
                 providesSignals: true,
                 requiresSignals: true,
                 hardSignal: true,
@@ -282,13 +311,6 @@ export default async function JobDetailPage({
       },
     }),
     getLiveSignals(id),
-    db.membership.findMany({
-      where: { organizationId: ctx.organizationId },
-      select: {
-        user: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: "asc" },
-    }),
   ]);
 
   if (!job) {
@@ -607,13 +629,30 @@ export default async function JobDetailPage({
         reviewItems={scheduleCleanupReviewItems}
       />
 
-      <JobVisitManager
+      <JobWorkPackagePanel
         jobId={job.id}
-        initialVisits={job.visits}
-        members={members.map((membership) => ({
-          id: membership.user.id,
-          label: membership.user.name || membership.user.email || "Unnamed user",
-        }))}
+        workPackages={job.workPackages}
+        tasks={job.stages.flatMap((stage) =>
+          stage.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            stageTitle: stage.title,
+            workPackageId: task.workPackageId,
+            status: task.status,
+          })),
+        )}
+      />
+
+      <JobScheduleEventsPanel
+        jobId={job.id}
+        events={job.scheduleEvents}
+        tasks={job.stages.flatMap((stage) =>
+          stage.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            status: task.status,
+          })),
+        )}
       />
 
       <JobActivityFeed activities={job.activities} />

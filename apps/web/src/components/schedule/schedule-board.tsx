@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { format } from "date-fns";
-import { LeadVisitRequestStatus } from "@prisma/client";
+import { JobScheduleEventCompletionOutcome, LeadVisitRequestStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -13,9 +13,11 @@ import type {
   UnscheduledScheduleItem,
 } from "@/lib/schedule-query";
 import {
+  cancelJobScheduleEventFromScheduleAction,
+  completeJobScheduleEventFromScheduleAction,
+  rescheduleJobScheduleEventFromScheduleAction,
   cancelLeadVisitRequestAction,
   confirmLeadVisitRequestAction,
-  rescheduleJobVisitFromScheduleAction,
   rescheduleLeadVisitRequestAction,
   updateTaskScheduleFromCalendarAction,
   upsertScheduleBlockAction,
@@ -231,6 +233,13 @@ function EventRow({ event, members }: { event: ScheduleEvent; members: MemberOpt
   const [newDateTime, setNewDateTime] = useState(
     format(event.startAt, "yyyy-MM-dd'T'HH:mm"),
   );
+  const [newEventEndDateTime, setNewEventEndDateTime] = useState(
+    toDateTimeLocalValue(
+      event.endAt ??
+        new Date(event.startAt.getTime() + 2 * 60 * 60 * 1000),
+    ),
+  );
+  const [eventReason, setEventReason] = useState("");
   const [dueDate, setDueDate] = useState(
     event.kind === "task" && event.status === "Due" ? toDateTimeLocalValue(event.startAt) : "",
   );
@@ -242,6 +251,9 @@ function EventRow({ event, members }: { event: ScheduleEvent; members: MemberOpt
   );
   const [assigneeId, setAssigneeId] = useState(event.assigneeUserId ?? "");
   const [notifyCustomer, setNotifyCustomer] = useState(false);
+  const [completionOutcome, setCompletionOutcome] = useState<JobScheduleEventCompletionOutcome>(
+    JobScheduleEventCompletionOutcome.WORK_COMPLETED,
+  );
 
   return (
     <div className="rounded border border-border bg-surface p-3">
@@ -256,7 +268,7 @@ function EventRow({ event, members }: { event: ScheduleEvent; members: MemberOpt
       </p>
       {event.subtitle ? <p className="mt-1 text-xs text-foreground-muted">{event.subtitle}</p> : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {event.kind === "job-visit" ? (
+        {event.kind === "job-schedule-event" ? (
           <>
             <input
               type="datetime-local"
@@ -264,19 +276,90 @@ function EventRow({ event, members }: { event: ScheduleEvent; members: MemberOpt
               value={newDateTime}
               onChange={(e) => setNewDateTime(e.target.value)}
             />
+            <input
+              type="datetime-local"
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
+              value={newEventEndDateTime}
+              onChange={(e) => setNewEventEndDateTime(e.target.value)}
+            />
+            <input
+              type="text"
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
+              placeholder="Reason (required for confirmed cancel)"
+              value={eventReason}
+              onChange={(e) => setEventReason(e.target.value)}
+            />
             <Button
               size="sm"
               disabled={isPending}
               onClick={() =>
                 startTransition(async () => {
-                  await rescheduleJobVisitFromScheduleAction(event.recordId, {
-                    scheduledStartAt: new Date(newDateTime),
+                  await rescheduleJobScheduleEventFromScheduleAction(event.recordId, {
+                    startAt: new Date(newDateTime),
+                    endAt: new Date(newEventEndDateTime),
+                    reason: eventReason.trim() || undefined,
                   });
                 })
               }
             >
-              {isPending ? "Saving..." : "Reschedule"}
+              {isPending ? "Saving..." : "Reschedule event"}
             </Button>
+            {event.status === "TENTATIVE" || event.status === "CONFIRMED" ? (
+              <Button
+                size="sm"
+                variant="muted"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    await cancelJobScheduleEventFromScheduleAction(
+                      event.recordId,
+                      eventReason.trim() || "Canceled from schedule board.",
+                    );
+                  })
+                }
+              >
+                Cancel event
+              </Button>
+            ) : null}
+            {event.status === "CONFIRMED" ? (
+              <Button
+                size="sm"
+                variant="muted"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    await completeJobScheduleEventFromScheduleAction(
+                      event.recordId,
+                      completionOutcome,
+                      eventReason.trim() || undefined,
+                    );
+                  })
+                }
+              >
+                Complete event
+              </Button>
+            ) : null}
+            {event.status === "CONFIRMED" ? (
+              <select
+                className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
+                value={completionOutcome}
+                onChange={(e) =>
+                  setCompletionOutcome(
+                    e.target.value as JobScheduleEventCompletionOutcome,
+                  )
+                }
+              >
+                <option value={JobScheduleEventCompletionOutcome.WORK_COMPLETED}>
+                  Work completed
+                </option>
+                <option value={JobScheduleEventCompletionOutcome.PARTIAL_WORK}>
+                  Partial work
+                </option>
+                <option value={JobScheduleEventCompletionOutcome.NO_WORK_COMPLETED}>
+                  No work completed
+                </option>
+              </select>
+            ) : null}
           </>
         ) : null}
 

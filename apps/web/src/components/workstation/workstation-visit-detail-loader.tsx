@@ -1,6 +1,7 @@
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
-import { JobVisitManager } from "@/components/jobs/job-visit-manager";
+import { JobScheduleEventsPanel } from "@/components/jobs/job-schedule-events-panel";
+import { JobScheduleEventStatus } from "@prisma/client";
 
 type WorkstationVisitDetailLoaderProps = {
   jobId: string;
@@ -10,8 +11,8 @@ type WorkstationVisitDetailLoaderProps = {
 
 export async function WorkstationVisitDetailLoader({
   jobId,
-  visitId,
-  mode,
+  visitId: _visitId,
+  mode: _mode,
 }: WorkstationVisitDetailLoaderProps) {
   const ctx = await getRequestContextOrThrow();
 
@@ -22,49 +23,52 @@ export async function WorkstationVisitDetailLoader({
 
   if (!job) return null;
 
-  if (mode === "focus-visit" && visitId) {
-    const visit = await db.jobVisit.findFirst({
-      where: { id: visitId, jobId, organizationId: ctx.organizationId },
-      select: { id: true },
-    });
-    if (!visit) return null;
-  }
-
-  const visits = await db.jobVisit.findMany({
-    where: { jobId, organizationId: ctx.organizationId },
-    orderBy: { scheduledStartAt: "desc" },
+  const scheduleEvents = await db.jobScheduleEvent.findMany({
+    where: {
+      jobId,
+      organizationId: ctx.organizationId,
+      status: {
+        in: [
+          JobScheduleEventStatus.TENTATIVE,
+          JobScheduleEventStatus.CONFIRMED,
+          JobScheduleEventStatus.COMPLETED,
+          JobScheduleEventStatus.CANCELED,
+        ],
+      },
+    },
+    orderBy: { startAt: "desc" },
     select: {
       id: true,
-      scheduledStartAt: true,
-      scheduledEndAt: true,
-      assignedUserId: true,
+      title: true,
+      kind: true,
       status: true,
-      notes: true,
-      assignedUser: {
-        select: { name: true, email: true },
+      startAt: true,
+      endAt: true,
+      completionOutcome: true,
+      taskLinks: {
+        select: {
+          jobTask: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            },
+          },
+        },
       },
     },
   });
-
-  const members = await db.membership.findMany({
-    where: { organizationId: ctx.organizationId },
-    select: {
-      user: { select: { id: true, name: true, email: true } },
-    },
-    orderBy: { createdAt: "asc" },
+  const tasks = await db.jobTask.findMany({
+    where: { jobId, job: { organizationId: ctx.organizationId } },
+    select: { id: true, title: true, status: true },
+    orderBy: [{ sortOrder: "asc" }],
   });
 
   return (
-    <JobVisitManager
+    <JobScheduleEventsPanel
       jobId={jobId}
-      initialVisits={visits}
-      members={members.map((membership) => ({
-        id: membership.user.id,
-        label: membership.user.name || membership.user.email || "Unnamed user",
-      }))}
-      variant="embedded"
-      focusId={mode === "focus-visit" ? visitId : undefined}
-      initialShowScheduleForm={mode === "schedule-new"}
+      events={scheduleEvents}
+      tasks={tasks}
     />
   );
 }

@@ -14,11 +14,14 @@ export default async function WorkstationScheduleLensPage() {
   const scheduleItems = items.filter(
     (item) =>
       item.kind === "schedule" ||
-      (item.kind === "task" && (item.status === "Overdue" || item.status === "Due today")),
+      (item.kind === "task" &&
+        (item.status === "Overdue" ||
+          item.status === "Due today" ||
+          item.status === "Needs schedule")),
   );
   const todayCount = scheduleItems.filter((item) => item.status === "Today" || item.status === "Due today").length;
   const missedCount = scheduleItems.filter((item) => item.status === "Missed" || item.status === "Overdue").length;
-  const unscheduledCount = scheduleItems.filter((item) => item.status === "Needs Schedule").length;
+  const unscheduledCount = scheduleItems.filter((item) => item.status === "Needs schedule").length;
 
   return (
     <div className="space-y-8">

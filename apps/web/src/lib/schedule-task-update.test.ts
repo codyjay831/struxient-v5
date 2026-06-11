@@ -28,3 +28,23 @@ test("buildScheduledBlockTaskTimingUpdate updates block without touching due dat
   assert.equal(payload.assignedUserId, null);
 });
 
+test("task timing builders reject schedule-event identifiers", () => {
+  assert.throws(
+    () =>
+      buildDueOnlyTaskTimingUpdate(
+        "schedule-event-evt_123",
+        new Date("2026-06-08T09:00:00.000Z"),
+      ),
+    /task ID, not a schedule-event ID/i,
+  );
+  assert.throws(
+    () =>
+      buildScheduledBlockTaskTimingUpdate(
+        "schedule-event-evt_456",
+        new Date("2026-06-08T10:00:00.000Z"),
+        new Date("2026-06-08T12:00:00.000Z"),
+      ),
+    /task ID, not a schedule-event ID/i,
+  );
+});
+

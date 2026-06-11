@@ -3,6 +3,7 @@
 import {
   JobVisitStatus,
   JobActivityType,
+  JobScheduleEventCompletionOutcome,
   JobScheduleEventKind,
   JobScheduleEventStatus,
 } from "@prisma/client";
@@ -34,6 +35,10 @@ export type JobVisitActionState = {
   success?: boolean;
 };
 
+function isVisitTerminal(status: JobVisitStatus): boolean {
+  return status === JobVisitStatus.CANCELED || status === JobVisitStatus.COMPLETED;
+}
+
 export async function createJobVisitAction(
   jobId: string,
   data: {
@@ -61,32 +66,6 @@ export async function createJobVisitAction(
     }
 
     await db.$transaction(async (tx) => {
-      const visit = await tx.jobVisit.create({
-        data: {
-          organizationId,
-          jobId,
-          scheduledStartAt: data.scheduledStartAt,
-          scheduledEndAt: data.scheduledEndAt,
-          assignedUserId: data.assignedUserId,
-          notes: data.notes,
-          status: JobVisitStatus.SCHEDULED,
-        },
-      });
-
-      await recordJobActivity(
-        {
-          organizationId,
-          jobId,
-          type: JobActivityType.VISIT_SCHEDULED,
-          title: `Visit scheduled: ${data.scheduledStartAt.toLocaleString()}`,
-          details: data.notes || undefined,
-          entityType: "JobVisit",
-          entityId: visit.id,
-          actorUserId: session.userId,
-        },
-        tx
-      );
-
       const endAt =
         data.scheduledEndAt ??
         new Date(data.scheduledStartAt.getTime() + 2 * 60 * 60 * 1000);
@@ -108,10 +87,21 @@ export async function createJobVisitAction(
       if ("error" in created) {
         throw new Error(created.error);
       }
-      await tx.jobScheduleEvent.update({
-        where: { id: created.eventId },
-        data: { legacyVisitId: visit.id },
-      });
+
+      await recordJobActivity(
+        {
+          organizationId,
+          jobId,
+          type: JobActivityType.VISIT_SCHEDULED,
+          title: `Visit scheduled: ${data.scheduledStartAt.toLocaleString()}`,
+          details:
+            "Canonical schedule event created. Legacy JobVisit creation is disabled.",
+          entityType: "JobScheduleEvent",
+          entityId: created.eventId,
+          actorUserId: session.userId,
+        },
+        tx,
+      );
 
       await enqueueNotification(
         {
@@ -120,9 +110,10 @@ export async function createJobVisitAction(
           kind: "JOB_VISIT_SCHEDULED",
           title: `Visit scheduled: ${job.title}`,
           body: data.notes || undefined,
-          dedupeKey: `job-visit-scheduled-${visit.id}-${data.scheduledStartAt.toISOString()}`,
+          dedupeKey: `job-visit-scheduled-${created.eventId}-${data.scheduledStartAt.toISOString()}`,
           payloadJson: {
-            visitId: visit.id,
+            visitId: null,
+            scheduleEventId: created.eventId,
             jobId,
             scheduledStartAt: data.scheduledStartAt.toISOString(),
             scheduledEndAt: data.scheduledEndAt?.toISOString() ?? null,
@@ -164,11 +155,14 @@ export async function rescheduleJobVisitAction(
   try {
     const visit = await db.jobVisit.findFirst({
       where: { id: visitId, organizationId },
-      select: { id: true, jobId: true },
+      select: { id: true, jobId: true, status: true },
     });
 
     if (!visit) {
       return { error: "Visit not found or access denied." };
+    }
+    if (isVisitTerminal(visit.status)) {
+      return { error: "Completed or canceled visits cannot be rescheduled." };
     }
 
     await db.$transaction(async (tx) => {
@@ -178,7 +172,6 @@ export async function rescheduleJobVisitAction(
           scheduledStartAt: data.scheduledStartAt,
           scheduledEndAt: data.scheduledEndAt,
           notes: data.notes,
-          status: JobVisitStatus.SCHEDULED, // Ensure it's back to scheduled if it was something else
         },
       });
 
@@ -258,11 +251,14 @@ export async function cancelJobVisitAction(
   try {
     const visit = await db.jobVisit.findFirst({
       where: { id: visitId, organizationId },
-      select: { id: true, jobId: true, scheduledStartAt: true },
+      select: { id: true, jobId: true, scheduledStartAt: true, status: true },
     });
 
     if (!visit) {
       return { error: "Visit not found or access denied." };
+    }
+    if (isVisitTerminal(visit.status)) {
+      return { error: "Completed or canceled visits cannot be canceled again." };
     }
 
     await db.$transaction(async (tx) => {
@@ -340,11 +336,14 @@ export async function completeJobVisitAction(
   try {
     const visit = await db.jobVisit.findFirst({
       where: { id: visitId, organizationId },
-      select: { id: true, jobId: true, scheduledStartAt: true },
+      select: { id: true, jobId: true, scheduledStartAt: true, status: true },
     });
 
     if (!visit) {
       return { error: "Visit not found or access denied." };
+    }
+    if (isVisitTerminal(visit.status)) {
+      return { error: "Completed or canceled visits cannot be completed again." };
     }
 
     await db.$transaction(async (tx) => {
@@ -377,6 +376,8 @@ export async function completeJobVisitAction(
             organizationId,
             eventId: canonical.id,
             actorUserId: session.userId,
+            outcome: JobScheduleEventCompletionOutcome.WORK_COMPLETED,
+            reason: notes,
           },
           tx,
         );

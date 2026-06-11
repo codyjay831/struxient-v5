@@ -14,6 +14,26 @@ export type LinkedScheduleEvent = Pick<
   "id" | "status" | "startAt" | "endAt"
 >;
 
+export function deriveWorkPackageProgress(input: {
+  totalTaskCount: number;
+  completedTaskCount: number;
+}): number {
+  if (input.totalTaskCount <= 0) return 0;
+  const ratio = input.completedTaskCount / input.totalTaskCount;
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+}
+
+export function deriveReturnWorkCandidateTaskIds(input: {
+  linkedTasks: Array<{
+    taskId: string;
+    status: JobTaskStatus;
+  }>;
+}): string[] {
+  return input.linkedTasks
+    .filter((task) => task.status === JobTaskStatus.TODO)
+    .map((task) => task.taskId);
+}
+
 export type TaskDeadlineInput = {
   dueAt: Date | null;
   dueMode: TaskDueMode;

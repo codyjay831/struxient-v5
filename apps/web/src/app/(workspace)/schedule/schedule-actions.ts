@@ -1,17 +1,43 @@
 "use server";
 
-import { LeadVisitRequestStatus, ScheduleBlockType } from "@prisma/client";
+import {
+  JobScheduleEventCompletionOutcome,
+  JobScheduleEventKind,
+  JobScheduleEventStatus,
+  LeadVisitRequestStatus,
+  ScheduleBlockType,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCurrentSession } from "@/lib/session";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
-import { rescheduleJobVisitAction } from "@/app/(workspace)/jobs/job-visit-actions";
 import { setTaskScheduleActionCore } from "@/lib/task-timing";
+import {
+  confirmScheduleEvent,
+  cancelScheduleEvent,
+  completeScheduleEvent,
+  createScheduleEvent,
+  rescheduleScheduleEvent,
+} from "@/lib/scheduling/event-service";
+import {
+  linkTasksToScheduleEvent,
+  unlinkTasksFromScheduleEvent,
+} from "@/lib/scheduling/event-link-service";
+import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
 
 type ScheduleActionState = {
   error?: string;
   success?: boolean;
+  eventId?: string;
 };
+
+function requireSchedulePermission(
+  role: import("@prisma/client").StaffRole,
+  permission: import("@/lib/scheduling/schedule-permissions").SchedulePermission,
+): string | null {
+  const gate = assertSchedulePermission(role, permission);
+  return gate.ok ? null : gate.error;
+}
 
 export async function confirmLeadVisitRequestAction(
   requestId: string,
@@ -178,16 +204,209 @@ export async function rescheduleLeadVisitRequestAction(
   }
 }
 
-export async function rescheduleJobVisitFromScheduleAction(
-  visitId: string,
+export async function rescheduleJobScheduleEventFromScheduleAction(
+  eventId: string,
   data: {
-    scheduledStartAt: Date;
-    scheduledEndAt?: Date;
-    notes?: string;
+    startAt: Date;
+    endAt: Date;
+    reason?: string;
+    externalWindowStartAt?: Date | null;
+    externalWindowEndAt?: Date | null;
   },
 ): Promise<ScheduleActionState> {
-  const result = await rescheduleJobVisitAction(visitId, data);
-  if (result.error) return { error: result.error };
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(
+    session.role,
+    "reschedule_confirmed",
+  );
+  if (denied) return { error: denied };
+  const result = await rescheduleScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    startAt: data.startAt,
+    endAt: data.endAt,
+    reason: data.reason,
+    externalWindowStartAt: data.externalWindowStartAt,
+    externalWindowEndAt: data.externalWindowEndAt,
+    actorUserId: session.userId,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  return { success: true };
+}
+
+export async function cancelJobScheduleEventFromScheduleAction(
+  eventId: string,
+  reason: string,
+): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "cancel");
+  if (denied) return { error: denied };
+  const result = await cancelScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    reason,
+    actorUserId: session.userId,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  return { success: true };
+}
+
+export async function completeJobScheduleEventFromScheduleAction(
+  eventId: string,
+  outcome: JobScheduleEventCompletionOutcome,
+  reason?: string,
+): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "complete");
+  if (denied) return { error: denied };
+  const result = await completeScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    actorUserId: session.userId,
+    outcome,
+    reason,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  return { success: true };
+}
+
+export async function createJobScheduleEventAction(input: {
+  jobId: string;
+  kind: JobScheduleEventKind;
+  title?: string;
+  startAt: Date;
+  endAt: Date;
+  leadUserId?: string | null;
+  notes?: string;
+  status?:
+    | typeof JobScheduleEventStatus.TENTATIVE
+    | typeof JobScheduleEventStatus.CONFIRMED;
+  taskIds?: string[];
+  externalWindowStartAt?: Date | null;
+  externalWindowEndAt?: Date | null;
+  externalWindowLabel?: string;
+  externalWindowNotes?: string;
+  externalWindowSource?: string;
+  customerVisible?: boolean;
+}): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "create_tentative");
+  if (denied) return { error: denied };
+
+  const created = await db.$transaction(async (tx) => {
+    const result = await createScheduleEvent(
+      {
+        organizationId: session.organizationId,
+        jobId: input.jobId,
+        actorUserId: session.userId,
+        kind: input.kind,
+        title: input.title,
+        startAt: input.startAt,
+        endAt: input.endAt,
+        leadUserId: input.leadUserId,
+        notes: input.notes,
+        status: input.status,
+        externalWindowStartAt: input.externalWindowStartAt,
+        externalWindowEndAt: input.externalWindowEndAt,
+        externalWindowLabel: input.externalWindowLabel,
+        externalWindowNotes: input.externalWindowNotes,
+        externalWindowSource: input.externalWindowSource,
+        customerVisible: input.customerVisible,
+      },
+      tx,
+    );
+    if ("error" in result) return result;
+
+    if (input.taskIds && input.taskIds.length > 0) {
+      const linked = await linkTasksToScheduleEvent(
+        {
+          organizationId: session.organizationId,
+          eventId: result.eventId,
+          taskIds: input.taskIds,
+          actorUserId: session.userId,
+        },
+        tx,
+      );
+      if ("error" in linked) return linked;
+    }
+
+    return { success: true as const, eventId: result.eventId };
+  });
+  if ("error" in created) return { error: created.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  revalidatePath(`/jobs/${input.jobId}`);
+  return { success: true, eventId: created.eventId };
+}
+
+export async function confirmJobScheduleEventAction(
+  eventId: string,
+): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "confirm");
+  if (denied) return { error: denied };
+  const result = await confirmScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    actorUserId: session.userId,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  return { success: true };
+}
+
+export async function linkTasksToScheduleEventAction(
+  eventId: string,
+  taskIds: string[],
+): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
+  if (denied) return { error: denied };
+  const result = await linkTasksToScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    taskIds,
+    actorUserId: session.userId,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  return { success: true };
+}
+
+export async function unlinkTasksFromScheduleEventAction(
+  eventId: string,
+  taskIds: string[],
+): Promise<ScheduleActionState> {
+  const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
+  if (denied) return { error: denied };
+  const result = await unlinkTasksFromScheduleEvent({
+    organizationId: session.organizationId,
+    eventId,
+    taskIds,
+    actorUserId: session.userId,
+  });
+  if ("error" in result) return { error: result.error };
 
   revalidatePath("/schedule");
   revalidatePath("/workstation");
@@ -257,6 +476,11 @@ export async function updateTaskScheduleFromCalendarAction(data: {
   assignedUserId?: string | null;
 }): Promise<ScheduleActionState> {
   const session = await requireCurrentSession();
+  const denied = requireSchedulePermission(session.role, "deadline_set_recalc");
+  if (denied) return { error: denied };
+  if (data.taskId.startsWith("schedule-event-")) {
+    return { error: "Task schedule update targeted a schedule event instead of a task." };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const updateResult = await setTaskScheduleActionCore(

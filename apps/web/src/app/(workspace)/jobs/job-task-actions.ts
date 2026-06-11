@@ -35,6 +35,13 @@ import {
   validateCompletionNoteDraftSave,
 } from "@/lib/job-task-completion-note-save";
 import { setTaskScheduleActionCore, syncTaskDueDatesAfterReadiness } from "@/lib/task-timing";
+import {
+  recalculateDerivedDeadline,
+  setDerivedDeadlineRule,
+  setManualTaskDeadline,
+} from "@/lib/scheduling/deadline-service";
+import { TaskDueAnchor, TaskDueGranularity } from "@prisma/client";
+import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
 
 export type JobTaskActionState = {
   error?: string;
@@ -528,6 +535,8 @@ export async function updateJobTaskScheduleAction(
 ): Promise<JobTaskActionState> {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
+  if (!permission.ok) return { error: permission.error };
 
   try {
     const updateResult = await db.$transaction(async (tx) => {
@@ -568,6 +577,122 @@ export async function updateJobTaskScheduleAction(
     console.error("Failed to update task schedule", e);
     return { error: "Failed to update task schedule." };
   }
+}
+
+export async function setJobTaskManualDeadlineAction(input: {
+  taskId: string;
+  dueAt: Date | null;
+  granularity: TaskDueGranularity;
+  dateOnlyInput?: string;
+}): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
+  if (!permission.ok) return { error: permission.error };
+
+  const result = await db.$transaction(async (tx) => {
+    const deadline = await setManualTaskDeadline(
+      {
+        organizationId: session.organizationId,
+        taskId: input.taskId,
+        actorUserId: session.userId,
+        dueAt: input.dueAt,
+        granularity: input.granularity,
+        dateOnlyInput: input.dateOnlyInput,
+      },
+      tx,
+    );
+    if ("error" in deadline) return deadline;
+    const task = await tx.jobTask.findUnique({
+      where: { id: input.taskId },
+      select: { jobId: true },
+    });
+    if (!task) return { error: "Task not found." };
+    return { success: true as const, jobId: task.jobId };
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/tasks");
+  revalidatePath("/schedule");
+  revalidatePath("/workstation/schedule");
+  revalidatePath(`/jobs/${result.jobId}`);
+  return { success: true, taskId: input.taskId };
+}
+
+export async function setJobTaskDerivedDeadlineRuleAction(input: {
+  taskId: string;
+  anchor: TaskDueAnchor;
+  offsetDays: number;
+  granularity: TaskDueGranularity;
+}): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
+  if (!permission.ok) return { error: permission.error };
+
+  const result = await db.$transaction(async (tx) => {
+    const deadline = await setDerivedDeadlineRule(
+      {
+        organizationId: session.organizationId,
+        taskId: input.taskId,
+        actorUserId: session.userId,
+        anchor: input.anchor,
+        offsetDays: input.offsetDays,
+        granularity: input.granularity,
+      },
+      tx,
+    );
+    if ("error" in deadline) return deadline;
+    const task = await tx.jobTask.findUnique({
+      where: { id: input.taskId },
+      select: { jobId: true },
+    });
+    if (!task) return { error: "Task not found." };
+    return { success: true as const, jobId: task.jobId };
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/tasks");
+  revalidatePath("/schedule");
+  revalidatePath("/workstation/schedule");
+  revalidatePath(`/jobs/${result.jobId}`);
+  return { success: true, taskId: input.taskId };
+}
+
+export async function recalculateJobTaskDerivedDeadlineAction(
+  taskId: string,
+  reason: string,
+): Promise<JobTaskActionState> {
+  const session = await requireCurrentSession();
+  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
+  if (!permission.ok) return { error: permission.error };
+
+  const result = await db.$transaction(async (tx) => {
+    const deadline = await recalculateDerivedDeadline(
+      {
+        organizationId: session.organizationId,
+        taskId,
+        actorUserId: session.userId,
+        reason,
+      },
+      tx,
+    );
+    if ("error" in deadline) return deadline;
+    const task = await tx.jobTask.findUnique({
+      where: { id: taskId },
+      select: { jobId: true },
+    });
+    if (!task) return { error: "Task not found." };
+    return { success: true as const, jobId: task.jobId };
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/tasks");
+  revalidatePath("/schedule");
+  revalidatePath("/workstation/schedule");
+  revalidatePath(`/jobs/${result.jobId}`);
+  return { success: true, taskId };
 }
 
 export async function toggleJobTaskChecklistItemAction(

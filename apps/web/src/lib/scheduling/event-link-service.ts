@@ -1,4 +1,4 @@
-import { JobActivityType } from "@prisma/client";
+import { JobActivityType, JobScheduleEventStatus } from "@prisma/client";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 
@@ -18,6 +18,16 @@ export async function linkTaskToScheduleEvent(
     select: { id: true, jobId: true, title: true },
   });
   if (!event) return { error: "Schedule event not found." };
+  const terminalStatus = await tx.jobScheduleEvent.findUnique({
+    where: { id: event.id },
+    select: { status: true },
+  });
+  if (
+    terminalStatus?.status === JobScheduleEventStatus.CANCELED ||
+    terminalStatus?.status === JobScheduleEventStatus.COMPLETED
+  ) {
+    return { error: "Cannot link tasks to a terminal schedule event." };
+  }
 
   const task = await tx.jobTask.findFirst({
     where: {
@@ -74,6 +84,16 @@ export async function unlinkTaskFromScheduleEvent(
     select: { id: true, jobId: true },
   });
   if (!event) return { error: "Schedule event not found." };
+  const terminalStatus = await tx.jobScheduleEvent.findUnique({
+    where: { id: event.id },
+    select: { status: true },
+  });
+  if (
+    terminalStatus?.status === JobScheduleEventStatus.CANCELED ||
+    terminalStatus?.status === JobScheduleEventStatus.COMPLETED
+  ) {
+    return { error: "Cannot unlink tasks from a terminal schedule event." };
+  }
 
   const link = await tx.jobScheduleEventTask.findFirst({
     where: {
@@ -108,6 +128,60 @@ export async function unlinkTaskFromScheduleEvent(
   );
 
   return { success: true };
+}
+
+export async function linkTasksToScheduleEvent(
+  input: {
+    organizationId: string;
+    eventId: string;
+    taskIds: string[];
+    actorUserId?: string;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true; linkedCount: number } | LinkServiceError> {
+  const uniqueTaskIds = [...new Set(input.taskIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueTaskIds.length === 0) return { success: true, linkedCount: 0 };
+
+  for (const taskId of uniqueTaskIds) {
+    const linked = await linkTaskToScheduleEvent(
+      {
+        organizationId: input.organizationId,
+        eventId: input.eventId,
+        taskId,
+        actorUserId: input.actorUserId,
+      },
+      tx,
+    );
+    if ("error" in linked) return linked;
+  }
+  return { success: true, linkedCount: uniqueTaskIds.length };
+}
+
+export async function unlinkTasksFromScheduleEvent(
+  input: {
+    organizationId: string;
+    eventId: string;
+    taskIds: string[];
+    actorUserId?: string;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true; unlinkedCount: number } | LinkServiceError> {
+  const uniqueTaskIds = [...new Set(input.taskIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueTaskIds.length === 0) return { success: true, unlinkedCount: 0 };
+
+  for (const taskId of uniqueTaskIds) {
+    const unlinked = await unlinkTaskFromScheduleEvent(
+      {
+        organizationId: input.organizationId,
+        eventId: input.eventId,
+        taskId,
+        actorUserId: input.actorUserId,
+      },
+      tx,
+    );
+    if ("error" in unlinked) return unlinked;
+  }
+  return { success: true, unlinkedCount: uniqueTaskIds.length };
 }
 
 export async function loadLinkedEventsForTask(

@@ -3,7 +3,6 @@ import {
   JobIssueStatus,
   JobScheduleEventStatus,
   JobTaskStatus,
-  JobVisitStatus,
   LeadVisitRequestStatus,
   TaskSchedulingRequirement,
 } from "@prisma/client";
@@ -12,12 +11,13 @@ import { getLiveSignals } from "@/lib/signal-bus";
 import { deriveTaskState, toTaskReadinessInput } from "@/lib/task-readiness";
 import { deriveUnscheduledTaskItems, type ReadyUnscheduledTaskCandidate } from "@/lib/schedule-unscheduled-tasks";
 import { deriveScheduleConflicts as deriveCanonicalScheduleConflicts } from "@/lib/scheduling/scheduling-derivation";
+import { queryOrganizationScheduleProjection } from "@/lib/scheduling/schedule-projection";
 
 export type ScheduleView = "month" | "week" | "day" | "agenda" | "dispatch";
 
 export type ScheduleEventKind =
   | "lead-visit-request"
-  | "job-visit"
+  | "job-schedule-event"
   | "task"
   | "schedule-block"
   | "payment-overlay";
@@ -63,11 +63,30 @@ export type ScheduleQueryResult = {
   conflicts: ScheduleConflict[];
 };
 
+type CanonicalTaskScheduleLink = {
+  jobScheduleEvent: {
+    status: JobScheduleEventStatus;
+  };
+};
+
+const ACTIVE_CALENDAR_EVENT_STATUSES = new Set<JobScheduleEventStatus>([
+  JobScheduleEventStatus.TENTATIVE,
+  JobScheduleEventStatus.CONFIRMED,
+]);
+
+export function hasActiveCanonicalTaskScheduleLink(
+  links: CanonicalTaskScheduleLink[],
+): boolean {
+  return links.some((link) =>
+    ACTIVE_CALENDAR_EVENT_STATUSES.has(link.jobScheduleEvent.status),
+  );
+}
+
 export async function queryOrganizationSchedule(
   organizationId: string,
   range: { startAt: Date; endAt: Date },
 ): Promise<ScheduleQueryResult> {
-  const [leadRequests, visits, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
+  const [leadRequests, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
     db.leadVisitRequest.findMany({
       where: {
         organizationId,
@@ -94,50 +113,7 @@ export async function queryOrganizationSchedule(
       },
       orderBy: [{ confirmedDate: "asc" }, { requestedDate: "asc" }],
     }),
-    db.jobVisit.findMany({
-      where: {
-        organizationId,
-        status: { in: [JobVisitStatus.SCHEDULED, JobVisitStatus.COMPLETED] },
-        scheduledStartAt: { gte: range.startAt, lte: range.endAt },
-      },
-      select: {
-        id: true,
-        scheduledStartAt: true,
-        scheduledEndAt: true,
-        status: true,
-        assignedUserId: true,
-        notes: true,
-        assignedUser: { select: { id: true, name: true, email: true } },
-        job: { select: { id: true, title: true } },
-      },
-      orderBy: { scheduledStartAt: "asc" },
-    }),
-    db.jobScheduleEvent.findMany({
-      where: {
-        organizationId,
-        status: {
-          in: [
-            JobScheduleEventStatus.TENTATIVE,
-            JobScheduleEventStatus.CONFIRMED,
-            JobScheduleEventStatus.COMPLETED,
-          ],
-        },
-        startAt: { lte: range.endAt },
-        endAt: { gte: range.startAt },
-      },
-      select: {
-        id: true,
-        kind: true,
-        status: true,
-        title: true,
-        startAt: true,
-        endAt: true,
-        leadUserId: true,
-        leadUser: { select: { id: true, name: true, email: true } },
-        job: { select: { id: true, title: true } },
-      },
-      orderBy: { startAt: "asc" },
-    }),
+    queryOrganizationScheduleProjection({ organizationId, range }),
     db.scheduleBlock.findMany({
       where: {
         organizationId,
@@ -162,7 +138,6 @@ export async function queryOrganizationSchedule(
         status: JobTaskStatus.TODO,
         OR: [
           { dueAt: { gte: range.startAt, lte: range.endAt } },
-          { scheduledStartAt: { gte: range.startAt, lte: range.endAt } },
         ],
       },
       select: {
@@ -170,8 +145,6 @@ export async function queryOrganizationSchedule(
         title: true,
         status: true,
         dueAt: true,
-        scheduledStartAt: true,
-        scheduledEndAt: true,
         assignedUserId: true,
         assignedUser: { select: { id: true, name: true, email: true } },
         requiresSignals: true,
@@ -180,6 +153,22 @@ export async function queryOrganizationSchedule(
           select: { id: true, status: true, severity: true },
         },
         recoveryFlow: { select: { jobIssueId: true } },
+        scheduleEventLinks: {
+          where: {
+            jobScheduleEvent: {
+              status: {
+                in: [JobScheduleEventStatus.TENTATIVE, JobScheduleEventStatus.CONFIRMED],
+              },
+            },
+          },
+          select: {
+            jobScheduleEvent: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
         jobStage: {
           select: {
             issues: {
@@ -195,7 +184,7 @@ export async function queryOrganizationSchedule(
           },
         },
       },
-      orderBy: [{ dueAt: "asc" }, { scheduledStartAt: "asc" }],
+      orderBy: [{ dueAt: "asc" }],
     }),
     db.jobTask.findMany({
       where: {
@@ -212,6 +201,13 @@ export async function queryOrganizationSchedule(
         updatedAt: true,
         requiresSignals: true,
         scheduleEventLinks: {
+          where: {
+            jobScheduleEvent: {
+              status: {
+                in: [JobScheduleEventStatus.TENTATIVE, JobScheduleEventStatus.CONFIRMED],
+              },
+            },
+          },
           select: {
             jobScheduleEvent: {
               select: {
@@ -248,28 +244,10 @@ export async function queryOrganizationSchedule(
   ]);
 
   const events: ScheduleEvent[] = [];
-
-  for (const visit of visits) {
-    events.push({
-      id: `job-visit-${visit.id}`,
-      kind: "job-visit",
-      title: visit.job.title,
-      subtitle: visit.notes ?? undefined,
-      status: visit.status,
-      startAt: visit.scheduledStartAt,
-      endAt: visit.scheduledEndAt,
-      assigneeUserId: visit.assignedUserId,
-      assigneeLabel: visit.assignedUser?.name ?? visit.assignedUser?.email ?? null,
-      recordHref: `/jobs/${visit.job.id}`,
-      recordId: visit.id,
-      parentId: visit.job.id,
-    });
-  }
-
   for (const canonicalEvent of scheduleEvents) {
     events.push({
       id: `schedule-event-${canonicalEvent.id}`,
-      kind: "task",
+      kind: "job-schedule-event",
       title: canonicalEvent.title ?? canonicalEvent.job.title,
       subtitle: canonicalEvent.kind.replaceAll("_", " "),
       status: canonicalEvent.status,
@@ -340,22 +318,7 @@ export async function queryOrganizationSchedule(
 
     if (state === "BLOCKED_BY_ISSUE") continue;
 
-    if (task.scheduledStartAt) {
-      events.push({
-        id: `task-scheduled-${task.id}`,
-        kind: "task",
-        title: task.title,
-        subtitle: task.job.title,
-        status: "Scheduled",
-        startAt: task.scheduledStartAt,
-        endAt: task.scheduledEndAt,
-        assigneeUserId: task.assignedUserId,
-        assigneeLabel: task.assignedUser?.name ?? task.assignedUser?.email ?? null,
-        recordHref: `/jobs/${task.job.id}`,
-        recordId: task.id,
-        parentId: task.job.id,
-      });
-    } else if (task.dueAt) {
+    if (task.dueAt) {
       events.push({
         id: `task-due-${task.id}`,
         kind: "task",

@@ -28,6 +28,7 @@ model Organization {
   jobPaymentRequirements    JobPaymentRequirement[]
   jobVisits                 JobVisit[]
   jobScheduleEvents         JobScheduleEvent[]
+  jobWorkPackages           JobWorkPackage[]
   leads                     Lead[]
   leadCustomFieldDefs       LeadCustomFieldDef[]
   leadVisitRequests         LeadVisitRequest[]
@@ -710,6 +711,7 @@ model Job {
   tasks               JobTask[]
   visits              JobVisit[]
   scheduleEvents      JobScheduleEvent[]
+  workPackages        JobWorkPackage[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -800,6 +802,7 @@ model JobTask {
   dueResolvedAt                  DateTime?
   dueFirstReadyAt                DateTime?
   schedulingRequirement          TaskSchedulingRequirement  @default(NONE)
+  workPackageId                  String?
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
   /// Reserved for future job costing.
@@ -825,6 +828,7 @@ model JobTask {
   sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                          Stage?                     @relation(fields: [stageId], references: [id])
   scheduleEventLinks             JobScheduleEventTask[]
+  workPackage                    JobWorkPackage?            @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
@@ -833,6 +837,28 @@ model JobTask {
   @@index([dueAt])
   @@index([scheduledStartAt])
   @@index([schedulingRequirement])
+  @@index([workPackageId])
+}
+
+model JobWorkPackage {
+  id               String   @id @default(cuid())
+  organizationId   String
+  jobId            String
+  title            String
+  workType         String?
+  plannedStartDate DateTime?
+  plannedEndDate   DateTime?
+  source           String?
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job              Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tasks            JobTask[]
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([jobId, displayOrder])
 }
 
 /// Canonical job-related calendar commitment (appointment, crew block, inspection window, etc.).
@@ -842,9 +868,17 @@ model JobScheduleEvent {
   jobId          String
   kind           JobScheduleEventKind
   status         JobScheduleEventStatus @default(TENTATIVE)
+  completionOutcome JobScheduleEventCompletionOutcome?
+  completedAt    DateTime?
   title          String?
   startAt        DateTime
   endAt          DateTime
+  externalWindowStartAt DateTime?
+  externalWindowEndAt DateTime?
+  externalWindowLabel String?
+  externalWindowNotes String?
+  externalWindowSource String?
+  customerVisible Boolean @default(false)
   leadUserId     String?
   notes          String?
   /// Bridge to legacy JobVisit row during migration; null for new-only events.
@@ -860,6 +894,7 @@ model JobScheduleEvent {
   @@index([jobId])
   @@index([leadUserId])
   @@index([status])
+  @@index([completionOutcome])
   @@index([startAt])
   @@index([endAt])
 }
@@ -1500,6 +1535,12 @@ enum JobScheduleEventStatus {
   CONFIRMED
   COMPLETED
   CANCELED
+}
+
+enum JobScheduleEventCompletionOutcome {
+  WORK_COMPLETED
+  PARTIAL_WORK
+  NO_WORK_COMPLETED
 }
 
 enum LeadVisitRequestStatus {
