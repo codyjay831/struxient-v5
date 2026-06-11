@@ -59,7 +59,7 @@ export default function SignupPage() {
       const signInResult = await signIn("credentials", {
         email: parsed.data.email,
         password: parsed.data.password,
-        callbackUrl: "/onboarding/trade",
+        callbackUrl: "/onboarding/business-profile",
         redirect: false,
       });
 
@@ -68,7 +68,7 @@ export default function SignupPage() {
         return;
       }
 
-      window.location.assign(signInResult.url ?? "/onboarding/trade");
+      window.location.assign(signInResult.url ?? "/onboarding/business-profile");
     });
   };
 

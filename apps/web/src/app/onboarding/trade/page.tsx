@@ -25,7 +25,7 @@ export default function TradeOnboardingPage() {
           </div>
           <h1 className="text-3xl font-bold text-foreground tracking-tight mb-3">Welcome to Struxient</h1>
           <p className="text-foreground-muted">
-            Let&apos;s get your account set up. What is your primary trade?
+            Choose a starter template for your first public intake form.
           </p>
         </div>
 
@@ -55,7 +55,7 @@ export default function TradeOnboardingPage() {
         >
           {isPending ? <Loader2 className="size-5 animate-spin" /> : (
             <>
-              Finish Setup
+              Continue to form setup
               <ArrowRight className="size-5" />
             </>
           )}

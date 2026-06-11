@@ -8,6 +8,11 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { AIService } from "@/lib/ai/ai-service";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
+import {
+  appendBusinessProfileContext,
+  selectBusinessProfileAiContext,
+} from "@/lib/business-profile/business-profile-ai-context";
+import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 
 const INPUT_TYPES = [
   "single_choice",
@@ -264,8 +269,14 @@ export async function generateClarificationQuestionSetProposalAction(input: {
   const ctx = await getRequestContextOrThrow();
   try {
     assertCanManage(ctx.role);
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "CLARIFICATION_QUESTION_GENERATION",
+      profile,
+    );
+    const lineTextWithProfile = appendBusinessProfileContext(input.lineText, selectedProfileContext);
     const result = await AIService.generateClarificationQuestionSet({
-      lineText: input.lineText,
+      lineText: lineTextWithProfile ?? input.lineText,
       organizationName: ctx.organizationName,
       missingContext: input.missingContext ?? [],
     });

@@ -20,6 +20,11 @@ import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-lib
 import { lineItemTemplateDefaultExecutionPath } from "@/lib/line-item-template-execution-path";
 import { buildTemplateExecutionPlanningContext } from "@/lib/ai/execution-planning-inputs";
 import type { ExecutionContextAssessment } from "@/lib/ai/execution-context-assessment-schema";
+import {
+  appendBusinessProfileContext,
+  selectBusinessProfileAiContext,
+} from "@/lib/business-profile/business-profile-ai-context";
+import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 
 export type LineItemTemplateExecutionFormState = {
   error?: string;
@@ -583,6 +588,16 @@ export async function generateLineItemTemplateAIProposalAction(
     // TODO: Fetch existing signals for vocabulary normalization
     const existingSignals: string[] = [];
 
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "SCOPE_LIBRARY_EXECUTION_PLANNING",
+      profile,
+    );
+    const userInstructionsWithProfile = appendBusinessProfileContext(
+      userInstructions,
+      selectedProfileContext,
+    );
+
     const generated = await AIService.generateLibraryExecutionPlan({
       organizationId: ctx.organizationId,
       templateId: tid,
@@ -591,7 +606,7 @@ export async function generateLineItemTemplateAIProposalAction(
       organizationName: ctx.organizationName,
       existingStages: stages,
       existingSignals,
-      userInstructions,
+      userInstructions: userInstructionsWithProfile,
     });
 
     return { proposal: generated.proposal, generation: generated.generation };
@@ -636,6 +651,20 @@ export async function assessLineItemTemplateExecutionContextAction(
       orderBy: { sortOrder: "asc" },
     });
 
+    const basePlanningContext = buildTemplateExecutionPlanningContext(
+      preset.description,
+      userInstructions,
+    );
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "SCOPE_LIBRARY_EXECUTION_PLANNING",
+      profile,
+    );
+    const userInstructionsWithProfile = appendBusinessProfileContext(
+      basePlanningContext,
+      selectedProfileContext,
+    );
+
     const assessment = await AIService.assessExecutionPlanningContext({
       organizationId: ctx.organizationId,
       templateId: tid,
@@ -644,7 +673,7 @@ export async function assessLineItemTemplateExecutionContextAction(
       organizationName: ctx.organizationName,
       existingStages: stages,
       existingSignals: [],
-      userInstructions: buildTemplateExecutionPlanningContext(preset.description, userInstructions),
+      userInstructions: userInstructionsWithProfile,
     });
 
     return { assessment };

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -6,12 +7,45 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { PlaceholderButton } from "@/components/ui/placeholder-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Building2, Users } from "lucide-react";
+import { Users } from "lucide-react";
+import {
+  canManageBusinessProfile,
+  canViewBusinessProfile,
+} from "@/lib/business-profile/business-profile-permissions";
+import { getBusinessProfileViewForOrganization } from "@/lib/business-profile/business-profile-service";
+import { BusinessProfileSettingsForm } from "./business-profile-settings-form";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-export default function OrganizationSettingsPage() {
+export default async function OrganizationSettingsPage() {
+  const ctx = await getRequestContextOrThrow();
+  if (!canViewBusinessProfile(ctx.role)) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Settings", href: "/settings" },
+            { label: "Organization" },
+          ]}
+        />
+        <PageHeader
+          title="Organization"
+          description="Manage company profile and organization-wide defaults for your team."
+        />
+        <WorkspacePanel>
+          <p className="text-sm text-foreground-muted">
+            You do not have permission to view organization settings.
+          </p>
+        </WorkspacePanel>
+      </div>
+    );
+  }
+
+  const view = await getBusinessProfileViewForOrganization(ctx);
+  const canManage = canManageBusinessProfile(ctx.role);
+  const profile = view.profile;
+
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
@@ -53,22 +87,25 @@ export default function OrganizationSettingsPage() {
       <div className="space-y-8">
         <section>
           <SectionHeading
-            title="Company profile"
-            description="Legal details, branding, and service territory."
+            title="Business Profile"
+            description="Organization defaults used for terminology and AI context assistance."
           />
           <WorkspacePanel>
-            <EmptyState
-              icon={Building2}
-              title="No company profile stored"
-              description="Set up legal profile and branding details for your organization."
-            >
-              <PlaceholderButton title="Coming in a future update">
-                Edit legal profile
-              </PlaceholderButton>
-              <PlaceholderButton title="Coming in a future update">
-                Logo & colors
-              </PlaceholderButton>
-            </EmptyState>
+            <BusinessProfileSettingsForm
+              initial={{
+                trades: profile?.trades ?? [],
+                workTypes: profile?.workTypes ?? [],
+                customerMarkets: profile?.customerMarkets ?? [],
+                operatingModel: profile?.operatingModel ?? null,
+                teamSize: profile?.teamSize ?? null,
+              }}
+              canManage={canManage}
+            />
+            {!canManage ? (
+              <p className="mt-4 text-xs text-foreground-subtle">
+                Office role can view this profile but cannot edit it.
+              </p>
+            ) : null}
           </WorkspacePanel>
         </section>
 

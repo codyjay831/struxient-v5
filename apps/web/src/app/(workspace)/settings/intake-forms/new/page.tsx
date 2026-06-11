@@ -22,6 +22,8 @@ import { PageHeader } from "@/components/ui/page-header";
 export default function NewIntakeFormPage() {
   const [state, formAction, isPending] = useActionState(createIntakeFormAction, {});
   const [selectedTemplate, setSelectedTemplate] = useState<TradeStarter | null>(null);
+  const [nameValue, setNameValue] = useState("");
+  const [slugValue, setSlugValue] = useState("");
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -61,7 +63,11 @@ export default function NewIntakeFormPage() {
           </div>
           <TradeTemplatePicker 
             selectedSlug={selectedTemplate?.slug} 
-            onSelect={(t) => setSelectedTemplate(t)} 
+            onSelect={(t) => {
+              setSelectedTemplate(t);
+              setNameValue(t.name);
+              setSlugValue(t.slug);
+            }} 
           />
           <input type="hidden" name="templateSlug" value={selectedTemplate?.slug || ""} />
         </div>
@@ -74,7 +80,8 @@ export default function NewIntakeFormPage() {
                 name="name"
                 type="text"
                 required
-                defaultValue={selectedTemplate?.name || ""}
+                value={nameValue}
+                onChange={(event) => setNameValue(event.target.value)}
                 placeholder="e.g. Roofing Estimate Form"
                 className={controlClass}
               />
@@ -90,7 +97,8 @@ export default function NewIntakeFormPage() {
                   name="slug"
                   type="text"
                   required
-                  defaultValue={selectedTemplate?.slug || ""}
+                  value={slugValue}
+                  onChange={(event) => setSlugValue(event.target.value)}
                   placeholder="roofing-estimate"
                   className={controlClass}
                 />

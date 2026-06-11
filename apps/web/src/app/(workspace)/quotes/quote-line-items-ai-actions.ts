@@ -21,6 +21,11 @@ import {
   QuoteScopeApplyTxError,
 } from "@/lib/quote-scope-suggestions-apply-tx";
 import { readRequest } from "@/lib/lead/lead-projection";
+import {
+  appendBusinessProfileContext,
+  selectBusinessProfileAiContext,
+} from "@/lib/business-profile/business-profile-ai-context";
+import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 import type {
   QuoteScopeSuggestionsApplyOptions,
   QuoteScopeSuggestionsApplyResult,
@@ -118,9 +123,13 @@ export async function generateQuoteScopeSuggestionsAction(
 
     const recommendedMatches = recommendLineItemTemplates(contextText, candidates);
 
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext("QUOTE_SCOPE_SUGGESTIONS", profile);
+    const aiContextText = appendBusinessProfileContext(contextText, selectedProfileContext);
+
     const generated = await AIService.generateScopeSuggestions({
       quoteId: qid,
-      contextText,
+      contextText: aiContextText ?? contextText,
       organizationName: ctx.organizationName,
       recommendedTemplates: recommendedMatches,
       existingLineDescriptions: quote.lineItems.map((line) => line.description),

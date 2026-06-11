@@ -29,6 +29,11 @@ import {
   buildProviderTaskTitle,
   signalLooksSchedulingOrAccessRelated,
 } from "@/lib/signal-display-copy";
+import {
+  appendBusinessProfileContext,
+  selectBusinessProfileAiContext,
+} from "@/lib/business-profile/business-profile-ai-context";
+import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 import type {
   ExecutionContextAssessment,
   ExecutionPlanningContextManifest,
@@ -761,6 +766,15 @@ export async function generateQuoteLineExecutionAIProposalAction(
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
     });
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "QUOTE_LINE_EXECUTION_PLANNING",
+      profile,
+    );
+    const userInstructionsWithProfile = appendBusinessProfileContext(
+      userInstructions,
+      selectedProfileContext,
+    );
     const contextPreview = buildQuoteExecutionPlanningContextFromManifest(contextManifest, {
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
@@ -772,7 +786,7 @@ export async function generateQuoteLineExecutionAIProposalAction(
       stages,
       [],
       ctx.organizationName,
-      userInstructions,
+      userInstructionsWithProfile,
     );
 
     console.info("[quote-ai] generate ok", {
@@ -880,6 +894,15 @@ export async function assessQuoteLineExecutionContextAction(
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
     });
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "QUOTE_LINE_EXECUTION_PLANNING",
+      profile,
+    );
+    const userInstructionsWithProfile = appendBusinessProfileContext(
+      userInstructions,
+      selectedProfileContext,
+    );
     const contextPreview = buildQuoteExecutionPlanningContextFromManifest(contextManifest, {
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
@@ -893,7 +916,7 @@ export async function assessQuoteLineExecutionContextAction(
           existingStages: stages,
           existingSignals: [],
           organizationName: ctx.organizationName,
-          userInstructions,
+          userInstructions: userInstructionsWithProfile,
         })
       : { foundContext: [], missingContext: [], assumptions: [] };
     console.info("[quote-ai] assess ok", {

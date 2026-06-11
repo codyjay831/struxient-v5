@@ -32,6 +32,11 @@ import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
+import {
+  appendBusinessProfileContext,
+  selectBusinessProfileAiContext,
+} from "@/lib/business-profile/business-profile-ai-context";
+import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 import { QUOTE_PROPOSAL_FIELD_LIMITS, QUOTE_LINE_FIELD_LIMITS } from "./quote-field-limits";
 import type {
   ApplyLineClarificationResult,
@@ -388,9 +393,15 @@ export async function generateClarificationQuestionSetForLineAction(
     ]
       .filter(Boolean)
       .join("\n");
+    const profile = await getBusinessProfileForAi(ctx.organizationId);
+    const selectedProfileContext = selectBusinessProfileAiContext(
+      "CLARIFICATION_QUESTION_GENERATION",
+      profile,
+    );
+    const lineTextWithProfile = appendBusinessProfileContext(lineText, selectedProfileContext);
 
     const result = await AIService.generateClarificationQuestionSet({
-      lineText,
+      lineText: lineTextWithProfile ?? lineText,
       organizationName: ctx.organizationName,
       missingContext: [],
     });

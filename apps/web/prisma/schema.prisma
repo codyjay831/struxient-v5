@@ -53,6 +53,7 @@ model Organization {
   serviceLocationAudits     ServiceLocationAuditEvent[]
   siteDetailsReviews        SiteDetailsReview[]
   aiUsageLogs               AiUsageLog[]
+  businessProfile           OrganizationBusinessProfile?
 }
 
 model Stage {
@@ -219,6 +220,24 @@ model User {
   sessions                   Session[]
   siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
   serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
+  updatedBusinessProfiles    OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
+}
+
+model OrganizationBusinessProfile {
+  id               String                        @id @default(cuid())
+  organizationId   String                        @unique
+  trades           BusinessProfileTrade[]        @default([])
+  workTypes        BusinessProfileWorkType[]     @default([])
+  customerMarkets  BusinessProfileCustomerMarket[] @default([])
+  operatingModel   BusinessProfileOperatingModel?
+  teamSize         BusinessProfileTeamSize?
+  updatedByUserId  String?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+  organization     Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedByUser    User?                         @relation("BusinessProfileUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedByUserId])
 }
 
 model Account {
@@ -1672,6 +1691,51 @@ enum StaffRole {
   FIELD
   VIEWER
   SUBCONTRACTOR
+}
+
+enum BusinessProfileTrade {
+  ELECTRICAL
+  SOLAR
+  ROOFING
+  HVAC
+  PLUMBING
+  GENERAL_CONTRACTING
+  REMODELING
+  OTHER
+}
+
+enum BusinessProfileWorkType {
+  SERVICE_REPAIR
+  REPLACEMENT
+  INSTALLATION
+  REMODEL
+  NEW_CONSTRUCTION
+  MAINTENANCE
+  MULTI_STEP_PROJECTS
+  OTHER
+}
+
+enum BusinessProfileCustomerMarket {
+  RESIDENTIAL
+  COMMERCIAL
+  PROPERTY_MANAGERS
+  BUILDERS_GENERAL_CONTRACTORS
+  OTHER
+}
+
+enum BusinessProfileOperatingModel {
+  OWNER_OPERATOR
+  EMPLOYEES
+  SUBCONTRACTORS
+  EMPLOYEES_AND_SUBCONTRACTORS
+}
+
+enum BusinessProfileTeamSize {
+  JUST_ME
+  TWO_TO_FIVE
+  SIX_TO_FIFTEEN
+  SIXTEEN_TO_FIFTY
+  FIFTY_ONE_PLUS
 }
 
 enum JobRecoveryFlowStatus {
