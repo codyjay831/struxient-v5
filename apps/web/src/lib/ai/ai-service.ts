@@ -131,17 +131,27 @@ function deriveApnEvidenceFromApprovedSources(
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  const apnMentions: string[] = [];
+  const apnMentions: Array<{ value: string; sourceId: string | null; text: string }> = [];
   const apnRegex = /\b\d{3,5}(?:[-\s]?\d{2,5}){2,3}\b/g;
-  for (const line of summaryLines) {
+  const collectApnMentions = (text: string, sourceId: string | null) => {
+    const line = text.trim();
+    if (!line) return;
     const lower = line.toLowerCase();
-    if (!lower.includes("apn") && !lower.includes("parcel")) continue;
-    if (lower.includes("nearby") || lower.includes("neighbor") || lower.includes("for instance")) continue;
+    if (!lower.includes("apn") && !lower.includes("parcel")) return;
+    if (lower.includes("nearby") || lower.includes("neighbor") || lower.includes("for instance")) return;
     const matches = line.match(apnRegex) ?? [];
     for (const match of matches) {
       const digits = match.replace(/\D/g, "");
       if (digits.length < 9 || digits.length > 14) continue;
-      apnMentions.push(match);
+      apnMentions.push({ value: match, sourceId, text: line });
+    }
+  };
+  for (const line of summaryLines) {
+    collectApnMentions(line, null);
+  }
+  for (const source of approvedSources) {
+    for (const supportLine of source.supportText) {
+      collectApnMentions(supportLine, source.id);
     }
   }
   const selectedApn = apnMentions[0] ?? null;
@@ -169,7 +179,10 @@ function deriveApnEvidenceFromApprovedSources(
     );
   };
 
+  const preferredSourceFromMention =
+    selectedApn.sourceId ? approvedSources.find((source) => source.id === selectedApn.sourceId) ?? null : null;
   const preferredSource =
+    preferredSourceFromMention ??
     approvedSources.find((source) => {
       const text = `${source.title} ${source.url} ${source.supportText.join(" ")}`;
       return isTrustedListing(text) && matchesAddress(text);
@@ -183,11 +196,11 @@ function deriveApnEvidenceFromApprovedSources(
   if (!preferredSource) return [];
   return [
     {
-      value: selectedApn,
+      value: selectedApn.value,
       sourceId: preferredSource.id,
       addressMatched: true,
       apnShownOnSource: true,
-      explanation: "Derived from grounded summary APN mention with trusted/address-matched source.",
+      explanation: "Derived from grounded APN mention in source support/summary with trusted/address-matched source.",
     },
   ];
 }
