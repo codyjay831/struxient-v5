@@ -137,7 +137,6 @@ function deriveApnEvidenceFromApprovedSources(
     const line = text.trim();
     if (!line) return;
     const lower = line.toLowerCase();
-    if (!lower.includes("apn") && !lower.includes("parcel")) return;
     if (lower.includes("nearby") || lower.includes("neighbor") || lower.includes("for instance")) return;
     const matches = line.match(apnRegex) ?? [];
     for (const match of matches) {
