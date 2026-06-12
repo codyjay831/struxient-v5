@@ -280,3 +280,34 @@ test("returns neighbor-detected decision metadata for adjacent address evidence"
   assert.equal(decision.candidate, null);
   assert.equal(decision.neighborEvidenceDetected, true);
 });
+
+test("accepts APN when grounded source url is opaque but explanation has exact address", () => {
+  const candidate = normalizeGroundedApnCandidate({
+    apnEvidence: [
+      {
+        value: "0137081100",
+        sourceTitle: "publicaccessnow.com",
+        sourceUrl:
+          "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEXAMPLE",
+        addressMatched: true,
+        apnShownOnSource: true,
+        explanation:
+          "The APN for 401 Royal Tern Drive, Vacaville, CA 95687 is 0137081100 from Zillow listing.",
+      },
+    ],
+    sourceLinks: [
+      {
+        title: "zillow.com",
+        url: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEXAMPLE",
+      },
+      {
+        title: "Solano County Assessor",
+        url: "https://ca-solano.publicaccessnow.com/Assessor",
+      },
+    ],
+    countyAssessorSearchUrl:
+      "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQOFFICIAL",
+    addressLine: "401 Royal Tern Drive, Vacaville, CA 95687",
+  });
+  assert.equal(candidate?.value, "0137081100");
+});

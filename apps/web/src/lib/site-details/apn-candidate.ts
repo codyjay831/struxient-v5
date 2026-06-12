@@ -88,12 +88,18 @@ export function decideGroundedApnCandidate(params: {
       if (!candidate.addressMatched || !candidate.apnShownOnSource) return null;
       if (looksLikeGenericSearchResult(candidate.sourceTitle, candidate.sourceUrl)) return null;
       const matchesAddress = looksLikeEvidenceForAddress(
-        candidate.sourceTitle,
+        `${candidate.sourceTitle} ${candidate.explanation}`,
         candidate.sourceUrl,
         params.addressLine,
       );
       if (!matchesAddress && !isLikelyPropertyDetailUrl(candidate.sourceUrl)) {
-        if (looksLikeNeighborAddressEvidence(candidate.sourceTitle, candidate.sourceUrl, params.addressLine)) {
+        if (
+          looksLikeNeighborAddressEvidence(
+            `${candidate.sourceTitle} ${candidate.explanation}`,
+            candidate.sourceUrl,
+            params.addressLine,
+          )
+        ) {
           neighborEvidenceDetected = true;
         }
         return null;
@@ -148,8 +154,12 @@ export function decideGroundedApnCandidate(params: {
   const acceptedGroups = [...byNormalizedValue.values()].filter((group) => {
     const uniqueDomains = new Set(group.map((item) => toDomain(item.sourceUrl)));
     const hasOfficialSource = group.some((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl));
-    const hasSecondaryDiscoverySource = group.some((item) => isSecondaryDiscoveryUrl(item.sourceUrl));
-    const hasTrustedListingSource = group.some((item) => isTrustedListingSourceUrl(item.sourceUrl));
+    const hasSecondaryDiscoverySource = group.some((item) =>
+      isSecondaryDiscoveryEvidence(item.sourceTitle, item.sourceUrl),
+    );
+    const hasTrustedListingSource = group.some((item) =>
+      isTrustedListingEvidence(item.sourceTitle, item.sourceUrl),
+    );
     return (
       hasOfficialSource ||
       (uniqueDomains.size >= 2 && hasSecondaryDiscoverySource) ||
@@ -183,7 +193,7 @@ export function decideGroundedApnCandidate(params: {
 
   const preferredSource =
     selectedGroup.find((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl)) ??
-    selectedGroup.find((item) => isSecondaryDiscoveryUrl(item.sourceUrl)) ??
+    selectedGroup.find((item) => isSecondaryDiscoveryEvidence(item.sourceTitle, item.sourceUrl)) ??
     selectedGroup[0];
   if (!preferredSource) {
     return {
@@ -221,6 +231,16 @@ function isSecondaryDiscoveryUrl(url: string): boolean {
   );
 }
 
+function isSecondaryDiscoveryEvidence(title: string, url: string): boolean {
+  const combined = `${title} ${url}`.toLowerCase();
+  return (
+    combined.includes("zillow.com") ||
+    combined.includes("redfin.com") ||
+    combined.includes("realtor.com") ||
+    combined.includes("compass.com")
+  );
+}
+
 function isTrustedListingSourceUrl(url: string): boolean {
   const normalized = url.trim().toLowerCase();
   return (
@@ -229,6 +249,10 @@ function isTrustedListingSourceUrl(url: string): boolean {
     normalized.includes("realtor.com") ||
     normalized.includes("compass.com")
   );
+}
+
+function isTrustedListingEvidence(title: string, url: string): boolean {
+  return isSecondaryDiscoveryEvidence(title, url);
 }
 
 function isLikelyOfficialVerificationUrl(url: string): boolean {
