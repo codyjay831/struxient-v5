@@ -150,6 +150,34 @@ test("rejects APN candidate when no secondary discovery source is present", () =
   assert.equal(candidate, null);
 });
 
+test("accepts APN from single trusted listing source when official verification exists", () => {
+  const candidate = normalizeGroundedApnCandidate({
+    apnEvidence: [validEvidence],
+    sourceLinks: [
+      { title: "Redfin", url: validEvidence.sourceUrl },
+      { title: "Solano County Assessor", url: "https://ca-solano.publicaccessnow.com/Assessor" },
+    ],
+    countyAssessorSearchUrl: "https://assessor.solanocounty.com/search",
+    addressLine: "401 Royal Tern Drive, Vacaville, CA, USA",
+  });
+  assert.equal(candidate?.value, "0137-081-100");
+  assert.equal(candidate?.sourceTitle, "Redfin");
+});
+
+test("accepts APN when official verification URL is grounded redirect", () => {
+  const candidate = normalizeGroundedApnCandidate({
+    apnEvidence: [validEvidence],
+    sourceLinks: [
+      { title: "Redfin", url: validEvidence.sourceUrl },
+      { title: "Solano County Assessor", url: "https://ca-solano.publicaccessnow.com/Assessor" },
+    ],
+    countyAssessorSearchUrl:
+      "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEXAMPLE",
+    addressLine: "401 Royal Tern Drive, Vacaville, CA, USA",
+  });
+  assert.equal(candidate?.value, "0137-081-100");
+});
+
 test("rejects generic map search APN sources", () => {
   const candidate = normalizeGroundedApnCandidate({
     apnEvidence: [{

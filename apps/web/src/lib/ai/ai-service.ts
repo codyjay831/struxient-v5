@@ -116,6 +116,82 @@ function buildPaymentScheduleGenerationMeta(
   return { isSimulated: false, canApply: true };
 }
 
+function deriveApnEvidenceFromApprovedSources(
+  approvedSources: ApprovedGroundedSource[],
+  addressLine: string,
+  groundedSummary: string,
+): Array<{
+  value: string;
+  sourceId: string;
+  addressMatched: boolean;
+  apnShownOnSource: boolean;
+  explanation: string;
+}> {
+  const summaryLines = groundedSummary
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const apnMentions: string[] = [];
+  const apnRegex = /\b\d{3,5}(?:[-\s]?\d{2,5}){2,3}\b/g;
+  for (const line of summaryLines) {
+    const lower = line.toLowerCase();
+    if (!lower.includes("apn") && !lower.includes("parcel")) continue;
+    if (lower.includes("nearby") || lower.includes("neighbor") || lower.includes("for instance")) continue;
+    const matches = line.match(apnRegex) ?? [];
+    for (const match of matches) {
+      const digits = match.replace(/\D/g, "");
+      if (digits.length < 9 || digits.length > 14) continue;
+      apnMentions.push(match);
+    }
+  }
+  const selectedApn = apnMentions[0] ?? null;
+  if (!selectedApn) return [];
+
+  const normalizedAddress = addressLine.trim().toLowerCase();
+  const houseNumber = normalizedAddress.match(/\b\d+\b/)?.[0] ?? null;
+  const streetToken =
+    normalizedAddress
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .find((token) => token.length >= 4 && !/^\d+$/.test(token)) ?? null;
+  const matchesAddress = (text: string): boolean => {
+    if (!houseNumber || !streetToken) return true;
+    const normalized = text.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+    return normalized.includes(houseNumber) && normalized.includes(streetToken);
+  };
+  const isTrustedListing = (text: string): boolean => {
+    const lower = text.toLowerCase();
+    return (
+      lower.includes("zillow.com") ||
+      lower.includes("redfin.com") ||
+      lower.includes("realtor.com") ||
+      lower.includes("compass.com")
+    );
+  };
+
+  const preferredSource =
+    approvedSources.find((source) => {
+      const text = `${source.title} ${source.url} ${source.supportText.join(" ")}`;
+      return isTrustedListing(text) && matchesAddress(text);
+    }) ??
+    approvedSources.find((source) => {
+      const text = `${source.title} ${source.url} ${source.supportText.join(" ")}`;
+      return matchesAddress(text);
+    }) ??
+    null;
+
+  if (!preferredSource) return [];
+  return [
+    {
+      value: selectedApn,
+      sourceId: preferredSource.id,
+      addressMatched: true,
+      apnShownOnSource: true,
+      explanation: "Derived from grounded summary APN mention with trusted/address-matched source.",
+    },
+  ];
+}
+
 /**
  * AI Service for Execution Planning
  * 
@@ -2982,6 +3058,16 @@ Rules:
           : schemaParsed.apnCandidate
             ? [schemaParsed.apnCandidate]
             : [];
+      const fallbackApnEvidence =
+        extractedApnEvidence.length > 0
+          ? []
+          : deriveApnEvidenceFromApprovedSources(
+              approvedSources,
+              params.addressLine,
+              groundedResearch.groundedSummary,
+            );
+      const apnEvidenceCandidates =
+        extractedApnEvidence.length > 0 ? extractedApnEvidence : fallbackApnEvidence;
       const resolvedApnEvidence: Array<{
         value: string;
         sourceTitle: string;
@@ -2991,7 +3077,7 @@ Rules:
         explanation: string;
       }> = [];
       const resolvedApnSourceIds: string[] = [];
-      for (const item of extractedApnEvidence) {
+      for (const item of apnEvidenceCandidates) {
         const source = getApprovedGroundedSourceById(approvedSources, item.sourceId);
         if (!source) continue;
         resolvedApnEvidence.push({
@@ -3015,13 +3101,13 @@ Rules:
       const apnScopeDecision: SiteDetailsScopeDecision = {
         outcome: "NOT_FOUND",
         decisionCode: "NOT_FOUND",
-        candidatePresent: extractedApnEvidence.length > 0,
-        sourceReferences: extractedApnEvidence.map((item) => item.sourceId),
+        candidatePresent: apnEvidenceCandidates.length > 0,
+        sourceReferences: apnEvidenceCandidates.map((item) => item.sourceId),
         sourceReferencesResolved: resolvedApnSourceIds,
         writeAttempted: false,
         writeApplied: false,
       };
-      if (extractedApnEvidence.length > 0 && resolvedApnEvidence.length === 0) {
+      if (apnEvidenceCandidates.length > 0 && resolvedApnEvidence.length === 0) {
         apnScopeDecision.outcome = "REJECTED";
         apnScopeDecision.decisionCode = "UNKNOWN_SOURCE_REFERENCE";
       } else if (apnDecision.candidate) {
@@ -3186,7 +3272,7 @@ Rules:
           neighborEvidenceDetected: apnDecision.neighborEvidenceDetected,
           apnDecision: apnDecision.candidate
             ? "accepted"
-            : extractedApnEvidence.length > 0
+            : apnEvidenceCandidates.length > 0
               ? "rejected"
               : "none",
           apnDecisionReason: apnDecision.reason,

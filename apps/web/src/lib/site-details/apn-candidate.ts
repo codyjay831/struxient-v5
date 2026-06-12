@@ -149,7 +149,12 @@ export function decideGroundedApnCandidate(params: {
     const uniqueDomains = new Set(group.map((item) => toDomain(item.sourceUrl)));
     const hasOfficialSource = group.some((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl));
     const hasSecondaryDiscoverySource = group.some((item) => isSecondaryDiscoveryUrl(item.sourceUrl));
-    return hasOfficialSource || (uniqueDomains.size >= 2 && hasSecondaryDiscoverySource);
+    const hasTrustedListingSource = group.some((item) => isTrustedListingSourceUrl(item.sourceUrl));
+    return (
+      hasOfficialSource ||
+      (uniqueDomains.size >= 2 && hasSecondaryDiscoverySource) ||
+      hasTrustedListingSource
+    );
   });
 
   if (acceptedGroups.length === 0) {
@@ -216,14 +221,28 @@ function isSecondaryDiscoveryUrl(url: string): boolean {
   );
 }
 
+function isTrustedListingSourceUrl(url: string): boolean {
+  const normalized = url.trim().toLowerCase();
+  return (
+    normalized.includes("zillow.com") ||
+    normalized.includes("redfin.com") ||
+    normalized.includes("realtor.com") ||
+    normalized.includes("compass.com")
+  );
+}
+
 function isLikelyOfficialVerificationUrl(url: string): boolean {
   const normalized = url.trim().toLowerCase();
   return (
+    normalized.includes("vertexaisearch.cloud.google.com/grounding-api-redirect/") ||
     normalized.includes(".gov") ||
     normalized.includes("assessor") ||
     normalized.includes("parcel") ||
     normalized.includes("gis") ||
-    normalized.includes("tax")
+    normalized.includes("tax") ||
+    normalized.includes("publicaccessnow.com") ||
+    normalized.includes("countygateway.com") ||
+    normalized.includes("parcelquest.com")
   );
 }
 
