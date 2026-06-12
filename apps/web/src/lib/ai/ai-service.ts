@@ -149,6 +149,7 @@ function deriveApnEvidenceFromApprovedSources(
     collectApnMentions(line, null);
   }
   for (const source of approvedSources) {
+    collectApnMentions(`${source.title} ${decodeURIComponent(source.url)}`, source.id);
     for (const supportLine of source.supportText) {
       collectApnMentions(supportLine, source.id);
     }
