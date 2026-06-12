@@ -1,6 +1,7 @@
 /** Shared clarification types — safe for client imports (no server actions). */
 import type {
   ClarificationQuestion,
+  ClarificationQuestionSetSummary,
   ClarificationQuestionSetStatus,
 } from "@/lib/clarification/clarification-types";
 import type { ClarificationMatchConfidence } from "@/lib/clarification/clarification-matching";
@@ -15,6 +16,8 @@ export type ClarificationSetOption = {
   label: string;
   confidence: ClarificationMatchConfidence;
 };
+
+export type ClarificationQuestionSetPickerRow = ClarificationQuestionSetSummary;
 
 export type ClarificationLineModel = {
   lineId: string;
@@ -50,4 +53,9 @@ export type SuggestLineClarificationResult = {
   error?: string;
   proposal?: ClarificationAnswerProposal;
   generation?: ClarificationAnswerGenerationMeta;
+};
+
+export type SearchClarificationQuestionSetsResult = {
+  error?: string;
+  sets?: ClarificationQuestionSetPickerRow[];
 };

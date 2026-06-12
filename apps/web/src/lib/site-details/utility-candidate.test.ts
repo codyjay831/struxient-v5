@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeGroundedElectricUtilityCandidate } from "@/lib/site-details/utility-candidate";
+import {
+  decideGroundedElectricUtilityCandidate,
+  normalizeGroundedElectricUtilityCandidate,
+} from "@/lib/site-details/utility-candidate";
 
 const validCandidate = {
   name: "PG&E",
@@ -54,4 +57,29 @@ test("rejects water or sewer utility candidates", () => {
     ],
   });
   assert.equal(candidate, null);
+});
+
+test("returns decision reason when candidate source is not grounded", () => {
+  const decision = decideGroundedElectricUtilityCandidate({
+    candidate: validCandidate,
+    sourceLinks: [{ title: "Other source", url: "https://www.pge.com/other-page" }],
+  });
+  assert.equal(decision.candidate, null);
+  assert.equal(decision.reason, "SOURCE_NOT_GROUNDED");
+});
+
+test("rejects community-choice providers as distribution utility", () => {
+  const decision = decideGroundedElectricUtilityCandidate({
+    candidate: {
+      ...validCandidate,
+      name: "Silicon Valley Clean Energy (Community Choice)",
+      officialWebsite: "https://svcleanenergy.org",
+    },
+    sourceLinks: [
+      { title: "SVCE", url: "https://www.pge.com/service-territory" },
+      { title: "PG&E", url: "https://www.pge.com/" },
+    ],
+  });
+  assert.equal(decision.candidate, null);
+  assert.equal(decision.reason, "NOT_DISTRIBUTION_UTILITY");
 });

@@ -72,8 +72,19 @@ import {
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { normalizeGroundedApnCandidate } from "@/lib/site-details/apn-candidate";
-import { normalizeGroundedElectricUtilityCandidate } from "@/lib/site-details/utility-candidate";
+import { decideGroundedApnCandidate } from "@/lib/site-details/apn-candidate";
+import {
+  decideGroundedElectricUtilityCandidate,
+  type UtilityCandidateDecisionReason,
+} from "@/lib/site-details/utility-candidate";
+import { canonicalizeElectricUtilityName } from "@/lib/site-details/utility-name";
+import { researchGroundedSiteDetailsSources } from "@/lib/ai/site-details-grounded-research";
+import { extractSiteDetailsFromGroundedResearch } from "@/lib/ai/site-details-extraction";
+import { isSiteDetailsProviderError } from "@/lib/ai/site-details-provider-error";
+import {
+  getApprovedGroundedSourceById,
+  type ApprovedGroundedSource,
+} from "@/lib/ai/site-details-approved-sources";
 
 function buildScopeSuggestionsGenerationMeta(simulated: boolean): QuoteScopeSuggestionsGenerationResult["generation"] {
   if (simulated) {
@@ -180,6 +191,14 @@ export type AISiteDetailsResearchResult = {
   countyAssessorCounty: string | null;
   countyAssessorState: string | null;
   countyAssessorSearchUrl: string | null;
+  apnEvidence: Array<{
+    value: string;
+    sourceTitle: string;
+    sourceUrl: string;
+    addressMatched: boolean;
+    apnShownOnSource: boolean;
+    explanation: string;
+  }>;
   apnCandidate: {
     value: string;
     sourceTitle: string;
@@ -189,18 +208,65 @@ export type AISiteDetailsResearchResult = {
     explanation: string;
   } | null;
   sourceLinks: Array<{ title: string; url: string }>;
+  approvedSources: ApprovedGroundedSource[];
+  scopeDecisions: {
+    apn: SiteDetailsScopeDecision;
+    electricUtility: SiteDetailsScopeDecision;
+    jurisdiction: SiteDetailsScopeDecision;
+    assessor: SiteDetailsScopeDecision;
+  };
+  diagnostics?: {
+    normalizedAddress: string;
+    requestedScopes: string[];
+    groundingToolEnabled: boolean;
+    groundingMetadataPresent: boolean;
+    groundingSearchQueries: string[];
+    groundingSourceUrls: string[];
+    rawApnCandidate: string | null;
+    normalizedApnCandidate: string | null;
+    apnEvidenceSources: string[];
+    exactAddressEvidenceMatch: boolean;
+    neighborEvidenceDetected: boolean;
+    apnDecision: "accepted" | "rejected" | "none";
+    apnDecisionReason: string;
+    rawUtilityCandidate: string | null;
+    normalizedUtilityAlias: string | null;
+    utilityDecision: "accepted" | "rejected" | "none";
+    utilityDecisionReason: UtilityCandidateDecisionReason | "GROUNDING_METADATA_MISSING";
+    overallOutcome: "FULL_SUCCESS" | "PARTIAL_RESEARCH_SUCCESS" | "NO_ACCEPTED_RESULTS";
+  };
   usageLogId?: string;
+};
+
+type SiteDetailsScopeDecision = {
+  outcome: "ACCEPTED" | "REJECTED" | "NOT_FOUND";
+  decisionCode:
+    | "ACCEPTED"
+    | "NOT_FOUND"
+    | "UNKNOWN_SOURCE_REFERENCE"
+    | "APN_EVIDENCE_NOT_APPROVED"
+    | "APN_ADDRESS_MISMATCH"
+    | "APN_NEIGHBOR_EVIDENCE"
+    | "APN_NOT_EXPLICITLY_SUPPORTED"
+    | "UTILITY_COVERAGE_EVIDENCE_NOT_APPROVED"
+    | "UTILITY_CANONICAL_MATCH_FAILED"
+    | "OPTIONAL_RESOURCE_URL_DROPPED"
+    | "PROTECTED_NOT_WRITTEN"
+    | "PARTIAL_RESEARCH_SUCCESS";
+  candidatePresent: boolean;
+  sourceReferences: string[];
+  sourceReferencesResolved: string[];
+  writeAttempted: boolean;
+  writeApplied: boolean;
+  details?: Record<string, unknown>;
 };
 
 const SiteDetailsResearchSchema = z.object({
   electricUtilityCandidate: z
     .object({
       name: z.string().trim().min(1),
-      officialWebsite: z.string().url().nullable(),
-      serviceUpgradeUrl: z.string().url().nullable(),
-      coverageSourceTitle: z.string().trim().min(1),
-      coverageSourceUrl: z.string().url(),
-      coverageBasis: z.enum(["ZIP", "CITY", "COUNTY", "ADDRESS"]),
+      coverageSourceId: z.string().trim().min(1).nullable(),
+      coverageBasis: z.enum(["ZIP", "CITY", "COUNTY", "ADDRESS"]).nullable(),
       addressMatched: z.boolean(),
       isElectric: z.boolean(),
       explanation: z.string().trim().min(1).max(500),
@@ -210,28 +276,32 @@ const SiteDetailsResearchSchema = z.object({
   jurisdictionType: z
     .enum(["CITY", "COUNTY", "UNINCORPORATED_COUNTY", "DISTRICT"])
     .nullable(),
-  jurisdictionOfficialWebsite: z.string().url().nullable(),
+  jurisdictionSourceId: z.string().trim().min(1).nullable().optional().default(null),
   countyAssessorCounty: z.string().trim().min(1).nullable(),
   countyAssessorState: z.string().trim().min(1).nullable(),
-  countyAssessorSearchUrl: z.string().url().nullable(),
+  countyAssessorSourceId: z.string().trim().min(1).nullable().optional().default(null),
+  apnEvidence: z
+    .array(
+      z.object({
+        value: z.string().trim().min(1),
+        sourceId: z.string().trim().min(1),
+        addressMatched: z.boolean(),
+        apnShownOnSource: z.boolean(),
+        explanation: z.string().trim().min(1).max(500),
+      }),
+    )
+    .default([]),
   apnCandidate: z
     .object({
       value: z.string().trim().min(1),
-      sourceTitle: z.string().trim().min(1),
-      sourceUrl: z.string().url(),
+      sourceId: z.string().trim().min(1),
       addressMatched: z.boolean(),
       apnShownOnSource: z.boolean(),
       explanation: z.string().trim().min(1).max(500),
     })
-    .nullable(),
-  sourceLinks: z
-    .array(
-      z.object({
-        title: z.string().trim().min(1),
-        url: z.string().url(),
-      }),
-    )
-    .default([]),
+    .nullable()
+    .optional()
+    .default(null),
 });
 
 export class AIService {
@@ -254,27 +324,7 @@ export class AIService {
     } catch (firstError) {
       const repaired = jsonStr.replace(/,\s*([}\]])/g, "$1");
       try {
-        const parsed = JSON.parse(repaired);
-        // #region agent log
-        fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "039511" },
-          body: JSON.stringify({
-            sessionId: "039511",
-            runId: "post-fix",
-            hypothesisId: "A",
-            location: "ai-service.ts:parseGeminiJsonResponse:repaired",
-            message: "Repaired trailing commas in Gemini JSON",
-            data: {
-              firstError:
-                firstError instanceof Error ? firstError.message : String(firstError),
-              jsonStrLen: jsonStr.length,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        return parsed;
+        return JSON.parse(repaired);
       } catch {
         throw firstError;
       }
@@ -2757,54 +2807,16 @@ OUTPUT JSON ONLY:
   }): Promise<AISiteDetailsResearchResult> {
     const startedAt = new Date();
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-    const prompt = `You are researching property-adjacent contractor site details.
+    const groundedResearchPrompt = `Research contractor site details for:
 Address: ${params.addressLine}
-Missing scopes: ${params.missingScopes.join(", ")}
+Requested scopes: ${params.missingScopes.join(", ")}
 
 Rules:
-- Return ONLY official or highly credible links.
-- Focus electric utility/jurisdiction/assessor resources.
-- Search for an explicit APN tied to this exact address.
-- Credible secondary discovery sources are allowed (Zillow, Redfin, Compass, Realtor, etc).
-- Prefer official county assessor/GIS for APN when available, but discovery source does not need to be official.
-- Do NOT infer, calculate, pattern-match, or generate APN values.
-- If APN is not explicitly shown on a source for the exact address, return apnCandidate=null.
-- If the address match is uncertain, return apnCandidate=null.
-- Always provide an official county assessor or parcel-search URL when available.
-- Preserve discovery source title + URL and include that URL in sourceLinks.
-- sourceLinks must only include URLs directly returned by grounded search results; do not invent or transform URLs.
-- If providing electricUtilityCandidate, include a coverage source URL and title that support electric service for this address/area.
-- Do not return water/sewer departments as electric utility.
-- If unknown, use null.
-- Return JSON only with this exact shape:
-{
-  "electricUtilityCandidate": {
-    "name": string,
-    "officialWebsite": "https://..." | null,
-    "serviceUpgradeUrl": "https://..." | null,
-    "coverageSourceTitle": string,
-    "coverageSourceUrl": "https://...",
-    "coverageBasis": "ZIP" | "CITY" | "COUNTY" | "ADDRESS",
-    "addressMatched": boolean,
-    "isElectric": boolean,
-    "explanation": string
-  } | null,
-  "jurisdictionName": string | null,
-  "jurisdictionType": "CITY" | "COUNTY" | "UNINCORPORATED_COUNTY" | "DISTRICT" | null,
-  "jurisdictionOfficialWebsite": string | null,
-  "countyAssessorCounty": string | null,
-  "countyAssessorState": string | null,
-  "countyAssessorSearchUrl": string | null,
-  "apnCandidate": {
-    "value": string,
-    "sourceTitle": string,
-    "sourceUrl": "https://...",
-    "addressMatched": boolean,
-    "apnShownOnSource": boolean,
-    "explanation": string
-  } | null,
-  "sourceLinks": [{"title":"string","url":"https://..."}]
-}`;
+- Focus on electric utility, building jurisdiction, county assessor resource, and explicit APN evidence.
+- Include street number, city, state, and ZIP in your checks.
+- Reject neighboring properties and mismatched ZIP evidence.
+- Do not fabricate URLs.
+- Summarize findings with source-backed notes.`;
 
     const usage = await db.aiUsageLog.create({
       data: {
@@ -2815,83 +2827,464 @@ Rules:
         model: modelName,
         requestKind: "missing_scope_grounded_research",
         status: "started",
-        promptChars: prompt.length,
+        promptChars: groundedResearchPrompt.length,
         requestPayload: {
           addressLine: params.addressLine,
           missingScopes: params.missingScopes,
+          configuredModel: modelName,
         } as unknown as Prisma.InputJsonValue,
         startedAt,
       },
       select: { id: true },
     });
+    // #region agent log
+    console.error("[agent-debug] a9eae3 aiServiceEntry reached", {
+      runId: "pre-fix-3",
+      hypothesisId: "H11",
+      usageLogId: usage.id,
+      serviceLocationId: params.serviceLocationId,
+      requestedScopes: params.missingScopes,
+    });
+    // #endregion
+    // #region agent log
+    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+      body: JSON.stringify({
+        sessionId: "a9eae3",
+        runId: "pre-fix-2",
+        hypothesisId: "H9",
+        location: "ai-service.ts:usageCreated",
+        message: "Entered AIService.researchSiteDetails",
+        data: {
+          usageLogId: usage.id,
+          serviceLocationId: params.serviceLocationId,
+          requestedScopes: params.missingScopes,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch((error) => {
+      console.error(
+        "[agent-debug] a9eae3 log send failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    // #endregion
 
     try {
-      const gemini = this.getGeminiClient();
-      if (!gemini) {
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
+      if (!apiKey) {
         throw new AiProviderTemporarilyUnavailableError("GEMINI_API_KEY missing.");
       }
-      const model = gemini.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      const groundedResearch = await this.retryWithBackoff(() =>
+        this.withTimeout(
+          researchGroundedSiteDetailsSources({
+            apiKey,
+            model: modelName,
+            prompt: groundedResearchPrompt,
+            timeoutMs: this.GEMINI_REQUEST_TIMEOUT_MS,
+          }),
+          this.GEMINI_REQUEST_TIMEOUT_MS,
+        ),
       );
-      const response = await result.response;
-      const text = response.text();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : text;
+
+      const approvedSources = groundedResearch.approvedSources;
+      const trustedSourceLinks = approvedSources.map((source) => ({
+        title: source.title,
+        url: source.url,
+      }));
+      let schemaParsed = SiteDetailsResearchSchema.parse({
+        electricUtilityCandidate: null,
+        jurisdictionName: null,
+        jurisdictionType: null,
+        jurisdictionSourceId: null,
+        countyAssessorCounty: null,
+        countyAssessorState: null,
+        countyAssessorSourceId: null,
+        apnEvidence: [],
+        apnCandidate: null,
+      });
+
+      if (groundedResearch.groundingMetadataPresent && approvedSources.length > 0) {
+        const extractionRaw = await this.retryWithBackoff(() =>
+          this.withTimeout(
+            extractSiteDetailsFromGroundedResearch({
+              apiKey,
+              model: modelName,
+              timeoutMs: this.GEMINI_REQUEST_TIMEOUT_MS,
+              addressLine: params.addressLine,
+              missingScopes: params.missingScopes,
+              groundedSummary: groundedResearch.groundedSummary,
+              approvedSources,
+            }),
+            this.GEMINI_REQUEST_TIMEOUT_MS,
+          ),
+        );
+        // #region agent log
+        await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+          body: JSON.stringify({
+            sessionId: "a9eae3",
+            runId: "pre-fix-1",
+            hypothesisId: "H1",
+            location: "ai-service.ts:extractionRaw",
+            message: "Extraction raw utility candidate payload",
+            data: {
+              hasElectricUtilityCandidate: Boolean(
+                (extractionRaw as { electricUtilityCandidate?: unknown } | null)?.electricUtilityCandidate,
+              ),
+              extractedCoverageSourceId:
+                (
+                  extractionRaw as {
+                    electricUtilityCandidate?: { coverageSourceId?: string | null } | null;
+                  } | null
+                )?.electricUtilityCandidate?.coverageSourceId ?? null,
+              approvedSourceCount: approvedSources.length,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch((error) => {
+          console.error(
+            "[agent-debug] a9eae3 log send failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        });
+        // #endregion
+        schemaParsed = SiteDetailsResearchSchema.parse(extractionRaw);
+      }
+
+      const assessorSource = getApprovedGroundedSourceById(
+        approvedSources,
+        schemaParsed.countyAssessorSourceId,
+      );
+      const assessorAccepted = Boolean(
+        schemaParsed.countyAssessorCounty && schemaParsed.countyAssessorState,
+      );
+      const countyAssessorSearchUrl = assessorSource?.url ?? null;
+      const assessorScopeDecision: SiteDetailsScopeDecision = {
+        outcome: assessorAccepted ? "ACCEPTED" : "NOT_FOUND",
+        decisionCode: assessorAccepted
+          ? schemaParsed.countyAssessorSourceId && !assessorSource
+            ? "OPTIONAL_RESOURCE_URL_DROPPED"
+            : "ACCEPTED"
+          : "NOT_FOUND",
+        candidatePresent: assessorAccepted,
+        sourceReferences: schemaParsed.countyAssessorSourceId ? [schemaParsed.countyAssessorSourceId] : [],
+        sourceReferencesResolved: assessorSource ? [assessorSource.id] : [],
+        writeAttempted: false,
+        writeApplied: false,
+      };
+
+      const extractedApnEvidence =
+        schemaParsed.apnEvidence.length > 0
+          ? schemaParsed.apnEvidence
+          : schemaParsed.apnCandidate
+            ? [schemaParsed.apnCandidate]
+            : [];
+      const resolvedApnEvidence: Array<{
+        value: string;
+        sourceTitle: string;
+        sourceUrl: string;
+        addressMatched: boolean;
+        apnShownOnSource: boolean;
+        explanation: string;
+      }> = [];
+      const resolvedApnSourceIds: string[] = [];
+      for (const item of extractedApnEvidence) {
+        const source = getApprovedGroundedSourceById(approvedSources, item.sourceId);
+        if (!source) continue;
+        resolvedApnEvidence.push({
+          value: item.value,
+          sourceTitle: source.title,
+          sourceUrl: source.url,
+          addressMatched: item.addressMatched,
+          apnShownOnSource: item.apnShownOnSource,
+          explanation: item.explanation,
+        });
+        resolvedApnSourceIds.push(source.id);
+      }
+
+      const apnDecision = decideGroundedApnCandidate({
+        apnEvidence: resolvedApnEvidence,
+        sourceLinks: trustedSourceLinks,
+        countyAssessorSearchUrl,
+        existingOfficialVerificationUrl: params.existingOfficialVerificationUrl ?? null,
+        addressLine: params.addressLine,
+      });
+      const apnScopeDecision: SiteDetailsScopeDecision = {
+        outcome: "NOT_FOUND",
+        decisionCode: "NOT_FOUND",
+        candidatePresent: extractedApnEvidence.length > 0,
+        sourceReferences: extractedApnEvidence.map((item) => item.sourceId),
+        sourceReferencesResolved: resolvedApnSourceIds,
+        writeAttempted: false,
+        writeApplied: false,
+      };
+      if (extractedApnEvidence.length > 0 && resolvedApnEvidence.length === 0) {
+        apnScopeDecision.outcome = "REJECTED";
+        apnScopeDecision.decisionCode = "UNKNOWN_SOURCE_REFERENCE";
+      } else if (apnDecision.candidate) {
+        apnScopeDecision.outcome = "ACCEPTED";
+        apnScopeDecision.decisionCode = "ACCEPTED";
+      } else if (resolvedApnEvidence.length > 0) {
+        apnScopeDecision.outcome = "REJECTED";
+        if (apnDecision.neighborEvidenceDetected) {
+          apnScopeDecision.decisionCode = "APN_NEIGHBOR_EVIDENCE";
+        } else if (!apnDecision.exactAddressEvidenceMatch) {
+          apnScopeDecision.decisionCode = "APN_ADDRESS_MISMATCH";
+        } else if (
+          apnDecision.reason === "NO_GROUNDED_EVIDENCE" ||
+          apnDecision.reason === "INSUFFICIENT_GROUNDED_SOURCES" ||
+          apnDecision.reason === "NO_OFFICIAL_VERIFICATION_URL" ||
+          apnDecision.reason === "INVALID_OFFICIAL_VERIFICATION_URL"
+        ) {
+          apnScopeDecision.decisionCode = "APN_EVIDENCE_NOT_APPROVED";
+        } else {
+          apnScopeDecision.decisionCode = "APN_NOT_EXPLICITLY_SUPPORTED";
+        }
+      }
+
+      const utilitySource = getApprovedGroundedSourceById(
+        approvedSources,
+        schemaParsed.electricUtilityCandidate?.coverageSourceId ?? null,
+      );
+      const utilityCandidateForDecision = schemaParsed.electricUtilityCandidate
+        ? {
+            name: schemaParsed.electricUtilityCandidate.name,
+            officialWebsite: null,
+            serviceUpgradeUrl: null,
+            coverageSourceTitle: utilitySource?.title ?? "Grounded source",
+            coverageSourceUrl: utilitySource?.url ?? "",
+            coverageBasis: schemaParsed.electricUtilityCandidate.coverageBasis ?? "ADDRESS",
+            addressMatched: schemaParsed.electricUtilityCandidate.addressMatched,
+            isElectric: schemaParsed.electricUtilityCandidate.isElectric,
+            explanation: schemaParsed.electricUtilityCandidate.explanation,
+          }
+        : null;
+      const utilityDecision = groundedResearch.groundingMetadataPresent
+        ? decideGroundedElectricUtilityCandidate({
+            candidate: utilityCandidateForDecision,
+            sourceLinks: trustedSourceLinks,
+          })
+        : { candidate: null, reason: "NO_CANDIDATE" as const };
+      const utilityScopeDecision: SiteDetailsScopeDecision = {
+        outcome: "NOT_FOUND",
+        decisionCode: "NOT_FOUND",
+        candidatePresent: Boolean(schemaParsed.electricUtilityCandidate),
+        sourceReferences: schemaParsed.electricUtilityCandidate?.coverageSourceId
+          ? [schemaParsed.electricUtilityCandidate.coverageSourceId]
+          : [],
+        sourceReferencesResolved: utilitySource ? [utilitySource.id] : [],
+        writeAttempted: false,
+        writeApplied: false,
+      };
+      if (schemaParsed.electricUtilityCandidate && !schemaParsed.electricUtilityCandidate.coverageSourceId) {
+        utilityScopeDecision.outcome = "REJECTED";
+        utilityScopeDecision.decisionCode = "UTILITY_COVERAGE_EVIDENCE_NOT_APPROVED";
+      } else if (schemaParsed.electricUtilityCandidate && !utilitySource) {
+        utilityScopeDecision.outcome = "REJECTED";
+        utilityScopeDecision.decisionCode = "UTILITY_COVERAGE_EVIDENCE_NOT_APPROVED";
+      } else if (utilityDecision.candidate) {
+        utilityScopeDecision.outcome = "ACCEPTED";
+        utilityScopeDecision.decisionCode = "ACCEPTED";
+      } else if (schemaParsed.electricUtilityCandidate) {
+        utilityScopeDecision.outcome = "REJECTED";
+        utilityScopeDecision.decisionCode = "UTILITY_CANONICAL_MATCH_FAILED";
+      }
       // #region agent log
-      fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "039511" },
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
         body: JSON.stringify({
-          sessionId: "039511",
-          runId: "post-fix",
-          hypothesisId: "A,B,C,D,E",
-          location: "ai-service.ts:researchSiteDetails:pre-parse",
-          message: "Gemini site details response before JSON.parse",
+          sessionId: "a9eae3",
+          runId: "pre-fix-1",
+          hypothesisId: "H2",
+          location: "ai-service.ts:utilityScopeDecision",
+          message: "Utility scope decision computed",
           data: {
-            textLen: text.length,
-            jsonStrLen: jsonStr.length,
-            hasTrailingComma: /,\s*[}\]]/.test(jsonStr),
+            candidatePresent: utilityScopeDecision.candidatePresent,
+            decisionCode: utilityScopeDecision.decisionCode,
+            outcome: utilityScopeDecision.outcome,
+            sourceReferences: utilityScopeDecision.sourceReferences,
+            sourceReferencesResolved: utilityScopeDecision.sourceReferencesResolved,
+            utilityDecisionReason: groundedResearch.groundingMetadataPresent
+              ? utilityDecision.reason
+              : "GROUNDING_METADATA_MISSING",
           },
           timestamp: Date.now(),
         }),
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error(
+          "[agent-debug] a9eae3 log send failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
       // #endregion
-      const raw = this.parseGeminiJsonResponse(text);
-      const schemaParsed = SiteDetailsResearchSchema.parse(raw);
+
+      const jurisdictionSource = getApprovedGroundedSourceById(
+        approvedSources,
+        schemaParsed.jurisdictionSourceId,
+      );
+      const jurisdictionAccepted = Boolean(schemaParsed.jurisdictionName && schemaParsed.jurisdictionType);
+      const jurisdictionScopeDecision: SiteDetailsScopeDecision = {
+        outcome: jurisdictionAccepted ? "ACCEPTED" : "NOT_FOUND",
+        decisionCode: jurisdictionAccepted
+          ? schemaParsed.jurisdictionSourceId && !jurisdictionSource
+            ? "OPTIONAL_RESOURCE_URL_DROPPED"
+            : "ACCEPTED"
+          : "NOT_FOUND",
+        candidatePresent: jurisdictionAccepted,
+        sourceReferences: schemaParsed.jurisdictionSourceId ? [schemaParsed.jurisdictionSourceId] : [],
+        sourceReferencesResolved: jurisdictionSource ? [jurisdictionSource.id] : [],
+        writeAttempted: false,
+        writeApplied: false,
+      };
+
+      const acceptedCount = [
+        apnScopeDecision.outcome,
+        utilityScopeDecision.outcome,
+        jurisdictionScopeDecision.outcome,
+        assessorScopeDecision.outcome,
+      ].filter((outcome) => outcome === "ACCEPTED").length;
+      const overallOutcome =
+        acceptedCount === 0
+          ? "NO_ACCEPTED_RESULTS"
+          : acceptedCount === 4
+            ? "FULL_SUCCESS"
+            : "PARTIAL_RESEARCH_SUCCESS";
+
       const parsed: AISiteDetailsResearchResult = {
-        ...schemaParsed,
-        electricUtilityCandidate: normalizeGroundedElectricUtilityCandidate({
-          candidate: schemaParsed.electricUtilityCandidate,
-          sourceLinks: schemaParsed.sourceLinks,
+        electricUtilityCandidate: utilityDecision.candidate,
+        jurisdictionName: schemaParsed.jurisdictionName,
+        jurisdictionType: schemaParsed.jurisdictionType,
+        jurisdictionOfficialWebsite: jurisdictionSource?.url ?? null,
+        countyAssessorCounty: schemaParsed.countyAssessorCounty,
+        countyAssessorState: schemaParsed.countyAssessorState,
+        countyAssessorSearchUrl,
+        apnEvidence: resolvedApnEvidence,
+        apnCandidate: apnDecision.candidate,
+        sourceLinks: trustedSourceLinks,
+        approvedSources,
+        scopeDecisions: {
+          apn: apnScopeDecision,
+          electricUtility: utilityScopeDecision,
+          jurisdiction: jurisdictionScopeDecision,
+          assessor: assessorScopeDecision,
+        },
+        diagnostics: {
+          normalizedAddress: params.addressLine.trim(),
+          requestedScopes: params.missingScopes,
+          groundingToolEnabled: true,
+          groundingMetadataPresent: groundedResearch.groundingMetadataPresent,
+          groundingSearchQueries: groundedResearch.groundingSearchQueries,
+          groundingSourceUrls: trustedSourceLinks.map((source) => source.url),
+          rawApnCandidate: extractedApnEvidence[0]?.value ?? null,
+          normalizedApnCandidate: apnDecision.normalizedCandidate,
+          apnEvidenceSources: apnDecision.evidenceSourceUrls,
+          exactAddressEvidenceMatch: apnDecision.exactAddressEvidenceMatch,
+          neighborEvidenceDetected: apnDecision.neighborEvidenceDetected,
+          apnDecision: apnDecision.candidate
+            ? "accepted"
+            : extractedApnEvidence.length > 0
+              ? "rejected"
+              : "none",
+          apnDecisionReason: apnDecision.reason,
+          rawUtilityCandidate: schemaParsed.electricUtilityCandidate?.name ?? null,
+          normalizedUtilityAlias: schemaParsed.electricUtilityCandidate
+            ? canonicalizeElectricUtilityName(schemaParsed.electricUtilityCandidate.name)
+            : null,
+          utilityDecision: utilityDecision.candidate
+            ? "accepted"
+            : schemaParsed.electricUtilityCandidate
+              ? "rejected"
+              : "none",
+          utilityDecisionReason: groundedResearch.groundingMetadataPresent
+            ? utilityDecision.reason
+            : "GROUNDING_METADATA_MISSING",
+          overallOutcome,
+        },
+      };
+      // #region agent log
+      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+        body: JSON.stringify({
+          sessionId: "a9eae3",
+          runId: "pre-fix-1",
+          hypothesisId: "H5",
+          location: "ai-service.ts:parsedResult",
+          message: "Research result before persistence layer",
+          data: {
+            overallOutcome: parsed.diagnostics?.overallOutcome ?? null,
+            utilityScopeOutcome: parsed.scopeDecisions.electricUtility.outcome,
+            jurisdictionScopeOutcome: parsed.scopeDecisions.jurisdiction.outcome,
+            assessorScopeOutcome: parsed.scopeDecisions.assessor.outcome,
+            apnScopeOutcome: parsed.scopeDecisions.apn.outcome,
+            hasUtilityCandidate: Boolean(parsed.electricUtilityCandidate),
+          },
+          timestamp: Date.now(),
         }),
-        apnCandidate: normalizeGroundedApnCandidate({
-          apnCandidate: schemaParsed.apnCandidate,
-          sourceLinks: schemaParsed.sourceLinks,
-          countyAssessorSearchUrl: schemaParsed.countyAssessorSearchUrl,
-          existingOfficialVerificationUrl: params.existingOfficialVerificationUrl ?? null,
-        }),
+      }).catch((error) => {
+        console.error(
+          "[agent-debug] a9eae3 log send failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+      // #endregion
+      const responsePayload = {
+        ...parsed,
+        groundedSummary: groundedResearch.groundedSummary.slice(0, 2_000),
       };
 
       await db.aiUsageLog.update({
         where: { id: usage.id },
         data: {
           status: "success",
-          responseChars: text.length,
-          responsePayload: parsed as unknown as Prisma.InputJsonValue,
+          responseChars: JSON.stringify(responsePayload).length,
+          responsePayload: responsePayload as unknown as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
       });
       return { ...parsed, usageLogId: usage.id };
     } catch (error) {
+      const providerDetails = isSiteDetailsProviderError(error) ? error.details : null;
+      // #region agent log
+      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+        body: JSON.stringify({
+          sessionId: "a9eae3",
+          runId: "pre-fix-2",
+          hypothesisId: "H10",
+          location: "ai-service.ts:catch",
+          message: "AIService.researchSiteDetails caught error",
+          data: {
+            errorName: error instanceof Error ? error.name : "unknown",
+            errorMessage: error instanceof Error ? error.message : String(error),
+            providerStage: providerDetails?.stage ?? null,
+            providerCode: providerDetails?.code ?? null,
+            providerStatus: providerDetails?.status ?? null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch((fetchError) => {
+        console.error(
+          "[agent-debug] a9eae3 log send failed",
+          fetchError instanceof Error ? fetchError.message : String(fetchError),
+        );
+      });
+      // #endregion
       await db.aiUsageLog.update({
         where: { id: usage.id },
         data: {
           status: "error",
-          errorMessage: error instanceof Error ? error.message : "Unknown AI error",
+          errorMessage: providerDetails
+            ? JSON.stringify(providerDetails)
+            : error instanceof Error
+              ? error.message
+              : "Unknown AI error",
+          responsePayload: providerDetails ? (providerDetails as unknown as Prisma.InputJsonValue) : undefined,
           finishedAt: new Date(),
         },
       });

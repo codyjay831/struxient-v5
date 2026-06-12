@@ -21,6 +21,15 @@ import {
 import { appendServiceLocationAuditEvent } from "@/lib/site-details/audit";
 import { normalizeAddressDedupKey } from "@/lib/customer-service-location-from-lead";
 import { AIService } from "@/lib/ai/ai-service";
+import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import {
+  buildElectricUtilityNameAliases,
+  canonicalizeElectricUtilityName,
+} from "@/lib/site-details/utility-name";
+import {
+  findUtilityCoverageMatches,
+} from "@/lib/site-details/utility-coverage";
+import type { UtilityCandidateDecisionReason } from "@/lib/site-details/utility-candidate";
 
 export type SiteDetailsActionState = {
   error?: string;
@@ -36,18 +45,29 @@ export type SiteDetailsOption = {
 const researchInFlightByLocation = new Map<string, Promise<SiteDetailsResolved | null>>();
 const resolverDb = db as unknown as Parameters<typeof resolveSiteDetailsForServiceLocation>[0];
 const auditDb = db as unknown as Parameters<typeof appendServiceLocationAuditEvent>[0];
+const CONTROLLED_CANONICAL_UTILITIES = new Set([
+  "PG&E",
+  "San Diego Gas & Electric",
+  "Southern California Edison",
+]);
 
 function trimField(formData: FormData, key: string): string {
   const v = formData.get(key);
   return typeof v === "string" ? v.trim() : "";
 }
 
-function revalidateLocationSurfaces(serviceLocationId: string) {
+async function revalidateLocationSurfaces(serviceLocationId: string) {
   revalidatePath("/leads");
   revalidatePath("/quotes");
   revalidatePath("/jobs");
   revalidatePath("/customers");
-  revalidatePath(`/customers/${serviceLocationId}`);
+  const row = await db.customerServiceLocation.findUnique({
+    where: { id: serviceLocationId },
+    select: { customerId: true },
+  });
+  if (row?.customerId) {
+    revalidatePath(`/customers/${row.customerId}`);
+  }
 }
 
 export async function loadQuoteSiteDetailsAction(quoteId: string): Promise<SiteDetailsActionState> {
@@ -119,13 +139,17 @@ export async function saveSiteDetailsApnAction(
   const existingApn = existing.apn?.trim() || null;
   const normalizedApn = apn || null;
   const nextStatus =
-    normalizedApn && existingApn && existingApn !== normalizedApn
-      ? SiteDetailsStatus.USER_CORRECTED
-      : pickHigherPriorityStatus(existing.detailsStatus, SiteDetailsStatus.USER_REVIEWED);
+    !normalizedApn
+      ? SiteDetailsStatus.UNVERIFIED
+      : normalizedApn && existingApn && existingApn !== normalizedApn
+        ? SiteDetailsStatus.USER_CORRECTED
+        : pickHigherPriorityStatus(existing.detailsStatus, SiteDetailsStatus.USER_REVIEWED);
   const nextSource =
-    normalizedApn && existingApn && existingApn !== normalizedApn
-      ? SiteDetailsSource.USER_CORRECTED
-      : SiteDetailsSource.USER_REVIEWED;
+    !normalizedApn
+      ? SiteDetailsSource.DATABASE_MATCH
+      : normalizedApn && existingApn && existingApn !== normalizedApn
+        ? SiteDetailsSource.USER_CORRECTED
+        : SiteDetailsSource.USER_REVIEWED;
 
   await db.customerServiceLocation.update({
     where: { id },
@@ -133,12 +157,17 @@ export async function saveSiteDetailsApnAction(
       apn: normalizedApn,
       detailsStatus: nextStatus,
       detailsSource: nextSource,
-      detailsReviewedAt: new Date(),
-      detailsReviewedBy: ctx.userId,
+      detailsReviewedAt: normalizedApn ? new Date() : null,
+      detailsReviewedBy: normalizedApn ? ctx.userId : null,
+      apnSourceTitle: normalizedApn ? existing.apnSourceTitle : null,
+      apnSourceUrl: normalizedApn ? existing.apnSourceUrl : null,
       apnConflictValue: null,
       apnConflictSourceTitle: null,
       apnConflictSourceUrl: null,
       apnConflictDetectedAt: null,
+      apnDiscoveredAt: normalizedApn ? existing.apnDiscoveredAt : null,
+      apnResearchUsageLogId: normalizedApn ? undefined : null,
+      apnVerificationUrl: normalizedApn ? existing.apnVerificationUrl : null,
     },
   });
   await appendServiceLocationAuditEvent(auditDb, {
@@ -158,10 +187,10 @@ export async function saveSiteDetailsApnAction(
       discoveredAt: existing.apnDiscoveredAt,
       verificationUrl: existing.apnVerificationUrl,
     },
-    newValue: { apn: normalizedApn, preservedDiscoverySource: true },
+    newValue: { apn: normalizedApn, preservedDiscoverySource: Boolean(normalizedApn) },
     sourceReason: reason,
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -215,7 +244,7 @@ export async function confirmSiteDetailsApnAction(
     },
     sourceReason: "manual_apn_confirm",
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -242,10 +271,10 @@ export async function saveSiteDetailsUtilityAction(
       where: { id },
       data: {
         utilityId: null,
-        detailsStatus: SiteDetailsStatus.USER_CORRECTED,
-        detailsSource: SiteDetailsSource.USER_CORRECTED,
-        detailsReviewedAt: new Date(),
-        detailsReviewedBy: ctx.userId,
+        detailsStatus: SiteDetailsStatus.UNVERIFIED,
+        detailsSource: SiteDetailsSource.DATABASE_MATCH,
+        detailsReviewedAt: null,
+        detailsReviewedBy: null,
       },
     });
     await appendServiceLocationAuditEvent(auditDb, {
@@ -257,7 +286,7 @@ export async function saveSiteDetailsUtilityAction(
       newValue: { utilityId: null },
       sourceReason: reason || "manual_utility_clear",
     });
-    revalidateLocationSurfaces(id);
+    await revalidateLocationSurfaces(id);
     return { success: true };
   }
 
@@ -294,7 +323,7 @@ export async function saveSiteDetailsUtilityAction(
     newValue: { utilityId: utility.id, utilityName: utility.name },
     sourceReason: reason,
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -321,10 +350,10 @@ export async function saveSiteDetailsJurisdictionAction(
       where: { id },
       data: {
         jurisdictionId: null,
-        detailsStatus: SiteDetailsStatus.USER_CORRECTED,
-        detailsSource: SiteDetailsSource.USER_CORRECTED,
-        detailsReviewedAt: new Date(),
-        detailsReviewedBy: ctx.userId,
+        detailsStatus: SiteDetailsStatus.UNVERIFIED,
+        detailsSource: SiteDetailsSource.DATABASE_MATCH,
+        detailsReviewedAt: null,
+        detailsReviewedBy: null,
       },
     });
     await appendServiceLocationAuditEvent(auditDb, {
@@ -336,7 +365,7 @@ export async function saveSiteDetailsJurisdictionAction(
       newValue: { jurisdictionId: null },
       sourceReason: reason || "manual_jurisdiction_clear",
     });
-    revalidateLocationSurfaces(id);
+    await revalidateLocationSurfaces(id);
     return { success: true };
   }
 
@@ -368,7 +397,7 @@ export async function saveSiteDetailsJurisdictionAction(
     newValue: { jurisdictionId: jurisdiction.id, jurisdictionName: jurisdiction.name },
     sourceReason: reason,
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -417,7 +446,7 @@ export async function markSiteDetailsReviewedAction(
     newValue: { detailsStatus: nextStatus, detailsSource: SiteDetailsSource.USER_REVIEWED, notes },
     sourceReason: "manual_review",
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -492,7 +521,7 @@ export async function clearUnreviewedAiSiteDetailsAction(
     newValue: { cleared: true, preservedReviewedValues: true },
     sourceReason: "manual_clear_unreviewed_ai_results",
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -577,7 +606,7 @@ export async function updateServiceLocationAddressAction(
     newValue: updateData,
     sourceReason: "manual_address_update",
   });
-  revalidateLocationSurfaces(id);
+  await revalidateLocationSurfaces(id);
   return { success: true };
 }
 
@@ -595,6 +624,38 @@ export async function requestSiteDetailsResearchAction(
     return { success: true, siteDetails };
   }
   const pending = (async () => {
+    // #region agent log
+    console.error("[agent-debug] a9eae3 pendingEntry reached", {
+      runId: "pre-fix-3",
+      hypothesisId: "H11",
+      serviceLocationId: id,
+      requestedScopesParam: requestedScopes ?? null,
+    });
+    // #endregion
+    // #region agent log
+    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+      body: JSON.stringify({
+        sessionId: "a9eae3",
+        runId: "pre-fix-2",
+        hypothesisId: "H9",
+        location: "site-details-actions.ts:pendingEntry",
+        message: "Entered requestSiteDetailsResearchAction pending block",
+        data: {
+          serviceLocationId: id,
+          requestedScopesParam: requestedScopes ?? null,
+          organizationId: ctx.organizationId,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch((error) => {
+      console.error(
+        "[agent-debug] a9eae3 log send failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    // #endregion
     const before = await resolveSiteDetailsForServiceLocation(resolverDb, {
       organizationId: ctx.organizationId,
       serviceLocationId: id,
@@ -635,7 +696,37 @@ export async function requestSiteDetailsResearchAction(
       missingScopes: requested,
       existingOfficialVerificationUrl: before.assessorResource?.assessorSearchUrl ?? null,
     });
+    // #region agent log
+    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+      body: JSON.stringify({
+        sessionId: "a9eae3",
+        runId: "pre-fix-1",
+        hypothesisId: "H3",
+        location: "site-details-actions.ts:afterResearch",
+        message: "Research output entering persistence action",
+        data: {
+          requestedScopes: requested,
+          utilityScopeDecision: research.scopeDecisions.electricUtility,
+          jurisdictionScopeDecision: research.scopeDecisions.jurisdiction,
+          assessorScopeDecision: research.scopeDecisions.assessor,
+          apnScopeDecision: research.scopeDecisions.apn,
+          hasUtilityCandidate: Boolean(research.electricUtilityCandidate),
+          utilityDecisionReason: research.diagnostics?.utilityDecisionReason ?? null,
+          overallOutcome: research.diagnostics?.overallOutcome ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch((error) => {
+      console.error(
+        "[agent-debug] a9eae3 log send failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    // #endregion
     const requestedSet = new Set(requested);
+    const coverageCounty = research.countyAssessorCounty ?? null;
 
     let utilityId: string | null = null;
     let jurisdictionId: string | null = null;
@@ -653,61 +744,92 @@ export async function requestSiteDetailsResearchAction(
     let apnDiscovered = false;
     let apnRefreshed = false;
     let rejectedUtilityCandidate = false;
+    let utilityDecisionReason:
+      | UtilityCandidateDecisionReason
+      | "GROUNDING_METADATA_MISSING"
+      | "UTILITY_CANONICAL_MATCH_FAILED"
+      | null = research.diagnostics?.utilityDecisionReason ?? null;
+    const apnDecisionReason = research.diagnostics?.apnDecisionReason ?? null;
 
     if (requestedSet.has("UTILITY") && research.electricUtilityCandidate) {
       const utilityCandidate = research.electricUtilityCandidate;
-      const existingUtility = await db.utility.findFirst({
+      const canonicalUtilityName = canonicalizeElectricUtilityName(utilityCandidate.name);
+      const utilityNameAliases = buildElectricUtilityNameAliases(utilityCandidate.name);
+      let existingUtility = await db.utility.findFirst({
         where: {
           organizationId: ctx.organizationId,
-          name: utilityCandidate.name,
+          name: { in: utilityNameAliases },
           utilityType: UtilityType.ELECTRIC,
           isActive: true,
         },
-        select: { id: true },
+        select: { id: true, name: true },
       });
-      const existingCoverageMatch = existingUtility
-        ? await db.utilityCoverage.findFirst({
-            where: {
-              organizationId: ctx.organizationId,
-              utilityId: existingUtility.id,
-              isActive: true,
-              OR: [
-                {
-                  coverageType: "ZIP",
-                  coverageValue: location.postalCode,
-                  state: location.state,
-                },
-                {
-                  coverageType: "CITY",
-                  coverageValue: location.city,
-                  state: location.state,
-                },
-              ],
-            },
-            select: { id: true },
-          })
-        : null;
-      const hasCoverageEvidence =
-        utilityCandidate.coverageBasis === "ADDRESS" || Boolean(existingCoverageMatch);
-      if (hasCoverageEvidence) {
-        const utility = await db.utility.upsert({
+      if (!existingUtility && CONTROLLED_CANONICAL_UTILITIES.has(canonicalUtilityName)) {
+        existingUtility = await db.utility.upsert({
           where: {
             organizationId_name: {
               organizationId: ctx.organizationId,
-              name: utilityCandidate.name,
+              name: canonicalUtilityName,
             },
           },
           update: {
             utilityType: UtilityType.ELECTRIC,
-            officialWebsite: utilityCandidate.officialWebsite,
-            serviceUpgradeUrl: utilityCandidate.serviceUpgradeUrl,
-            officialSourceTitle: utilityCandidate.coverageSourceTitle,
-            officialSourceUrl: utilityCandidate.coverageSourceUrl,
-            sourceStatus: SourceStatus.UNVERIFIED,
+            isActive: true,
           },
           create: {
             organizationId: ctx.organizationId,
-            name: utilityCandidate.name,
+            name: canonicalUtilityName,
+            utilityType: UtilityType.ELECTRIC,
+            isActive: true,
+          },
+          select: { id: true, name: true },
+        });
+      }
+      const existingCoverageMatch = existingUtility
+        ? await findUtilityCoverageMatches(db as unknown as Parameters<typeof findUtilityCoverageMatches>[0], {
+            organizationId: ctx.organizationId,
+            utilityId: existingUtility.id,
+            location: {
+              postalCode: location.postalCode,
+              city: location.city,
+              state: location.state,
+              county: coverageCounty,
+            },
+          })
+        : [];
+      const hasCoverageEvidence = Boolean(utilityCandidate.coverageSourceUrl?.trim());
+      // #region agent log
+      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+        body: JSON.stringify({
+          sessionId: "a9eae3",
+          runId: "pre-fix-1",
+          hypothesisId: "H4",
+          location: "site-details-actions.ts:utilityBranch",
+          message: "Utility candidate matching and evidence",
+          data: {
+            candidateName: utilityCandidate.name,
+            canonicalUtilityName,
+            hasCoverageEvidence,
+            matchedExistingUtilityId: existingUtility?.id ?? null,
+            matchedExistingUtilityName: existingUtility?.name ?? null,
+            existingCoverageMatchCount: existingCoverageMatch.length,
+            coverageBasis: utilityCandidate.coverageBasis,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch((error) => {
+        console.error(
+          "[agent-debug] a9eae3 log send failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+      // #endregion
+      if (hasCoverageEvidence && existingUtility) {
+        const utility = await db.utility.update({
+          where: { id: existingUtility.id },
+          data: {
             utilityType: UtilityType.ELECTRIC,
             officialWebsite: utilityCandidate.officialWebsite,
             serviceUpgradeUrl: utilityCandidate.serviceUpgradeUrl,
@@ -718,10 +840,102 @@ export async function requestSiteDetailsResearchAction(
           select: { id: true, name: true },
         });
         utilityId = utility.id;
+        const coverageType =
+          utilityCandidate.coverageBasis === "ZIP"
+            ? "ZIP"
+            : utilityCandidate.coverageBasis === "COUNTY"
+              ? "COUNTY"
+              : "CITY";
+        const coverageValue =
+          coverageType === "ZIP"
+            ? location.postalCode
+            : coverageType === "COUNTY"
+              ? coverageCounty ?? location.city
+              : location.city;
+        if (coverageValue.trim()) {
+          await db.utilityCoverage.upsert({
+            where: {
+              id: `${ctx.organizationId}:${utility.id}:${coverageType}:${coverageValue}:${location.state}`,
+            },
+            update: {
+              coverageType,
+              coverageValue,
+              state: location.state,
+              city: location.city || null,
+              county: coverageCounty,
+              sourceUrl: utilityCandidate.coverageSourceUrl,
+              sourceTitle: utilityCandidate.coverageSourceTitle,
+              sourceStatus: SourceStatus.UNVERIFIED,
+              isActive: true,
+            },
+            create: {
+              id: `${ctx.organizationId}:${utility.id}:${coverageType}:${coverageValue}:${location.state}`,
+              organizationId: ctx.organizationId,
+              utilityId: utility.id,
+              coverageType,
+              coverageValue,
+              state: location.state,
+              city: location.city || null,
+              county: coverageCounty,
+              sourceUrl: utilityCandidate.coverageSourceUrl,
+              sourceTitle: utilityCandidate.coverageSourceTitle,
+              sourceStatus: SourceStatus.UNVERIFIED,
+              isActive: true,
+            },
+          });
+        }
+      } else if (!existingUtility) {
+        rejectedUtilityCandidate = true;
+        utilityDecisionReason = "UTILITY_CANONICAL_MATCH_FAILED";
       } else {
         rejectedUtilityCandidate = true;
       }
     }
+
+    if (requestedSet.has("UTILITY") && !utilityId) {
+      const coverageMatches = await findUtilityCoverageMatches(
+        db as unknown as Parameters<typeof findUtilityCoverageMatches>[0],
+        {
+          organizationId: ctx.organizationId,
+          electricOnly: true,
+          location: {
+            postalCode: location.postalCode,
+            city: location.city,
+            state: location.state,
+            county: coverageCounty,
+          },
+        },
+      );
+      const uniqueUtilityIds = [...new Set(coverageMatches.map((row) => row.utilityId))];
+      if (uniqueUtilityIds.length === 1) {
+        utilityId = uniqueUtilityIds[0] ?? null;
+      }
+    }
+    // #region agent log
+    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+      body: JSON.stringify({
+        sessionId: "a9eae3",
+        runId: "pre-fix-1",
+        hypothesisId: "H4",
+        location: "site-details-actions.ts:utilityResolved",
+        message: "Utility resolution before location write",
+        data: {
+          utilityId,
+          rejectedUtilityCandidate,
+          utilityDecisionReason,
+          requestedUtilityScope: requestedSet.has("UTILITY"),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch((error) => {
+      console.error(
+        "[agent-debug] a9eae3 log send failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    // #endregion
 
     if (requestedSet.has("JURISDICTION") && research.jurisdictionName && research.jurisdictionType) {
       const jurisdiction = await db.jurisdiction.upsert({
@@ -734,7 +948,10 @@ export async function requestSiteDetailsResearchAction(
           },
         },
         update: {
+          county: research.countyAssessorCounty,
           officialWebsite: research.jurisdictionOfficialWebsite,
+          sourceTitle: research.sourceLinks[0]?.title ?? undefined,
+          sourceUrl: research.sourceLinks[0]?.url ?? undefined,
           sourceStatus: SourceStatus.UNVERIFIED,
         },
         create: {
@@ -744,6 +961,8 @@ export async function requestSiteDetailsResearchAction(
           state: research.countyAssessorState ?? "UNKNOWN",
           county: research.countyAssessorCounty,
           officialWebsite: research.jurisdictionOfficialWebsite,
+          sourceTitle: research.sourceLinks[0]?.title ?? null,
+          sourceUrl: research.sourceLinks[0]?.url ?? null,
           sourceStatus: SourceStatus.UNVERIFIED,
         },
         select: { id: true, name: true },
@@ -785,14 +1004,22 @@ export async function requestSiteDetailsResearchAction(
     const shouldProtectReviewed =
       location.detailsStatus === SiteDetailsStatus.USER_REVIEWED ||
       location.detailsStatus === SiteDetailsStatus.USER_CORRECTED;
-    if (!shouldProtectReviewed) {
+    const canApplyApnCandidate = !shouldProtectReviewed || !existingApn;
+    const canApplyUtilityCandidate = !shouldProtectReviewed || !location.utilityId;
+    const canApplyJurisdictionCandidate = !shouldProtectReviewed || !location.jurisdictionId;
+    const canApplyAnyAiValue =
+      !shouldProtectReviewed ||
+      canApplyApnCandidate ||
+      canApplyUtilityCandidate ||
+      canApplyJurisdictionCandidate;
+    if (canApplyAnyAiValue) {
       const updates: Prisma.CustomerServiceLocationUncheckedUpdateInput = {
-        utilityId: utilityId ?? undefined,
-        jurisdictionId: jurisdictionId ?? undefined,
+        utilityId: canApplyUtilityCandidate ? (utilityId ?? undefined) : undefined,
+        jurisdictionId: canApplyJurisdictionCandidate ? (jurisdictionId ?? undefined) : undefined,
         detailsLastChecked: new Date(),
       };
 
-      if (apnValue && !existingApn) {
+      if (canApplyApnCandidate && apnValue && !existingApn) {
         updates.apn = apnValue;
         updates.apnSourceTitle = apnSourceTitle;
         updates.apnSourceUrl = apnSourceUrl;
@@ -804,7 +1031,7 @@ export async function requestSiteDetailsResearchAction(
         updates.apnConflictSourceUrl = null;
         updates.apnConflictDetectedAt = null;
         apnDiscovered = true;
-      } else if (apnValue && existingApn && existingApn === apnValue) {
+      } else if (!shouldProtectReviewed && apnValue && existingApn && existingApn === apnValue) {
         updates.apnSourceTitle = apnSourceTitle ?? location.apnSourceTitle;
         updates.apnSourceUrl = apnSourceUrl ?? location.apnSourceUrl;
         updates.apnDiscoveredAt = new Date();
@@ -824,11 +1051,44 @@ export async function requestSiteDetailsResearchAction(
         apnConflictDetected = true;
       }
       const acceptedAnyAiValue =
-        Boolean(utilityId) || Boolean(jurisdictionId) || apnDiscovered || apnRefreshed;
+        Boolean(canApplyUtilityCandidate && utilityId) ||
+        Boolean(canApplyJurisdictionCandidate && jurisdictionId) ||
+        apnDiscovered ||
+        apnRefreshed;
       if (acceptedAnyAiValue) {
         updates.detailsStatus = pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND);
         updates.detailsSource = SiteDetailsSource.AI_FOUND;
       }
+      // #region agent log
+      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+        body: JSON.stringify({
+          sessionId: "a9eae3",
+          runId: "pre-fix-1",
+          hypothesisId: "H5",
+          location: "site-details-actions.ts:beforeLocationUpdate",
+          message: "Final location updates payload",
+          data: {
+            acceptedAnyAiValue,
+            canApplyUtilityCandidate,
+            canApplyJurisdictionCandidate,
+            canApplyApnCandidate,
+            utilityId,
+            jurisdictionId,
+            apnDiscovered,
+            apnRefreshed,
+            updates,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch((error) => {
+        console.error(
+          "[agent-debug] a9eae3 log send failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+      // #endregion
 
       await db.customerServiceLocation.update({
         where: { id },
@@ -861,8 +1121,22 @@ export async function requestSiteDetailsResearchAction(
           actorUserId: ctx.userId,
           eventType: ServiceLocationAuditType.AI_VALUE_REJECTED,
           oldValue: { utilityId: location.utilityId },
-          newValue: { rejectedCandidate: "electric_utility", reason: "insufficient_coverage_evidence" },
+          newValue: {
+            rejectedCandidate: "electric_utility",
+            reason: utilityDecisionReason ?? "insufficient_coverage_evidence",
+          },
           sourceReason: "ai_utility_candidate_rejected",
+        });
+      }
+      if (!apnValue && requestedSet.has("APN") && apnDecisionReason && apnDecisionReason !== "NO_EVIDENCE") {
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.AI_VALUE_REJECTED,
+          oldValue: { apn: existingApn },
+          newValue: { rejectedCandidate: "apn", reason: apnDecisionReason },
+          sourceReason: "ai_apn_candidate_rejected",
         });
       }
       if (apnDiscovered || apnRefreshed) {
@@ -945,12 +1219,66 @@ export async function requestSiteDetailsResearchAction(
       organizationId: ctx.organizationId,
       serviceLocationId: id,
     });
+    // #region agent log
+    console.error("[agent-debug] a9eae3 pendingResolved siteDetails", {
+      runId: "pre-fix-4",
+      hypothesisId: "H12",
+      serviceLocationId: id,
+      requestedScopes: requested,
+      hasSiteDetails: Boolean(siteDetails),
+      apn: siteDetails?.apn ?? null,
+      utilityName: siteDetails?.utility?.name ?? null,
+      jurisdictionName: siteDetails?.jurisdiction?.name ?? null,
+      missingScopes: siteDetails?.missingScopes ?? null,
+    });
+    // #endregion
+    await revalidateLocationSurfaces(id);
     return siteDetails;
   })();
   researchInFlightByLocation.set(key, pending);
   try {
     const siteDetails = await pending;
+    // #region agent log
+    console.error("[agent-debug] a9eae3 actionReturn success", {
+      runId: "pre-fix-4",
+      hypothesisId: "H12",
+      serviceLocationId: id,
+      hasSiteDetails: Boolean(siteDetails),
+      apn: siteDetails?.apn ?? null,
+      utilityName: siteDetails?.utility?.name ?? null,
+      jurisdictionName: siteDetails?.jurisdiction?.name ?? null,
+      missingScopes: siteDetails?.missingScopes ?? null,
+    });
+    // #endregion
     return { success: true, siteDetails };
+  } catch (error) {
+    // #region agent log
+    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
+      body: JSON.stringify({
+        sessionId: "a9eae3",
+        runId: "pre-fix-2",
+        hypothesisId: "H10",
+        location: "site-details-actions.ts:outerCatch",
+        message: "requestSiteDetailsResearchAction caught error",
+        data: {
+          errorName: error instanceof Error ? error.name : "unknown",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch((fetchError) => {
+      console.error(
+        "[agent-debug] a9eae3 log send failed",
+        fetchError instanceof Error ? fetchError.message : String(fetchError),
+      );
+    });
+    // #endregion
+    return {
+      error: getAiActionErrorMessage(error, "Failed to research site details."),
+      success: false,
+    };
   } finally {
     researchInFlightByLocation.delete(key);
   }

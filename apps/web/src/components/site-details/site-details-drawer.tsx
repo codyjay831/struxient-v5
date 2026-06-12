@@ -423,7 +423,7 @@ export function SiteDetailsDrawer({
 
           <DetailDisclosure
             title="Electric utility"
-            primary={data.utilityName || "Not found"}
+            primary={data.utilityName || "Not set"}
             meta={statusLabel[data.detailsStatus]}
           >
             <div className="space-y-2">

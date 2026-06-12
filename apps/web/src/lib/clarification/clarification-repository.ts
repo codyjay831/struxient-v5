@@ -9,6 +9,7 @@ import {
 import type {
   ClarificationBinding,
   ClarificationQuestionSet,
+  ClarificationQuestionSetSummary,
   ClarificationQuestionSetStatus as ClarificationQuestionSetStatusType,
 } from "./clarification-types";
 
@@ -124,4 +125,93 @@ export async function selectClarificationQuestionSetsForLine(
   const sets = rows.map(mapSetRow);
   const bindings = toBindings(rows);
   return matchQuestionSetsForLine(context, sets, bindings, options);
+}
+
+function includesQuery(text: string | null | undefined, query: string): boolean {
+  if (!text) return false;
+  return normalizeForMatch(text).includes(query);
+}
+
+export type ClarificationSetSummarySource = {
+  key: string;
+  label: string;
+  description: string | null;
+  aliases: string[];
+  keywords: string[];
+  questionCount: number;
+  tagNames: string[];
+};
+
+export function buildClarificationQuestionSetSummaries(
+  rows: readonly ClarificationSetSummarySource[],
+  options?: { query?: string; limit?: number },
+): ClarificationQuestionSetSummary[] {
+  const latestByKey = new Map<string, ClarificationSetSummarySource>();
+  for (const row of rows) {
+    if (latestByKey.has(row.key)) continue;
+    latestByKey.set(row.key, row);
+  }
+
+  const query = normalizeForMatch(options?.query ?? "").trim();
+  const limit = Math.max(1, Math.min(options?.limit ?? 50, 200));
+
+  return Array.from(latestByKey.values())
+    .map((row) => ({
+      key: row.key,
+      label: row.label,
+      description: row.description ?? undefined,
+      questionCount: row.questionCount,
+      tagNames: row.tagNames,
+      aliases: row.aliases,
+      keywords: row.keywords,
+    }))
+    .filter((row) => {
+      if (!query) return true;
+      return (
+        includesQuery(row.key, query) ||
+        includesQuery(row.label, query) ||
+        includesQuery(row.description, query) ||
+        row.tagNames.some((name) => includesQuery(name, query)) ||
+        row.aliases.some((alias) => includesQuery(alias, query)) ||
+        row.keywords.some((keyword) => includesQuery(keyword, query))
+      );
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+export async function listActiveClarificationQuestionSetSummaries(
+  organizationId: string,
+  options?: { query?: string; limit?: number },
+): Promise<ClarificationQuestionSetSummary[]> {
+  const rows = await db.clarificationQuestionSet.findMany({
+    where: {
+      organizationId,
+      status: ClarificationQuestionSetStatus.active,
+      archivedAt: null,
+    },
+    orderBy: [{ key: "asc" }, { version: "desc" }],
+    select: {
+      key: true,
+      label: true,
+      description: true,
+      aliases: true,
+      keywords: true,
+      version: true,
+      tags: { select: { name: true } },
+      _count: { select: { questions: true } },
+    },
+  });
+
+  const mappedRows: ClarificationSetSummarySource[] = rows.map((row) => ({
+    key: row.key,
+    label: row.label,
+    description: row.description,
+    aliases: row.aliases,
+    keywords: row.keywords,
+    questionCount: row._count.questions,
+    tagNames: row.tags.map((tag) => tag.name),
+  }));
+
+  return buildClarificationQuestionSetSummaries(mappedRows, options);
 }

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   getClarificationQuestionSetByKey,
+  listActiveClarificationQuestionSetSummaries,
   selectClarificationQuestionSetsForLine,
 } from "@/lib/clarification/clarification-repository";
 import { normalizeForMatch } from "@/lib/clarification/clarification-matching";
@@ -41,6 +42,7 @@ import { QUOTE_PROPOSAL_FIELD_LIMITS, QUOTE_LINE_FIELD_LIMITS } from "./quote-fi
 import type {
   ApplyLineClarificationResult,
   GetClarificationLineModelResult,
+  SearchClarificationQuestionSetsResult,
   SuggestLineClarificationResult,
 } from "./quote-line-clarification-types";
 
@@ -121,6 +123,24 @@ async function loadDraftLine(quoteId: string, lineId: string, organizationId: st
       },
     },
   });
+}
+
+async function loadSavedAnswersForLineSet(
+  lineId: string,
+  questionSetKey: string,
+  questionSetVersion: number,
+): Promise<LineClarificationAnswers | null> {
+  const savedRow = await db.quoteLineClarification.findFirst({
+    where: {
+      quoteLineItemId: lineId,
+      questionSetKey,
+      questionSetVersion,
+    },
+    select: { answersJson: true },
+  });
+  if (!savedRow) return null;
+  const parsed = LineClarificationAnswersSchema.safeParse(savedRow.answersJson);
+  return parsed.success ? parsed.data : null;
 }
 
 function normalizeSetKey(value: string): string {
@@ -214,21 +234,9 @@ export async function getClarificationLineModelAction(
           }
         : null;
 
-    let savedAnswers: LineClarificationAnswers | null = null;
-    if (matchedSet) {
-      const savedRow = await db.quoteLineClarification.findFirst({
-        where: {
-          quoteLineItemId: line.id,
-          questionSetKey: matchedSet.key,
-          questionSetVersion: matchedSet.version,
-        },
-        select: { answersJson: true },
-      });
-      if (savedRow) {
-        const parsed = LineClarificationAnswersSchema.safeParse(savedRow.answersJson);
-        if (parsed.success) savedAnswers = parsed.data;
-      }
-    }
+    const savedAnswers = matchedSet
+      ? await loadSavedAnswersForLineSet(line.id, matchedSet.key, matchedSet.version)
+      : null;
 
     return {
       model: {
@@ -251,21 +259,30 @@ export async function getClarificationLineModelAction(
  * Returns the full question set for a key (used when the user switches sets).
  */
 export async function getClarificationSetByKeyAction(
+  quoteId: string,
+  lineId: string,
   setKey: string,
 ): Promise<GetClarificationLineModelResult> {
+  const qid = quoteId.trim();
+  const lid = lineId.trim();
   const key = setKey.trim();
-  if (!key) {
-    return { error: "Missing question set key." };
+  if (!qid || !lid || !key) {
+    return { error: "Missing quote, line, or question set key." };
   }
   const ctx = await getRequestContextOrThrow();
+  const line = await loadDraftLine(qid, lid, ctx.organizationId);
+  if (!line) {
+    return { error: LINE_LOCKED_ERROR };
+  }
   const set = await getClarificationQuestionSetByKey(ctx.organizationId, key);
   if (!set || set.status !== "active") {
     return { error: "That question set is not available." };
   }
+  const savedAnswers = await loadSavedAnswersForLineSet(line.id, set.key, set.version);
   return {
     model: {
-      lineId: "",
-      lineDescription: "",
+      lineId: line.id,
+      lineDescription: line.description,
       matchedSet: {
         key: set.key,
         version: set.version,
@@ -275,9 +292,32 @@ export async function getClarificationSetByKeyAction(
         questions: set.questions,
       },
       alternatives: [],
-      savedAnswers: null,
+      savedAnswers,
     },
   };
+}
+
+export async function searchActiveClarificationQuestionSetsAction(
+  quoteId: string,
+  lineId: string,
+  query?: string,
+): Promise<SearchClarificationQuestionSetsResult> {
+  const qid = quoteId.trim();
+  const lid = lineId.trim();
+  if (!qid || !lid) return { error: "Missing quote or line id." };
+  const ctx = await getRequestContextOrThrow();
+  try {
+    const line = await loadDraftLine(qid, lid, ctx.organizationId);
+    if (!line) return { error: LINE_LOCKED_ERROR };
+    const sets = await listActiveClarificationQuestionSetSummaries(ctx.organizationId, {
+      query,
+      limit: 100,
+    });
+    return { sets };
+  } catch (error) {
+    console.error("[quote-clarification] set search failed", { quoteId: qid, lineId: lid, error });
+    return { error: "Failed to load question sets." };
+  }
 }
 
 /**

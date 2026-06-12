@@ -33,6 +33,7 @@ import {
 import {
   getClarificationLineModelAction,
   getClarificationSetByKeyAction,
+  searchActiveClarificationQuestionSetsAction,
   suggestLineClarificationAnswersAction,
   applyLineClarificationAnswersAction,
   createClarificationQuestionSetForLineAction,
@@ -41,6 +42,7 @@ import {
   updateClarificationQuestionSetForLineAction,
 } from "@/app/(workspace)/quotes/quote-line-clarification-actions";
 import type {
+  ClarificationQuestionSetPickerRow,
   ClarificationLineModel,
   ClarificationSetOption,
 } from "@/app/(workspace)/quotes/quote-line-clarification-types";
@@ -771,6 +773,10 @@ export function QuoteAuthoringSurface({
   const [clarifyLineId, setClarifyLineId] = useState<string | null>(null);
   const [clarifyModel, setClarifyModel] = useState<ClarificationLineModel | null>(null);
   const [clarifyAlternatives, setClarifyAlternatives] = useState<ClarificationSetOption[]>([]);
+  const [clarifySetOptions, setClarifySetOptions] = useState<ClarificationQuestionSetPickerRow[]>([]);
+  const [clarifySetOptionsQuery, setClarifySetOptionsQuery] = useState("");
+  const [clarifyAutoMatchedSetKey, setClarifyAutoMatchedSetKey] = useState<string | null>(null);
+  const [isClarifySetSearchLoading, setIsClarifySetSearchLoading] = useState(false);
   const [isClarifyLoading, setIsClarifyLoading] = useState(false);
   const [clarifyAiProposal, setClarifyAiProposal] = useState<ClarificationAnswerProposal | null>(
     null,
@@ -1038,10 +1044,31 @@ export function QuoteAuthoringSurface({
     }
   };
 
+  const handleSearchClarificationSets = async (lineId: string, query?: string) => {
+    setIsClarifySetSearchLoading(true);
+    try {
+      const result = await searchActiveClarificationQuestionSetsAction(quoteId, lineId, query);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setClarifySetOptions(result.sets ?? []);
+      setClarifySetOptionsQuery(query?.trim() ?? "");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load clarification question sets.");
+    } finally {
+      setIsClarifySetSearchLoading(false);
+    }
+  };
+
   const openClarifyScope = async (lineId: string) => {
     setClarifyLineId(lineId);
     setClarifyModel(null);
     setClarifyAlternatives([]);
+    setClarifySetOptions([]);
+    setClarifySetOptionsQuery("");
+    setClarifyAutoMatchedSetKey(null);
     setClarifyAiProposal(null);
     setClarifyAiGeneration(null);
     setIsClarifyLoading(true);
@@ -1055,7 +1082,9 @@ export function QuoteAuthoringSurface({
       if (result.model) {
         setClarifyModel(result.model);
         setClarifyAlternatives(result.model.alternatives);
+        setClarifyAutoMatchedSetKey(result.model.matchedSet?.key ?? null);
       }
+      await handleSearchClarificationSets(lineId);
     } catch (e) {
       console.error(e);
       toast.error("Failed to load scope clarification.");
@@ -1069,6 +1098,9 @@ export function QuoteAuthoringSurface({
     setClarifyLineId(null);
     setClarifyModel(null);
     setClarifyAlternatives([]);
+    setClarifySetOptions([]);
+    setClarifySetOptionsQuery("");
+    setClarifyAutoMatchedSetKey(null);
     setClarifyAiProposal(null);
     setClarifyAiGeneration(null);
     setIsClarifySuggesting(false);
@@ -1079,11 +1111,12 @@ export function QuoteAuthoringSurface({
   };
 
   const handleSelectClarifyAlternative = async (setKey: string) => {
+    if (!clarifyLineId) return;
     setIsClarifyLoading(true);
     setClarifyAiProposal(null);
     setClarifyAiGeneration(null);
     try {
-      const result = await getClarificationSetByKeyAction(setKey);
+      const result = await getClarificationSetByKeyAction(quoteId, clarifyLineId, setKey);
       if (result.error || !result.model) {
         toast.error(result.error ?? "Failed to load that question set.");
         return;
@@ -1163,8 +1196,8 @@ export function QuoteAuthoringSurface({
     }
   };
 
-  const handleCreateClarifySet = async (payload: ClarificationSetDraftPayload) => {
-    if (!clarifyLineId) return;
+  const handleCreateClarifySet = async (payload: ClarificationSetDraftPayload): Promise<boolean> => {
+    if (!clarifyLineId) return false;
     setIsClarifySetCreating(true);
     try {
       const result = await createClarificationQuestionSetForLineAction(
@@ -1174,7 +1207,7 @@ export function QuoteAuthoringSurface({
       );
       if (result.error || !result.matchedSet) {
         toast.error(result.error ?? "Failed to create question set.");
-        return;
+        return false;
       }
       const matchedSet = result.matchedSet;
       setClarifyModel((prev) =>
@@ -1192,10 +1225,14 @@ export function QuoteAuthoringSurface({
       setClarifyAlternatives([]);
       setClarifyAiProposal(null);
       setClarifyAiGeneration(null);
+      setClarifySetOptionsQuery("");
+      await handleSearchClarificationSets(clarifyLineId);
       toast.success("Clarification questions created. Fill answers and apply.");
+      return true;
     } catch (error) {
       console.error(error);
       toast.error("Failed to create clarification questions.");
+      return false;
     } finally {
       setIsClarifySetCreating(false);
     }
@@ -1662,12 +1699,20 @@ export function QuoteAuthoringSurface({
       <ClarifyScopePanel
         open={clarifyLineId !== null}
         onClose={closeClarifyScope}
+        lineId={clarifyLineId}
         lineDescription={clarifyModel?.lineDescription ?? ""}
         questionSet={clarifyModel?.matchedSet ?? null}
         savedAnswers={clarifyModel?.savedAnswers ?? null}
         alternatives={clarifyAlternatives}
         isLoading={isClarifyLoading}
         onSelectAlternative={(setKey) => void handleSelectClarifyAlternative(setKey)}
+        setPickerRows={clarifySetOptions}
+        pickerQueryFromParent={clarifySetOptionsQuery}
+        autoMatchedSetKey={clarifyAutoMatchedSetKey}
+        isSetPickerLoading={isClarifySetSearchLoading}
+        onSearchSets={(query) =>
+          clarifyLineId ? handleSearchClarificationSets(clarifyLineId, query) : Promise.resolve()
+        }
         aiProposal={clarifyAiProposal}
         aiGeneration={clarifyAiGeneration}
         isSuggesting={isClarifySuggesting}
@@ -1705,3 +1750,8 @@ export function QuoteAuthoringSurface({
     </div>
   );
 }
+
+
+
+
+

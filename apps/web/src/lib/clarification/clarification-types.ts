@@ -77,6 +77,17 @@ export type ClarificationQuestionSet = {
   mergedIntoKey?: string;
 };
 
+/** Lightweight row for picker/search surfaces. */
+export type ClarificationQuestionSetSummary = {
+  key: string;
+  label: string;
+  description?: string;
+  questionCount: number;
+  tagNames: string[];
+  aliases: string[];
+  keywords: string[];
+};
+
 /**
  * Where a question set applies. Bindings keep trade knowledge out of code:
  * a set is matched to a line by tag/classification keys or description keywords.

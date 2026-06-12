@@ -29,6 +29,7 @@ import {
   type ClarificationTradePreset,
 } from "@/lib/clarification/clarification-trade-presets";
 import type {
+  ClarificationQuestionSetPickerRow,
   ClarificationSetOption,
 } from "@/app/(workspace)/quotes/quote-line-clarification-types";
 import {
@@ -95,10 +96,16 @@ export type ClarificationSetDraftPayload = {
 export type ClarifyScopePanelProps = {
   open: boolean;
   onClose: () => void;
+  lineId: string | null;
   lineDescription: string;
   questionSet: ClarifyScopeQuestionSet | null;
   savedAnswers: LineClarificationAnswers | null;
   alternatives: ClarificationSetOption[];
+  setPickerRows: ClarificationQuestionSetPickerRow[];
+  pickerQueryFromParent: string;
+  autoMatchedSetKey: string | null;
+  isSetPickerLoading: boolean;
+  onSearchSets: (query?: string) => Promise<void>;
   isLoading: boolean;
   onSelectAlternative: (setKey: string) => void;
   aiProposal: ClarificationAnswerProposal | null;
@@ -108,7 +115,7 @@ export type ClarifyScopePanelProps = {
   isGeneratingSet: boolean;
   onGenerateSet: () => Promise<ClarificationQuestionSetProposal | null>;
   isCreatingSet: boolean;
-  onCreateSet: (payload: ClarificationSetDraftPayload) => Promise<void>;
+  onCreateSet: (payload: ClarificationSetDraftPayload) => Promise<boolean>;
   isUpdatingSet: boolean;
   onUpdateSet: (
     setKey: string,
@@ -136,10 +143,16 @@ function chipClass(active: boolean): string {
 export function ClarifyScopePanel({
   open,
   onClose,
+  lineId,
   lineDescription,
   questionSet,
   savedAnswers,
   alternatives,
+  setPickerRows,
+  pickerQueryFromParent,
+  autoMatchedSetKey,
+  isSetPickerLoading,
+  onSearchSets,
   isLoading,
   onSelectAlternative,
   aiProposal,
@@ -167,8 +180,11 @@ export function ClarifyScopePanel({
     latestVersion: number;
   } | null>(null);
   const [isEditingExistingSet, setIsEditingExistingSet] = useState(false);
-  const [prevSetKey, setPrevSetKey] = useState<string | null>(null);
-  const [prevProposal, setPrevProposal] = useState<ClarificationAnswerProposal | null>(null);
+  const [panelMode, setPanelMode] = useState<"answer" | "choose" | "create">("answer");
+  const [pickerQuery, setPickerQuery] = useState("");
+  const prevSetIdentityRef = useRef<string | null>(null);
+  const prevLineIdRef = useRef<string | null>(null);
+  const prevProposalRef = useRef<ClarificationAnswerProposal | null>(null);
 
   const canClose = !isApplying;
 
@@ -181,8 +197,37 @@ export function ClarifyScopePanel({
     currentSetKey && currentSetVersion != null
       ? `${currentSetKey}@${currentSetVersion}`
       : null;
-  if (setIdentity !== prevSetKey) {
-    setPrevSetKey(setIdentity);
+
+  useEffect(() => {
+    if (!open) {
+      setAnswers({});
+      setError(null);
+      setSetDraftError(null);
+      setDraftSet(null);
+      setExistingSetKey(null);
+      setIsEditingExistingSet(false);
+      setPanelMode("answer");
+      prevSetIdentityRef.current = null;
+      prevLineIdRef.current = null;
+      prevProposalRef.current = null;
+      return;
+    }
+    const lineChanged = prevLineIdRef.current !== lineId;
+    if (lineChanged) {
+      setPanelMode(questionSet ? "answer" : "create");
+      setSetDraftError(null);
+      setDraftSet(null);
+      setExistingSetKey(null);
+      setIsEditingExistingSet(false);
+      setError(null);
+      prevProposalRef.current = null;
+    }
+    prevLineIdRef.current = lineId;
+  }, [lineId, open, questionSet]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousSetIdentity = prevSetIdentityRef.current;
     const canHydrate =
       savedAnswers &&
       currentSetKey === savedKey &&
@@ -192,9 +237,9 @@ export function ClarifyScopePanel({
         return lineClarificationAnswersToAnswerMap(savedAnswers);
       }
       if (
-        prevSetKey &&
+        previousSetIdentity &&
         currentSetKey &&
-        prevSetKey.startsWith(`${currentSetKey}@`) &&
+        previousSetIdentity.startsWith(`${currentSetKey}@`) &&
         questionSet
       ) {
         const validKeys = new Set(questionSet.questions.map((q) => q.key));
@@ -207,16 +252,28 @@ export function ClarifyScopePanel({
       return {};
     });
     setError(null);
-    setPrevProposal(null);
+    prevProposalRef.current = null;
     if (currentSetKey && !isEditingExistingSet) {
       setDraftSet(null);
       setSetDraftError(null);
     }
-  }
+    prevSetIdentityRef.current = setIdentity;
+  }, [
+    open,
+    setIdentity,
+    savedAnswers,
+    currentSetKey,
+    currentSetVersion,
+    savedKey,
+    savedVersion,
+    questionSet,
+    isEditingExistingSet,
+  ]);
 
-  // Merge AI suggestions into local answers once per new proposal.
-  if (aiProposal && aiProposal !== prevProposal && questionSet) {
-    setPrevProposal(aiProposal);
+  useEffect(() => {
+    if (!open || !questionSet || !aiProposal) return;
+    if (aiProposal === prevProposalRef.current) return;
+    prevProposalRef.current = aiProposal;
     const questionsByKey = new Map(questionSet.questions.map((q) => [q.key, q]));
     setAnswers((prev) => {
       const next: AnswerMap = { ...prev };
@@ -248,7 +305,15 @@ export function ClarifyScopePanel({
       }
       return next;
     });
-  }
+  }, [aiProposal, open, questionSet]);
+
+  useEffect(() => {
+    if (!open) return;
+    setPickerQuery(pickerQueryFromParent);
+  }, [open, pickerQueryFromParent]);
+
+
+
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -522,6 +587,7 @@ export function ClarifyScopePanel({
   const beginEditingExistingSet = (appendBlank = false) => {
     if (!questionSet) return;
     setSetDraftError(null);
+    setPanelMode("create");
     setIsEditingExistingSet(true);
     setDraftSet({
       key: questionSet.key,
@@ -556,6 +622,7 @@ export function ClarifyScopePanel({
     setIsEditingExistingSet(false);
     setDraftSet(null);
     setSetDraftError(null);
+    setPanelMode(questionSet ? "answer" : "create");
   };
 
   const handleUpdateSet = async () => {
@@ -575,7 +642,7 @@ export function ClarifyScopePanel({
   };
 
   const isUpdatingExisting = Boolean(questionSet && isEditingExistingSet);
-  const showDraftEditor = Boolean(draftSet) && (!questionSet || isEditingExistingSet);
+  const showDraftEditor = Boolean(draftSet) && (panelMode === "create" || isUpdatingExisting);
 
   const handleCreateSet = async () => {
     if (!normalizedDraftPayload) {
@@ -590,7 +657,11 @@ export function ClarifyScopePanel({
       return;
     }
     setSetDraftError(null);
-    await onCreateSet(normalizedDraftPayload);
+    const ok = await onCreateSet(normalizedDraftPayload);
+    if (ok) {
+      setDraftSet(null);
+      setPanelMode("answer");
+    }
   };
 
   const answeredCount = useMemo(
@@ -621,6 +692,24 @@ export function ClarifyScopePanel({
       questionSetVersion: questionSet.version,
       answers: built,
     });
+  };
+
+  const openSetPicker = () => {
+    setPanelMode("choose");
+    void onSearchSets(pickerQuery.trim() || undefined);
+  };
+
+  const startCreateSet = () => {
+    setPanelMode("create");
+    setIsEditingExistingSet(false);
+    setDraftSet(null);
+    setSetDraftError(null);
+    setExistingSetKey(null);
+  };
+
+  const selectQuestionSet = async (setKey: string) => {
+    await Promise.resolve(onSelectAlternative(setKey));
+    setPanelMode("answer");
   };
 
   const renderQuestion = (question: ClarificationQuestion) => {
@@ -781,12 +870,141 @@ export function ClarifyScopePanel({
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div className="rounded-lg border border-border bg-foreground/[0.02] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className={workspaceFormFieldLabelClass}>Question set</p>
+                {questionSet ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{questionSet.label}</p>
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-foreground-subtle">
+                      {questionSet.key === autoMatchedSetKey ? "Auto matched" : "Selected"}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground-muted">No set selected yet</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {panelMode !== "answer" ? (
+                  <button
+                    type="button"
+                    className={workspaceFormSecondaryButtonClass}
+                    disabled={isLoading || isApplying}
+                    onClick={() => setPanelMode(questionSet ? "answer" : "create")}
+                  >
+                    Back
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={workspaceFormSecondaryButtonClass}
+                  disabled={isLoading || isApplying || isUpdatingSet || isCreatingSet}
+                  onClick={openSetPicker}
+                >
+                  Choose another
+                </button>
+                <button
+                  type="button"
+                  className={workspaceFormSecondaryButtonClass}
+                  disabled={isLoading || isApplying || isUpdatingSet || isCreatingSet}
+                  onClick={startCreateSet}
+                >
+                  <Plus className="size-4" />
+                  Create new
+                </button>
+              </div>
+            </div>
+          </div>
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-foreground-muted">
               <Loader2 className="size-4 animate-spin" />
               Finding scope questions…
             </div>
-          ) : showDraftEditor && draftSet ? (
+          ) : panelMode === "choose" ? (
+            <div className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">Choose question set</p>
+                <button
+                  type="button"
+                  className={workspaceFormSecondaryButtonClass}
+                  onClick={() => setPanelMode(questionSet ? "answer" : "create")}
+                >
+                  Back
+                </button>
+              </div>
+              <input
+                type="search"
+                value={pickerQuery}
+                onChange={(event) => {
+                  const nextQuery = event.target.value;
+                  setPickerQuery(nextQuery);
+                  void onSearchSets(nextQuery.trim() || undefined);
+                }}
+                placeholder="Search by set name, key, tags, aliases, keywords..."
+                className={workspaceFormControlClass}
+              />
+              {alternatives.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-foreground-subtle">Suggested for this line</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {alternatives.map((alt) => (
+                      <button
+                        key={alt.key}
+                        type="button"
+                        className="rounded-full border border-border px-2.5 py-1 text-[11px] text-foreground-muted hover:border-border-strong"
+                        onClick={() => void selectQuestionSet(alt.key)}
+                      >
+                        {alt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {isSetPickerLoading ? (
+                <div className="flex items-center gap-2 text-xs text-foreground-muted">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Loading question sets…
+                </div>
+              ) : null}
+              {!isSetPickerLoading && setPickerRows.length === 0 ? (
+                <p className="text-xs text-foreground-muted">
+                  No active question sets match this search. Create one for this line.
+                </p>
+              ) : null}
+              {!isSetPickerLoading && setPickerRows.length > 0 ? (
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {setPickerRows.map((row) => (
+                    <button
+                      key={row.key}
+                      type="button"
+                      className="w-full rounded-md border border-border px-3 py-2 text-left hover:border-border-strong"
+                      onClick={() => void selectQuestionSet(row.key)}
+                    >
+                      <p className="text-sm font-medium text-foreground">{row.label}</p>
+                      <p className="text-[11px] text-foreground-subtle">{row.key}</p>
+                      {row.description ? (
+                        <p className="mt-1 text-xs text-foreground-muted">{row.description}</p>
+                      ) : null}
+                      <p className="mt-1 text-[11px] text-foreground-subtle">
+                        {row.questionCount} question{row.questionCount === 1 ? "" : "s"}
+                        {row.tagNames.length > 0 ? ` · tags: ${row.tagNames.join(", ")}` : ""}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className={workspaceFormSecondaryButtonClass}
+                disabled={isGeneratingSet || isCreatingSet}
+                onClick={startCreateSet}
+              >
+                <Plus className="size-4" />
+                Create new question set
+              </button>
+            </div>
+          ) : panelMode === "create" && showDraftEditor && draftSet ? (
             <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
               {isUpdatingExisting ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1205,12 +1423,22 @@ export function ClarifyScopePanel({
                     )}
                   </button>
             </div>
-          ) : !questionSet ? (
+          ) : panelMode === "create" ? (
             <div className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-3">
               <p className="text-sm text-foreground-muted">
                 No scope question set matched this line yet. Create one here, then answer it right
                 away.
               </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={workspaceFormSecondaryButtonClass}
+                  disabled={isSetPickerLoading}
+                  onClick={openSetPicker}
+                >
+                  Choose existing set
+                </button>
+              </div>
               <div className="space-y-2">
                 <p className={workspaceFormFieldLabelClass}>Start from a trade template</p>
                 <div className="flex flex-wrap gap-2">
@@ -1241,7 +1469,7 @@ export function ClarifyScopePanel({
                       Generating questions…
                     </>
                   ) : (
-                    <>
+            <>
                       <Sparkles className="size-4" />
                       AI draft questions
                     </>
@@ -1257,14 +1485,21 @@ export function ClarifyScopePanel({
                 </button>
               </div>
             </div>
-          ) : (
+          ) : panelMode === "answer" && questionSet ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className={workspaceFormFieldLabelClass}>Question set</p>
-                  <p className="text-sm font-medium text-foreground">{questionSet.label}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{questionSet.label}</p>
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-foreground-subtle">
+                      {questionSet.key === autoMatchedSetKey ? "Auto matched" : "Selected"}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+
+
                   <button
                     type="button"
                     className={workspaceFormSecondaryButtonClass}
@@ -1286,7 +1521,7 @@ export function ClarifyScopePanel({
                       Suggesting…
                     </>
                   ) : (
-                    <>
+            <>
                       <Sparkles className="size-4" />
                       AI suggest answers
                     </>
@@ -1297,13 +1532,13 @@ export function ClarifyScopePanel({
 
               {alternatives.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-foreground-subtle">Not right?</span>
+                  <span className="text-[11px] text-foreground-subtle">Suggested alternatives</span>
                   {alternatives.map((alt) => (
                     <button
                       key={alt.key}
                       type="button"
                       className="rounded-full border border-border px-2.5 py-1 text-[11px] text-foreground-muted hover:border-border-strong"
-                      onClick={() => onSelectAlternative(alt.key)}
+                      onClick={() => void selectQuestionSet(alt.key)}
                     >
                       {alt.label}
                     </button>
@@ -1333,12 +1568,16 @@ export function ClarifyScopePanel({
                 </p>
               ) : null}
             </>
-          )}
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-4">
           <p className="text-xs text-foreground-subtle">
-            {!questionSet
+            {panelMode === "choose"
+              ? "Select an existing set or create a new one for this line."
+              : panelMode === "create"
+              ? "Create a matching question set, then answer and apply it to this line."
+              : !questionSet
               ? "Create a matching question set, then answer it for this line."
               : answeredCount > 0
               ? `${answeredCount} answered — applies to this line's scope notes`
@@ -1356,7 +1595,7 @@ export function ClarifyScopePanel({
             <button
               type="button"
               className={workspaceFormPrimaryButtonClass}
-              disabled={isApplying || answeredCount === 0 || !questionSet}
+              disabled={isApplying || answeredCount === 0 || !questionSet || panelMode !== "answer"}
               onClick={() => void handleApply()}
             >
               {isApplying ? (
@@ -1365,7 +1604,7 @@ export function ClarifyScopePanel({
                   Applying…
                 </>
               ) : (
-                <>
+            <>
                   <Check className="size-4" />
                   Apply to line scope
                 </>
@@ -1380,3 +1619,23 @@ export function ClarifyScopePanel({
   if (!mounted) return null;
   return createPortal(dialogNode, document.body);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

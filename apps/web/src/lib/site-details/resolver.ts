@@ -5,6 +5,10 @@ import {
   type Prisma,
   type PrismaClient,
 } from "@prisma/client";
+import {
+  findUtilityCoverageMatches,
+  pickBestCoverageMatch,
+} from "@/lib/site-details/utility-coverage";
 
 export type SiteDetailsMissingScope = "APN" | "UTILITY" | "JURISDICTION" | "ASSESSOR_RESOURCE";
 
@@ -167,33 +171,22 @@ export async function resolveSiteDetailsForServiceLocation(
   if (!row.jurisdiction) missing.push("JURISDICTION");
   if (!assessor) missing.push("ASSESSOR_RESOURCE");
 
-  const utilityCoverage = electricUtility
-    ? await db.utilityCoverage.findFirst({
-        where: {
+  const utilityCoverageMatches = electricUtility
+    ? await findUtilityCoverageMatches(
+        db as unknown as Parameters<typeof findUtilityCoverageMatches>[0],
+        {
           organizationId: params.organizationId,
           utilityId: electricUtility.id,
-          isActive: true,
-          OR: [
-            {
-              coverageType: "ZIP",
-              coverageValue: row.postalCode,
-              state: row.state,
-            },
-            {
-              coverageType: "CITY",
-              coverageValue: row.city,
-              state: row.state,
-            },
-            {
-              coverageType: "COUNTY",
-              coverageValue: row.jurisdiction?.county ?? "",
-              state: row.state,
-            },
-          ],
+          location: {
+            postalCode: row.postalCode,
+            city: row.city,
+            state: row.state,
+            county: row.jurisdiction?.county ?? null,
+          },
         },
-        select: { sourceTitle: true, sourceUrl: true },
-      })
-    : null;
+      )
+    : [];
+  const utilityCoverage = pickBestCoverageMatch(utilityCoverageMatches);
 
   return {
     serviceLocationId: row.id,
