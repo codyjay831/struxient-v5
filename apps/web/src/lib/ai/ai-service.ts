@@ -131,6 +131,8 @@ function deriveApnEvidenceFromApprovedSources(
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+  const propertyZip = addressLine.match(/\b\d{5}\b/)?.[0] ?? null;
+  const zipPlus4Regex = /^\d{5}-\d{4}$/;
   const apnMentions: Array<{ value: string; sourceId: string | null; text: string }> = [];
   const apnRegex = /\b\d{3,5}(?:[-\s]?\d{2,5}){2,3}\b/g;
   const collectApnMentions = (text: string, sourceId: string | null) => {
@@ -140,9 +142,14 @@ function deriveApnEvidenceFromApprovedSources(
     if (lower.includes("nearby") || lower.includes("neighbor") || lower.includes("for instance")) return;
     const matches = line.match(apnRegex) ?? [];
     for (const match of matches) {
+      const trimmedMatch = match.trim();
+      // Reject ZIP+4 (e.g. "94533-6338") which is not an APN.
+      if (zipPlus4Regex.test(trimmedMatch)) continue;
       const digits = match.replace(/\D/g, "");
       if (digits.length < 9 || digits.length > 14) continue;
-      apnMentions.push({ value: match, sourceId, text: line });
+      // Reject sequences that are just the property's own ZIP padded with extra digits.
+      if (propertyZip && digits.startsWith(propertyZip) && digits.length <= 9) continue;
+      apnMentions.push({ value: trimmedMatch, sourceId, text: line });
     }
   };
   for (const line of summaryLines) {
@@ -2905,7 +2912,14 @@ Rules:
 - Include street number, city, state, and ZIP in your checks.
 - Reject neighboring properties and mismatched ZIP evidence.
 - Do not fabricate URLs.
-- Summarize findings with source-backed notes.`;
+- Summarize findings with source-backed notes.
+
+APN (Assessor's Parcel Number) instructions — follow exactly:
+- The APN is almost always shown directly in the search-result snippets for this address on real-estate listing sites such as Zillow, Redfin, Realtor.com, and Compass, and on county GIS/parcel viewers. You do NOT need to fill out any government search form to read it.
+- Report the literal APN digits exactly as they appear in the search results for THIS exact address (e.g. "0137-081-100" or "0137081100"). An APN is a parcel id, NOT a ZIP code, NOT a ZIP+4 (a 5-digit ZIP followed by 4 digits), and NOT a phone number — never report those as the APN.
+- State the APN value explicitly in your summary, and name which source it came from.
+- Also provide the official county assessor parcel-search URL as the verification link, even when the actual APN value came from a listing site.
+- Only if no source anywhere shows an APN for this exact address should you say the APN was not found; do not decline merely because the value lives on a listing site rather than a government page.`;
 
     const usage = await db.aiUsageLog.create({
       data: {
