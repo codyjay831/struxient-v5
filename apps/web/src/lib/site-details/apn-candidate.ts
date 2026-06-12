@@ -87,11 +87,15 @@ export function decideGroundedApnCandidate(params: {
     .map((candidate) => {
       if (!candidate.addressMatched || !candidate.apnShownOnSource) return null;
       if (looksLikeGenericSearchResult(candidate.sourceTitle, candidate.sourceUrl)) return null;
-      const matchesAddress = looksLikeEvidenceForAddress(
-        `${candidate.sourceTitle} ${candidate.explanation}`,
-        candidate.sourceUrl,
-        params.addressLine,
-      );
+      const sourceIsOpaqueRedirect = isOpaqueGroundingRedirectUrl(candidate.sourceUrl);
+      const matchesAddress =
+        sourceIsOpaqueRedirect && candidate.addressMatched
+          ? true
+          : looksLikeEvidenceForAddress(
+              `${candidate.sourceTitle} ${candidate.explanation}`,
+              candidate.sourceUrl,
+              params.addressLine,
+            );
       if (!matchesAddress && !isLikelyPropertyDetailUrl(candidate.sourceUrl)) {
         if (
           looksLikeNeighborAddressEvidence(
@@ -153,7 +157,9 @@ export function decideGroundedApnCandidate(params: {
 
   const acceptedGroups = [...byNormalizedValue.values()].filter((group) => {
     const uniqueDomains = new Set(group.map((item) => toDomain(item.sourceUrl)));
-    const hasOfficialSource = group.some((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl));
+    const hasOfficialSource = group.some((item) =>
+      isLikelyOfficialEvidence(item.sourceTitle, item.sourceUrl),
+    );
     const hasSecondaryDiscoverySource = group.some((item) =>
       isSecondaryDiscoveryEvidence(item.sourceTitle, item.sourceUrl),
     );
@@ -177,8 +183,10 @@ export function decideGroundedApnCandidate(params: {
   }
 
   const selectedGroup = acceptedGroups.sort((left, right) => {
-    const leftOfficial = left.some((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl));
-    const rightOfficial = right.some((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl));
+    const leftOfficial = left.some((item) => isLikelyOfficialEvidence(item.sourceTitle, item.sourceUrl));
+    const rightOfficial = right.some((item) =>
+      isLikelyOfficialEvidence(item.sourceTitle, item.sourceUrl),
+    );
     if (leftOfficial !== rightOfficial) return leftOfficial ? -1 : 1;
     return right.length - left.length;
   })[0];
@@ -192,7 +200,7 @@ export function decideGroundedApnCandidate(params: {
   }
 
   const preferredSource =
-    selectedGroup.find((item) => isLikelyOfficialEvidenceUrl(item.sourceUrl)) ??
+    selectedGroup.find((item) => isLikelyOfficialEvidence(item.sourceTitle, item.sourceUrl)) ??
     selectedGroup.find((item) => isSecondaryDiscoveryEvidence(item.sourceTitle, item.sourceUrl)) ??
     selectedGroup[0];
   if (!preferredSource) {
@@ -275,6 +283,16 @@ function isLikelyOfficialEvidenceUrl(url: string): boolean {
   return normalized.includes(".gov") || normalized.includes("assessor") || normalized.includes("county");
 }
 
+function isLikelyOfficialEvidence(title: string, url: string): boolean {
+  const combined = `${title} ${url}`.trim().toLowerCase();
+  return (
+    isLikelyOfficialEvidenceUrl(url) ||
+    combined.includes("county assessor") ||
+    combined.includes("assessor recorder") ||
+    combined.includes("county recorder")
+  );
+}
+
 function looksLikeGenericSearchResult(title: string, sourceUrl: string): boolean {
   const t = title.trim().toLowerCase();
   const u = sourceUrl.trim().toLowerCase();
@@ -346,6 +364,11 @@ function isLikelyPropertyDetailUrl(sourceUrl: string): boolean {
     u.includes("parcelid=") ||
     u.includes("apn=")
   );
+}
+
+function isOpaqueGroundingRedirectUrl(sourceUrl: string): boolean {
+  const u = sourceUrl.trim().toLowerCase();
+  return u.includes("vertexaisearch.cloud.google.com/grounding-api-redirect/");
 }
 
 function normalizeApnValue(value: string): string {

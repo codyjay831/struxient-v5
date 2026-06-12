@@ -2944,39 +2944,6 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
       },
       select: { id: true },
     });
-    // #region agent log
-    console.error("[agent-debug] a9eae3 aiServiceEntry reached", {
-      runId: "pre-fix-3",
-      hypothesisId: "H11",
-      usageLogId: usage.id,
-      serviceLocationId: params.serviceLocationId,
-      requestedScopes: params.missingScopes,
-    });
-    // #endregion
-    // #region agent log
-    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-      body: JSON.stringify({
-        sessionId: "a9eae3",
-        runId: "pre-fix-2",
-        hypothesisId: "H9",
-        location: "ai-service.ts:usageCreated",
-        message: "Entered AIService.researchSiteDetails",
-        data: {
-          usageLogId: usage.id,
-          serviceLocationId: params.serviceLocationId,
-          requestedScopes: params.missingScopes,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch((error) => {
-      console.error(
-        "[agent-debug] a9eae3 log send failed",
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-    // #endregion
 
     try {
       const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -3023,37 +2990,6 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
             this.GEMINI_REQUEST_TIMEOUT_MS,
           ),
         );
-        // #region agent log
-        await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-          body: JSON.stringify({
-            sessionId: "a9eae3",
-            runId: "pre-fix-1",
-            hypothesisId: "H1",
-            location: "ai-service.ts:extractionRaw",
-            message: "Extraction raw utility candidate payload",
-            data: {
-              hasElectricUtilityCandidate: Boolean(
-                (extractionRaw as { electricUtilityCandidate?: unknown } | null)?.electricUtilityCandidate,
-              ),
-              extractedCoverageSourceId:
-                (
-                  extractionRaw as {
-                    electricUtilityCandidate?: { coverageSourceId?: string | null } | null;
-                  } | null
-                )?.electricUtilityCandidate?.coverageSourceId ?? null,
-              approvedSourceCount: approvedSources.length,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch((error) => {
-          console.error(
-            "[agent-debug] a9eae3 log send failed",
-            error instanceof Error ? error.message : String(error),
-          );
-        });
-        // #endregion
         schemaParsed = SiteDetailsResearchSchema.parse(extractionRaw);
       }
 
@@ -3259,35 +3195,6 @@ Instructions:
         utilityScopeDecision.outcome = "REJECTED";
         utilityScopeDecision.decisionCode = "UTILITY_CANONICAL_MATCH_FAILED";
       }
-      // #region agent log
-      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-        body: JSON.stringify({
-          sessionId: "a9eae3",
-          runId: "pre-fix-1",
-          hypothesisId: "H2",
-          location: "ai-service.ts:utilityScopeDecision",
-          message: "Utility scope decision computed",
-          data: {
-            candidatePresent: utilityScopeDecision.candidatePresent,
-            decisionCode: utilityScopeDecision.decisionCode,
-            outcome: utilityScopeDecision.outcome,
-            sourceReferences: utilityScopeDecision.sourceReferences,
-            sourceReferencesResolved: utilityScopeDecision.sourceReferencesResolved,
-            utilityDecisionReason: groundedResearch.groundingMetadataPresent
-              ? utilityDecision.reason
-              : "GROUNDING_METADATA_MISSING",
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch((error) => {
-        console.error(
-          "[agent-debug] a9eae3 log send failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-      // #endregion
 
       const jurisdictionSource = getApprovedGroundedSourceById(
         approvedSources,
@@ -3372,33 +3279,6 @@ Instructions:
           overallOutcome,
         },
       };
-      // #region agent log
-      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-        body: JSON.stringify({
-          sessionId: "a9eae3",
-          runId: "pre-fix-1",
-          hypothesisId: "H5",
-          location: "ai-service.ts:parsedResult",
-          message: "Research result before persistence layer",
-          data: {
-            overallOutcome: parsed.diagnostics?.overallOutcome ?? null,
-            utilityScopeOutcome: parsed.scopeDecisions.electricUtility.outcome,
-            jurisdictionScopeOutcome: parsed.scopeDecisions.jurisdiction.outcome,
-            assessorScopeOutcome: parsed.scopeDecisions.assessor.outcome,
-            apnScopeOutcome: parsed.scopeDecisions.apn.outcome,
-            hasUtilityCandidate: Boolean(parsed.electricUtilityCandidate),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch((error) => {
-        console.error(
-          "[agent-debug] a9eae3 log send failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-      // #endregion
       const responsePayload = {
         ...parsed,
         groundedSummary: groundedResearch.groundedSummary.slice(0, 2_000),
@@ -3416,32 +3296,6 @@ Instructions:
       return { ...parsed, usageLogId: usage.id };
     } catch (error) {
       const providerDetails = isSiteDetailsProviderError(error) ? error.details : null;
-      // #region agent log
-      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-        body: JSON.stringify({
-          sessionId: "a9eae3",
-          runId: "pre-fix-2",
-          hypothesisId: "H10",
-          location: "ai-service.ts:catch",
-          message: "AIService.researchSiteDetails caught error",
-          data: {
-            errorName: error instanceof Error ? error.name : "unknown",
-            errorMessage: error instanceof Error ? error.message : String(error),
-            providerStage: providerDetails?.stage ?? null,
-            providerCode: providerDetails?.code ?? null,
-            providerStatus: providerDetails?.status ?? null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch((fetchError) => {
-        console.error(
-          "[agent-debug] a9eae3 log send failed",
-          fetchError instanceof Error ? fetchError.message : String(fetchError),
-        );
-      });
-      // #endregion
       await db.aiUsageLog.update({
         where: { id: usage.id },
         data: {

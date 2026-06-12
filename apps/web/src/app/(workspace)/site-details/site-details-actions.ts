@@ -624,38 +624,6 @@ export async function requestSiteDetailsResearchAction(
     return { success: true, siteDetails };
   }
   const pending = (async () => {
-    // #region agent log
-    console.error("[agent-debug] a9eae3 pendingEntry reached", {
-      runId: "pre-fix-3",
-      hypothesisId: "H11",
-      serviceLocationId: id,
-      requestedScopesParam: requestedScopes ?? null,
-    });
-    // #endregion
-    // #region agent log
-    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-      body: JSON.stringify({
-        sessionId: "a9eae3",
-        runId: "pre-fix-2",
-        hypothesisId: "H9",
-        location: "site-details-actions.ts:pendingEntry",
-        message: "Entered requestSiteDetailsResearchAction pending block",
-        data: {
-          serviceLocationId: id,
-          requestedScopesParam: requestedScopes ?? null,
-          organizationId: ctx.organizationId,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch((error) => {
-      console.error(
-        "[agent-debug] a9eae3 log send failed",
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-    // #endregion
     const before = await resolveSiteDetailsForServiceLocation(resolverDb, {
       organizationId: ctx.organizationId,
       serviceLocationId: id,
@@ -696,35 +664,6 @@ export async function requestSiteDetailsResearchAction(
       missingScopes: requested,
       existingOfficialVerificationUrl: before.assessorResource?.assessorSearchUrl ?? null,
     });
-    // #region agent log
-    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-      body: JSON.stringify({
-        sessionId: "a9eae3",
-        runId: "pre-fix-1",
-        hypothesisId: "H3",
-        location: "site-details-actions.ts:afterResearch",
-        message: "Research output entering persistence action",
-        data: {
-          requestedScopes: requested,
-          utilityScopeDecision: research.scopeDecisions.electricUtility,
-          jurisdictionScopeDecision: research.scopeDecisions.jurisdiction,
-          assessorScopeDecision: research.scopeDecisions.assessor,
-          apnScopeDecision: research.scopeDecisions.apn,
-          hasUtilityCandidate: Boolean(research.electricUtilityCandidate),
-          utilityDecisionReason: research.diagnostics?.utilityDecisionReason ?? null,
-          overallOutcome: research.diagnostics?.overallOutcome ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch((error) => {
-      console.error(
-        "[agent-debug] a9eae3 log send failed",
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-    // #endregion
     const requestedSet = new Set(requested);
     const coverageCounty = research.countyAssessorCounty ?? null;
 
@@ -798,34 +737,6 @@ export async function requestSiteDetailsResearchAction(
           })
         : [];
       const hasCoverageEvidence = Boolean(utilityCandidate.coverageSourceUrl?.trim());
-      // #region agent log
-      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-        body: JSON.stringify({
-          sessionId: "a9eae3",
-          runId: "pre-fix-1",
-          hypothesisId: "H4",
-          location: "site-details-actions.ts:utilityBranch",
-          message: "Utility candidate matching and evidence",
-          data: {
-            candidateName: utilityCandidate.name,
-            canonicalUtilityName,
-            hasCoverageEvidence,
-            matchedExistingUtilityId: existingUtility?.id ?? null,
-            matchedExistingUtilityName: existingUtility?.name ?? null,
-            existingCoverageMatchCount: existingCoverageMatch.length,
-            coverageBasis: utilityCandidate.coverageBasis,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch((error) => {
-        console.error(
-          "[agent-debug] a9eae3 log send failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-      // #endregion
       if (hasCoverageEvidence && existingUtility) {
         const utility = await db.utility.update({
           where: { id: existingUtility.id },
@@ -911,31 +822,6 @@ export async function requestSiteDetailsResearchAction(
         utilityId = uniqueUtilityIds[0] ?? null;
       }
     }
-    // #region agent log
-    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-      body: JSON.stringify({
-        sessionId: "a9eae3",
-        runId: "pre-fix-1",
-        hypothesisId: "H4",
-        location: "site-details-actions.ts:utilityResolved",
-        message: "Utility resolution before location write",
-        data: {
-          utilityId,
-          rejectedUtilityCandidate,
-          utilityDecisionReason,
-          requestedUtilityScope: requestedSet.has("UTILITY"),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch((error) => {
-      console.error(
-        "[agent-debug] a9eae3 log send failed",
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-    // #endregion
 
     if (requestedSet.has("JURISDICTION") && research.jurisdictionName && research.jurisdictionType) {
       const jurisdiction = await db.jurisdiction.upsert({
@@ -1059,36 +945,6 @@ export async function requestSiteDetailsResearchAction(
         updates.detailsStatus = pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND);
         updates.detailsSource = SiteDetailsSource.AI_FOUND;
       }
-      // #region agent log
-      await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-        body: JSON.stringify({
-          sessionId: "a9eae3",
-          runId: "pre-fix-1",
-          hypothesisId: "H5",
-          location: "site-details-actions.ts:beforeLocationUpdate",
-          message: "Final location updates payload",
-          data: {
-            acceptedAnyAiValue,
-            canApplyUtilityCandidate,
-            canApplyJurisdictionCandidate,
-            canApplyApnCandidate,
-            utilityId,
-            jurisdictionId,
-            apnDiscovered,
-            apnRefreshed,
-            updates,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch((error) => {
-        console.error(
-          "[agent-debug] a9eae3 log send failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-      // #endregion
 
       await db.customerServiceLocation.update({
         where: { id },
@@ -1219,62 +1075,14 @@ export async function requestSiteDetailsResearchAction(
       organizationId: ctx.organizationId,
       serviceLocationId: id,
     });
-    // #region agent log
-    console.error("[agent-debug] a9eae3 pendingResolved siteDetails", {
-      runId: "pre-fix-4",
-      hypothesisId: "H12",
-      serviceLocationId: id,
-      requestedScopes: requested,
-      hasSiteDetails: Boolean(siteDetails),
-      apn: siteDetails?.apn ?? null,
-      utilityName: siteDetails?.utility?.name ?? null,
-      jurisdictionName: siteDetails?.jurisdiction?.name ?? null,
-      missingScopes: siteDetails?.missingScopes ?? null,
-    });
-    // #endregion
     await revalidateLocationSurfaces(id);
     return siteDetails;
   })();
   researchInFlightByLocation.set(key, pending);
   try {
     const siteDetails = await pending;
-    // #region agent log
-    console.error("[agent-debug] a9eae3 actionReturn success", {
-      runId: "pre-fix-4",
-      hypothesisId: "H12",
-      serviceLocationId: id,
-      hasSiteDetails: Boolean(siteDetails),
-      apn: siteDetails?.apn ?? null,
-      utilityName: siteDetails?.utility?.name ?? null,
-      jurisdictionName: siteDetails?.jurisdiction?.name ?? null,
-      missingScopes: siteDetails?.missingScopes ?? null,
-    });
-    // #endregion
     return { success: true, siteDetails };
   } catch (error) {
-    // #region agent log
-    await fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a9eae3" },
-      body: JSON.stringify({
-        sessionId: "a9eae3",
-        runId: "pre-fix-2",
-        hypothesisId: "H10",
-        location: "site-details-actions.ts:outerCatch",
-        message: "requestSiteDetailsResearchAction caught error",
-        data: {
-          errorName: error instanceof Error ? error.name : "unknown",
-          errorMessage: error instanceof Error ? error.message : String(error),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch((fetchError) => {
-      console.error(
-        "[agent-debug] a9eae3 log send failed",
-        fetchError instanceof Error ? fetchError.message : String(fetchError),
-      );
-    });
-    // #endregion
     return {
       error: getAiActionErrorMessage(error, "Failed to research site details."),
       success: false,
