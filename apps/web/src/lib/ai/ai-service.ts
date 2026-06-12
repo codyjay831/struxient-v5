@@ -201,13 +201,17 @@ function deriveApnEvidenceFromApprovedSources(
     null;
 
   if (!preferredSource) return [];
+  const preferredSourceText = `${preferredSource.title} ${preferredSource.supportText.join(" ")}`;
+  const addressMatched = matchesAddress(selectedApn.text) || matchesAddress(preferredSourceText);
   return [
     {
       value: selectedApn.value,
       sourceId: preferredSource.id,
-      addressMatched: true,
+      addressMatched,
       apnShownOnSource: true,
-      explanation: "Derived from grounded APN mention in source support/summary with trusted/address-matched source.",
+      // Carry the actual evidence line (which contains the address) so downstream
+      // address validation matches on real grounded text, not the opaque redirect URL.
+      explanation: `APN found in grounded evidence: "${selectedApn.text.slice(0, 220)}" (source: ${preferredSource.title})`,
     },
   ];
 }
