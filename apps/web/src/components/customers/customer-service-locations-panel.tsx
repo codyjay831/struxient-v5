@@ -256,6 +256,9 @@ export function CustomerServiceLocationsPanel({
                               ...(loc.apn?.trim() ? [] : ["APN"]),
                               ...(loc.utilityName ? [] : ["UTILITY"]),
                               ...(loc.jurisdictionName ? [] : ["JURISDICTION"]),
+                              ...(loc.assessorSearchUrl || loc.assessorParcelGisUrl
+                                ? []
+                                : ["ASSESSOR_RESOURCE"]),
                             ],
                           }}
                           onOpen={() =>
@@ -290,6 +293,9 @@ export function CustomerServiceLocationsPanel({
                                 ...(loc.apn?.trim() ? [] : ["APN"]),
                                 ...(loc.utilityName ? [] : ["UTILITY"]),
                                 ...(loc.jurisdictionName ? [] : ["JURISDICTION"]),
+                                ...(loc.assessorSearchUrl || loc.assessorParcelGisUrl
+                                  ? []
+                                  : ["ASSESSOR_RESOURCE"]),
                               ],
                             })
                           }

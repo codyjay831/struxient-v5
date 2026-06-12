@@ -1,6 +1,7 @@
 import {
   SiteDetailsSource,
   SiteDetailsStatus,
+  UtilityType,
   type Prisma,
   type PrismaClient,
 } from "@prisma/client";
@@ -111,6 +112,7 @@ export async function resolveSiteDetailsForServiceLocation(
         select: {
           id: true,
           name: true,
+          utilityType: true,
           officialWebsite: true,
           serviceUpgradeUrl: true,
           applicationPortalUrl: true,
@@ -160,15 +162,16 @@ export async function resolveSiteDetailsForServiceLocation(
 
   const missing: SiteDetailsMissingScope[] = [];
   if (!row.apn?.trim()) missing.push("APN");
-  if (!row.utility) missing.push("UTILITY");
+  const electricUtility = row.utility?.utilityType === UtilityType.ELECTRIC ? row.utility : null;
+  if (!electricUtility) missing.push("UTILITY");
   if (!row.jurisdiction) missing.push("JURISDICTION");
   if (!assessor) missing.push("ASSESSOR_RESOURCE");
 
-  const utilityCoverage = row.utility
+  const utilityCoverage = electricUtility
     ? await db.utilityCoverage.findFirst({
         where: {
           organizationId: params.organizationId,
-          utilityId: row.utility.id,
+          utilityId: electricUtility.id,
           isActive: true,
           OR: [
             {
@@ -210,17 +213,17 @@ export async function resolveSiteDetailsForServiceLocation(
           detectedAt: row.apnConflictDetectedAt ?? null,
         }
       : null,
-    utility: row.utility
+    utility: electricUtility
       ? {
-          id: row.utility.id,
-          name: row.utility.name,
-          officialWebsite: row.utility.officialWebsite?.trim() || null,
-          serviceUpgradeUrl: row.utility.serviceUpgradeUrl?.trim() || null,
-          applicationPortalUrl: row.utility.applicationPortalUrl?.trim() || null,
+          id: electricUtility.id,
+          name: electricUtility.name,
+          officialWebsite: electricUtility.officialWebsite?.trim() || null,
+          serviceUpgradeUrl: electricUtility.serviceUpgradeUrl?.trim() || null,
+          applicationPortalUrl: electricUtility.applicationPortalUrl?.trim() || null,
           coverageSourceTitle: utilityCoverage?.sourceTitle?.trim() || null,
           coverageSourceUrl: utilityCoverage?.sourceUrl?.trim() || null,
-          officialSourceTitle: row.utility.officialSourceTitle?.trim() || null,
-          officialSourceUrl: row.utility.officialSourceUrl?.trim() || null,
+          officialSourceTitle: electricUtility.officialSourceTitle?.trim() || null,
+          officialSourceUrl: electricUtility.officialSourceUrl?.trim() || null,
         }
       : null,
     jurisdiction: row.jurisdiction

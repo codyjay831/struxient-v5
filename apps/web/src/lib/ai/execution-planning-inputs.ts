@@ -49,7 +49,7 @@ export function buildQuoteLineExecutionPlanningContextFromLine(
     siteDetails?.detailsStatus ? `Status: ${siteDetails.detailsStatus}` : null,
     siteDetails?.apn?.trim()
       ? siteDetails.detailsStatus === "AI_FOUND"
-        ? `APN: ${siteDetails.apn.trim()} — AI found${siteDetails.apnSourceTitle ? ` from ${siteDetails.apnSourceTitle}` : ""}; not yet user reviewed.`
+        ? `APN: ${siteDetails.apn.trim()} — AI candidate${siteDetails.apnSourceTitle ? ` from ${siteDetails.apnSourceTitle}` : ""}; not yet user reviewed.`
         : `APN (${siteDetails.detailsStatus ?? "UNVERIFIED"}): ${siteDetails.apn.trim()}`
       : null,
     siteDetails?.utility?.name
@@ -63,7 +63,9 @@ export function buildQuoteLineExecutionPlanningContextFromLine(
     siteDetailsSummaryParts.length > 0 ? siteDetailsSummaryParts.map((line) => `- ${line}`).join("\n") : null;
   const siteDetailsUnresolved = [
     siteDetails?.apn?.trim() ? null : "APN not verified for this site",
-    siteDetails?.utility?.name ? null : "Utility assignment not verified for this site",
+    siteDetails?.utility?.name && siteDetails.detailsStatus !== "AI_FOUND"
+      ? null
+      : "Utility assignment not verified for this site",
     siteDetails?.jurisdiction?.name ? null : "Jurisdiction assignment not verified for this site",
   ].filter((item): item is string => Boolean(item));
 
@@ -93,7 +95,7 @@ export function buildQuoteLineExecutionPlanningContextManifestFromLine(
     siteDetails?.detailsStatus ? `Status: ${siteDetails.detailsStatus}` : null,
     siteDetails?.apn?.trim()
       ? siteDetails.detailsStatus === "AI_FOUND"
-        ? `APN: ${siteDetails.apn.trim()} — AI found${siteDetails.apnSourceTitle ? ` from ${siteDetails.apnSourceTitle}` : ""}; not yet user reviewed.`
+        ? `APN: ${siteDetails.apn.trim()} — AI candidate${siteDetails.apnSourceTitle ? ` from ${siteDetails.apnSourceTitle}` : ""}; not yet user reviewed.`
         : `APN (${siteDetails.detailsStatus ?? "UNVERIFIED"}): ${siteDetails.apn.trim()}`
       : null,
     siteDetails?.utility?.name
@@ -107,7 +109,9 @@ export function buildQuoteLineExecutionPlanningContextManifestFromLine(
     siteDetailsSummaryParts.length > 0 ? siteDetailsSummaryParts.map((line) => `- ${line}`).join("\n") : null;
   const siteDetailsUnresolved = [
     siteDetails?.apn?.trim() ? null : "APN not verified for this site",
-    siteDetails?.utility?.name ? null : "Utility assignment not verified for this site",
+    siteDetails?.utility?.name && siteDetails.detailsStatus !== "AI_FOUND"
+      ? null
+      : "Utility assignment not verified for this site",
     siteDetails?.jurisdiction?.name ? null : "Jurisdiction assignment not verified for this site",
   ].filter((item): item is string => Boolean(item));
 

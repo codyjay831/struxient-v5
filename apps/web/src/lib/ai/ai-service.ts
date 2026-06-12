@@ -73,6 +73,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { normalizeGroundedApnCandidate } from "@/lib/site-details/apn-candidate";
+import { normalizeGroundedElectricUtilityCandidate } from "@/lib/site-details/utility-candidate";
 
 function buildScopeSuggestionsGenerationMeta(simulated: boolean): QuoteScopeSuggestionsGenerationResult["generation"] {
   if (simulated) {
@@ -162,9 +163,17 @@ export type AIQuoteExecutionReviewProposalGenerationResult = {
 };
 
 export type AISiteDetailsResearchResult = {
-  utilityName: string | null;
-  utilityOfficialWebsite: string | null;
-  utilityServiceUpgradeUrl: string | null;
+  electricUtilityCandidate: {
+    name: string;
+    officialWebsite: string | null;
+    serviceUpgradeUrl: string | null;
+    coverageSourceTitle: string;
+    coverageSourceUrl: string;
+    coverageBasis: "ZIP" | "CITY" | "COUNTY" | "ADDRESS";
+    addressMatched: boolean;
+    isElectric: boolean;
+    explanation: string;
+  } | null;
   jurisdictionName: string | null;
   jurisdictionType: "CITY" | "COUNTY" | "UNINCORPORATED_COUNTY" | "DISTRICT" | null;
   jurisdictionOfficialWebsite: string | null;
@@ -176,6 +185,7 @@ export type AISiteDetailsResearchResult = {
     sourceTitle: string;
     sourceUrl: string;
     addressMatched: boolean;
+    apnShownOnSource: boolean;
     explanation: string;
   } | null;
   sourceLinks: Array<{ title: string; url: string }>;
@@ -183,9 +193,19 @@ export type AISiteDetailsResearchResult = {
 };
 
 const SiteDetailsResearchSchema = z.object({
-  utilityName: z.string().trim().min(1).nullable(),
-  utilityOfficialWebsite: z.string().url().nullable(),
-  utilityServiceUpgradeUrl: z.string().url().nullable(),
+  electricUtilityCandidate: z
+    .object({
+      name: z.string().trim().min(1),
+      officialWebsite: z.string().url().nullable(),
+      serviceUpgradeUrl: z.string().url().nullable(),
+      coverageSourceTitle: z.string().trim().min(1),
+      coverageSourceUrl: z.string().url(),
+      coverageBasis: z.enum(["ZIP", "CITY", "COUNTY", "ADDRESS"]),
+      addressMatched: z.boolean(),
+      isElectric: z.boolean(),
+      explanation: z.string().trim().min(1).max(500),
+    })
+    .nullable(),
   jurisdictionName: z.string().trim().min(1).nullable(),
   jurisdictionType: z
     .enum(["CITY", "COUNTY", "UNINCORPORATED_COUNTY", "DISTRICT"])
@@ -200,6 +220,7 @@ const SiteDetailsResearchSchema = z.object({
       sourceTitle: z.string().trim().min(1),
       sourceUrl: z.string().url(),
       addressMatched: z.boolean(),
+      apnShownOnSource: z.boolean(),
       explanation: z.string().trim().min(1).max(500),
     })
     .nullable(),
@@ -2742,7 +2763,7 @@ Missing scopes: ${params.missingScopes.join(", ")}
 
 Rules:
 - Return ONLY official or highly credible links.
-- Focus utility/jurisdiction/assessor resources.
+- Focus electric utility/jurisdiction/assessor resources.
 - Search for an explicit APN tied to this exact address.
 - Credible secondary discovery sources are allowed (Zillow, Redfin, Compass, Realtor, etc).
 - Prefer official county assessor/GIS for APN when available, but discovery source does not need to be official.
@@ -2752,12 +2773,22 @@ Rules:
 - Always provide an official county assessor or parcel-search URL when available.
 - Preserve discovery source title + URL and include that URL in sourceLinks.
 - sourceLinks must only include URLs directly returned by grounded search results; do not invent or transform URLs.
+- If providing electricUtilityCandidate, include a coverage source URL and title that support electric service for this address/area.
+- Do not return water/sewer departments as electric utility.
 - If unknown, use null.
 - Return JSON only with this exact shape:
 {
-  "utilityName": string | null,
-  "utilityOfficialWebsite": string | null,
-  "utilityServiceUpgradeUrl": string | null,
+  "electricUtilityCandidate": {
+    "name": string,
+    "officialWebsite": "https://..." | null,
+    "serviceUpgradeUrl": "https://..." | null,
+    "coverageSourceTitle": string,
+    "coverageSourceUrl": "https://...",
+    "coverageBasis": "ZIP" | "CITY" | "COUNTY" | "ADDRESS",
+    "addressMatched": boolean,
+    "isElectric": boolean,
+    "explanation": string
+  } | null,
   "jurisdictionName": string | null,
   "jurisdictionType": "CITY" | "COUNTY" | "UNINCORPORATED_COUNTY" | "DISTRICT" | null,
   "jurisdictionOfficialWebsite": string | null,
@@ -2769,6 +2800,7 @@ Rules:
     "sourceTitle": string,
     "sourceUrl": "https://...",
     "addressMatched": boolean,
+    "apnShownOnSource": boolean,
     "explanation": string
   } | null,
   "sourceLinks": [{"title":"string","url":"https://..."}]
@@ -2832,6 +2864,10 @@ Rules:
       const schemaParsed = SiteDetailsResearchSchema.parse(raw);
       const parsed: AISiteDetailsResearchResult = {
         ...schemaParsed,
+        electricUtilityCandidate: normalizeGroundedElectricUtilityCandidate({
+          candidate: schemaParsed.electricUtilityCandidate,
+          sourceLinks: schemaParsed.sourceLinks,
+        }),
         apnCandidate: normalizeGroundedApnCandidate({
           apnCandidate: schemaParsed.apnCandidate,
           sourceLinks: schemaParsed.sourceLinks,

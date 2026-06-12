@@ -1,18 +1,24 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Loader2, RefreshCcw, Save, X } from "lucide-react";
 import {
+  clearUnreviewedAiSiteDetailsAction,
   confirmSiteDetailsApnAction,
+  listElectricUtilityOptionsAction,
+  listJurisdictionOptionsAction,
+  markSiteDetailsReviewedAction,
   requestSiteDetailsResearchAction,
   saveSiteDetailsApnAction,
+  saveSiteDetailsJurisdictionAction,
+  saveSiteDetailsUtilityAction,
 } from "@/app/(workspace)/site-details/site-details-actions";
 import type { SiteDetailsRowData } from "@/components/site-details/site-details-row";
 
 const statusLabel: Record<SiteDetailsRowData["detailsStatus"], string> = {
   DATABASE_MATCH: "Database match",
-  AI_FOUND: "AI found",
+  AI_FOUND: "AI candidate",
   USER_REVIEWED: "Reviewed",
   USER_CORRECTED: "Corrected",
   UNVERIFIED: "Unverified",
@@ -81,9 +87,16 @@ export function SiteDetailsDrawer({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [apnPending, startApnTransition] = useTransition();
+  const [savingPending, startSavingTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [apnEditorOpen, setApnEditorOpen] = useState(false);
   const [apnDraft, setApnDraft] = useState("");
+  const [utilityEditorOpen, setUtilityEditorOpen] = useState(false);
+  const [jurisdictionEditorOpen, setJurisdictionEditorOpen] = useState(false);
+  const [utilityOptions, setUtilityOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [jurisdictionOptions, setJurisdictionOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [utilityDraftId, setUtilityDraftId] = useState("");
+  const [jurisdictionDraftId, setJurisdictionDraftId] = useState("");
   const canResearch = Boolean(data.serviceLocationId) && data.missingScopes.length > 0;
   const hasApn = Boolean(data.apn?.trim());
   const hasConflict = Boolean(data.apnConflict?.value);
@@ -101,6 +114,36 @@ export function SiteDetailsDrawer({
     }),
     [data.apn, data.utilityName, data.jurisdictionName],
   );
+
+  useEffect(() => {
+    if (!open || !utilityEditorOpen) return;
+    let cancelled = false;
+    listElectricUtilityOptionsAction()
+      .then((items) => {
+        if (!cancelled) setUtilityOptions(items);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Failed to load electric utility options.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, utilityEditorOpen]);
+
+  useEffect(() => {
+    if (!open || !jurisdictionEditorOpen) return;
+    let cancelled = false;
+    listJurisdictionOptionsAction()
+      .then((items) => {
+        if (!cancelled) setJurisdictionOptions(items);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Failed to load jurisdiction options.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, jurisdictionEditorOpen]);
 
   if (!open) return null;
 
@@ -156,7 +199,7 @@ export function SiteDetailsDrawer({
             meta={
               hasApn
                 ? data.apnSourceTitle
-                  ? `AI found from ${data.apnSourceTitle}`
+                  ? `AI candidate from ${data.apnSourceTitle}`
                   : "APN source not recorded"
                 : "No APN stored yet"
             }
@@ -219,6 +262,90 @@ export function SiteDetailsDrawer({
                   >
                     {hasApn ? "Correct" : "Enter manually"}
                   </button>
+                  {hasApn ? (
+                    <button
+                      type="button"
+                      disabled={apnPending}
+                      onClick={() => {
+                        if (!data.serviceLocationId) return;
+                        setError(null);
+                        const formData = new FormData();
+                        formData.set("apn", "");
+                        formData.set("reason", "manual_apn_clear");
+                        startApnTransition(async () => {
+                          const result = await saveSiteDetailsApnAction(
+                            data.serviceLocationId as string,
+                            {},
+                            formData,
+                          );
+                          if (result.error) {
+                            setError(result.error);
+                            return;
+                          }
+                          router.refresh();
+                        });
+                      }}
+                      className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                    >
+                      {apnPending ? "Clearing..." : "Clear APN"}
+                    </button>
+                  ) : null}
+                  {hasConflict && data.apnConflict?.value ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={apnPending}
+                        onClick={() => {
+                          if (!data.serviceLocationId || !data.apn) return;
+                          setError(null);
+                          const formData = new FormData();
+                          formData.set("apn", data.apn);
+                          formData.set("reason", "manual_keep_saved_apn");
+                          startApnTransition(async () => {
+                            const result = await saveSiteDetailsApnAction(
+                              data.serviceLocationId as string,
+                              {},
+                              formData,
+                            );
+                            if (result.error) {
+                              setError(result.error);
+                              return;
+                            }
+                            router.refresh();
+                          });
+                        }}
+                        className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                      >
+                        Keep saved APN
+                      </button>
+                      <button
+                        type="button"
+                        disabled={apnPending}
+                        onClick={() => {
+                          if (!data.serviceLocationId) return;
+                          setError(null);
+                          const formData = new FormData();
+                          formData.set("apn", data.apnConflict!.value);
+                          formData.set("reason", "manual_accept_research_apn");
+                          startApnTransition(async () => {
+                            const result = await saveSiteDetailsApnAction(
+                              data.serviceLocationId as string,
+                              {},
+                              formData,
+                            );
+                            if (result.error) {
+                              setError(result.error);
+                              return;
+                            }
+                            router.refresh();
+                          });
+                        }}
+                        className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                      >
+                        Accept research APN
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
@@ -299,27 +426,112 @@ export function SiteDetailsDrawer({
             primary={data.utilityName || "Not found"}
             meta={statusLabel[data.detailsStatus]}
           >
-            <div className="flex flex-wrap gap-2">
-              {data.utilityOfficialWebsite ? (
-                <LinkChip href={data.utilityOfficialWebsite} label="Official website" />
-              ) : null}
-              {data.utilityCoverageSourceUrl ? (
-                <LinkChip
-                  href={data.utilityCoverageSourceUrl}
-                  label={
-                    data.utilityCoverageSourceTitle?.trim()
-                      ? `Coverage source: ${data.utilityCoverageSourceTitle}`
-                      : "Coverage source"
-                  }
-                />
-              ) : null}
-              {data.utilityServiceUpgradeUrl ? (
-                <LinkChip href={data.utilityServiceUpgradeUrl} label="Service upgrade information" />
-              ) : null}
-              {!data.utilityOfficialWebsite &&
-              !data.utilityCoverageSourceUrl &&
-              !data.utilityServiceUpgradeUrl ? (
-                <p className="text-xs text-foreground-muted">No utility references recorded.</p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {data.utilityOfficialWebsite ? (
+                  <LinkChip href={data.utilityOfficialWebsite} label="Official website" />
+                ) : null}
+                {data.utilityCoverageSourceUrl ? (
+                  <LinkChip
+                    href={data.utilityCoverageSourceUrl}
+                    label={
+                      data.utilityCoverageSourceTitle?.trim()
+                        ? `Coverage source: ${data.utilityCoverageSourceTitle}`
+                        : "Coverage source"
+                    }
+                  />
+                ) : null}
+                {data.utilityServiceUpgradeUrl ? (
+                  <LinkChip href={data.utilityServiceUpgradeUrl} label="Service upgrade information" />
+                ) : null}
+                {!data.utilityOfficialWebsite &&
+                !data.utilityCoverageSourceUrl &&
+                !data.utilityServiceUpgradeUrl ? (
+                  <p className="text-xs text-foreground-muted">No utility references recorded.</p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUtilityEditorOpen((prev) => !prev)}
+                  className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground"
+                >
+                  {data.utilityName ? "Edit electric utility" : "Set electric utility"}
+                </button>
+                {data.utilityName ? (
+                  <button
+                    type="button"
+                    disabled={savingPending}
+                    onClick={() => {
+                      if (!data.serviceLocationId) return;
+                      setError(null);
+                      const formData = new FormData();
+                      formData.set("utilityId", "");
+                      formData.set("reason", "manual_utility_clear");
+                      startSavingTransition(async () => {
+                        const result = await saveSiteDetailsUtilityAction(
+                          data.serviceLocationId as string,
+                          {},
+                          formData,
+                        );
+                        if (result.error) {
+                          setError(result.error);
+                          return;
+                        }
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                  >
+                    {savingPending ? "Clearing..." : "Clear electric utility"}
+                  </button>
+                ) : null}
+              </div>
+              {utilityEditorOpen ? (
+                <form
+                  className="space-y-2 border-t border-border pt-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!data.serviceLocationId || !utilityDraftId.trim()) return;
+                    setError(null);
+                    const formData = new FormData();
+                    formData.set("utilityId", utilityDraftId);
+                    formData.set("reason", "manual_utility_assignment");
+                    startSavingTransition(async () => {
+                      const result = await saveSiteDetailsUtilityAction(
+                        data.serviceLocationId as string,
+                        {},
+                        formData,
+                      );
+                      if (result.error) {
+                        setError(result.error);
+                        return;
+                      }
+                      setUtilityEditorOpen(false);
+                      router.refresh();
+                    });
+                  }}
+                >
+                  <select
+                    value={utilityDraftId}
+                    onChange={(event) => setUtilityDraftId(event.target.value)}
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                  >
+                    <option value="">Select electric utility</option>
+                    {utilityOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={savingPending || !utilityDraftId.trim()}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                  >
+                    {savingPending ? "Saving..." : "Save utility"}
+                  </button>
+                </form>
               ) : null}
             </div>
           </DetailDisclosure>
@@ -329,28 +541,113 @@ export function SiteDetailsDrawer({
             primary={data.jurisdictionBuildingDepartmentName || data.jurisdictionName || "Not found"}
             meta={statusLabel[data.detailsStatus]}
           >
-            <div className="flex flex-wrap gap-2">
-              {data.jurisdictionOfficialWebsite ? (
-                <LinkChip href={data.jurisdictionOfficialWebsite} label="Official department" />
-              ) : null}
-              {data.jurisdictionBuildingDepartmentUrl ? (
-                <LinkChip href={data.jurisdictionBuildingDepartmentUrl} label="Department page" />
-              ) : null}
-              {data.jurisdictionPermitPortalUrl ? (
-                <LinkChip href={data.jurisdictionPermitPortalUrl} label="Permit portal" />
-              ) : null}
-              {data.jurisdictionFormsUrl ? <LinkChip href={data.jurisdictionFormsUrl} label="Forms" /> : null}
-              {data.jurisdictionInspectionsUrl ? (
-                <LinkChip href={data.jurisdictionInspectionsUrl} label="Inspections" />
-              ) : null}
-              {!data.jurisdictionOfficialWebsite &&
-              !data.jurisdictionBuildingDepartmentUrl &&
-              !data.jurisdictionPermitPortalUrl &&
-              !data.jurisdictionFormsUrl &&
-              !data.jurisdictionInspectionsUrl ? (
-                <p className="text-xs text-foreground-muted">
-                  No department references recorded.
-                </p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {data.jurisdictionOfficialWebsite ? (
+                  <LinkChip href={data.jurisdictionOfficialWebsite} label="Official department" />
+                ) : null}
+                {data.jurisdictionBuildingDepartmentUrl ? (
+                  <LinkChip href={data.jurisdictionBuildingDepartmentUrl} label="Department page" />
+                ) : null}
+                {data.jurisdictionPermitPortalUrl ? (
+                  <LinkChip href={data.jurisdictionPermitPortalUrl} label="Permit portal" />
+                ) : null}
+                {data.jurisdictionFormsUrl ? <LinkChip href={data.jurisdictionFormsUrl} label="Forms" /> : null}
+                {data.jurisdictionInspectionsUrl ? (
+                  <LinkChip href={data.jurisdictionInspectionsUrl} label="Inspections" />
+                ) : null}
+                {!data.jurisdictionOfficialWebsite &&
+                !data.jurisdictionBuildingDepartmentUrl &&
+                !data.jurisdictionPermitPortalUrl &&
+                !data.jurisdictionFormsUrl &&
+                !data.jurisdictionInspectionsUrl ? (
+                  <p className="text-xs text-foreground-muted">
+                    No department references recorded.
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setJurisdictionEditorOpen((prev) => !prev)}
+                  className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground"
+                >
+                  {data.jurisdictionName ? "Edit jurisdiction" : "Set jurisdiction"}
+                </button>
+                {data.jurisdictionName ? (
+                  <button
+                    type="button"
+                    disabled={savingPending}
+                    onClick={() => {
+                      if (!data.serviceLocationId) return;
+                      setError(null);
+                      const formData = new FormData();
+                      formData.set("jurisdictionId", "");
+                      formData.set("reason", "manual_jurisdiction_clear");
+                      startSavingTransition(async () => {
+                        const result = await saveSiteDetailsJurisdictionAction(
+                          data.serviceLocationId as string,
+                          {},
+                          formData,
+                        );
+                        if (result.error) {
+                          setError(result.error);
+                          return;
+                        }
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                  >
+                    {savingPending ? "Clearing..." : "Clear jurisdiction"}
+                  </button>
+                ) : null}
+              </div>
+              {jurisdictionEditorOpen ? (
+                <form
+                  className="space-y-2 border-t border-border pt-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!data.serviceLocationId || !jurisdictionDraftId.trim()) return;
+                    setError(null);
+                    const formData = new FormData();
+                    formData.set("jurisdictionId", jurisdictionDraftId);
+                    formData.set("reason", "manual_jurisdiction_assignment");
+                    startSavingTransition(async () => {
+                      const result = await saveSiteDetailsJurisdictionAction(
+                        data.serviceLocationId as string,
+                        {},
+                        formData,
+                      );
+                      if (result.error) {
+                        setError(result.error);
+                        return;
+                      }
+                      setJurisdictionEditorOpen(false);
+                      router.refresh();
+                    });
+                  }}
+                >
+                  <select
+                    value={jurisdictionDraftId}
+                    onChange={(event) => setJurisdictionDraftId(event.target.value)}
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                  >
+                    <option value="">Select jurisdiction</option>
+                    {jurisdictionOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={savingPending || !jurisdictionDraftId.trim()}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+                  >
+                    {savingPending ? "Saving..." : "Save jurisdiction"}
+                  </button>
+                </form>
               ) : null}
             </div>
           </DetailDisclosure>
@@ -388,6 +685,55 @@ export function SiteDetailsDrawer({
               {error}
             </p>
           ) : null}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={!data.serviceLocationId || savingPending}
+              onClick={() => {
+                if (!data.serviceLocationId) return;
+                setError(null);
+                const formData = new FormData();
+                formData.set("notes", "");
+                startSavingTransition(async () => {
+                  const result = await markSiteDetailsReviewedAction(
+                    data.serviceLocationId as string,
+                    {},
+                    formData,
+                  );
+                  if (result.error) {
+                    setError(result.error);
+                    return;
+                  }
+                  router.refresh();
+                });
+              }}
+              className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+            >
+              {savingPending ? "Saving..." : "Mark reviewed"}
+            </button>
+            <button
+              type="button"
+              disabled={!data.serviceLocationId || savingPending}
+              onClick={() => {
+                if (!data.serviceLocationId) return;
+                setError(null);
+                startSavingTransition(async () => {
+                  const result = await clearUnreviewedAiSiteDetailsAction(
+                    data.serviceLocationId as string,
+                  );
+                  if (result.error) {
+                    setError(result.error);
+                    return;
+                  }
+                  router.refresh();
+                });
+              }}
+              className="rounded border border-border px-2 py-1 text-xs text-foreground-muted hover:text-foreground disabled:opacity-60"
+            >
+              {savingPending ? "Clearing..." : "Clear unreviewed AI results"}
+            </button>
+          </div>
 
           <div className="flex items-center gap-2">
             <button

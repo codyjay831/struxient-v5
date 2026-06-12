@@ -43,7 +43,7 @@ export type SiteDetailsRowData = {
 
 const statusLabel: Record<SiteDetailsRowData["detailsStatus"], string> = {
   DATABASE_MATCH: "Database match",
-  AI_FOUND: "AI found",
+  AI_FOUND: "AI candidate",
   USER_REVIEWED: "Reviewed",
   USER_CORRECTED: "Corrected",
   UNVERIFIED: "Unverified",

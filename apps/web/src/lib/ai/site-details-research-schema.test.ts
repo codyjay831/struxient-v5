@@ -3,9 +3,19 @@ import test from "node:test";
 import { z } from "zod";
 
 const LocalSchema = z.object({
-  utilityName: z.string().trim().min(1).nullable(),
-  utilityOfficialWebsite: z.string().url().nullable(),
-  utilityServiceUpgradeUrl: z.string().url().nullable(),
+  electricUtilityCandidate: z
+    .object({
+      name: z.string().trim().min(1),
+      officialWebsite: z.string().url().nullable(),
+      serviceUpgradeUrl: z.string().url().nullable(),
+      coverageSourceTitle: z.string().trim().min(1),
+      coverageSourceUrl: z.string().url(),
+      coverageBasis: z.enum(["ZIP", "CITY", "COUNTY", "ADDRESS"]),
+      addressMatched: z.boolean(),
+      isElectric: z.boolean(),
+      explanation: z.string().trim().min(1).max(500),
+    })
+    .nullable(),
   jurisdictionName: z.string().trim().min(1).nullable(),
   jurisdictionType: z
     .enum(["CITY", "COUNTY", "UNINCORPORATED_COUNTY", "DISTRICT"])
@@ -20,6 +30,7 @@ const LocalSchema = z.object({
       sourceTitle: z.string().trim().min(1),
       sourceUrl: z.string().url(),
       addressMatched: z.boolean(),
+      apnShownOnSource: z.boolean(),
       explanation: z.string().trim().min(1).max(500),
     })
     .nullable(),
@@ -28,9 +39,7 @@ const LocalSchema = z.object({
 
 test("site details research schema accepts nullable known fields", () => {
   const parsed = LocalSchema.parse({
-    utilityName: null,
-    utilityOfficialWebsite: null,
-    utilityServiceUpgradeUrl: null,
+    electricUtilityCandidate: null,
     jurisdictionName: null,
     jurisdictionType: null,
     jurisdictionOfficialWebsite: null,
@@ -42,19 +51,28 @@ test("site details research schema accepts nullable known fields", () => {
       sourceTitle: "Redfin",
       sourceUrl: "https://www.redfin.com/example",
       addressMatched: true,
+      apnShownOnSource: true,
       explanation: "Listing page explicitly shows APN for the exact address.",
     },
     sourceLinks: [],
   });
-  assert.equal(parsed.utilityName, null);
+  assert.equal(parsed.electricUtilityCandidate, null);
 });
 
 test("site details research schema rejects non-url links", () => {
   assert.throws(() =>
     LocalSchema.parse({
-      utilityName: "PG&E",
-      utilityOfficialWebsite: "not-a-url",
-      utilityServiceUpgradeUrl: null,
+      electricUtilityCandidate: {
+        name: "PG&E",
+        officialWebsite: "not-a-url",
+        serviceUpgradeUrl: null,
+        coverageSourceTitle: "Service territory",
+        coverageSourceUrl: "https://www.pge.com/territory",
+        coverageBasis: "ZIP",
+        addressMatched: true,
+        isElectric: true,
+        explanation: "Source identifies electric territory.",
+      },
       jurisdictionName: null,
       jurisdictionType: null,
       jurisdictionOfficialWebsite: null,
@@ -70,9 +88,7 @@ test("site details research schema rejects non-url links", () => {
 test("site details research schema rejects apn candidate without source title", () => {
   assert.throws(() =>
     LocalSchema.parse({
-      utilityName: null,
-      utilityOfficialWebsite: null,
-      utilityServiceUpgradeUrl: null,
+      electricUtilityCandidate: null,
       jurisdictionName: null,
       jurisdictionType: null,
       jurisdictionOfficialWebsite: null,
@@ -82,6 +98,29 @@ test("site details research schema rejects apn candidate without source title", 
       apnCandidate: {
         value: "0137-081-100",
         sourceTitle: "",
+        sourceUrl: "https://www.redfin.com/example",
+        addressMatched: true,
+        apnShownOnSource: true,
+        explanation: "APN appears on listing.",
+      },
+      sourceLinks: [],
+    }),
+  );
+});
+
+test("site details research schema rejects APN candidate missing explicit-source flag", () => {
+  assert.throws(() =>
+    LocalSchema.parse({
+      electricUtilityCandidate: null,
+      jurisdictionName: null,
+      jurisdictionType: null,
+      jurisdictionOfficialWebsite: null,
+      countyAssessorCounty: "Solano",
+      countyAssessorState: "CA",
+      countyAssessorSearchUrl: "https://assessor.solanocounty.com/search",
+      apnCandidate: {
+        value: "0137-081-100",
+        sourceTitle: "Redfin",
         sourceUrl: "https://www.redfin.com/example",
         addressMatched: true,
         explanation: "APN appears on listing.",

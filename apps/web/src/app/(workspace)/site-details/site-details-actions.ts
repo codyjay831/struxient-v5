@@ -6,6 +6,7 @@ import {
   SourceStatus,
   SiteDetailsSource,
   SiteDetailsStatus,
+  UtilityType,
   type Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -25,6 +26,11 @@ export type SiteDetailsActionState = {
   error?: string;
   success?: boolean;
   siteDetails?: SiteDetailsResolved | null;
+};
+
+export type SiteDetailsOption = {
+  id: string;
+  name: string;
 };
 
 const researchInFlightByLocation = new Map<string, Promise<SiteDetailsResolved | null>>();
@@ -56,6 +62,33 @@ export async function loadQuoteSiteDetailsAction(quoteId: string): Promise<SiteD
     serviceLocationId,
   });
   return { siteDetails, success: true };
+}
+
+export async function listElectricUtilityOptionsAction(): Promise<SiteDetailsOption[]> {
+  const ctx = await getRequestContextOrThrow();
+  const rows = await db.utility.findMany({
+    where: {
+      organizationId: ctx.organizationId,
+      isActive: true,
+      utilityType: UtilityType.ELECTRIC,
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  return rows;
+}
+
+export async function listJurisdictionOptionsAction(): Promise<SiteDetailsOption[]> {
+  const ctx = await getRequestContextOrThrow();
+  const rows = await db.jurisdiction.findMany({
+    where: {
+      organizationId: ctx.organizationId,
+      isActive: true,
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  return rows;
 }
 
 export async function saveSiteDetailsApnAction(
@@ -195,21 +228,49 @@ export async function saveSiteDetailsUtilityAction(
   const ctx = await getRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const utilityId = trimField(formData, "utilityId");
-  const reason = trimField(formData, "reason") || "manual_utility_assignment";
-  if (!id || !utilityId) return { error: "Missing service location or utility id." };
+  const reason = trimField(formData, "reason") || "manual_utility_update";
+  if (!id) return { error: "Missing service location id." };
 
-  const [loc, utility] = await Promise.all([
-    db.customerServiceLocation.findFirst({
-      where: { id, organizationId: ctx.organizationId },
-      select: { id: true, utilityId: true },
-    }),
-    db.utility.findFirst({
-      where: { id: utilityId, organizationId: ctx.organizationId, isActive: true },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const loc = await db.customerServiceLocation.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, utilityId: true },
+  });
   if (!loc) return { error: "Service location not found." };
-  if (!utility) return { error: "Utility not found in organization scope." };
+
+  if (!utilityId) {
+    await db.customerServiceLocation.update({
+      where: { id },
+      data: {
+        utilityId: null,
+        detailsStatus: SiteDetailsStatus.USER_CORRECTED,
+        detailsSource: SiteDetailsSource.USER_CORRECTED,
+        detailsReviewedAt: new Date(),
+        detailsReviewedBy: ctx.userId,
+      },
+    });
+    await appendServiceLocationAuditEvent(auditDb, {
+      organizationId: ctx.organizationId,
+      serviceLocationId: id,
+      actorUserId: ctx.userId,
+      eventType: ServiceLocationAuditType.UTILITY_CORRECTED,
+      oldValue: { utilityId: loc.utilityId },
+      newValue: { utilityId: null },
+      sourceReason: reason || "manual_utility_clear",
+    });
+    revalidateLocationSurfaces(id);
+    return { success: true };
+  }
+
+  const utility = await db.utility.findFirst({
+    where: {
+      id: utilityId,
+      organizationId: ctx.organizationId,
+      isActive: true,
+      utilityType: UtilityType.ELECTRIC,
+    },
+    select: { id: true, name: true },
+  });
+  if (!utility) return { error: "Electric utility not found in organization scope." };
 
   await db.customerServiceLocation.update({
     where: { id },
@@ -246,20 +307,43 @@ export async function saveSiteDetailsJurisdictionAction(
   const ctx = await getRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const jurisdictionId = trimField(formData, "jurisdictionId");
-  const reason = trimField(formData, "reason") || "manual_jurisdiction_assignment";
-  if (!id || !jurisdictionId) return { error: "Missing service location or jurisdiction id." };
+  const reason = trimField(formData, "reason") || "manual_jurisdiction_update";
+  if (!id) return { error: "Missing service location id." };
 
-  const [loc, jurisdiction] = await Promise.all([
-    db.customerServiceLocation.findFirst({
-      where: { id, organizationId: ctx.organizationId },
-      select: { id: true, jurisdictionId: true },
-    }),
-    db.jurisdiction.findFirst({
-      where: { id: jurisdictionId, organizationId: ctx.organizationId, isActive: true },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const loc = await db.customerServiceLocation.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, jurisdictionId: true },
+  });
   if (!loc) return { error: "Service location not found." };
+
+  if (!jurisdictionId) {
+    await db.customerServiceLocation.update({
+      where: { id },
+      data: {
+        jurisdictionId: null,
+        detailsStatus: SiteDetailsStatus.USER_CORRECTED,
+        detailsSource: SiteDetailsSource.USER_CORRECTED,
+        detailsReviewedAt: new Date(),
+        detailsReviewedBy: ctx.userId,
+      },
+    });
+    await appendServiceLocationAuditEvent(auditDb, {
+      organizationId: ctx.organizationId,
+      serviceLocationId: id,
+      actorUserId: ctx.userId,
+      eventType: ServiceLocationAuditType.JURISDICTION_CORRECTED,
+      oldValue: { jurisdictionId: loc.jurisdictionId },
+      newValue: { jurisdictionId: null },
+      sourceReason: reason || "manual_jurisdiction_clear",
+    });
+    revalidateLocationSurfaces(id);
+    return { success: true };
+  }
+
+  const jurisdiction = await db.jurisdiction.findFirst({
+    where: { id: jurisdictionId, organizationId: ctx.organizationId, isActive: true },
+    select: { id: true, name: true },
+  });
   if (!jurisdiction) return { error: "Jurisdiction not found in organization scope." };
 
   await db.customerServiceLocation.update({
@@ -332,6 +416,81 @@ export async function markSiteDetailsReviewedAction(
     oldValue: { detailsStatus: existing.detailsStatus, detailsSource: existing.detailsSource },
     newValue: { detailsStatus: nextStatus, detailsSource: SiteDetailsSource.USER_REVIEWED, notes },
     sourceReason: "manual_review",
+  });
+  revalidateLocationSurfaces(id);
+  return { success: true };
+}
+
+export async function clearUnreviewedAiSiteDetailsAction(
+  serviceLocationId: string,
+): Promise<SiteDetailsActionState> {
+  const ctx = await getRequestContextOrThrow();
+  const id = serviceLocationId.trim();
+  if (!id) return { error: "Missing service location id." };
+
+  const existing = await db.customerServiceLocation.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: {
+      id: true,
+      detailsStatus: true,
+      detailsSource: true,
+      apn: true,
+      utilityId: true,
+      jurisdictionId: true,
+      apnConflictValue: true,
+      apnConflictSourceTitle: true,
+      apnConflictSourceUrl: true,
+    },
+  });
+  if (!existing) return { error: "Service location not found." };
+  if (
+    existing.detailsStatus === SiteDetailsStatus.USER_REVIEWED ||
+    existing.detailsStatus === SiteDetailsStatus.USER_CORRECTED
+  ) {
+    return { error: "Reviewed or corrected details cannot be cleared with this action." };
+  }
+
+  await db.customerServiceLocation.update({
+    where: { id },
+    data: {
+      apn: null,
+      apnSourceTitle: null,
+      apnSourceUrl: null,
+      apnDiscoveredAt: null,
+      apnResearchUsageLogId: null,
+      apnVerificationUrl: null,
+      apnConflictValue: null,
+      apnConflictSourceTitle: null,
+      apnConflictSourceUrl: null,
+      apnConflictDetectedAt: null,
+      utilityId: null,
+      jurisdictionId: null,
+      detailsStatus: SiteDetailsStatus.UNVERIFIED,
+      detailsSource: SiteDetailsSource.DATABASE_MATCH,
+      detailsLastChecked: new Date(),
+    },
+  });
+  await appendServiceLocationAuditEvent(auditDb, {
+    organizationId: ctx.organizationId,
+    serviceLocationId: id,
+    actorUserId: ctx.userId,
+    eventType: ServiceLocationAuditType.AI_VALUE_REJECTED,
+    oldValue: {
+      detailsStatus: existing.detailsStatus,
+      detailsSource: existing.detailsSource,
+      apn: existing.apn,
+      utilityId: existing.utilityId,
+      jurisdictionId: existing.jurisdictionId,
+      apnConflict: existing.apnConflictValue
+        ? {
+            value: existing.apnConflictValue,
+            sourceTitle: existing.apnConflictSourceTitle,
+            sourceUrl: existing.apnConflictSourceUrl,
+          }
+        : null,
+    },
+    newValue: { cleared: true, preservedReviewedValues: true },
+    sourceReason: "manual_clear_unreviewed_ai_results",
   });
   revalidateLocationSurfaces(id);
   return { success: true };
@@ -449,6 +608,9 @@ export async function requestSiteDetailsResearchAction(
       where: { id, organizationId: ctx.organizationId },
       select: {
         id: true,
+        city: true,
+        state: true,
+        postalCode: true,
         apn: true,
         apnSourceTitle: true,
         apnSourceUrl: true,
@@ -458,6 +620,8 @@ export async function requestSiteDetailsResearchAction(
         apnConflictSourceTitle: true,
         apnConflictSourceUrl: true,
         apnConflictDetectedAt: true,
+        utilityId: true,
+        jurisdictionId: true,
         detailsStatus: true,
         detailsSource: true,
       },
@@ -488,31 +652,75 @@ export async function requestSiteDetailsResearchAction(
     let apnConflictDetected = false;
     let apnDiscovered = false;
     let apnRefreshed = false;
+    let rejectedUtilityCandidate = false;
 
-    if (requestedSet.has("UTILITY") && research.utilityName) {
-      const utility = await db.utility.upsert({
+    if (requestedSet.has("UTILITY") && research.electricUtilityCandidate) {
+      const utilityCandidate = research.electricUtilityCandidate;
+      const existingUtility = await db.utility.findFirst({
         where: {
-          organizationId_name: {
-            organizationId: ctx.organizationId,
-            name: research.utilityName,
-          },
-        },
-        update: {
-          officialWebsite: research.utilityOfficialWebsite,
-          serviceUpgradeUrl: research.utilityServiceUpgradeUrl,
-          sourceStatus: SourceStatus.UNVERIFIED,
-        },
-        create: {
           organizationId: ctx.organizationId,
-          name: research.utilityName,
-          utilityType: "OTHER",
-          officialWebsite: research.utilityOfficialWebsite,
-          serviceUpgradeUrl: research.utilityServiceUpgradeUrl,
-          sourceStatus: SourceStatus.UNVERIFIED,
+          name: utilityCandidate.name,
+          utilityType: UtilityType.ELECTRIC,
+          isActive: true,
         },
-        select: { id: true, name: true },
+        select: { id: true },
       });
-      utilityId = utility.id;
+      const existingCoverageMatch = existingUtility
+        ? await db.utilityCoverage.findFirst({
+            where: {
+              organizationId: ctx.organizationId,
+              utilityId: existingUtility.id,
+              isActive: true,
+              OR: [
+                {
+                  coverageType: "ZIP",
+                  coverageValue: location.postalCode,
+                  state: location.state,
+                },
+                {
+                  coverageType: "CITY",
+                  coverageValue: location.city,
+                  state: location.state,
+                },
+              ],
+            },
+            select: { id: true },
+          })
+        : null;
+      const hasCoverageEvidence =
+        utilityCandidate.coverageBasis === "ADDRESS" || Boolean(existingCoverageMatch);
+      if (hasCoverageEvidence) {
+        const utility = await db.utility.upsert({
+          where: {
+            organizationId_name: {
+              organizationId: ctx.organizationId,
+              name: utilityCandidate.name,
+            },
+          },
+          update: {
+            utilityType: UtilityType.ELECTRIC,
+            officialWebsite: utilityCandidate.officialWebsite,
+            serviceUpgradeUrl: utilityCandidate.serviceUpgradeUrl,
+            officialSourceTitle: utilityCandidate.coverageSourceTitle,
+            officialSourceUrl: utilityCandidate.coverageSourceUrl,
+            sourceStatus: SourceStatus.UNVERIFIED,
+          },
+          create: {
+            organizationId: ctx.organizationId,
+            name: utilityCandidate.name,
+            utilityType: UtilityType.ELECTRIC,
+            officialWebsite: utilityCandidate.officialWebsite,
+            serviceUpgradeUrl: utilityCandidate.serviceUpgradeUrl,
+            officialSourceTitle: utilityCandidate.coverageSourceTitle,
+            officialSourceUrl: utilityCandidate.coverageSourceUrl,
+            sourceStatus: SourceStatus.UNVERIFIED,
+          },
+          select: { id: true, name: true },
+        });
+        utilityId = utility.id;
+      } else {
+        rejectedUtilityCandidate = true;
+      }
     }
 
     if (requestedSet.has("JURISDICTION") && research.jurisdictionName && research.jurisdictionType) {
@@ -581,8 +789,6 @@ export async function requestSiteDetailsResearchAction(
       const updates: Prisma.CustomerServiceLocationUncheckedUpdateInput = {
         utilityId: utilityId ?? undefined,
         jurisdictionId: jurisdictionId ?? undefined,
-        detailsStatus: pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND),
-        detailsSource: SiteDetailsSource.AI_FOUND,
         detailsLastChecked: new Date(),
       };
 
@@ -617,12 +823,18 @@ export async function requestSiteDetailsResearchAction(
         updates.apnConflictDetectedAt = new Date();
         apnConflictDetected = true;
       }
+      const acceptedAnyAiValue =
+        Boolean(utilityId) || Boolean(jurisdictionId) || apnDiscovered || apnRefreshed;
+      if (acceptedAnyAiValue) {
+        updates.detailsStatus = pickHigherPriorityStatus(location.detailsStatus, SiteDetailsStatus.AI_FOUND);
+        updates.detailsSource = SiteDetailsSource.AI_FOUND;
+      }
 
       await db.customerServiceLocation.update({
         where: { id },
         data: updates,
       });
-      if (utilityId || jurisdictionId || assessorUpserted) {
+      if (acceptedAnyAiValue || assessorUpserted) {
         await appendServiceLocationAuditEvent(auditDb, {
           organizationId: ctx.organizationId,
           serviceLocationId: id,
@@ -640,6 +852,17 @@ export async function requestSiteDetailsResearchAction(
             assessorState: research.countyAssessorState,
           },
           sourceReason: "site_details_missing_scope_research",
+        });
+      }
+      if (rejectedUtilityCandidate) {
+        await appendServiceLocationAuditEvent(auditDb, {
+          organizationId: ctx.organizationId,
+          serviceLocationId: id,
+          actorUserId: ctx.userId,
+          eventType: ServiceLocationAuditType.AI_VALUE_REJECTED,
+          oldValue: { utilityId: location.utilityId },
+          newValue: { rejectedCandidate: "electric_utility", reason: "insufficient_coverage_evidence" },
+          sourceReason: "ai_utility_candidate_rejected",
         });
       }
       if (apnDiscovered || apnRefreshed) {
