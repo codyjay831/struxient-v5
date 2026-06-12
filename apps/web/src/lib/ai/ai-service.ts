@@ -2991,11 +2991,7 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
         ),
       );
 
-      const approvedSources = groundedResearch.approvedSources;
-      const trustedSourceLinks = approvedSources.map((source) => ({
-        title: source.title,
-        url: source.url,
-      }));
+      const approvedSources = [...groundedResearch.approvedSources];
       let schemaParsed = SiteDetailsResearchSchema.parse({
         electricUtilityCandidate: null,
         jurisdictionName: null,
@@ -3085,13 +3081,57 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
           : schemaParsed.apnCandidate
             ? [schemaParsed.apnCandidate]
             : [];
+
+      // When the general grounded pass does not surface an actual parcel number,
+      // run a dedicated APN-only grounded search aimed at listing sites (Zillow,
+      // Redfin, Realtor, county GIS) that display the APN directly in snippets.
+      let apnSearchSummary = groundedResearch.groundedSummary;
+      const apnScopeRequested = params.missingScopes.some(
+        (scope) => scope.trim().toUpperCase() === "APN",
+      );
+      if (extractedApnEvidence.length === 0 && apnScopeRequested) {
+        const apnFocusedPrompt = `What is the Assessor's Parcel Number (APN), also called the parcel number, for this exact property?
+Address: ${params.addressLine}
+
+Instructions:
+- The APN is displayed directly in the property details on real-estate listing sites such as Zillow, Redfin, Realtor.com, and Compass, and on county GIS/parcel viewers. Read the value straight from those search results; you do not need to submit any government search form.
+- Reply with the exact APN digits for THIS address (for example "0137-081-100" or "0137081100") and name the source that shows it.
+- An APN is a parcel id. It is NOT a ZIP code, NOT a ZIP+4, and NOT a phone number.
+- Only state that the APN was not found if no source anywhere shows an APN for this exact address.`;
+        try {
+          const apnFocused = await this.retryWithBackoff(() =>
+            this.withTimeout(
+              researchGroundedSiteDetailsSources({
+                apiKey,
+                model: modelName,
+                prompt: apnFocusedPrompt,
+                timeoutMs: this.GEMINI_REQUEST_TIMEOUT_MS,
+              }),
+              this.GEMINI_REQUEST_TIMEOUT_MS,
+            ),
+          );
+          for (const focusedSource of apnFocused.approvedSources) {
+            if (!approvedSources.some((existing) => existing.id === focusedSource.id)) {
+              approvedSources.push(focusedSource);
+            }
+          }
+          apnSearchSummary = `${groundedResearch.groundedSummary}\n${apnFocused.groundedSummary}`;
+        } catch {
+          // APN-focused search is best-effort when the general grounded pass misses parcel numbers.
+        }
+      }
+
+      const trustedSourceLinks = approvedSources.map((source) => ({
+        title: source.title,
+        url: source.url,
+      }));
       const fallbackApnEvidence =
         extractedApnEvidence.length > 0
           ? []
           : deriveApnEvidenceFromApprovedSources(
               approvedSources,
               params.addressLine,
-              groundedResearch.groundedSummary,
+              apnSearchSummary,
             );
       const apnEvidenceCandidates =
         extractedApnEvidence.length > 0 ? extractedApnEvidence : fallbackApnEvidence;
