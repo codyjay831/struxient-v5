@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
+import {
+  DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+  DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+} from "@/lib/public-request-settings-defaults";
 export type PublicRequestSettingsFormState = {
   error?: string;
   success?: boolean;
@@ -132,6 +136,40 @@ export async function updatePublicRequestSettingsAction(
   revalidatePath("/leads");
   revalidatePath("/settings/public-request-settings");
   revalidatePath("/settings/intake");
+  revalidatePath("/settings");
+
+  return { success: true };
+}
+
+export async function updatePublicRequestEnabledAction(enabled: boolean) {
+  const ctx = await getRequestContextOrThrow();
+
+  if (typeof enabled !== "boolean") {
+    return { success: false, error: "Invalid request status." };
+  }
+
+  try {
+    await db.publicRequestSettings.upsert({
+      where: { organizationId: ctx.organizationId },
+      create: {
+        organizationId: ctx.organizationId,
+        enabled,
+        formTitle: DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+        submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+      },
+      update: {
+        enabled,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update public request enabled state:", error);
+    return { success: false, error: "Could not update public request status." };
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/settings/public-request-settings");
+  revalidatePath("/settings/intake");
+  revalidatePath("/settings");
 
   return { success: true };
 }
