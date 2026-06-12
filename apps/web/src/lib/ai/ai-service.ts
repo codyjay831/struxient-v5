@@ -3102,9 +3102,13 @@ Instructions:
 - Reply with the exact APN digits for THIS address (for example "0137-081-100" or "0137081100") and name the source that shows it.
 - An APN is a parcel id. It is NOT a ZIP code, NOT a ZIP+4, and NOT a phone number.
 - Only state that the APN was not found if no source anywhere shows an APN for this exact address.`;
-        try {
-          const apnFocused = await this.retryWithBackoff(() =>
-            this.withTimeout(
+        // The grounded model is non-deterministic: a single focused call often
+        // declines even when the APN is readable from a listing snippet. Retry a
+        // few times, stopping as soon as a parseable parcel number is found.
+        const MAX_APN_SEARCH_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_APN_SEARCH_ATTEMPTS; attempt++) {
+          try {
+            const apnFocused = await this.withTimeout(
               researchGroundedSiteDetailsSources({
                 apiKey,
                 model: modelName,
@@ -3112,16 +3116,22 @@ Instructions:
                 timeoutMs: this.GEMINI_REQUEST_TIMEOUT_MS,
               }),
               this.GEMINI_REQUEST_TIMEOUT_MS,
-            ),
-          );
-          for (const focusedSource of apnFocused.approvedSources) {
-            if (!approvedSources.some((existing) => existing.id === focusedSource.id)) {
-              approvedSources.push(focusedSource);
+            );
+            for (const focusedSource of apnFocused.approvedSources) {
+              if (!approvedSources.some((existing) => existing.id === focusedSource.id)) {
+                approvedSources.push(focusedSource);
+              }
             }
+            apnSearchSummary = `${apnSearchSummary}\n${apnFocused.groundedSummary}`;
+            const attemptApn = deriveApnEvidenceFromApprovedSources(
+              approvedSources,
+              params.addressLine,
+              apnSearchSummary,
+            );
+            if (attemptApn.length > 0) break;
+          } catch {
+            // APN-focused search is best-effort; try again on transient failures.
           }
-          apnSearchSummary = `${groundedResearch.groundedSummary}\n${apnFocused.groundedSummary}`;
-        } catch {
-          // APN-focused search is best-effort when the general grounded pass misses parcel numbers.
         }
       }
 
