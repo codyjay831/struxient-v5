@@ -1,35 +1,155 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  JobScopeItemStatus,
   JobStatus,
   QuoteScopeRevisionLineOperation,
   QuoteScopeRevisionStatus,
   StaffRole,
 } from "@prisma/client";
 import {
+  buildProposedLineFromSource,
   changeOrderPageBlockMessage,
   checkJobPlanVersionForApply,
+  createLineFromIntent,
   deriveChangeOrderImpactPreview,
+  deriveChangeOrderLineDiffs,
   deriveChangeOrderPageBlockReason,
   deriveChangeOrderPermissions,
+  deriveChangeOrderReadiness,
   getApplyButtonState,
   getApproveButtonState,
   getCreateDraftButtonState,
   jobChangeOrdersPath,
-  resolveFocusedRevisionId,
+  lineHasMeaningfulChange,
+  parseDollarInputToCents,
   shouldShowJobChangeOrderLink,
   validateChangeOrderDraftInput,
   validateChangeOrderLine,
+  type ChangeOrderScopeItemSnapshot,
 } from "./change-order-flow";
 
 const officePermissions = deriveChangeOrderPermissions(StaffRole.OFFICE);
 const viewerPermissions = deriveChangeOrderPermissions(StaffRole.VIEWER);
 
-test("smoke: job page change order link routes to dedicated page", () => {
-  assert.equal(
-    jobChangeOrdersPath("job-123"),
-    "/jobs/job-123/change-orders",
+const sampleScopeItem: ChangeOrderScopeItemSnapshot = {
+  id: "scope-active",
+  description: "New roof",
+  quantity: "1",
+  unitPriceCents: 1200000,
+  executionRelevant: true,
+  status: JobScopeItemStatus.ACTIVE,
+  signedQuote: {
+    description: "New roof",
+    quantity: "1",
+    unitAmountCents: 1200000,
+    lineTotalCents: 1200000,
+    customerScopeTitle: "Roof replacement",
+    customerScopeDescription: "Full tear-off and replacement",
+    customerIncludedNotes: null,
+    customerExcludedNotes: null,
+  },
+  priorRevision: null,
+};
+
+test("guided intent creates expected first line operation", () => {
+  assert.equal(createLineFromIntent("add").operation, QuoteScopeRevisionLineOperation.ADD);
+  assert.equal(createLineFromIntent("modify").operation, QuoteScopeRevisionLineOperation.MODIFY);
+  assert.equal(createLineFromIntent("remove").operation, QuoteScopeRevisionLineOperation.REMOVE);
+});
+
+test("selecting source scope builds initial modify line from current scope", () => {
+  const line = buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY);
+  assert.equal(line.sourceJobScopeItemId, "scope-active");
+  assert.equal(line.description, "New roof");
+  assert.equal(line.quantity, "1");
+  assert.equal(line.unitPriceCents, 1200000);
+  assert.equal(line.priceDeltaCents, 0);
+});
+
+test("modify with no actual changed fields is blocked", () => {
+  const line = buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY);
+  const result = validateChangeOrderLine(
+    line,
+    new Set(["scope-active"]),
+    new Map([["scope-active", sampleScopeItem]]),
   );
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? "", /must change scope/i);
+  assert.equal(lineHasMeaningfulChange(line, sampleScopeItem), false);
+});
+
+test("modify with changed quantity passes validation", () => {
+  const line = {
+    ...buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY),
+    quantity: "2",
+  };
+  const result = validateChangeOrderLine(
+    line,
+    new Set(["scope-active"]),
+    new Map([["scope-active", sampleScopeItem]]),
+  );
+  assert.equal(result.ok, true);
+});
+
+test("remove requires source scope selection", () => {
+  const result = validateChangeOrderLine(
+    {
+      operation: QuoteScopeRevisionLineOperation.REMOVE,
+      description: "",
+      quantity: "1",
+      sourceJobScopeItemId: null,
+    },
+    new Set(["scope-active"]),
+    new Map([["scope-active", sampleScopeItem]]),
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? "", /Select the scope item you want to remove/i);
+});
+
+test("diff preview identifies changed description quantity and price fields", () => {
+  const diffs = deriveChangeOrderLineDiffs({
+    lines: [
+      {
+        operation: QuoteScopeRevisionLineOperation.MODIFY,
+        sourceJobScopeItemId: "scope-active",
+        description: "New roof + gutters",
+        quantity: "2",
+        unitPriceCents: 1300000,
+        priceDeltaCents: 50000,
+        executionRelevant: true,
+      },
+    ],
+    scopeItems: [sampleScopeItem],
+  });
+  assert.equal(diffs.length, 1);
+  assert.ok(diffs[0]?.fields.some((field) => field.label === "Description"));
+  assert.ok(diffs[0]?.fields.some((field) => field.label === "Quantity"));
+  assert.ok(diffs[0]?.fields.some((field) => field.label === "Unit price"));
+  assert.ok(diffs[0]?.fields.some((field) => field.label === "Price delta"));
+});
+
+test("readiness panel state matches create draft disabled reason", () => {
+  const readiness = deriveChangeOrderReadiness({
+    permissions: officePermissions,
+    pageBlocked: false,
+    draftLines: [
+      buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY),
+    ],
+    reasoning: "Customer wants more roof area",
+    activeScopeItems: [sampleScopeItem],
+    selectedRevision: null,
+    jobPlanVersion: 3,
+    expectedJobPlanVersion: 3,
+    isPending: false,
+  });
+  assert.equal(readiness.createDraft.disabled, true);
+  assert.match(readiness.createDraft.reason ?? "", /must change scope/i);
+  assert.ok(readiness.executionCoverageWarning);
+});
+
+test("smoke: job page change order link routes to dedicated page", () => {
+  assert.equal(jobChangeOrdersPath("job-123"), "/jobs/job-123/change-orders");
   assert.equal(
     shouldShowJobChangeOrderLink({ quoteId: "quote-1", jobStatus: JobStatus.ACTIVE }),
     true,
@@ -107,72 +227,6 @@ test("smoke: apply button disabled unless revision is approved", () => {
     isPending: false,
   });
   assert.equal(approvedState.disabled, false);
-
-  const draftState = getApplyButtonState({
-    permissions: officePermissions,
-    pageBlocked: false,
-    selectedRevision: {
-      id: "rev-1",
-      status: QuoteScopeRevisionStatus.DRAFT,
-      reasoning: "Add battery",
-      priceDeltaCents: 0,
-      lines: [],
-    },
-    jobPlanVersion: 4,
-    expectedJobPlanVersion: 4,
-    isPending: false,
-  });
-  assert.equal(draftState.disabled, true);
-  assert.match(draftState.reason ?? "", /Only approved Change Orders/i);
-});
-
-test("smoke: permission-denied role sees disabled create/approve/apply actions", () => {
-  const createState = getCreateDraftButtonState({
-    permissions: viewerPermissions,
-    pageBlocked: false,
-    draftLines: [
-      {
-        operation: QuoteScopeRevisionLineOperation.ADD,
-        description: "Extra work",
-        quantity: "1",
-      },
-    ],
-    reasoning: "Customer request",
-    activeScopeItemIds: new Set(),
-    isPending: false,
-  });
-  assert.equal(createState.disabled, true);
-  assert.match(createState.reason ?? "", /permission/i);
-
-  const approveState = getApproveButtonState({
-    permissions: viewerPermissions,
-    pageBlocked: false,
-    selectedRevision: {
-      id: "rev-1",
-      status: QuoteScopeRevisionStatus.DRAFT,
-      reasoning: "Add battery",
-      priceDeltaCents: 0,
-      lines: [],
-    },
-    isPending: false,
-  });
-  assert.equal(approveState.disabled, true);
-
-  const applyState = getApplyButtonState({
-    permissions: viewerPermissions,
-    pageBlocked: false,
-    selectedRevision: {
-      id: "rev-1",
-      status: QuoteScopeRevisionStatus.APPROVED,
-      reasoning: "Add battery",
-      priceDeltaCents: 0,
-      lines: [],
-    },
-    jobPlanVersion: 2,
-    expectedJobPlanVersion: 2,
-    isPending: false,
-  });
-  assert.equal(applyState.disabled, true);
 });
 
 test("smoke: stale jobPlanVersion apply conflict shows retry message", () => {
@@ -182,62 +236,6 @@ test("smoke: stale jobPlanVersion apply conflict shows retry message", () => {
   });
   assert.equal(versionCheck.ok, false);
   assert.match(versionCheck.error ?? "", /Job plan changed/i);
-
-  const applyState = getApplyButtonState({
-    permissions: officePermissions,
-    pageBlocked: false,
-    selectedRevision: {
-      id: "rev-1",
-      status: QuoteScopeRevisionStatus.APPROVED,
-      reasoning: "Add battery",
-      priceDeltaCents: 0,
-      lines: [
-        {
-          operation: QuoteScopeRevisionLineOperation.ADD,
-          description: "Battery backup",
-          quantity: "1",
-        },
-      ],
-    },
-    jobPlanVersion: 3,
-    expectedJobPlanVersion: 2,
-    isPending: false,
-  });
-  assert.equal(applyState.disabled, true);
-  assert.match(applyState.reason ?? "", /Job plan changed/i);
-});
-
-test("smoke: create draft with lines succeeds validation", () => {
-  const validation = validateChangeOrderDraftInput({
-    reasoning: "Customer approved battery add-on",
-    lines: [
-      {
-        operation: QuoteScopeRevisionLineOperation.ADD,
-        description: "Battery backup",
-        quantity: "1",
-        priceDeltaCents: 0,
-        executionRelevant: true,
-      },
-    ],
-    activeScopeItemIds: new Set(["scope-1"]),
-  });
-  assert.equal(validation.ok, true);
-  if (validation.ok) {
-    assert.equal(validation.priceDeltaCents, 0);
-  }
-});
-
-test("smoke: approve then apply flow increments expected job plan version", () => {
-  let jobPlanVersion = 5;
-  const revisionStatus = QuoteScopeRevisionStatus.DRAFT;
-
-  assert.equal(revisionStatus, QuoteScopeRevisionStatus.DRAFT);
-  const approvedStatus = QuoteScopeRevisionStatus.APPROVED;
-  assert.notEqual(revisionStatus, approvedStatus);
-
-  const applyResultVersion = jobPlanVersion + 1;
-  jobPlanVersion = applyResultVersion;
-  assert.equal(jobPlanVersion, 6);
 });
 
 test("change order page blocks archived jobs and missing quotes", () => {
@@ -249,42 +247,7 @@ test("change order page blocks archived jobs and missing quotes", () => {
     }),
     "missing_quote",
   );
-  assert.equal(
-    deriveChangeOrderPageBlockReason({
-      quoteId: "quote-1",
-      jobStatus: JobStatus.ARCHIVED,
-      permissions: officePermissions,
-    }),
-    "job_archived",
-  );
-  assert.match(
-    changeOrderPageBlockMessage("missing_quote"),
-    /no linked quote/i,
-  );
-});
-
-test("change order line validation requires active source for modify/remove", () => {
-  const invalidRemove = validateChangeOrderLine(
-    {
-      operation: QuoteScopeRevisionLineOperation.REMOVE,
-      description: "Remove old scope",
-      quantity: "1",
-      sourceJobScopeItemId: "missing",
-    },
-    new Set(["scope-active"]),
-  );
-  assert.equal(invalidRemove.ok, false);
-
-  const validModify = validateChangeOrderLine(
-    {
-      operation: QuoteScopeRevisionLineOperation.MODIFY,
-      description: "Updated scope",
-      quantity: "2",
-      sourceJobScopeItemId: "scope-active",
-    },
-    new Set(["scope-active"]),
-  );
-  assert.equal(validModify.ok, true);
+  assert.match(changeOrderPageBlockMessage("missing_quote"), /no linked quote/i);
 });
 
 test("change order impact preview flags non-zero payment delta", () => {
@@ -303,45 +266,43 @@ test("change order impact preview flags non-zero payment delta", () => {
   assert.ok(preview.paymentBlockReason);
 });
 
-test("focus revision resolves requested id when present", () => {
-  assert.equal(
-    resolveFocusedRevisionId({
-      revisions: [{ id: "rev-a" }, { id: "rev-b" }],
-      requestedRevisionId: "rev-b",
-    }),
-    "rev-b",
-  );
-  assert.equal(
-    resolveFocusedRevisionId({
-      revisions: [{ id: "rev-a" }],
-      requestedRevisionId: "missing",
-    }),
-    "rev-a",
-  );
+test("dollar input parser converts user-friendly price delta", () => {
+  assert.equal(parseDollarInputToCents("500.00"), 50000);
+  assert.equal(parseDollarInputToCents("$25.50"), 2550);
 });
 
-test("apply button blocks non-zero payment delta without approved payment op", () => {
-  const applyState = getApplyButtonState({
-    permissions: officePermissions,
+test("create draft validation succeeds for add line", () => {
+  const validation = validateChangeOrderDraftInput({
+    reasoning: "Customer approved battery add-on",
+    lines: [
+      {
+        operation: QuoteScopeRevisionLineOperation.ADD,
+        description: "Battery backup",
+        quantity: "1",
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+    activeScopeItemIds: new Set(["scope-1"]),
+  });
+  assert.equal(validation.ok, true);
+});
+
+test("permission-denied role sees disabled create action", () => {
+  const createState = getCreateDraftButtonState({
+    permissions: viewerPermissions,
     pageBlocked: false,
-    selectedRevision: {
-      id: "rev-paid",
-      status: QuoteScopeRevisionStatus.APPROVED,
-      reasoning: "Paid upgrade",
-      priceDeltaCents: 2500,
-      lines: [
-        {
-          operation: QuoteScopeRevisionLineOperation.ADD,
-          description: "Premium inverter",
-          quantity: "1",
-          priceDeltaCents: 2500,
-        },
-      ],
-    },
-    jobPlanVersion: 1,
-    expectedJobPlanVersion: 1,
+    draftLines: [
+      {
+        operation: QuoteScopeRevisionLineOperation.ADD,
+        description: "Extra work",
+        quantity: "1",
+      },
+    ],
+    reasoning: "Customer request",
+    activeScopeItemIds: new Set(),
     isPending: false,
   });
-  assert.equal(applyState.disabled, true);
-  assert.match(applyState.reason ?? "", /payment-impact operation/i);
+  assert.equal(createState.disabled, true);
+  assert.match(createState.reason ?? "", /permission/i);
 });

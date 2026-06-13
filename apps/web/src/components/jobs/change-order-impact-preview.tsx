@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { formatCents } from "@/lib/job-payment-display";
 import type { ChangeOrderImpactPreview } from "@/lib/change-order-flow";
+import { ChangeOrderLineDiffPreview } from "@/components/jobs/change-order-line-diff-preview";
 
 export function ChangeOrderImpactPreviewPanel({
   preview,
@@ -10,8 +11,13 @@ export function ChangeOrderImpactPreviewPanel({
   preview: ChangeOrderImpactPreview;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-foreground/[0.02] p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-foreground">Impact preview</h3>
+    <div className="rounded-lg border border-border bg-foreground/[0.02] p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Impact preview</h3>
+        <p className="mt-1 text-xs text-foreground-muted">
+          Commercial summary and proposed line-level changes.
+        </p>
+      </div>
 
       <dl className="grid gap-2 text-sm md:grid-cols-2">
         <div>
@@ -35,6 +41,8 @@ export function ChangeOrderImpactPreviewPanel({
           <dd className="font-medium">{formatCents(preview.priceDeltaCents)}</dd>
         </div>
       </dl>
+
+      <ChangeOrderLineDiffPreview diffs={preview.lineDiffs} />
 
       {preview.scopeSummaryLines.length > 0 ? (
         <ul className="space-y-1 text-sm text-foreground-muted">

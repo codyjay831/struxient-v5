@@ -13,33 +13,33 @@ import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
-  deriveChangeOrderImpactPreview,
-  getApplyButtonState,
-  getApproveButtonState,
-  getCreateDraftButtonState,
+  createLineFromIntent,
+  deriveChangeOrderReadiness,
   jobChangeOrdersPath,
   validateChangeOrderDraftInput,
+  type ChangeOrderIntent,
   type ChangeOrderLineDraft,
 } from "@/lib/change-order-flow";
 import type { LoadedChangeOrderWorkspace } from "@/lib/change-order-loader";
-import {
-  ChangeOrderLineEditor,
-  createEmptyChangeOrderLine,
-} from "@/components/jobs/change-order-line-editor";
+import { ChangeOrderLineEditor } from "@/components/jobs/change-order-line-editor";
 import { ChangeOrderImpactPreviewPanel } from "@/components/jobs/change-order-impact-preview";
 import { ChangeOrderHistoryList } from "@/components/jobs/change-order-history-list";
+import {
+  ChangeOrderIntentPicker,
+} from "@/components/jobs/change-order-intent-picker";
+import { ChangeOrderReadinessPanel } from "@/components/jobs/change-order-readiness-panel";
 
 type WorkspacePhase = "idle" | "creating" | "approving" | "applying";
+type DraftComposerPhase = "closed" | "intent" | "editing";
 
 export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspace }) {
   const router = useRouter();
   const [phase, setPhase] = useState<WorkspacePhase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [showDraftComposer, setShowDraftComposer] = useState(false);
+  const [composerPhase, setComposerPhase] = useState<DraftComposerPhase>("closed");
+  const [selectedIntent, setSelectedIntent] = useState<ChangeOrderIntent | null>(null);
   const [reasoning, setReasoning] = useState("");
-  const [draftLines, setDraftLines] = useState<ChangeOrderLineDraft[]>([
-    createEmptyChangeOrderLine(),
-  ]);
+  const [draftLines, setDraftLines] = useState<ChangeOrderLineDraft[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
     data.focusRevisionId,
   );
@@ -58,52 +58,54 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     reasoning,
     lines: draftLines,
     activeScopeItemIds,
+    activeScopeItems: data.activeScopeItems,
   });
-
-  const draftImpact =
-    draftValidation.ok && showDraftComposer
-      ? deriveChangeOrderImpactPreview({
-          lines: draftLines,
-          priceDeltaCents: draftValidation.priceDeltaCents,
-        })
-      : null;
-
-  const selectedImpact = selectedRevision
-    ? deriveChangeOrderImpactPreview({
-        lines: selectedRevision.lines,
-        priceDeltaCents: selectedRevision.priceDeltaCents,
-      })
-    : null;
 
   const isPending = phase !== "idle";
   const pageBlocked = data.pageBlocked;
+  const isDrafting = composerPhase !== "closed";
 
-  const createDraftState = getCreateDraftButtonState({
+  const draftReadiness = deriveChangeOrderReadiness({
     permissions: data.permissions,
     pageBlocked,
     draftLines,
     reasoning,
-    activeScopeItemIds,
+    activeScopeItems: data.activeScopeItems,
+    selectedRevision: null,
+    jobPlanVersion: data.jobPlanVersion,
+    expectedJobPlanVersion,
     isPending,
   });
 
-  const approveState = getApproveButtonState({
+  const selectedReadiness = deriveChangeOrderReadiness({
     permissions: data.permissions,
     pageBlocked,
-    selectedRevision,
-    isPending,
-  });
-
-  const applyState = getApplyButtonState({
-    permissions: data.permissions,
-    pageBlocked,
+    draftLines: [],
+    reasoning: "",
+    activeScopeItems: data.activeScopeItems,
     selectedRevision,
     jobPlanVersion: data.jobPlanVersion,
     expectedJobPlanVersion,
     isPending,
   });
 
+  function resetComposer() {
+    setComposerPhase("closed");
+    setSelectedIntent(null);
+    setReasoning("");
+    setDraftLines([]);
+    setError(null);
+  }
+
+  function handleIntentSelect(intent: ChangeOrderIntent) {
+    setSelectedIntent(intent);
+    setDraftLines([createLineFromIntent(intent)]);
+    setComposerPhase("editing");
+    setSelectedRevisionId(null);
+  }
+
   function handleCreateDraft() {
+    const createDraftState = draftReadiness.createDraft;
     if (createDraftState.disabled || !draftValidation.ok) {
       setError(
         createDraftState.reason ??
@@ -126,9 +128,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
         setPhase("idle");
         return;
       }
-      setShowDraftComposer(false);
-      setReasoning("");
-      setDraftLines([createEmptyChangeOrderLine()]);
+      resetComposer();
       setPhase("idle");
       router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.revisionId}`);
       router.refresh();
@@ -136,6 +136,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
   }
 
   function handleApprove() {
+    const approveState = selectedReadiness.approve;
     if (!selectedRevision || approveState.disabled) {
       setError(approveState.reason ?? "Cannot approve this Change Order.");
       return;
@@ -156,6 +157,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
   }
 
   function handleApply() {
+    const applyState = selectedReadiness.apply;
     if (!selectedRevision || applyState.disabled) {
       setError(applyState.reason ?? "Cannot apply this Change Order.");
       return;
@@ -197,83 +199,11 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
 
       <WorkspacePanel>
         <SectionHeading
-          title="Change Order history"
-          description="Draft, approve, and apply commercial scope changes after activation."
-        />
-        <div className="mt-4">
-          <ChangeOrderHistoryList
-            revisions={data.revisions}
-            selectedRevisionId={selectedRevisionId}
-            onSelect={setSelectedRevisionId}
-          />
-        </div>
-      </WorkspacePanel>
-
-      {selectedRevision ? (
-        <WorkspacePanel>
-          <SectionHeading
-            title="Selected Change Order"
-            description={selectedRevision.reasoning}
-          />
-          <div className="mt-4 space-y-4">
-            {selectedImpact ? <ChangeOrderImpactPreviewPanel preview={selectedImpact} /> : null}
-
-            <div className="flex flex-wrap gap-2">
-              {selectedRevision.status === QuoteScopeRevisionStatus.DRAFT ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={approveState.disabled}
-                  title={approveState.reason ?? undefined}
-                  onClick={handleApprove}
-                >
-                  {phase === "approving" ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="size-4" />
-                  )}
-                  Approve Change Order
-                </Button>
-              ) : null}
-
-              {selectedRevision.status === QuoteScopeRevisionStatus.APPROVED ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={applyState.disabled}
-                  title={applyState.reason ?? undefined}
-                  onClick={handleApply}
-                >
-                  {phase === "applying" ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="size-4" />
-                  )}
-                  Apply Change Order
-                </Button>
-              ) : null}
-
-              {selectedRevision.status === QuoteScopeRevisionStatus.APPLIED ? (
-                <p className="text-sm text-success">
-                  Applied{" "}
-                  {selectedRevision.appliedAt
-                    ? new Date(selectedRevision.appliedAt).toLocaleString()
-                    : "successfully"}
-                  .
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </WorkspacePanel>
-      ) : null}
-
-      <WorkspacePanel>
-        <SectionHeading
-          title="Create Change Order draft"
-          description="Capture new commercial scope changes before customer approval and apply."
+          title="Create Change Order"
+          description="You are creating a customer-facing Change Order for signed scope changes. This does not mutate the original quote."
         />
         <div className="mt-4 space-y-4">
-          {!showDraftComposer ? (
+          {composerPhase === "closed" ? (
             <Button
               type="button"
               variant="secondary"
@@ -283,62 +213,167 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                   ? data.pageBlockedMessage ?? undefined
                   : data.permissions.createDraftError ?? undefined
               }
-              onClick={() => setShowDraftComposer(true)}
+              onClick={() => {
+                setComposerPhase("intent");
+                setSelectedRevisionId(null);
+              }}
             >
               <FilePlus2 className="size-4" />
-              New Change Order draft
+              New Change Order
             </Button>
-          ) : (
-            <>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-foreground-muted">Reasoning</span>
-                <textarea
-                  className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  value={reasoning}
-                  disabled={isPending || pageBlocked}
-                  onChange={(event) => setReasoning(event.target.value)}
-                  placeholder="Why is this scope changing?"
-                />
-              </label>
+          ) : null}
 
-              <ChangeOrderLineEditor
-                lines={draftLines}
-                activeScopeItems={data.activeScopeItems}
-                onChange={setDraftLines}
+          {composerPhase === "intent" ? (
+            <div className="space-y-4">
+              <ChangeOrderIntentPicker
                 disabled={isPending || pageBlocked}
+                onSelect={handleIntentSelect}
               />
+              <Button type="button" variant="ghost" disabled={isPending} onClick={resetComposer}>
+                Cancel
+              </Button>
+            </div>
+          ) : null}
 
-              {draftImpact ? <ChangeOrderImpactPreviewPanel preview={draftImpact} /> : null}
+          {composerPhase === "editing" ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+              <div className="space-y-4">
+                {selectedIntent ? (
+                  <p className="text-sm text-foreground-muted">
+                    {selectedIntent === "add"
+                      ? "Adding new work or cost."
+                      : selectedIntent === "modify"
+                        ? "Modifying existing scope."
+                        : "Removing existing scope."}
+                  </p>
+                ) : null}
+
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground-muted">Reasoning</span>
+                  <textarea
+                    className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    value={reasoning}
+                    disabled={isPending || pageBlocked}
+                    onChange={(event) => setReasoning(event.target.value)}
+                    placeholder="Why is this scope changing?"
+                  />
+                </label>
+
+                <ChangeOrderLineEditor
+                  lines={draftLines}
+                  activeScopeItems={data.activeScopeItems}
+                  onChange={setDraftLines}
+                  disabled={isPending || pageBlocked}
+                  showAdvancedControls={selectedIntent === "add" || draftLines.length > 1}
+                />
+
+                {draftValidation.ok ? (
+                  <ChangeOrderImpactPreviewPanel preview={draftReadiness.impact} />
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={draftReadiness.createDraft.disabled}
+                    title={draftReadiness.createDraft.reason ?? undefined}
+                    onClick={handleCreateDraft}
+                  >
+                    {phase === "creating" ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <FilePlus2 className="size-4" />
+                    )}
+                    Create draft
+                  </Button>
+                  <Button type="button" variant="ghost" disabled={isPending} onClick={resetComposer}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+
+              <ChangeOrderReadinessPanel readiness={draftReadiness} mode="draft" />
+            </div>
+          ) : null}
+        </div>
+      </WorkspacePanel>
+
+      {selectedRevision ? (
+        <WorkspacePanel>
+          <SectionHeading
+            title="Selected Change Order"
+            description={selectedRevision.reasoning}
+          />
+          <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+            <div className="space-y-4">
+              <ChangeOrderImpactPreviewPanel preview={selectedReadiness.impact} />
 
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={createDraftState.disabled}
-                  title={createDraftState.reason ?? undefined}
-                  onClick={handleCreateDraft}
-                >
-                  {phase === "creating" ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <FilePlus2 className="size-4" />
-                  )}
-                  Create draft
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isPending}
-                  onClick={() => {
-                    setShowDraftComposer(false);
-                    setError(null);
-                  }}
-                >
-                  Cancel
-                </Button>
+                {selectedRevision.status === QuoteScopeRevisionStatus.DRAFT ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={selectedReadiness.approve.disabled}
+                    title={selectedReadiness.approve.reason ?? undefined}
+                    onClick={handleApprove}
+                  >
+                    {phase === "approving" ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-4" />
+                    )}
+                    Approve Change Order
+                  </Button>
+                ) : null}
+
+                {selectedRevision.status === QuoteScopeRevisionStatus.APPROVED ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={selectedReadiness.apply.disabled}
+                    title={selectedReadiness.apply.reason ?? undefined}
+                    onClick={handleApply}
+                  >
+                    {phase === "applying" ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-4" />
+                    )}
+                    Apply Change Order
+                  </Button>
+                ) : null}
+
+                {selectedRevision.status === QuoteScopeRevisionStatus.APPLIED ? (
+                  <p className="text-sm text-success">
+                    Applied{" "}
+                    {selectedRevision.appliedAt
+                      ? new Date(selectedRevision.appliedAt).toLocaleString()
+                      : "successfully"}
+                    .
+                  </p>
+                ) : null}
               </div>
-            </>
-          )}
+            </div>
+
+            <ChangeOrderReadinessPanel readiness={selectedReadiness} mode="selected" />
+          </div>
+        </WorkspacePanel>
+      ) : null}
+
+      <WorkspacePanel>
+        <SectionHeading
+          title="Change Order history"
+          description="Prior drafts, approvals, and applied Change Orders for this job."
+        />
+        <div className="mt-4">
+          <ChangeOrderHistoryList
+            revisions={data.revisions}
+            selectedRevisionId={selectedRevisionId}
+            onSelect={(revisionId) => {
+              setSelectedRevisionId(revisionId);
+              if (isDrafting) resetComposer();
+            }}
+          />
         </div>
       </WorkspacePanel>
     </div>

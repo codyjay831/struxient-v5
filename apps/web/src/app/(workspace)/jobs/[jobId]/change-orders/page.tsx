@@ -50,7 +50,7 @@ export default async function JobChangeOrdersPage({
 
       <PageHeader
         title="Change Orders"
-        description="Formal commercial scope changes for this active job. Draft, review impact, approve, then apply to execution."
+        description="Create a customer-facing Change Order for signed scope changes. This does not mutate the original quote."
         actions={
           <>
             <ButtonLink href={jobDetailPath(workspace.jobId)} variant="secondary" size="sm">

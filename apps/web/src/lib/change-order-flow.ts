@@ -10,6 +10,8 @@ import {
 } from "@/lib/execution-plan-permissions";
 import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-payment-policy";
 
+export type ChangeOrderIntent = "add" | "modify" | "remove";
+
 export type ChangeOrderLineDraft = {
   operation: QuoteScopeRevisionLineOperation;
   sourceJobScopeItemId?: string | null;
@@ -20,6 +22,25 @@ export type ChangeOrderLineDraft = {
   executionRelevant?: boolean;
 };
 
+export type ChangeOrderSignedQuoteSourceSnapshot = {
+  description: string;
+  quantity: string;
+  unitAmountCents: number;
+  lineTotalCents: number;
+  customerScopeTitle: string | null;
+  customerScopeDescription: string | null;
+  customerIncludedNotes: string | null;
+  customerExcludedNotes: string | null;
+};
+
+export type ChangeOrderPriorRevisionSourceSnapshot = {
+  operation: QuoteScopeRevisionLineOperation;
+  description: string;
+  quantity: string;
+  unitPriceCents: number | null;
+  priceDeltaCents: number | null;
+};
+
 export type ChangeOrderScopeItemSnapshot = {
   id: string;
   description: string;
@@ -27,6 +48,8 @@ export type ChangeOrderScopeItemSnapshot = {
   unitPriceCents: number | null;
   executionRelevant: boolean;
   status: JobScopeItemStatus;
+  signedQuote: ChangeOrderSignedQuoteSourceSnapshot | null;
+  priorRevision: ChangeOrderPriorRevisionSourceSnapshot | null;
 };
 
 export type ChangeOrderRevisionSnapshot = {
@@ -60,6 +83,32 @@ export type ChangeOrderImpactPreview = {
   paymentBlocked: boolean;
   paymentBlockReason: string | null;
   scopeSummaryLines: string[];
+  lineDiffs: ChangeOrderLineDiff[];
+};
+
+export type ChangeOrderLineDiffField = {
+  label: string;
+  before: string;
+  after: string;
+  changed: boolean;
+};
+
+export type ChangeOrderLineDiff = {
+  lineIndex: number;
+  operation: QuoteScopeRevisionLineOperation;
+  sourceDescription: string | null;
+  fields: ChangeOrderLineDiffField[];
+};
+
+export type ChangeOrderReadiness = {
+  impact: ChangeOrderImpactPreview;
+  createDraft: ChangeOrderButtonState;
+  approve: ChangeOrderButtonState;
+  apply: ChangeOrderButtonState;
+  executionCoverageWarning: string | null;
+  jobPlanVersion: number;
+  expectedJobPlanVersion: number;
+  selectedRevisionStatus: QuoteScopeRevisionStatus | null;
 };
 
 export function jobChangeOrdersPath(jobId: string): string {
@@ -68,6 +117,201 @@ export function jobChangeOrdersPath(jobId: string): string {
 
 export function jobDetailPath(jobId: string): string {
   return `/jobs/${jobId}`;
+}
+
+export function createLineFromIntent(intent: ChangeOrderIntent): ChangeOrderLineDraft {
+  switch (intent) {
+    case "add":
+      return {
+        operation: QuoteScopeRevisionLineOperation.ADD,
+        description: "",
+        quantity: "1",
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      };
+    case "modify":
+      return {
+        operation: QuoteScopeRevisionLineOperation.MODIFY,
+        sourceJobScopeItemId: null,
+        description: "",
+        quantity: "1",
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      };
+    case "remove":
+      return {
+        operation: QuoteScopeRevisionLineOperation.REMOVE,
+        sourceJobScopeItemId: null,
+        description: "",
+        quantity: "1",
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      };
+  }
+}
+
+export function buildProposedLineFromSource(
+  scopeItem: ChangeOrderScopeItemSnapshot,
+  operation:
+    | typeof QuoteScopeRevisionLineOperation.MODIFY
+    | typeof QuoteScopeRevisionLineOperation.REMOVE,
+): ChangeOrderLineDraft {
+  return {
+    operation,
+    sourceJobScopeItemId: scopeItem.id,
+    description: scopeItem.description,
+    quantity: scopeItem.quantity,
+    unitPriceCents: scopeItem.unitPriceCents,
+    executionRelevant: scopeItem.executionRelevant,
+    priceDeltaCents: 0,
+  };
+}
+
+export function scopeItemsById(
+  items: ChangeOrderScopeItemSnapshot[],
+): Map<string, ChangeOrderScopeItemSnapshot> {
+  return new Map(items.map((item) => [item.id, item]));
+}
+
+function formatQuantity(value: string): string {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return value;
+  return String(parsed);
+}
+
+function formatMoney(cents: number | null | undefined): string {
+  if (cents == null) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+export function lineHasMeaningfulChange(
+  line: ChangeOrderLineDraft,
+  sourceItem: ChangeOrderScopeItemSnapshot | null,
+): boolean {
+  if (line.operation === QuoteScopeRevisionLineOperation.ADD) return true;
+  if (!sourceItem) return false;
+  if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) return true;
+  if ((line.priceDeltaCents ?? 0) !== 0) return true;
+
+  return (
+    line.description.trim() !== sourceItem.description.trim() ||
+    formatQuantity(line.quantity) !== formatQuantity(sourceItem.quantity) ||
+    (line.unitPriceCents ?? null) !== sourceItem.unitPriceCents ||
+    (line.executionRelevant !== false) !== sourceItem.executionRelevant
+  );
+}
+
+export function deriveChangeOrderLineDiffs(input: {
+  lines: ChangeOrderLineDraft[];
+  scopeItems: ChangeOrderScopeItemSnapshot[];
+}): ChangeOrderLineDiff[] {
+  const byId = scopeItemsById(input.scopeItems);
+  const diffs: ChangeOrderLineDiff[] = [];
+
+  for (const [lineIndex, line] of input.lines.entries()) {
+    const source = line.sourceJobScopeItemId
+      ? byId.get(line.sourceJobScopeItemId) ?? null
+      : null;
+
+    if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
+      diffs.push({
+        lineIndex,
+        operation: line.operation,
+        sourceDescription: null,
+        fields: [
+          {
+            label: "Description",
+            before: "—",
+            after: line.description.trim() || "—",
+            changed: !!line.description.trim(),
+          },
+          {
+            label: "Quantity",
+            before: "—",
+            after: formatQuantity(line.quantity),
+            changed: true,
+          },
+          {
+            label: "Price delta",
+            before: formatMoney(0),
+            after: formatMoney(line.priceDeltaCents ?? 0),
+            changed: (line.priceDeltaCents ?? 0) !== 0,
+          },
+        ],
+      });
+      continue;
+    }
+
+    if (!source) continue;
+
+    if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) {
+      diffs.push({
+        lineIndex,
+        operation: line.operation,
+        sourceDescription: source.description,
+        fields: [
+          {
+            label: "Scope item",
+            before: source.description,
+            after: "Removed",
+            changed: true,
+          },
+          {
+            label: "Price delta",
+            before: formatMoney(0),
+            after: formatMoney(line.priceDeltaCents ?? 0),
+            changed: (line.priceDeltaCents ?? 0) !== 0,
+          },
+        ],
+      });
+      continue;
+    }
+
+    const fields: ChangeOrderLineDiffField[] = [
+      {
+        label: "Description",
+        before: source.description,
+        after: line.description.trim() || source.description,
+        changed: line.description.trim() !== source.description.trim(),
+      },
+      {
+        label: "Quantity",
+        before: formatQuantity(source.quantity),
+        after: formatQuantity(line.quantity),
+        changed: formatQuantity(line.quantity) !== formatQuantity(source.quantity),
+      },
+      {
+        label: "Unit price",
+        before: formatMoney(source.unitPriceCents),
+        after: formatMoney(line.unitPriceCents ?? source.unitPriceCents),
+        changed: (line.unitPriceCents ?? source.unitPriceCents) !== source.unitPriceCents,
+      },
+      {
+        label: "Price delta",
+        before: formatMoney(0),
+        after: formatMoney(line.priceDeltaCents ?? 0),
+        changed: (line.priceDeltaCents ?? 0) !== 0,
+      },
+      {
+        label: "Execution relevant",
+        before: source.executionRelevant ? "Yes" : "No",
+        after: line.executionRelevant !== false ? "Yes" : "No",
+        changed: (line.executionRelevant !== false) !== source.executionRelevant,
+      },
+    ];
+
+    diffs.push({
+      lineIndex,
+      operation: line.operation,
+      sourceDescription: source.description,
+      fields: fields.filter((field) => field.changed),
+    });
+  }
+
+  return diffs;
 }
 
 export function deriveChangeOrderPermissions(role: StaffRole): ChangeOrderPermissions {
@@ -120,24 +364,61 @@ export function changeOrderPageBlockMessage(
 export function validateChangeOrderLine(
   line: ChangeOrderLineDraft,
   activeScopeItemIds: Set<string>,
+  scopeItemsByIdMap?: Map<string, ChangeOrderScopeItemSnapshot>,
 ): { ok: true } | { ok: false; error: string } {
-  if (!line.description.trim()) {
-    return { ok: false, error: "Each line requires a description." };
-  }
-  const quantity = line.quantity.trim();
-  if (!quantity || Number.isNaN(Number(quantity)) || Number(quantity) <= 0) {
-    return { ok: false, error: "Each line requires a positive quantity." };
-  }
   if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
+    if (!line.description.trim()) {
+      return { ok: false, error: "Add lines require a description." };
+    }
+    const quantity = line.quantity.trim();
+    if (!quantity || Number.isNaN(Number(quantity)) || Number(quantity) <= 0) {
+      return { ok: false, error: "Add lines require a positive quantity." };
+    }
     return { ok: true };
   }
+
   const sourceId = line.sourceJobScopeItemId?.trim();
   if (!sourceId) {
-    return { ok: false, error: "MODIFY and REMOVE lines require a source scope item." };
+    return {
+      ok: false,
+      error:
+        line.operation === QuoteScopeRevisionLineOperation.MODIFY
+          ? "Select the scope item you want to modify."
+          : "Select the scope item you want to remove.",
+    };
   }
   if (!activeScopeItemIds.has(sourceId)) {
     return { ok: false, error: "Source scope item must be active on this job." };
   }
+
+  const sourceItem = scopeItemsByIdMap?.get(sourceId) ?? null;
+
+  if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) {
+    if (!line.description.trim() && sourceItem) {
+      return { ok: false, error: "Remove lines require a description or selected source scope." };
+    }
+    return { ok: true };
+  }
+
+  if (!line.description.trim()) {
+    return { ok: false, error: "Modify lines require a description." };
+  }
+  const quantity = line.quantity.trim();
+  if (!quantity || Number.isNaN(Number(quantity)) || Number(quantity) <= 0) {
+    return { ok: false, error: "Modify lines require a positive quantity." };
+  }
+
+  if (sourceItem && !lineHasMeaningfulChange(line, sourceItem)) {
+    return {
+      ok: false,
+      error: "Modify lines must change scope, pricing, or execution relevance from the current value.",
+    };
+  }
+
+  if (sourceItem?.executionRelevant && line.executionRelevant !== false) {
+    // Informational only at line level; apply-time coverage is enforced server-side.
+  }
+
   return { ok: true };
 }
 
@@ -145,6 +426,7 @@ export function validateChangeOrderDraftInput(input: {
   reasoning: string;
   lines: ChangeOrderLineDraft[];
   activeScopeItemIds: Set<string>;
+  activeScopeItems?: ChangeOrderScopeItemSnapshot[];
 }): { ok: true; priceDeltaCents: number } | { ok: false; error: string } {
   if (!input.reasoning.trim()) {
     return { ok: false, error: "Reasoning is required." };
@@ -152,10 +434,18 @@ export function validateChangeOrderDraftInput(input: {
   if (input.lines.length === 0) {
     return { ok: false, error: "At least one scope revision line is required." };
   }
+
+  const byId = input.activeScopeItems ? scopeItemsById(input.activeScopeItems) : undefined;
+
   for (const line of input.lines) {
-    const lineValidation = validateChangeOrderLine(line, input.activeScopeItemIds);
+    const lineValidation = validateChangeOrderLine(
+      line,
+      input.activeScopeItemIds,
+      byId,
+    );
     if (!lineValidation.ok) return lineValidation;
   }
+
   const priceDeltaCents = input.lines.reduce(
     (sum, line) => sum + (line.priceDeltaCents ?? 0),
     0,
@@ -166,6 +456,7 @@ export function validateChangeOrderDraftInput(input: {
 export function deriveChangeOrderImpactPreview(input: {
   lines: ChangeOrderLineDraft[];
   priceDeltaCents: number;
+  scopeItems?: ChangeOrderScopeItemSnapshot[];
 }): ChangeOrderImpactPreview {
   const addCount = input.lines.filter(
     (line) => line.operation === QuoteScopeRevisionLineOperation.ADD,
@@ -192,7 +483,12 @@ export function deriveChangeOrderImpactPreview(input: {
         : line.operation === QuoteScopeRevisionLineOperation.MODIFY
           ? "Modify"
           : "Remove";
-    return `${op}: ${line.description.trim()}`;
+    return `${op}: ${line.description.trim() || "Untitled scope change"}`;
+  });
+
+  const lineDiffs = deriveChangeOrderLineDiffs({
+    lines: input.lines,
+    scopeItems: input.scopeItems ?? [],
   });
 
   return {
@@ -204,6 +500,7 @@ export function deriveChangeOrderImpactPreview(input: {
     paymentBlocked: !paymentCheck.ok,
     paymentBlockReason: paymentCheck.error ?? null,
     scopeSummaryLines,
+    lineDiffs,
   };
 }
 
@@ -218,6 +515,7 @@ export function getCreateDraftButtonState(input: {
   draftLines: ChangeOrderLineDraft[];
   reasoning: string;
   activeScopeItemIds: Set<string>;
+  activeScopeItems?: ChangeOrderScopeItemSnapshot[];
   isPending: boolean;
 }): ChangeOrderButtonState {
   if (input.pageBlocked) {
@@ -236,6 +534,7 @@ export function getCreateDraftButtonState(input: {
     reasoning: input.reasoning,
     lines: input.draftLines,
     activeScopeItemIds: input.activeScopeItemIds,
+    activeScopeItems: input.activeScopeItems,
   });
   if (!validation.ok) {
     return { disabled: true, reason: validation.error };
@@ -313,6 +612,94 @@ export function getApplyButtonState(input: {
   return { disabled: false, reason: null };
 }
 
+export function deriveExecutionCoverageWarning(input: {
+  lines: ChangeOrderLineDraft[];
+  scopeItems: ChangeOrderScopeItemSnapshot[];
+}): string | null {
+  const hasExecutionRelevantChange = input.lines.some(
+    (line) => line.executionRelevant !== false,
+  );
+  if (!hasExecutionRelevantChange) return null;
+  return "Execution-relevant scope changes may require task coverage before apply.";
+}
+
+export function deriveChangeOrderReadiness(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  draftLines: ChangeOrderLineDraft[];
+  reasoning: string;
+  activeScopeItems: ChangeOrderScopeItemSnapshot[];
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  jobPlanVersion: number;
+  expectedJobPlanVersion: number;
+  isPending: boolean;
+}): ChangeOrderReadiness {
+  const activeScopeItemIds = new Set(input.activeScopeItems.map((item) => item.id));
+  const draftValidation = validateChangeOrderDraftInput({
+    reasoning: input.reasoning,
+    lines: input.draftLines,
+    activeScopeItemIds,
+    activeScopeItems: input.activeScopeItems,
+  });
+
+  const draftImpact = draftValidation.ok
+    ? deriveChangeOrderImpactPreview({
+        lines: input.draftLines,
+        priceDeltaCents: draftValidation.priceDeltaCents,
+        scopeItems: input.activeScopeItems,
+      })
+    : deriveChangeOrderImpactPreview({
+        lines: input.draftLines,
+        priceDeltaCents: input.draftLines.reduce(
+          (sum, line) => sum + (line.priceDeltaCents ?? 0),
+          0,
+        ),
+        scopeItems: input.activeScopeItems,
+      });
+
+  const selectedImpact = input.selectedRevision
+    ? deriveChangeOrderImpactPreview({
+        lines: input.selectedRevision.lines,
+        priceDeltaCents: input.selectedRevision.priceDeltaCents,
+        scopeItems: input.activeScopeItems,
+      })
+    : draftImpact;
+
+  return {
+    impact: input.selectedRevision ? selectedImpact : draftImpact,
+    createDraft: getCreateDraftButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      draftLines: input.draftLines,
+      reasoning: input.reasoning,
+      activeScopeItemIds,
+      activeScopeItems: input.activeScopeItems,
+      isPending: input.isPending,
+    }),
+    approve: getApproveButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      isPending: input.isPending,
+    }),
+    apply: getApplyButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      jobPlanVersion: input.jobPlanVersion,
+      expectedJobPlanVersion: input.expectedJobPlanVersion,
+      isPending: input.isPending,
+    }),
+    executionCoverageWarning: deriveExecutionCoverageWarning({
+      lines: input.selectedRevision?.lines ?? input.draftLines,
+      scopeItems: input.activeScopeItems,
+    }),
+    jobPlanVersion: input.jobPlanVersion,
+    expectedJobPlanVersion: input.expectedJobPlanVersion,
+    selectedRevisionStatus: input.selectedRevision?.status ?? null,
+  };
+}
+
 export function checkJobPlanVersionForApply(input: {
   expectedJobPlanVersion: number;
   currentJobPlanVersion: number;
@@ -342,4 +729,17 @@ export function resolveFocusedRevisionId(input: {
     if (exists) return input.requestedRevisionId;
   }
   return input.revisions[0]?.id ?? null;
+}
+
+export function parseDollarInputToCents(value: string): number {
+  const normalized = value.replace(/[^0-9.-]/g, "");
+  if (!normalized) return 0;
+  const parsed = Number.parseFloat(normalized);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.round(parsed * 100);
+}
+
+export function formatCentsAsDollarInput(cents: number | null | undefined): string {
+  if (cents == null) return "0.00";
+  return (cents / 100).toFixed(2);
 }

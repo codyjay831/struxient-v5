@@ -70,6 +70,27 @@ export async function loadChangeOrderWorkspace(input: {
           unitPriceCents: true,
           executionRelevant: true,
           status: true,
+          sourceQuoteLineItem: {
+            select: {
+              description: true,
+              quantity: true,
+              unitAmountCents: true,
+              lineTotalCents: true,
+              customerScopeTitle: true,
+              customerScopeDescription: true,
+              customerIncludedNotes: true,
+              customerExcludedNotes: true,
+            },
+          },
+          sourceQuoteScopeRevisionLine: {
+            select: {
+              operation: true,
+              description: true,
+              quantity: true,
+              unitPriceCents: true,
+              priceDeltaCents: true,
+            },
+          },
         },
       },
       scopeRevisions: {
@@ -151,6 +172,27 @@ export async function loadChangeOrderWorkspace(input: {
       unitPriceCents: item.unitPriceCents,
       executionRelevant: item.executionRelevant,
       status: item.status,
+      signedQuote: item.sourceQuoteLineItem
+        ? {
+            description: item.sourceQuoteLineItem.description,
+            quantity: item.sourceQuoteLineItem.quantity.toString(),
+            unitAmountCents: item.sourceQuoteLineItem.unitAmountCents,
+            lineTotalCents: item.sourceQuoteLineItem.lineTotalCents,
+            customerScopeTitle: item.sourceQuoteLineItem.customerScopeTitle,
+            customerScopeDescription: item.sourceQuoteLineItem.customerScopeDescription,
+            customerIncludedNotes: item.sourceQuoteLineItem.customerIncludedNotes,
+            customerExcludedNotes: item.sourceQuoteLineItem.customerExcludedNotes,
+          }
+        : null,
+      priorRevision: item.sourceQuoteScopeRevisionLine
+        ? {
+            operation: item.sourceQuoteScopeRevisionLine.operation,
+            description: item.sourceQuoteScopeRevisionLine.description,
+            quantity: item.sourceQuoteScopeRevisionLine.quantity.toString(),
+            unitPriceCents: item.sourceQuoteScopeRevisionLine.unitPriceCents,
+            priceDeltaCents: item.sourceQuoteScopeRevisionLine.priceDeltaCents,
+          }
+        : null,
     })),
     revisions,
     focusRevisionId,
