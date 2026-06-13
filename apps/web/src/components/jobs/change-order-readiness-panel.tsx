@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, CircleDashed } from "lucide-react";
-import { QuoteScopeRevisionStatus } from "@prisma/client";
+import { ChangeOrderStatus } from "@prisma/client";
 import { formatCents } from "@/lib/job-payment-display";
 import type { ChangeOrderReadiness } from "@/lib/change-order-flow";
 
@@ -101,10 +101,10 @@ export function ChangeOrderReadinessPanel({
         {mode === "draft" ? (
           <ActionReadiness label="Create draft" state={readiness.createDraft} />
         ) : null}
-        {readiness.selectedRevisionStatus === QuoteScopeRevisionStatus.DRAFT ? (
-          <ActionReadiness label="Approve Change Order" state={readiness.approve} />
+        {readiness.selectedRevisionStatus === ChangeOrderStatus.DRAFT ? (
+          <ActionReadiness label="Send Change Order" state={readiness.approve} />
         ) : null}
-        {readiness.selectedRevisionStatus === QuoteScopeRevisionStatus.APPROVED ? (
+        {readiness.selectedRevisionStatus === ChangeOrderStatus.ACCEPTED ? (
           <>
             <ActionReadiness label="Apply Change Order" state={readiness.apply} />
             <ReadinessRow

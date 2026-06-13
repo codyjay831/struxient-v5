@@ -1,8 +1,8 @@
 import {
+  ChangeOrderLineOperation,
+  ChangeOrderStatus,
   JobScopeItemStatus,
   JobStatus,
-  QuoteScopeRevisionLineOperation,
-  QuoteScopeRevisionStatus,
   StaffRole,
 } from "@prisma/client";
 import {
@@ -13,7 +13,7 @@ import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-p
 export type ChangeOrderIntent = "add" | "modify" | "remove";
 
 export type ChangeOrderLineDraft = {
-  operation: QuoteScopeRevisionLineOperation;
+  operation: ChangeOrderLineOperation;
   sourceJobScopeItemId?: string | null;
   description: string;
   quantity: string;
@@ -34,7 +34,7 @@ export type ChangeOrderSignedQuoteSourceSnapshot = {
 };
 
 export type ChangeOrderPriorRevisionSourceSnapshot = {
-  operation: QuoteScopeRevisionLineOperation;
+  operation: ChangeOrderLineOperation;
   description: string;
   quantity: string;
   unitPriceCents: number | null;
@@ -54,7 +54,7 @@ export type ChangeOrderScopeItemSnapshot = {
 
 export type ChangeOrderRevisionSnapshot = {
   id: string;
-  status: QuoteScopeRevisionStatus;
+  status: ChangeOrderStatus;
   reasoning: string;
   priceDeltaCents: number;
   lines: ChangeOrderLineDraft[];
@@ -95,7 +95,7 @@ export type ChangeOrderLineDiffField = {
 
 export type ChangeOrderLineDiff = {
   lineIndex: number;
-  operation: QuoteScopeRevisionLineOperation;
+  operation: ChangeOrderLineOperation;
   sourceDescription: string | null;
   fields: ChangeOrderLineDiffField[];
 };
@@ -108,7 +108,7 @@ export type ChangeOrderReadiness = {
   executionCoverageWarning: string | null;
   jobPlanVersion: number;
   expectedJobPlanVersion: number;
-  selectedRevisionStatus: QuoteScopeRevisionStatus | null;
+  selectedRevisionStatus: ChangeOrderStatus | null;
 };
 
 export function jobChangeOrdersPath(jobId: string): string {
@@ -123,7 +123,7 @@ export function createLineFromIntent(intent: ChangeOrderIntent): ChangeOrderLine
   switch (intent) {
     case "add":
       return {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "",
         quantity: "1",
         priceDeltaCents: 0,
@@ -131,7 +131,7 @@ export function createLineFromIntent(intent: ChangeOrderIntent): ChangeOrderLine
       };
     case "modify":
       return {
-        operation: QuoteScopeRevisionLineOperation.MODIFY,
+        operation: ChangeOrderLineOperation.MODIFY,
         sourceJobScopeItemId: null,
         description: "",
         quantity: "1",
@@ -140,7 +140,7 @@ export function createLineFromIntent(intent: ChangeOrderIntent): ChangeOrderLine
       };
     case "remove":
       return {
-        operation: QuoteScopeRevisionLineOperation.REMOVE,
+        operation: ChangeOrderLineOperation.REMOVE,
         sourceJobScopeItemId: null,
         description: "",
         quantity: "1",
@@ -153,8 +153,8 @@ export function createLineFromIntent(intent: ChangeOrderIntent): ChangeOrderLine
 export function buildProposedLineFromSource(
   scopeItem: ChangeOrderScopeItemSnapshot,
   operation:
-    | typeof QuoteScopeRevisionLineOperation.MODIFY
-    | typeof QuoteScopeRevisionLineOperation.REMOVE,
+    | typeof ChangeOrderLineOperation.MODIFY
+    | typeof ChangeOrderLineOperation.REMOVE,
 ): ChangeOrderLineDraft {
   return {
     operation,
@@ -191,9 +191,9 @@ export function lineHasMeaningfulChange(
   line: ChangeOrderLineDraft,
   sourceItem: ChangeOrderScopeItemSnapshot | null,
 ): boolean {
-  if (line.operation === QuoteScopeRevisionLineOperation.ADD) return true;
+  if (line.operation === ChangeOrderLineOperation.ADD) return true;
   if (!sourceItem) return false;
-  if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) return true;
+  if (line.operation === ChangeOrderLineOperation.REMOVE) return true;
   if ((line.priceDeltaCents ?? 0) !== 0) return true;
 
   return (
@@ -216,7 +216,7 @@ export function deriveChangeOrderLineDiffs(input: {
       ? byId.get(line.sourceJobScopeItemId) ?? null
       : null;
 
-    if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
+    if (line.operation === ChangeOrderLineOperation.ADD) {
       diffs.push({
         lineIndex,
         operation: line.operation,
@@ -247,7 +247,7 @@ export function deriveChangeOrderLineDiffs(input: {
 
     if (!source) continue;
 
-    if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) {
+    if (line.operation === ChangeOrderLineOperation.REMOVE) {
       diffs.push({
         lineIndex,
         operation: line.operation,
@@ -366,7 +366,7 @@ export function validateChangeOrderLine(
   activeScopeItemIds: Set<string>,
   scopeItemsByIdMap?: Map<string, ChangeOrderScopeItemSnapshot>,
 ): { ok: true } | { ok: false; error: string } {
-  if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
+  if (line.operation === ChangeOrderLineOperation.ADD) {
     if (!line.description.trim()) {
       return { ok: false, error: "Add lines require a description." };
     }
@@ -382,7 +382,7 @@ export function validateChangeOrderLine(
     return {
       ok: false,
       error:
-        line.operation === QuoteScopeRevisionLineOperation.MODIFY
+        line.operation === ChangeOrderLineOperation.MODIFY
           ? "Select the scope item you want to modify."
           : "Select the scope item you want to remove.",
     };
@@ -393,7 +393,7 @@ export function validateChangeOrderLine(
 
   const sourceItem = scopeItemsByIdMap?.get(sourceId) ?? null;
 
-  if (line.operation === QuoteScopeRevisionLineOperation.REMOVE) {
+  if (line.operation === ChangeOrderLineOperation.REMOVE) {
     if (!line.description.trim() && sourceItem) {
       return { ok: false, error: "Remove lines require a description or selected source scope." };
     }
@@ -459,13 +459,13 @@ export function deriveChangeOrderImpactPreview(input: {
   scopeItems?: ChangeOrderScopeItemSnapshot[];
 }): ChangeOrderImpactPreview {
   const addCount = input.lines.filter(
-    (line) => line.operation === QuoteScopeRevisionLineOperation.ADD,
+    (line) => line.operation === ChangeOrderLineOperation.ADD,
   ).length;
   const modifyCount = input.lines.filter(
-    (line) => line.operation === QuoteScopeRevisionLineOperation.MODIFY,
+    (line) => line.operation === ChangeOrderLineOperation.MODIFY,
   ).length;
   const removeCount = input.lines.filter(
-    (line) => line.operation === QuoteScopeRevisionLineOperation.REMOVE,
+    (line) => line.operation === ChangeOrderLineOperation.REMOVE,
   ).length;
   const executionRelevantLineCount = input.lines.filter(
     (line) => line.executionRelevant !== false,
@@ -478,9 +478,9 @@ export function deriveChangeOrderImpactPreview(input: {
 
   const scopeSummaryLines = input.lines.map((line) => {
     const op =
-      line.operation === QuoteScopeRevisionLineOperation.ADD
+      line.operation === ChangeOrderLineOperation.ADD
         ? "Add"
-        : line.operation === QuoteScopeRevisionLineOperation.MODIFY
+        : line.operation === ChangeOrderLineOperation.MODIFY
           ? "Modify"
           : "Remove";
     return `${op}: ${line.description.trim() || "Untitled scope change"}`;
@@ -557,7 +557,7 @@ export function getApproveButtonState(input: {
   if (!input.selectedRevision) {
     return { disabled: true, reason: "Select a draft Change Order to approve." };
   }
-  if (input.selectedRevision.status !== QuoteScopeRevisionStatus.DRAFT) {
+  if (input.selectedRevision.status !== ChangeOrderStatus.DRAFT) {
     return { disabled: true, reason: "Only draft Change Orders can be approved." };
   }
   if (!input.permissions.canApprove) {
@@ -586,8 +586,8 @@ export function getApplyButtonState(input: {
   if (!input.selectedRevision) {
     return { disabled: true, reason: "Select an approved Change Order to apply." };
   }
-  if (input.selectedRevision.status !== QuoteScopeRevisionStatus.APPROVED) {
-    return { disabled: true, reason: "Only approved Change Orders can be applied." };
+  if (input.selectedRevision.status !== ChangeOrderStatus.ACCEPTED) {
+    return { disabled: true, reason: "Only accepted Change Orders can be applied." };
   }
   if (!input.permissions.canApply) {
     return {

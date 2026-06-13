@@ -4,8 +4,7 @@ export type ScopeRevisionPaymentImpactStrategy = "ZERO_DOLLAR_ONLY";
  * Gate 7 pre-implementation decision:
  * only zero-dollar scope revisions are allowed until payment-impact operations are implemented.
  */
-export const GATE7_PAYMENT_IMPACT_STRATEGY: ScopeRevisionPaymentImpactStrategy =
-  "ZERO_DOLLAR_ONLY";
+export const GATE7_PAYMENT_IMPACT_STRATEGY: ScopeRevisionPaymentImpactStrategy = "ZERO_DOLLAR_ONLY";
 
 export type ScopeRevisionPaymentImpactValidation = {
   ok: boolean;
@@ -33,7 +32,7 @@ export function validateScopeRevisionPaymentImpact(params: {
   return {
     ok: false,
     error:
-      "Scope revision changes job price. An approved payment-impact operation is required in the same transaction.",
+      "Change Order modifies job price. A payment requirement must be created in the same transaction.",
   };
 }
 

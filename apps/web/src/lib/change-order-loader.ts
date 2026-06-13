@@ -1,4 +1,4 @@
-import { JobScopeItemStatus, JobStatus, QuoteScopeRevisionStatus } from "@prisma/client";
+import { ChangeOrderStatus, JobScopeItemStatus, JobStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   changeOrderPageBlockMessage,
@@ -11,9 +11,12 @@ import {
 } from "@/lib/change-order-flow";
 import type { StaffRole } from "@prisma/client";
 
-export type LoadedChangeOrderRevision = {
+export type LoadedChangeOrder = {
   id: string;
-  status: QuoteScopeRevisionStatus;
+  number: number;
+  title: string;
+  customerDocumentTitle: string | null;
+  status: ChangeOrderStatus;
   reasoning: string;
   priceDeltaCents: number;
   createdAt: string;
@@ -33,15 +36,20 @@ export type LoadedChangeOrderWorkspace = {
   pageBlocked: boolean;
   pageBlockedMessage: string | null;
   activeScopeItems: ChangeOrderScopeItemSnapshot[];
-  revisions: LoadedChangeOrderRevision[];
+  changeOrders: LoadedChangeOrder[];
+  focusChangeOrderId: string | null;
+  // compatibility with existing components while migrating names
+  revisions: LoadedChangeOrder[];
   focusRevisionId: string | null;
 };
+
+export type LoadedChangeOrderRevision = LoadedChangeOrder;
 
 export async function loadChangeOrderWorkspace(input: {
   organizationId: string;
   jobId: string;
   role: StaffRole;
-  focusRevisionId?: string | null;
+  focusChangeOrderId?: string | null;
 }): Promise<LoadedChangeOrderWorkspace | null> {
   const job = await db.job.findFirst({
     where: {
@@ -82,7 +90,7 @@ export async function loadChangeOrderWorkspace(input: {
               customerExcludedNotes: true,
             },
           },
-          sourceQuoteScopeRevisionLine: {
+          sourceChangeOrderLine: {
             select: {
               operation: true,
               description: true,
@@ -93,10 +101,13 @@ export async function loadChangeOrderWorkspace(input: {
           },
         },
       },
-      scopeRevisions: {
+      changeOrders: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
+          number: true,
+          title: true,
+          customerDocumentTitle: true,
           status: true,
           reasoning: true,
           priceDeltaCents: true,
@@ -129,15 +140,18 @@ export async function loadChangeOrderWorkspace(input: {
     permissions,
   });
 
-  const revisions: LoadedChangeOrderRevision[] = job.scopeRevisions.map((revision) => ({
-    id: revision.id,
-    status: revision.status,
-    reasoning: revision.reasoning,
-    priceDeltaCents: revision.priceDeltaCents,
-    createdAt: revision.createdAt.toISOString(),
-    approvedAt: revision.approvedAt?.toISOString() ?? null,
-    appliedAt: revision.appliedAt?.toISOString() ?? null,
-    lines: revision.lines.map(
+  const changeOrders: LoadedChangeOrder[] = job.changeOrders.map((changeOrder) => ({
+    id: changeOrder.id,
+    number: changeOrder.number,
+    title: changeOrder.title,
+    customerDocumentTitle: changeOrder.customerDocumentTitle,
+    status: changeOrder.status,
+    reasoning: changeOrder.reasoning,
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    createdAt: changeOrder.createdAt.toISOString(),
+    approvedAt: changeOrder.approvedAt?.toISOString() ?? null,
+    appliedAt: changeOrder.appliedAt?.toISOString() ?? null,
+    lines: changeOrder.lines.map(
       (line): ChangeOrderLineDraft => ({
         operation: line.operation,
         sourceJobScopeItemId: line.sourceJobScopeItemId,
@@ -150,9 +164,9 @@ export async function loadChangeOrderWorkspace(input: {
     ),
   }));
 
-  const focusRevisionId = resolveFocusedRevisionId({
-    revisions,
-    requestedRevisionId: input.focusRevisionId?.trim() || null,
+  const focusChangeOrderId = resolveFocusedRevisionId({
+    revisions: changeOrders,
+    requestedRevisionId: input.focusChangeOrderId?.trim() || null,
   });
 
   return {
@@ -184,17 +198,19 @@ export async function loadChangeOrderWorkspace(input: {
             customerExcludedNotes: item.sourceQuoteLineItem.customerExcludedNotes,
           }
         : null,
-      priorRevision: item.sourceQuoteScopeRevisionLine
+      priorRevision: item.sourceChangeOrderLine
         ? {
-            operation: item.sourceQuoteScopeRevisionLine.operation,
-            description: item.sourceQuoteScopeRevisionLine.description,
-            quantity: item.sourceQuoteScopeRevisionLine.quantity.toString(),
-            unitPriceCents: item.sourceQuoteScopeRevisionLine.unitPriceCents,
-            priceDeltaCents: item.sourceQuoteScopeRevisionLine.priceDeltaCents,
+            operation: item.sourceChangeOrderLine.operation,
+            description: item.sourceChangeOrderLine.description,
+            quantity: item.sourceChangeOrderLine.quantity.toString(),
+            unitPriceCents: item.sourceChangeOrderLine.unitPriceCents,
+            priceDeltaCents: item.sourceChangeOrderLine.priceDeltaCents,
           }
         : null,
     })),
-    revisions,
-    focusRevisionId,
+    changeOrders,
+    focusChangeOrderId,
+    revisions: changeOrders,
+    focusRevisionId: focusChangeOrderId,
   };
 }

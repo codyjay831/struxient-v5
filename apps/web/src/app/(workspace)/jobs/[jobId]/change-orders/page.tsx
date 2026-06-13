@@ -30,7 +30,7 @@ export default async function JobChangeOrdersPage({
     organizationId: ctx.organizationId,
     jobId: id,
     role: ctx.role,
-    focusRevisionId: focus ?? null,
+    focusChangeOrderId: focus ?? null,
   });
 
   if (!workspace) {
@@ -66,6 +66,12 @@ export default async function JobChangeOrdersPage({
           </>
         }
       />
+
+      {workspace.changeOrders.length > 0 ? (
+        <p className="mb-4 text-sm text-foreground-muted">
+          {workspace.changeOrders.length} Change Order(s) on this job.
+        </p>
+      ) : null}
 
       {!workspace.quoteId ? (
         <EmptyState

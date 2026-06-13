@@ -1,6 +1,6 @@
 "use client";
 
-import { QuoteScopeRevisionLineOperation } from "@prisma/client";
+import { ChangeOrderLineOperation } from "@prisma/client";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,15 +13,15 @@ import {
 } from "@/lib/change-order-flow";
 import { ChangeOrderSourceComparisonCard } from "@/components/jobs/change-order-source-comparison-card";
 
-const OPERATION_OPTIONS: Array<{ value: QuoteScopeRevisionLineOperation; label: string }> = [
-  { value: QuoteScopeRevisionLineOperation.ADD, label: "Add scope" },
-  { value: QuoteScopeRevisionLineOperation.MODIFY, label: "Modify scope" },
-  { value: QuoteScopeRevisionLineOperation.REMOVE, label: "Remove scope" },
+const OPERATION_OPTIONS: Array<{ value: ChangeOrderLineOperation; label: string }> = [
+  { value: ChangeOrderLineOperation.ADD, label: "Add scope" },
+  { value: ChangeOrderLineOperation.MODIFY, label: "Modify scope" },
+  { value: ChangeOrderLineOperation.REMOVE, label: "Remove scope" },
 ];
 
 function emptyLine(): ChangeOrderLineDraft {
   return {
-    operation: QuoteScopeRevisionLineOperation.ADD,
+    operation: ChangeOrderLineOperation.ADD,
     description: "",
     quantity: "1",
     priceDeltaCents: 0,
@@ -65,8 +65,8 @@ export function ChangeOrderLineEditor({
     }
 
     if (
-      line.operation === QuoteScopeRevisionLineOperation.MODIFY ||
-      line.operation === QuoteScopeRevisionLineOperation.REMOVE
+      line.operation === ChangeOrderLineOperation.MODIFY ||
+      line.operation === ChangeOrderLineOperation.REMOVE
     ) {
       updateLine(
         index,
@@ -85,8 +85,8 @@ export function ChangeOrderLineEditor({
       : null;
     if (
       !sourceItem ||
-      (line.operation !== QuoteScopeRevisionLineOperation.MODIFY &&
-        line.operation !== QuoteScopeRevisionLineOperation.REMOVE)
+      (line.operation !== ChangeOrderLineOperation.MODIFY &&
+        line.operation !== ChangeOrderLineOperation.REMOVE)
     ) {
       return;
     }
@@ -111,12 +111,12 @@ export function ChangeOrderLineEditor({
 
       {lines.map((line, index) => {
         const needsSource =
-          line.operation === QuoteScopeRevisionLineOperation.MODIFY ||
-          line.operation === QuoteScopeRevisionLineOperation.REMOVE;
+          line.operation === ChangeOrderLineOperation.MODIFY ||
+          line.operation === ChangeOrderLineOperation.REMOVE;
         const sourceItem = line.sourceJobScopeItemId
           ? scopeMap.get(line.sourceJobScopeItemId) ?? null
           : null;
-        const isRemove = line.operation === QuoteScopeRevisionLineOperation.REMOVE;
+        const isRemove = line.operation === ChangeOrderLineOperation.REMOVE;
 
         return (
           <div
@@ -129,8 +129,8 @@ export function ChangeOrderLineEditor({
               </span>
               <div className="flex flex-wrap gap-2">
                 {sourceItem &&
-                (line.operation === QuoteScopeRevisionLineOperation.MODIFY ||
-                  line.operation === QuoteScopeRevisionLineOperation.REMOVE) ? (
+                (line.operation === ChangeOrderLineOperation.MODIFY ||
+                  line.operation === ChangeOrderLineOperation.REMOVE) ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -165,10 +165,10 @@ export function ChangeOrderLineEditor({
                     value={line.operation}
                     disabled={disabled}
                     onChange={(event) => {
-                      const operation = event.target.value as QuoteScopeRevisionLineOperation;
+                      const operation = event.target.value as ChangeOrderLineOperation;
                       if (
-                        operation === QuoteScopeRevisionLineOperation.MODIFY ||
-                        operation === QuoteScopeRevisionLineOperation.REMOVE
+                        operation === ChangeOrderLineOperation.MODIFY ||
+                        operation === ChangeOrderLineOperation.REMOVE
                       ) {
                         const sourceId = line.sourceJobScopeItemId;
                         if (sourceId && scopeMap.has(sourceId)) {
@@ -182,7 +182,7 @@ export function ChangeOrderLineEditor({
                       updateLine(index, {
                         operation,
                         sourceJobScopeItemId:
-                          operation === QuoteScopeRevisionLineOperation.ADD
+                          operation === ChangeOrderLineOperation.ADD
                             ? null
                             : line.sourceJobScopeItemId,
                       });

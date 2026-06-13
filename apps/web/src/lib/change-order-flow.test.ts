@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ChangeOrderLineOperation,
+  ChangeOrderStatus,
   JobScopeItemStatus,
   JobStatus,
-  QuoteScopeRevisionLineOperation,
-  QuoteScopeRevisionStatus,
   StaffRole,
 } from "@prisma/client";
 import {
@@ -53,13 +53,13 @@ const sampleScopeItem: ChangeOrderScopeItemSnapshot = {
 };
 
 test("guided intent creates expected first line operation", () => {
-  assert.equal(createLineFromIntent("add").operation, QuoteScopeRevisionLineOperation.ADD);
-  assert.equal(createLineFromIntent("modify").operation, QuoteScopeRevisionLineOperation.MODIFY);
-  assert.equal(createLineFromIntent("remove").operation, QuoteScopeRevisionLineOperation.REMOVE);
+  assert.equal(createLineFromIntent("add").operation, ChangeOrderLineOperation.ADD);
+  assert.equal(createLineFromIntent("modify").operation, ChangeOrderLineOperation.MODIFY);
+  assert.equal(createLineFromIntent("remove").operation, ChangeOrderLineOperation.REMOVE);
 });
 
 test("selecting source scope builds initial modify line from current scope", () => {
-  const line = buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY);
+  const line = buildProposedLineFromSource(sampleScopeItem, ChangeOrderLineOperation.MODIFY);
   assert.equal(line.sourceJobScopeItemId, "scope-active");
   assert.equal(line.description, "New roof");
   assert.equal(line.quantity, "1");
@@ -68,7 +68,7 @@ test("selecting source scope builds initial modify line from current scope", () 
 });
 
 test("modify with no actual changed fields is blocked", () => {
-  const line = buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY);
+  const line = buildProposedLineFromSource(sampleScopeItem, ChangeOrderLineOperation.MODIFY);
   const result = validateChangeOrderLine(
     line,
     new Set(["scope-active"]),
@@ -81,7 +81,7 @@ test("modify with no actual changed fields is blocked", () => {
 
 test("modify with changed quantity passes validation", () => {
   const line = {
-    ...buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY),
+    ...buildProposedLineFromSource(sampleScopeItem, ChangeOrderLineOperation.MODIFY),
     quantity: "2",
   };
   const result = validateChangeOrderLine(
@@ -95,7 +95,7 @@ test("modify with changed quantity passes validation", () => {
 test("remove requires source scope selection", () => {
   const result = validateChangeOrderLine(
     {
-      operation: QuoteScopeRevisionLineOperation.REMOVE,
+      operation: ChangeOrderLineOperation.REMOVE,
       description: "",
       quantity: "1",
       sourceJobScopeItemId: null,
@@ -111,7 +111,7 @@ test("diff preview identifies changed description quantity and price fields", ()
   const diffs = deriveChangeOrderLineDiffs({
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.MODIFY,
+        operation: ChangeOrderLineOperation.MODIFY,
         sourceJobScopeItemId: "scope-active",
         description: "New roof + gutters",
         quantity: "2",
@@ -134,7 +134,7 @@ test("readiness panel state matches create draft disabled reason", () => {
     permissions: officePermissions,
     pageBlocked: false,
     draftLines: [
-      buildProposedLineFromSource(sampleScopeItem, QuoteScopeRevisionLineOperation.MODIFY),
+      buildProposedLineFromSource(sampleScopeItem, ChangeOrderLineOperation.MODIFY),
     ],
     reasoning: "Customer wants more roof area",
     activeScopeItems: [sampleScopeItem],
@@ -179,7 +179,7 @@ test("smoke: approve button disabled unless revision is draft", () => {
     pageBlocked: false,
     selectedRevision: {
       id: "rev-1",
-      status: QuoteScopeRevisionStatus.DRAFT,
+      status: ChangeOrderStatus.DRAFT,
       reasoning: "Add battery",
       priceDeltaCents: 0,
       lines: [],
@@ -193,7 +193,7 @@ test("smoke: approve button disabled unless revision is draft", () => {
     pageBlocked: false,
     selectedRevision: {
       id: "rev-1",
-      status: QuoteScopeRevisionStatus.APPROVED,
+      status: ChangeOrderStatus.ACCEPTED,
       reasoning: "Add battery",
       priceDeltaCents: 0,
       lines: [],
@@ -210,12 +210,12 @@ test("smoke: apply button disabled unless revision is approved", () => {
     pageBlocked: false,
     selectedRevision: {
       id: "rev-1",
-      status: QuoteScopeRevisionStatus.APPROVED,
+      status: ChangeOrderStatus.ACCEPTED,
       reasoning: "Add battery",
       priceDeltaCents: 0,
       lines: [
         {
-          operation: QuoteScopeRevisionLineOperation.ADD,
+          operation: ChangeOrderLineOperation.ADD,
           description: "Battery backup",
           quantity: "1",
           executionRelevant: true,
@@ -254,7 +254,7 @@ test("change order impact preview flags non-zero payment delta", () => {
   const preview = deriveChangeOrderImpactPreview({
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "Premium upgrade",
         quantity: "1",
         priceDeltaCents: 5000,
@@ -276,7 +276,7 @@ test("create draft validation succeeds for add line", () => {
     reasoning: "Customer approved battery add-on",
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "Battery backup",
         quantity: "1",
         priceDeltaCents: 0,
@@ -294,7 +294,7 @@ test("permission-denied role sees disabled create action", () => {
     pageBlocked: false,
     draftLines: [
       {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "Extra work",
         quantity: "1",
       },

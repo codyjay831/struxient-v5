@@ -39,8 +39,11 @@ model Organization {
   quotes                    Quote[]
   quoteExecutionPlans       QuoteExecutionPlan[]
   executionPlanRevisions    ExecutionPlanRevision[]
-  quoteScopeRevisions       QuoteScopeRevision[]
-  quoteScopeRevisionLines   QuoteScopeRevisionLine[]
+  changeOrders              ChangeOrder[]
+  changeOrderLines          ChangeOrderLine[]
+  changeOrderShareTokens    ChangeOrderShareToken[]
+  changeOrderCheckpoints    ChangeOrderCheckpoint[]
+  changeOrderViews          ChangeOrderView[]
   jobScopeItems             JobScopeItem[]
   jobTaskScopes             JobTaskScope[]
   quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
@@ -232,7 +235,7 @@ model User {
   updatedBusinessProfiles    OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
   acceptedQuoteExecutionPlans QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
   approvedExecutionPlanRevisions ExecutionPlanRevision[]    @relation("ExecutionPlanRevisionApprovedBy")
-  approvedQuoteScopeRevisions QuoteScopeRevision[]          @relation("QuoteScopeRevisionApprovedBy")
+  approvedChangeOrders       ChangeOrder[]                  @relation("ChangeOrderApprovedBy")
   canceledTasks               JobTask[]                     @relation("CanceledTasks")
 }
 
@@ -373,7 +376,7 @@ model Quote {
   revisedQuotes         Quote[]                  @relation("QuoteRevisionLineage")
   executionPlan         QuoteExecutionPlan?
   executionPlanRevisions ExecutionPlanRevision[]
-  scopeRevisions        QuoteScopeRevision[]
+  changeOrders         ChangeOrder[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -414,6 +417,42 @@ model QuoteView {
 
   @@index([organizationId])
   @@index([quoteId])
+  @@index([token])
+}
+
+model ChangeOrderShareToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  changeOrderId  String       @unique
+  token          String       @unique
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastViewedAt   DateTime?
+  acceptedAt     DateTime?
+  acceptedByName String?
+  acceptedFromIp String?
+  userAgent      String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeOrder    ChangeOrder  @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([token])
+}
+
+model ChangeOrderView {
+  id             String   @id @default(cuid())
+  organizationId String
+  changeOrderId  String
+  token          String
+  viewedAt       DateTime @default(now())
+  ip             String?
+  userAgent      String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeOrder    ChangeOrder  @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([changeOrderId])
   @@index([token])
 }
 
@@ -458,6 +497,26 @@ model QuoteCheckpoint {
   @@unique([quoteId, kind, sequence])
   @@index([organizationId])
   @@index([quoteId, kind])
+}
+
+model ChangeOrderCheckpoint {
+  id                            String                      @id @default(cuid())
+  organizationId                String
+  changeOrderId                 String
+  kind                          ChangeOrderCheckpointKind
+  sequence                      Int
+  schemaVersion                 Int
+  snapshotJson                  Json
+  staffOnlyJson                 Json?
+  changeOrderUpdatedAtAtCapture DateTime?
+  createdAt                     DateTime                    @default(now())
+  source                        ChangeOrderCheckpointSource @default(STAFF)
+  organization                  Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeOrder                   ChangeOrder                 @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([changeOrderId, kind, sequence])
+  @@index([organizationId])
+  @@index([changeOrderId, kind])
 }
 
 /// Reusable commercial line presets for an organization. Applying copies values onto [QuoteLineItem];
@@ -791,7 +850,7 @@ model ExecutionPlanRevision {
   organizationId         String
   quoteId                String
   jobId                  String?
-  quoteScopeRevisionId   String?
+  changeOrderId          String?
   kind                   ExecutionPlanRevisionKind
   status                 ExecutionPlanRevisionStatus @default(DRAFT)
   basePlanVersion        Int
@@ -809,62 +868,71 @@ model ExecutionPlanRevision {
   organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote                  Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   job                    Job?                  @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  quoteScopeRevision     QuoteScopeRevision?   @relation(fields: [quoteScopeRevisionId], references: [id], onDelete: SetNull)
+  changeOrder            ChangeOrder?          @relation(fields: [changeOrderId], references: [id], onDelete: SetNull)
   approvedByUser         User?                 @relation("ExecutionPlanRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([quoteId])
   @@index([jobId])
-  @@index([quoteScopeRevisionId])
+  @@index([changeOrderId])
 }
 
-model QuoteScopeRevision {
-  id               String                    @id @default(cuid())
-  organizationId   String
-  quoteId          String
-  jobId            String
-  status           QuoteScopeRevisionStatus  @default(DRAFT)
-  reasoning        String
-  priceDeltaCents  Int                       @default(0)
-  approvedByUserId String?
-  approvedAt       DateTime?
-  appliedAt        DateTime?
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
-  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote            Quote                     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  job              Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  approvedByUser   User?                     @relation("QuoteScopeRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  lines            QuoteScopeRevisionLine[]
+model ChangeOrder {
+  id                  String                @id @default(cuid())
+  organizationId      String
+  quoteId             String
+  jobId               String
+  number              Int
+  title               String
+  customerDocumentTitle String?
+  status              ChangeOrderStatus     @default(DRAFT)
+  reasoning           String
+  priceDeltaCents     Int                   @default(0)
+  approvedByUserId    String?
+  approvedAt          DateTime?
+  lastSentEmailAt     DateTime?
+  acceptedAt          DateTime?
+  appliedAt           DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote               Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job                 Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  approvedByUser      User?                 @relation("ChangeOrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  lines               ChangeOrderLine[]
   executionPlanRevisions ExecutionPlanRevision[]
   paymentRequirements JobPaymentRequirement[]
+  shareToken          ChangeOrderShareToken?
+  checkpoints         ChangeOrderCheckpoint[]
+  views               ChangeOrderView[]
 
+  @@unique([jobId, number])
   @@index([organizationId])
   @@index([quoteId])
   @@index([jobId])
 }
 
-model QuoteScopeRevisionLine {
-  id                      String                  @id @default(cuid())
-  organizationId          String
-  quoteScopeRevisionId    String
-  operation               QuoteScopeRevisionLineOperation
-  sourceJobScopeItemId    String?
-  description             String
-  quantity                Decimal                 @db.Decimal(18, 6)
-  unitPriceCents          Int?
-  priceDeltaCents         Int?
-  executionRelevant       Boolean                 @default(true)
-  scopeDataJson           Json?
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
-  organization            Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteScopeRevision      QuoteScopeRevision      @relation(fields: [quoteScopeRevisionId], references: [id], onDelete: Cascade)
-  sourceJobScopeItem      JobScopeItem?           @relation("QuoteScopeRevisionLineSourceScope", fields: [sourceJobScopeItemId], references: [id], onDelete: SetNull)
-  resultingJobScopeItems  JobScopeItem[]          @relation("JobScopeItemFromQuoteScopeRevisionLine")
+model ChangeOrderLine {
+  id                   String                 @id @default(cuid())
+  organizationId       String
+  changeOrderId        String
+  operation            ChangeOrderLineOperation
+  sourceJobScopeItemId String?
+  description          String
+  quantity             Decimal                @db.Decimal(18, 6)
+  unitPriceCents       Int?
+  priceDeltaCents      Int?
+  executionRelevant    Boolean                @default(true)
+  scopeDataJson        Json?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeOrder          ChangeOrder            @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  sourceJobScopeItem   JobScopeItem?          @relation("ChangeOrderLineSourceScope", fields: [sourceJobScopeItemId], references: [id], onDelete: SetNull)
+  resultingJobScopeItems JobScopeItem[]       @relation("JobScopeItemFromChangeOrderLine")
 
   @@index([organizationId])
-  @@index([quoteScopeRevisionId])
+  @@index([changeOrderId])
   @@index([sourceJobScopeItemId])
 }
 
@@ -921,7 +989,7 @@ model Job {
   scheduleEvents      JobScheduleEvent[]
   workPackages        JobWorkPackage[]
   scopeItems          JobScopeItem[]
-  scopeRevisions      QuoteScopeRevision[]
+  changeOrders        ChangeOrder[]
   executionPlanRevisions ExecutionPlanRevision[]
 
   @@index([organizationId])
@@ -1067,7 +1135,7 @@ model JobScopeItem {
   organizationId               String
   jobId                        String
   sourceQuoteLineItemId        String?
-  sourceQuoteScopeRevisionLineId String?
+  sourceChangeOrderLineId      String?
   description                  String
   quantity                     Decimal             @db.Decimal(18, 6)
   unitPriceCents               Int?
@@ -1079,16 +1147,16 @@ model JobScopeItem {
   organization                 Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   job                          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
   sourceQuoteLineItem          QuoteLineItem?      @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
-  sourceQuoteScopeRevisionLine QuoteScopeRevisionLine? @relation("JobScopeItemFromQuoteScopeRevisionLine", fields: [sourceQuoteScopeRevisionLineId], references: [id], onDelete: SetNull)
+  sourceChangeOrderLine        ChangeOrderLine?    @relation("JobScopeItemFromChangeOrderLine", fields: [sourceChangeOrderLineId], references: [id], onDelete: SetNull)
   supersededByJobScopeItem     JobScopeItem?       @relation("JobScopeItemSupersession", fields: [supersededByJobScopeItemId], references: [id], onDelete: SetNull)
   supersedesJobScopeItem       JobScopeItem?       @relation("JobScopeItemSupersession")
-  sourceForRevisionLines       QuoteScopeRevisionLine[] @relation("QuoteScopeRevisionLineSourceScope")
+  sourceForChangeOrderLines    ChangeOrderLine[]   @relation("ChangeOrderLineSourceScope")
   taskScopes                   JobTaskScope[]
 
   @@index([organizationId])
   @@index([jobId])
   @@index([sourceQuoteLineItemId])
-  @@index([sourceQuoteScopeRevisionLineId])
+  @@index([sourceChangeOrderLineId])
 }
 
 model JobTaskScope {
@@ -1346,7 +1414,7 @@ model JobPaymentRequirement {
   status                      JobPaymentRequirementStatus @default(PENDING)
   requiredBeforeStageId       String?
   sourcePaymentScheduleItemId String?
-  sourceQuoteScopeRevisionId  String?
+  sourceChangeOrderId         String?
   paidAt                      DateTime?
   waivedAt                    DateTime?
   canceledAt                  DateTime?
@@ -1356,14 +1424,14 @@ model JobPaymentRequirement {
   job                         Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   organization                Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   requiredBeforeStage         JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id])
-  sourceQuoteScopeRevision    QuoteScopeRevision?         @relation(fields: [sourceQuoteScopeRevisionId], references: [id], onDelete: SetNull)
+  sourceChangeOrder           ChangeOrder?                @relation(fields: [sourceChangeOrderId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([jobId])
   @@index([organizationId, status])
   @@index([requiredBeforeStageId])
   @@index([sourcePaymentScheduleItemId])
-  @@index([sourceQuoteScopeRevisionId])
+  @@index([sourceChangeOrderId])
 }
 
 model LeadVisitRequest {
@@ -1786,17 +1854,29 @@ enum ExecutionPlanRevisionStatus {
   DISCARDED
 }
 
-enum QuoteScopeRevisionStatus {
+enum ChangeOrderStatus {
   DRAFT
-  APPROVED
+  SENT
+  ACCEPTED
   APPLIED
   REJECTED
+  VOID
 }
 
-enum QuoteScopeRevisionLineOperation {
+enum ChangeOrderLineOperation {
   ADD
   MODIFY
   REMOVE
+}
+
+enum ChangeOrderCheckpointKind {
+  SEND
+  ACCEPTANCE
+}
+
+enum ChangeOrderCheckpointSource {
+  STAFF
+  CUSTOMER_PORTAL
 }
 
 enum JobScopeItemStatus {

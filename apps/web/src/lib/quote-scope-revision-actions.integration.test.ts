@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ChangeOrderLineOperation,
+  ChangeOrderStatus,
   ExecutionPlanRevisionKind,
   ExecutionPlanRevisionStatus,
   JobActivityType,
   JobScopeItemStatus,
   JobTaskStatus,
-  QuoteScopeRevisionLineOperation,
-  QuoteScopeRevisionStatus,
 } from "@prisma/client";
 import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
 import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-payment-policy";
@@ -23,7 +23,7 @@ test("integration: create draft rejects empty reasoning and lines", () => {
     reasoning: "   ",
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "Extra work",
         quantity: "1",
       },
@@ -45,7 +45,7 @@ test("integration: create draft rejects MODIFY without active source scope item"
     reasoning: "Modify existing scope",
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.MODIFY,
+        operation: ChangeOrderLineOperation.MODIFY,
         description: "Updated panel count",
         quantity: "12",
         sourceJobScopeItemId: "scope-missing",
@@ -61,19 +61,20 @@ test("integration: create draft rejects MODIFY without active source scope item"
 
 test("integration: approve contract requires DRAFT status", () => {
   const statuses = [
-    QuoteScopeRevisionStatus.DRAFT,
-    QuoteScopeRevisionStatus.APPROVED,
-    QuoteScopeRevisionStatus.APPLIED,
+    ChangeOrderStatus.DRAFT,
+    ChangeOrderStatus.SENT,
+    ChangeOrderStatus.ACCEPTED,
+    ChangeOrderStatus.APPLIED,
   ];
   assert.equal(
-    statuses.filter((status) => status === QuoteScopeRevisionStatus.DRAFT).length,
+    statuses.filter((status) => status === ChangeOrderStatus.DRAFT).length,
     1,
   );
 });
 
-test("integration: apply contract requires APPROVED status and matching job plan version", () => {
-  const approvedOnly = QuoteScopeRevisionStatus.APPROVED;
-  assert.notEqual(approvedOnly, QuoteScopeRevisionStatus.DRAFT);
+test("integration: apply contract requires ACCEPTED status and matching job plan version", () => {
+  const acceptedOnly = ChangeOrderStatus.ACCEPTED;
+  assert.notEqual(acceptedOnly, ChangeOrderStatus.DRAFT);
 
   const expectedJobPlanVersion = 2;
   const currentJobPlanVersion = 3;
@@ -81,8 +82,8 @@ test("integration: apply contract requires APPROVED status and matching job plan
 });
 
 test("integration: apply blocks invalid source scope for MODIFY/REMOVE", () => {
-  const operation = QuoteScopeRevisionLineOperation.MODIFY;
-  assert.notEqual(operation, QuoteScopeRevisionLineOperation.ADD);
+  const operation = ChangeOrderLineOperation.MODIFY;
+  assert.notEqual(operation, ChangeOrderLineOperation.ADD);
 });
 
 test("integration: apply guard failures for uncovered execution scope", () => {
@@ -132,7 +133,7 @@ test("integration: payment-impact guard failures for non-zero delta", () => {
     hasApprovedPaymentImpactOperationInTx: false,
   });
   assert.equal(payment.ok, false);
-  assert.ok(payment.error?.includes("payment-impact operation"));
+  assert.ok(payment.error?.includes("payment requirement"));
 });
 
 test("integration: successful zero-dollar apply guard path", () => {
@@ -160,11 +161,11 @@ test("integration: apply metadata contract includes revision audit fields", () =
     status: ExecutionPlanRevisionStatus.APPLIED,
     basePlanVersion: 4,
     resultingPlanVersion: 5,
-    quoteScopeRevisionId: "rev-1",
+    changeOrderId: "co-1",
   };
   const activity = {
     type: JobActivityType.SCOPE_REVISION_APPLIED,
-    entityType: "QuoteScopeRevision",
+    entityType: "ChangeOrder",
     entityId: "rev-1",
     metadataJson: {
       revisionId: "rev-1",
@@ -181,14 +182,14 @@ test("integration: apply metadata contract includes revision audit fields", () =
 test("integration: simulated create→approve→apply state machine", () => {
   type Revision = {
     id: string;
-    status: QuoteScopeRevisionStatus;
+    status: ChangeOrderStatus;
     jobPlanVersionAtApply: number | null;
   };
 
   let jobPlanVersion = 7;
   const revision: Revision = {
     id: "rev-flow",
-    status: QuoteScopeRevisionStatus.DRAFT,
+    status: ChangeOrderStatus.DRAFT,
     jobPlanVersionAtApply: null,
   };
 
@@ -196,7 +197,7 @@ test("integration: simulated create→approve→apply state machine", () => {
     reasoning: "Add EV charger",
     lines: [
       {
-        operation: QuoteScopeRevisionLineOperation.ADD,
+        operation: ChangeOrderLineOperation.ADD,
         description: "EV charger install",
         quantity: "1",
         priceDeltaCents: 0,
@@ -206,8 +207,8 @@ test("integration: simulated create→approve→apply state machine", () => {
   });
   assert.equal(draftValidation.ok, true);
 
-  revision.status = QuoteScopeRevisionStatus.APPROVED;
-  assert.equal(revision.status, QuoteScopeRevisionStatus.APPROVED);
+  revision.status = ChangeOrderStatus.ACCEPTED;
+  assert.equal(revision.status, ChangeOrderStatus.ACCEPTED);
 
   const expectedJobPlanVersion = jobPlanVersion;
   assert.equal(expectedJobPlanVersion, jobPlanVersion);
@@ -233,7 +234,7 @@ test("integration: simulated create→approve→apply state machine", () => {
   assert.equal(guards.ok, true);
 
   jobPlanVersion += 1;
-  revision.status = QuoteScopeRevisionStatus.APPLIED;
+  revision.status = ChangeOrderStatus.APPLIED;
   revision.jobPlanVersionAtApply = jobPlanVersion;
   assert.equal(revision.jobPlanVersionAtApply, 8);
 });

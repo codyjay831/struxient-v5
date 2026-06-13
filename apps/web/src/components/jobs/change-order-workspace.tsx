@@ -2,13 +2,16 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { QuoteScopeRevisionStatus } from "@prisma/client";
-import { CheckCircle2, FilePlus2, RefreshCw } from "lucide-react";
+import { ChangeOrderStatus } from "@prisma/client";
+import { CheckCircle2, FilePlus2, RefreshCw, SendHorizontal } from "lucide-react";
 import {
-  approveChangeOrderAction,
   applyChangeOrderAction,
   createChangeOrderDraftAction,
-} from "@/app/(workspace)/quotes/quote-scope-revision-actions";
+  markChangeOrderAcceptedAction,
+  rejectChangeOrderAction,
+  sendChangeOrderAction,
+  voidChangeOrderAction,
+} from "@/app/(workspace)/change-orders/change-order-actions";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -41,7 +44,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
   const [reasoning, setReasoning] = useState("");
   const [draftLines, setDraftLines] = useState<ChangeOrderLineDraft[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
-    data.focusRevisionId,
+    data.focusChangeOrderId,
   );
   const [expectedJobPlanVersion, setExpectedJobPlanVersion] = useState(data.jobPlanVersion);
   const [, startTransition] = useTransition();
@@ -52,7 +55,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
   );
 
   const selectedRevision =
-    data.revisions.find((revision) => revision.id === selectedRevisionId) ?? null;
+    data.changeOrders.find((changeOrder) => changeOrder.id === selectedRevisionId) ?? null;
 
   const draftValidation = validateChangeOrderDraftInput({
     reasoning,
@@ -130,28 +133,48 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
       }
       resetComposer();
       setPhase("idle");
-      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.revisionId}`);
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
       router.refresh();
     });
   }
 
-  function handleApprove() {
+  function handleSend() {
     const approveState = selectedReadiness.approve;
     if (!selectedRevision || approveState.disabled) {
-      setError(approveState.reason ?? "Cannot approve this Change Order.");
+      setError(approveState.reason ?? "Cannot send this Change Order.");
       return;
     }
     setError(null);
     setPhase("approving");
     startTransition(async () => {
-      const result = await approveChangeOrderAction(selectedRevision.id);
+      const result = await sendChangeOrderAction(selectedRevision.id, { expiresInDays: 14 });
       if (!result.ok) {
         setError(result.error);
         setPhase("idle");
         return;
       }
       setPhase("idle");
-      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.revisionId}`);
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
+      router.refresh();
+    });
+  }
+
+  function handleMarkAccepted() {
+    if (!selectedRevision) {
+      setError("Cannot mark this Change Order as accepted.");
+      return;
+    }
+    setError(null);
+    setPhase("approving");
+    startTransition(async () => {
+      const result = await markChangeOrderAcceptedAction(selectedRevision.id);
+      if (!result.ok) {
+        setError(result.error);
+        setPhase("idle");
+        return;
+      }
+      setPhase("idle");
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
       router.refresh();
     });
   }
@@ -178,7 +201,41 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
       }
       setExpectedJobPlanVersion(result.resultingJobPlanVersion);
       setPhase("idle");
-      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.revisionId}`);
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
+      router.refresh();
+    });
+  }
+
+  function handleReject() {
+    if (!selectedRevision) return;
+    setError(null);
+    setPhase("approving");
+    startTransition(async () => {
+      const result = await rejectChangeOrderAction(selectedRevision.id);
+      if (!result.ok) {
+        setError(result.error);
+        setPhase("idle");
+        return;
+      }
+      setPhase("idle");
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
+      router.refresh();
+    });
+  }
+
+  function handleVoid() {
+    if (!selectedRevision) return;
+    setError(null);
+    setPhase("approving");
+    startTransition(async () => {
+      const result = await voidChangeOrderAction(selectedRevision.id);
+      if (!result.ok) {
+        setError(result.error);
+        setPhase("idle");
+        return;
+      }
+      setPhase("idle");
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
       router.refresh();
     });
   }
@@ -309,24 +366,40 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
               <ChangeOrderImpactPreviewPanel preview={selectedReadiness.impact} />
 
               <div className="flex flex-wrap gap-2">
-                {selectedRevision.status === QuoteScopeRevisionStatus.DRAFT ? (
+                {selectedRevision.status === ChangeOrderStatus.DRAFT ? (
                   <Button
                     type="button"
                     variant="primary"
                     disabled={selectedReadiness.approve.disabled}
                     title={selectedReadiness.approve.reason ?? undefined}
-                    onClick={handleApprove}
+                    onClick={handleSend}
+                  >
+                    {phase === "approving" ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <SendHorizontal className="size-4" />
+                    )}
+                    Send Change Order
+                  </Button>
+                ) : null}
+
+                {selectedRevision.status === ChangeOrderStatus.SENT ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isPending}
+                    onClick={handleMarkAccepted}
                   >
                     {phase === "approving" ? (
                       <RefreshCw className="size-4 animate-spin" />
                     ) : (
                       <CheckCircle2 className="size-4" />
                     )}
-                    Approve Change Order
+                    Mark Accepted (Office)
                   </Button>
                 ) : null}
 
-                {selectedRevision.status === QuoteScopeRevisionStatus.APPROVED ? (
+                {selectedRevision.status === ChangeOrderStatus.ACCEPTED ? (
                   <Button
                     type="button"
                     variant="primary"
@@ -343,7 +416,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                   </Button>
                 ) : null}
 
-                {selectedRevision.status === QuoteScopeRevisionStatus.APPLIED ? (
+                {selectedRevision.status === ChangeOrderStatus.APPLIED ? (
                   <p className="text-sm text-success">
                     Applied{" "}
                     {selectedRevision.appliedAt
@@ -351,6 +424,19 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                       : "successfully"}
                     .
                   </p>
+                ) : null}
+
+                {(selectedRevision.status === ChangeOrderStatus.DRAFT ||
+                  selectedRevision.status === ChangeOrderStatus.SENT ||
+                  selectedRevision.status === ChangeOrderStatus.ACCEPTED) ? (
+                  <>
+                    <Button type="button" variant="ghost" disabled={isPending} onClick={handleReject}>
+                      Reject
+                    </Button>
+                    <Button type="button" variant="ghost" disabled={isPending} onClick={handleVoid}>
+                      Void
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -367,8 +453,9 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
         />
         <div className="mt-4">
           <ChangeOrderHistoryList
-            revisions={data.revisions}
+            revisions={data.changeOrders}
             selectedRevisionId={selectedRevisionId}
+            jobId={data.jobId}
             onSelect={(revisionId) => {
               setSelectedRevisionId(revisionId);
               if (isDrafting) resetComposer();

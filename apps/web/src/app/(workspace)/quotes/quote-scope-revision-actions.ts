@@ -1,46 +1,20 @@
 "use server";
 
+import type {
+  ChangeOrderLineInput,
+  CreateChangeOrderDraftInput,
+} from "@/app/(workspace)/change-orders/change-order-actions";
 import {
-  ExecutionPlanRevisionKind,
-  ExecutionPlanRevisionStatus,
-  JobActivityType,
-  JobScopeItemStatus,
-  Prisma,
-  QuoteScopeRevisionLineOperation,
-  QuoteScopeRevisionStatus,
-} from "@prisma/client";
-import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
-import { recordJobActivity } from "@/lib/job-activity-helper";
-import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
-import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
-import {
-  createScopeItemDeltaInTx,
-  relinkFutureTaskScopesForSupersessionInTx,
-  removeScopeItemAndApplyFutureTaskDispositionInTx,
-} from "@/lib/execution-delta-service";
+  applyChangeOrderAction as applyChangeOrderActionCore,
+  createChangeOrderDraftAction as createChangeOrderDraftActionCore,
+  markChangeOrderAcceptedAction,
+  rejectChangeOrderAction,
+  sendChangeOrderAction,
+  voidChangeOrderAction,
+} from "@/app/(workspace)/change-orders/change-order-actions";
 
-type QuoteScopeRevisionLineInput = {
-  operation: QuoteScopeRevisionLineOperation;
-  sourceJobScopeItemId?: string | null;
-  description: string;
-  quantity: string;
-  unitPriceCents?: number | null;
-  priceDeltaCents?: number | null;
-  executionRelevant?: boolean;
-  scopeDataJson?: unknown;
-};
-
-type CreateQuoteScopeRevisionInput = {
-  quoteId: string;
-  jobId: string;
-  reasoning: string;
-  priceDeltaCents?: number;
-  lines: QuoteScopeRevisionLineInput[];
-};
-
-export type CreateChangeOrderDraftInput = CreateQuoteScopeRevisionInput;
+export type CreateQuoteScopeRevisionInput = CreateChangeOrderDraftInput;
+export type QuoteScopeRevisionLineInput = ChangeOrderLineInput;
 
 type QuoteScopeRevisionActionResult =
   | { ok: true; revisionId: string }
@@ -55,438 +29,82 @@ type QuoteScopeRevisionApplyResult =
     }
   | { ok: false; error: string };
 
-function revalidateScopeRevisionSurfaces(quoteId: string, jobId: string) {
-  revalidatePath(`/quotes/${quoteId}`);
-  revalidatePath(`/quotes/${quoteId}/execution-review`);
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/jobs/${jobId}/change-orders`);
-  revalidatePath("/workstation");
-  revalidatePath("/workstation/tasks");
+function toLegacyActionResult(result: { ok: true; changeOrderId: string } | { ok: false; error: string }): QuoteScopeRevisionActionResult {
+  return result.ok ? { ok: true, revisionId: result.changeOrderId } : result;
+}
+
+function toLegacyApplyResult(
+  result:
+    | { ok: true; changeOrderId: string; executionPlanRevisionId: string; resultingJobPlanVersion: number }
+    | { ok: false; error: string },
+): QuoteScopeRevisionApplyResult {
+  return result.ok
+    ? {
+        ok: true,
+        revisionId: result.changeOrderId,
+        executionPlanRevisionId: result.executionPlanRevisionId,
+        resultingJobPlanVersion: result.resultingJobPlanVersion,
+      }
+    : result;
 }
 
 export async function createQuoteScopeRevisionDraftAction(
   input: CreateQuoteScopeRevisionInput,
 ): Promise<QuoteScopeRevisionActionResult> {
-  const session = await requireCurrentSession();
-  const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
-  if (!permission.ok) return { ok: false, error: permission.error };
-
-  if (!input.reasoning.trim()) {
-    return { ok: false, error: "Reasoning is required." };
-  }
-  if (input.lines.length === 0) {
-    return { ok: false, error: "At least one scope revision line is required." };
-  }
-
-  const created = await db.$transaction(async (tx) => {
-    const inTxPermission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
-    if (!inTxPermission.ok) {
-      return { ok: false as const, error: inTxPermission.error };
-    }
-    const quote = await tx.quote.findFirst({
-      where: {
-        id: input.quoteId,
-        organizationId: session.organizationId,
-        job: { is: { id: input.jobId } },
-      },
-      select: { id: true, job: { select: { id: true } } },
-    });
-    if (!quote?.job?.id) {
-      return { ok: false as const, error: "Quote/job pair not found for scope revision." };
-    }
-    const revision = await tx.quoteScopeRevision.create({
-      data: {
-        organizationId: session.organizationId,
-        quoteId: quote.id,
-        jobId: quote.job.id,
-        status: QuoteScopeRevisionStatus.DRAFT,
-        reasoning: input.reasoning.trim(),
-        priceDeltaCents: input.priceDeltaCents ?? 0,
-        lines: {
-          createMany: {
-            data: input.lines.map((line) => ({
-              organizationId: session.organizationId,
-              operation: line.operation,
-              sourceJobScopeItemId: line.sourceJobScopeItemId ?? null,
-              description: line.description,
-              quantity: line.quantity,
-              unitPriceCents: line.unitPriceCents ?? null,
-              priceDeltaCents: line.priceDeltaCents ?? null,
-              executionRelevant: line.executionRelevant ?? true,
-              scopeDataJson:
-                line.scopeDataJson == null
-                  ? Prisma.JsonNull
-                  : (line.scopeDataJson as Prisma.InputJsonValue),
-            })),
-          },
-        },
-      },
-      select: { id: true },
-    });
-    return { ok: true as const, revisionId: revision.id };
-  });
-
-  if (!created.ok) return created;
-  revalidateScopeRevisionSurfaces(input.quoteId, input.jobId);
-  return created;
+  return toLegacyActionResult(await createChangeOrderDraftActionCore(input));
 }
 
-/**
- * Customer-facing alias for scope revisions.
- * A Change Order is implemented by QuoteScopeRevision under the hood.
- */
 export async function createChangeOrderDraftAction(
   input: CreateChangeOrderDraftInput,
 ): Promise<QuoteScopeRevisionActionResult> {
-  return createQuoteScopeRevisionDraftAction(input);
+  return toLegacyActionResult(await createChangeOrderDraftActionCore(input));
 }
 
 export async function approveQuoteScopeRevisionAction(
   revisionId: string,
 ): Promise<QuoteScopeRevisionActionResult> {
-  const session = await requireCurrentSession();
-  const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
-  if (!permission.ok) return { ok: false, error: permission.error };
-
-  const id = revisionId.trim();
-  if (!id) return { ok: false, error: "Missing scope revision id." };
-  const revision = await db.$transaction(async (tx) => {
-    const inTxPermission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
-    if (!inTxPermission.ok) {
-      return { ok: false as const, error: inTxPermission.error };
-    }
-    const updated = await tx.quoteScopeRevision.updateMany({
-      where: {
-        id,
-        organizationId: session.organizationId,
-        status: QuoteScopeRevisionStatus.DRAFT,
-      },
-      data: {
-        status: QuoteScopeRevisionStatus.APPROVED,
-        approvedAt: new Date(),
-        approvedByUserId: session.userId,
-      },
-    });
-    if (updated.count === 0) {
-      return { ok: false as const, error: "Scope revision is not in draft state or was not found." };
-    }
-    const row = await tx.quoteScopeRevision.findUnique({
-      where: { id },
-      select: { quoteId: true, jobId: true },
-    });
-    if (!row) {
-      return { ok: false as const, error: "Scope revision was updated but could not be reloaded." };
-    }
-    return { ok: true as const, quoteId: row.quoteId, jobId: row.jobId };
-  });
-  if (!revision.ok) {
-    return revision;
-  }
-  revalidateScopeRevisionSurfaces(revision.quoteId, revision.jobId);
-  return { ok: true, revisionId: id };
+  return toLegacyActionResult(await sendChangeOrderAction(revisionId));
 }
 
-/**
- * Customer-facing alias for scope revision approval.
- */
 export async function approveChangeOrderAction(
   revisionId: string,
 ): Promise<QuoteScopeRevisionActionResult> {
-  return approveQuoteScopeRevisionAction(revisionId);
+  return toLegacyActionResult(await sendChangeOrderAction(revisionId));
 }
 
 export async function applyQuoteScopeRevisionAction(
   revisionId: string,
   options?: {
     expectedJobPlanVersion?: number | null;
-    hasApprovedPaymentImpactOperationInTx?: boolean;
   },
 ): Promise<QuoteScopeRevisionApplyResult> {
-  const session = await requireCurrentSession();
-  const permission = assertExecutionPlanPermission(session.role, "apply_scope_revision");
-  if (!permission.ok) return { ok: false, error: permission.error };
-
-  const id = revisionId.trim();
-  if (!id) return { ok: false, error: "Missing scope revision id." };
-
-  const applied = await db.$transaction(async (tx) => {
-    const inTxPermission = assertExecutionPlanPermission(session.role, "apply_scope_revision");
-    if (!inTxPermission.ok) {
-      return { ok: false as const, error: inTxPermission.error };
-    }
-    const revision = await tx.quoteScopeRevision.findFirst({
-      where: {
-        id,
-        organizationId: session.organizationId,
-      },
-      select: {
-        id: true,
-        organizationId: true,
-        quoteId: true,
-        jobId: true,
-        status: true,
-        priceDeltaCents: true,
-        reasoning: true,
-        lines: {
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            operation: true,
-            sourceJobScopeItemId: true,
-            description: true,
-            quantity: true,
-            unitPriceCents: true,
-            priceDeltaCents: true,
-            executionRelevant: true,
-            scopeDataJson: true,
-          },
-        },
-      },
-    });
-    if (!revision) {
-      return { ok: false as const, error: "Scope revision was not found." };
-    }
-    if (revision.status !== QuoteScopeRevisionStatus.APPROVED) {
-      return { ok: false as const, error: "Only approved scope revisions can be applied." };
-    }
-
-    const job = await tx.job.findFirst({
-      where: {
-        id: revision.jobId,
-        organizationId: session.organizationId,
-      },
-      select: { id: true, jobPlanVersion: true },
-    });
-    if (!job) {
-      return { ok: false as const, error: "Scope revision job was not found." };
-    }
-    if (
-      options?.expectedJobPlanVersion != null &&
-      options.expectedJobPlanVersion !== job.jobPlanVersion
-    ) {
-      return {
-        ok: false as const,
-        error: "Job plan changed. Refresh and retry with the latest scope revision state.",
-      };
-    }
-
-    for (const line of revision.lines) {
-      if (line.operation !== QuoteScopeRevisionLineOperation.ADD && !line.sourceJobScopeItemId) {
-        return {
-          ok: false as const,
-          error: "MODIFY/REMOVE lines require a source job scope item.",
-        };
-      }
-    }
-
-    for (const line of revision.lines) {
-      if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
-        await createScopeItemDeltaInTx(tx, {
-          organizationId: revision.organizationId,
-          jobId: revision.jobId,
-          sourceQuoteScopeRevisionLineId: line.id,
-          description: line.description,
-          quantity: line.quantity.toString(),
-          unitPriceCents: line.unitPriceCents,
-          executionRelevant: line.executionRelevant,
-        });
-        continue;
-      }
-
-      const sourceItem = await tx.jobScopeItem.findFirst({
-        where: {
-          id: line.sourceJobScopeItemId!,
-          organizationId: revision.organizationId,
-          jobId: revision.jobId,
-        },
-        select: { id: true, status: true },
-      });
-      if (!sourceItem || sourceItem.status !== JobScopeItemStatus.ACTIVE) {
-        return {
-          ok: false as const,
-          error: "Source scope item must exist and be active for MODIFY/REMOVE operations.",
-        };
-      }
-
-      if (line.operation === QuoteScopeRevisionLineOperation.MODIFY) {
-        const replacement = await createScopeItemDeltaInTx(tx, {
-          organizationId: revision.organizationId,
-          jobId: revision.jobId,
-          sourceQuoteScopeRevisionLineId: line.id,
-          description: line.description,
-          quantity: line.quantity.toString(),
-          unitPriceCents: line.unitPriceCents,
-          executionRelevant: line.executionRelevant,
-        });
-
-        await tx.jobScopeItem.update({
-          where: { id: sourceItem.id },
-          data: {
-            status: JobScopeItemStatus.SUPERSEDED,
-            supersededByJobScopeItemId: replacement.id,
-          },
-        });
-
-        await relinkFutureTaskScopesForSupersessionInTx(tx, {
-          organizationId: revision.organizationId,
-          sourceScopeItemId: sourceItem.id,
-          replacementScopeItemId: replacement.id,
-        });
-        continue;
-      }
-
-      await removeScopeItemAndApplyFutureTaskDispositionInTx(tx, {
-        organizationId: revision.organizationId,
-        jobId: revision.jobId,
-        sourceScopeItemId: sourceItem.id,
-        actorUserId: session.userId,
-        canceledReason: "Scope removed by approved scope revision",
-        metadataJson: {
-          sourceQuoteScopeRevisionId: revision.id,
-          scopeItemId: sourceItem.id,
-        },
-      });
-    }
-
-    const postScopeItems = await tx.jobScopeItem.findMany({
-      where: { jobId: revision.jobId },
-      select: {
-        id: true,
-        executionRelevant: true,
-        status: true,
-      },
-    });
-    const postTasks = await tx.jobTask.findMany({
-      where: { jobId: revision.jobId },
-      select: {
-        id: true,
-        status: true,
-        hardSignal: true,
-        requiresSignals: true,
-        providesSignals: true,
-        scopes: { select: { jobScopeItemId: true } },
-      },
-    });
-    const guards = validateScopeRevisionApplyGuards({
-      priceDeltaCents: revision.priceDeltaCents,
-      hasApprovedPaymentImpactOperationInTx:
-        options?.hasApprovedPaymentImpactOperationInTx ?? false,
-      scopeItems: postScopeItems.map((item) => ({
-        id: item.id,
-        executionRelevant: item.executionRelevant,
-        status: item.status,
-      })),
-      tasks: postTasks.map((task) => ({
-        id: task.id,
-        status: task.status,
-        hardSignal: task.hardSignal,
-        requiresSignals: task.requiresSignals,
-        providesSignals: task.providesSignals,
-        jobScopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
-      })),
-    });
-    if (!guards.ok) {
-      return { ok: false as const, error: guards.errors.join(" ") };
-    }
-
-    const resultingJobPlanVersion = job.jobPlanVersion + 1;
-    await tx.job.update({
-      where: { id: revision.jobId },
-      data: {
-        jobPlanVersion: resultingJobPlanVersion,
-      },
-    });
-    await tx.quoteScopeRevision.update({
-      where: { id: revision.id },
-      data: {
-        status: QuoteScopeRevisionStatus.APPLIED,
-        appliedAt: new Date(),
-      },
-    });
-    const executionPlanRevision = await tx.executionPlanRevision.create({
-      data: {
-        organizationId: revision.organizationId,
-        quoteId: revision.quoteId,
-        jobId: revision.jobId,
-        quoteScopeRevisionId: revision.id,
-        kind: ExecutionPlanRevisionKind.SCOPE_RECONCILIATION,
-        status: ExecutionPlanRevisionStatus.APPLIED,
-        basePlanVersion: job.jobPlanVersion,
-        resultingPlanVersion: resultingJobPlanVersion,
-        proposalJson: {
-          scopeRevisionId: revision.id,
-          lines: revision.lines.map((line) => ({
-            id: line.id,
-            operation: line.operation,
-            sourceJobScopeItemId: line.sourceJobScopeItemId,
-            description: line.description,
-          })),
-        },
-        proposalSchemaVersion: 1,
-        plannerVersion: "scope-revision-v1",
-        modelProviderMeta: {
-          source: "applyQuoteScopeRevisionAction",
-          zeroDollarOnlyPolicy:
-            options?.hasApprovedPaymentImpactOperationInTx === true
-              ? "approved-payment-op-present"
-              : "blocked-unless-zero-delta",
-        },
-        planningInputHash: null,
-        reasoningSummary: revision.reasoning,
-        approvedByUserId: session.userId,
-        appliedAt: new Date(),
-      },
-      select: { id: true },
-    });
-    await recordJobActivity(
-      {
-        organizationId: revision.organizationId,
-        jobId: revision.jobId,
-        type: JobActivityType.SCOPE_REVISION_APPLIED,
-        title: "Scope revision applied",
-        details: revision.reasoning,
-        entityType: "QuoteScopeRevision",
-        entityId: revision.id,
-        actorUserId: session.userId,
-        metadataJson: {
-          revisionId: revision.id,
-          resultingJobPlanVersion,
-          executionPlanRevisionId: executionPlanRevision.id,
-          lineCount: revision.lines.length,
-        },
-      },
-      tx,
-    );
-    return {
-      ok: true as const,
-      revisionId: revision.id,
-      executionPlanRevisionId: executionPlanRevision.id,
-      resultingJobPlanVersion,
-      quoteId: revision.quoteId,
-      jobId: revision.jobId,
-    };
-  });
-
-  if (!applied.ok) return applied;
-  revalidateScopeRevisionSurfaces(applied.quoteId, applied.jobId);
-  return {
-    ok: true,
-    revisionId: applied.revisionId,
-    executionPlanRevisionId: applied.executionPlanRevisionId,
-    resultingJobPlanVersion: applied.resultingJobPlanVersion,
-  };
+  return toLegacyApplyResult(await applyChangeOrderActionCore(revisionId, options));
 }
 
-/**
- * Customer-facing alias for applying an approved Change Order.
- */
 export async function applyChangeOrderAction(
   revisionId: string,
   options?: {
     expectedJobPlanVersion?: number | null;
-    hasApprovedPaymentImpactOperationInTx?: boolean;
   },
 ): Promise<QuoteScopeRevisionApplyResult> {
-  return applyQuoteScopeRevisionAction(revisionId, options);
+  return toLegacyApplyResult(await applyChangeOrderActionCore(revisionId, options));
+}
+
+export async function markChangeOrderAcceptedCompatibilityAction(
+  revisionId: string,
+): Promise<QuoteScopeRevisionActionResult> {
+  return toLegacyActionResult(await markChangeOrderAcceptedAction(revisionId));
+}
+
+export async function rejectChangeOrderCompatibilityAction(
+  revisionId: string,
+): Promise<QuoteScopeRevisionActionResult> {
+  return toLegacyActionResult(await rejectChangeOrderAction(revisionId));
+}
+
+export async function voidChangeOrderCompatibilityAction(
+  revisionId: string,
+): Promise<QuoteScopeRevisionActionResult> {
+  return toLegacyActionResult(await voidChangeOrderAction(revisionId));
 }
 

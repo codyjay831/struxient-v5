@@ -40,7 +40,7 @@ test("scope revision apply guards block non-zero delta without approved payment 
     ],
   });
   assert.equal(result.ok, false);
-  assert.ok(result.errors.some((error) => error.includes("payment-impact operation")));
+  assert.ok(result.errors.some((error) => error.includes("payment requirement")));
 });
 
 test("scope revision apply guards block uncovered active execution scope", () => {

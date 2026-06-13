@@ -1,6 +1,6 @@
 "use client";
 
-import { QuoteScopeRevisionLineOperation } from "@prisma/client";
+import { ChangeOrderLineOperation } from "@prisma/client";
 import { MinusCircle, PencilLine, PlusCircle } from "lucide-react";
 import type { ChangeOrderIntent } from "@/lib/change-order-flow";
 import { createLineFromIntent } from "@/lib/change-order-flow";
@@ -71,4 +71,4 @@ export function createDraftLineFromIntent(intent: ChangeOrderIntent) {
   return createLineFromIntent(intent);
 }
 
-export { QuoteScopeRevisionLineOperation };
+export { ChangeOrderLineOperation };

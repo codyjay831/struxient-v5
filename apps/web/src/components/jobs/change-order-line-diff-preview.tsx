@@ -1,15 +1,15 @@
 "use client";
 
-import { QuoteScopeRevisionLineOperation } from "@prisma/client";
+import { ChangeOrderLineOperation } from "@prisma/client";
 import type { ChangeOrderLineDiff } from "@/lib/change-order-flow";
 
-function operationLabel(operation: QuoteScopeRevisionLineOperation): string {
+function operationLabel(operation: ChangeOrderLineOperation): string {
   switch (operation) {
-    case QuoteScopeRevisionLineOperation.ADD:
+    case ChangeOrderLineOperation.ADD:
       return "Add";
-    case QuoteScopeRevisionLineOperation.MODIFY:
+    case ChangeOrderLineOperation.MODIFY:
       return "Modify";
-    case QuoteScopeRevisionLineOperation.REMOVE:
+    case ChangeOrderLineOperation.REMOVE:
       return "Remove";
   }
 }

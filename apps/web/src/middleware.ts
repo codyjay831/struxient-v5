@@ -14,6 +14,8 @@ function isPublicPath(pathname: string) {
     pathname.startsWith("/request/") ||
     pathname === "/q" ||
     pathname.startsWith("/q/") ||
+    pathname === "/co" ||
+    pathname.startsWith("/co/") ||
     pathname.startsWith("/api/auth")
   );
 }

@@ -36,6 +36,23 @@ export type QuoteChangeRequestNotificationPayload = {
   submittedFromIp?: string;
 };
 
+export type ChangeOrderSentNotificationPayload = {
+  organizationId: string;
+  changeOrderId: string;
+  recipients: { email: string; name?: string }[];
+  customMessage?: string;
+  organizationDisplayName: string;
+  shareUrl: string;
+  expiresAt?: Date | null;
+};
+
+export type ChangeOrderAcceptedNotificationPayload = {
+  organizationId: string;
+  changeOrderId: string;
+  acceptedByName: string;
+  deltaCents: number;
+};
+
 /**
  * Triggered when a new lead is submitted via the public intake form.
  */
@@ -269,5 +286,80 @@ export async function notifyQuoteChangeRequested(payload: QuoteChangeRequestNoti
     }
   } catch (error) {
     console.error("[Notification] Failed to send change request notifications:", error);
+  }
+}
+
+export async function notifyChangeOrderSent(payload: ChangeOrderSentNotificationPayload) {
+  console.log(`[Notification] Change Order Sent:`, payload);
+
+  if (!resend) {
+    console.warn("[Notification] Resend API key not found, skipping email.");
+    return;
+  }
+
+  try {
+    const expiryText = payload.expiresAt
+      ? `This link expires on ${payload.expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+      : "This link does not expire.";
+
+    const customMessageHtml = payload.customMessage
+      ? `<div style="margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #2563eb; color: #374151; font-style: italic;">
+          ${payload.customMessage.replace(/\n/g, "<br/>")}
+        </div>`
+      : "";
+
+    for (const recipient of payload.recipients) {
+      await resend.emails.send({
+        from: "Struxient <notifications@struxient.com>",
+        to: recipient.email,
+        subject: `Change Order from ${payload.organizationDisplayName}`,
+        html: `
+          <h1>Your change order is ready</h1>
+          <p>Hi ${recipient.name || "there"},</p>
+          <p><strong>${payload.organizationDisplayName}</strong> sent a change order for your review and acceptance.</p>
+          ${customMessageHtml}
+          <p><a href="${payload.shareUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 16px 0;">Review Change Order</a></p>
+          <p style="font-size: 14px; color: #666;">Or copy this link: ${payload.shareUrl}</p>
+          <p style="font-size: 14px; color: #666;">${expiryText}</p>
+        `,
+      });
+    }
+  } catch (error) {
+    console.error("[Notification] Failed to send change order notifications:", error);
+  }
+}
+
+export async function notifyChangeOrderAccepted(payload: ChangeOrderAcceptedNotificationPayload) {
+  console.log(`[Notification] Change Order Accepted:`, payload);
+
+  if (!resend) {
+    console.warn("[Notification] Resend API key not found, skipping email.");
+    return;
+  }
+
+  try {
+    const staffMembers = await db.membership.findMany({
+      where: {
+        organizationId: payload.organizationId,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+      include: { user: true },
+    });
+    const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
+    if (staffEmails.length > 0) {
+      await resend.emails.send({
+        from: "Struxient <notifications@struxient.com>",
+        to: staffEmails,
+        subject: `Change Order Accepted: ${payload.acceptedByName}`,
+        html: `
+          <h1>Change Order Accepted</h1>
+          <p><strong>Accepted By:</strong> ${payload.acceptedByName}</p>
+          <p><strong>Price Delta:</strong> $${(payload.deltaCents / 100).toFixed(2)}</p>
+          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/jobs">View jobs in dashboard</a></p>
+        `,
+      });
+    }
+  } catch (error) {
+    console.error("[Notification] Failed to send change order accepted notifications:", error);
   }
 }

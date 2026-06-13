@@ -9,6 +9,7 @@ import {
   JobTaskStatus,
   JobPaymentRequirementStatus,
   DailyJobLogStatus,
+  ChangeOrderStatus,
   QuoteCheckpointKind,
   QuoteCheckpointSource,
   StaffRole,
@@ -426,6 +427,82 @@ export async function queryWorkstationWorkItems(
       href: quote.leadId ? `/leads/${quote.leadId}` : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
       workflow,
+    });
+  }
+
+  // 2b. Change Orders
+  const changeOrders = await db.changeOrder.findMany({
+    where: {
+      organizationId,
+      status: {
+        in: [ChangeOrderStatus.DRAFT, ChangeOrderStatus.SENT, ChangeOrderStatus.ACCEPTED],
+      },
+    },
+    include: {
+      quote: {
+        select: {
+          id: true,
+          title: true,
+          customerId: true,
+          leadId: true,
+          customer: { select: { displayName: true } },
+          lead: { select: { title: true } },
+        },
+      },
+      job: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  for (const changeOrder of changeOrders) {
+    const priority: WorkstationWorkItemPriority =
+      changeOrder.status === ChangeOrderStatus.ACCEPTED ? "critical" : "high";
+    const group: WorkstationWorkItemGroup =
+      changeOrder.status === ChangeOrderStatus.ACCEPTED ? "ready" : "waiting";
+    const nextStep =
+      changeOrder.status === ChangeOrderStatus.DRAFT
+        ? "Send Change Order to customer."
+        : changeOrder.status === ChangeOrderStatus.SENT
+          ? "Await customer acceptance."
+          : "Apply accepted Change Order.";
+
+    const { lane, withinLaneRank, reason: rankReason } = rank(
+      {
+        kind: "quote",
+        priority,
+        group,
+        updatedAt: changeOrder.updatedAt,
+      },
+      role,
+      now,
+    );
+
+    const customerLabel = changeOrder.quote.customer?.displayName ?? changeOrder.quote.lead?.title ?? null;
+
+    items.push({
+      id: `change-order-${changeOrder.id}`,
+      kind: "quote",
+      title: `CO-${String(changeOrder.number).padStart(3, "0")} · ${changeOrder.title}`,
+      subtitle: customerLabel ?? changeOrder.job.title,
+      status: `Change Order ${changeOrder.status}`,
+      priority,
+      group,
+      lens: changeOrder.status === ChangeOrderStatus.ACCEPTED ? "attention" : "waiting",
+      lane,
+      withinLaneRank,
+      filterCategory: "quotes",
+      reason: rankReason || "Customer-facing scope and price amendment in progress.",
+      nextStep,
+      recordId: changeOrder.id,
+      parentRecordId: changeOrder.job.id,
+      parentLabel: customerLabel ?? undefined,
+      href: `/jobs/${changeOrder.job.id}/change-orders?focus=${changeOrder.id}`,
+      updatedAt: changeOrder.updatedAt,
     });
   }
 

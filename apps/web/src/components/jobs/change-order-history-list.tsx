@@ -1,28 +1,28 @@
 "use client";
 
-import { QuoteScopeRevisionStatus } from "@prisma/client";
+import { ChangeOrderStatus } from "@prisma/client";
 import { formatCents } from "@/lib/job-payment-display";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { LoadedChangeOrderRevision } from "@/lib/change-order-loader";
 
 function revisionStatusTone(
-  status: QuoteScopeRevisionStatus,
+  status: ChangeOrderStatus,
 ): "draft" | "approved" | "neutral" | "warning" {
   switch (status) {
-    case QuoteScopeRevisionStatus.DRAFT:
+    case ChangeOrderStatus.DRAFT:
       return "draft";
-    case QuoteScopeRevisionStatus.APPROVED:
+    case ChangeOrderStatus.ACCEPTED:
       return "approved";
-    case QuoteScopeRevisionStatus.APPLIED:
+    case ChangeOrderStatus.APPLIED:
       return "approved";
-    case QuoteScopeRevisionStatus.REJECTED:
+    case ChangeOrderStatus.REJECTED:
       return "warning";
     default:
       return "neutral";
   }
 }
 
-function formatRevisionStatus(status: QuoteScopeRevisionStatus): string {
+function formatRevisionStatus(status: ChangeOrderStatus): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
@@ -30,10 +30,12 @@ export function ChangeOrderHistoryList({
   revisions,
   selectedRevisionId,
   onSelect,
+  jobId,
 }: {
   revisions: LoadedChangeOrderRevision[];
   selectedRevisionId: string | null;
   onSelect: (revisionId: string) => void;
+  jobId: string;
 }) {
   if (revisions.length === 0) {
     return (
@@ -60,18 +62,24 @@ export function ChangeOrderHistoryList({
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium text-foreground">
-                {revision.reasoning.slice(0, 80)}
-                {revision.reasoning.length > 80 ? "…" : ""}
+                {`CO-${String(revision.number).padStart(3, "0")} · ${revision.title}`}
               </span>
               <StatusBadge
                 label={formatRevisionStatus(revision.status)}
                 tone={revisionStatusTone(revision.status)}
               />
             </div>
-            <div className="mt-1 flex flex-wrap gap-3 text-xs text-foreground-muted">
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-foreground-muted">
               <span>{revision.lines.length} line(s)</span>
               <span>{formatCents(revision.priceDeltaCents)} delta</span>
               <span>{new Date(revision.createdAt).toLocaleString()}</span>
+              <a
+                href={`/jobs/${jobId}/change-orders/${revision.id}`}
+                className="text-accent hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                Open detail
+              </a>
             </div>
           </button>
         );

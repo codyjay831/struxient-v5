@@ -7,7 +7,7 @@ export async function createScopeItemDeltaInTx(
   params: {
     organizationId: string;
     jobId: string;
-    sourceQuoteScopeRevisionLineId: string;
+    sourceChangeOrderLineId: string;
     description: string;
     quantity: string;
     unitPriceCents: number | null;
@@ -18,7 +18,7 @@ export async function createScopeItemDeltaInTx(
     data: {
       organizationId: params.organizationId,
       jobId: params.jobId,
-      sourceQuoteScopeRevisionLineId: params.sourceQuoteScopeRevisionLineId,
+      sourceChangeOrderLineId: params.sourceChangeOrderLineId,
       description: params.description,
       quantity: params.quantity,
       unitPriceCents: params.unitPriceCents,
