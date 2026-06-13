@@ -5,7 +5,6 @@ import {
   ExecutionPlanRevisionStatus,
   JobActivityType,
   JobScopeItemStatus,
-  JobTaskStatus,
   Prisma,
   QuoteScopeRevisionLineOperation,
   QuoteScopeRevisionStatus,
@@ -16,6 +15,11 @@ import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
+import {
+  createScopeItemDeltaInTx,
+  relinkFutureTaskScopesForSupersessionInTx,
+  removeScopeItemAndApplyFutureTaskDispositionInTx,
+} from "@/lib/execution-delta-service";
 
 type QuoteScopeRevisionLineInput = {
   operation: QuoteScopeRevisionLineOperation;
@@ -36,6 +40,8 @@ type CreateQuoteScopeRevisionInput = {
   lines: QuoteScopeRevisionLineInput[];
 };
 
+export type CreateChangeOrderDraftInput = CreateQuoteScopeRevisionInput;
+
 type QuoteScopeRevisionActionResult =
   | { ok: true; revisionId: string }
   | { ok: false; error: string };
@@ -53,6 +59,7 @@ function revalidateScopeRevisionSurfaces(quoteId: string, jobId: string) {
   revalidatePath(`/quotes/${quoteId}`);
   revalidatePath(`/quotes/${quoteId}/execution-review`);
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/jobs/${jobId}/change-orders`);
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
 }
@@ -124,6 +131,16 @@ export async function createQuoteScopeRevisionDraftAction(
   return created;
 }
 
+/**
+ * Customer-facing alias for scope revisions.
+ * A Change Order is implemented by QuoteScopeRevision under the hood.
+ */
+export async function createChangeOrderDraftAction(
+  input: CreateChangeOrderDraftInput,
+): Promise<QuoteScopeRevisionActionResult> {
+  return createQuoteScopeRevisionDraftAction(input);
+}
+
 export async function approveQuoteScopeRevisionAction(
   revisionId: string,
 ): Promise<QuoteScopeRevisionActionResult> {
@@ -167,6 +184,15 @@ export async function approveQuoteScopeRevisionAction(
   }
   revalidateScopeRevisionSurfaces(revision.quoteId, revision.jobId);
   return { ok: true, revisionId: id };
+}
+
+/**
+ * Customer-facing alias for scope revision approval.
+ */
+export async function approveChangeOrderAction(
+  revisionId: string,
+): Promise<QuoteScopeRevisionActionResult> {
+  return approveQuoteScopeRevisionAction(revisionId);
 }
 
 export async function applyQuoteScopeRevisionAction(
@@ -255,17 +281,14 @@ export async function applyQuoteScopeRevisionAction(
 
     for (const line of revision.lines) {
       if (line.operation === QuoteScopeRevisionLineOperation.ADD) {
-        await tx.jobScopeItem.create({
-          data: {
-            organizationId: revision.organizationId,
-            jobId: revision.jobId,
-            sourceQuoteScopeRevisionLineId: line.id,
-            description: line.description,
-            quantity: line.quantity,
-            unitPriceCents: line.unitPriceCents,
-            executionRelevant: line.executionRelevant,
-            status: JobScopeItemStatus.ACTIVE,
-          },
+        await createScopeItemDeltaInTx(tx, {
+          organizationId: revision.organizationId,
+          jobId: revision.jobId,
+          sourceQuoteScopeRevisionLineId: line.id,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPriceCents: line.unitPriceCents,
+          executionRelevant: line.executionRelevant,
         });
         continue;
       }
@@ -286,18 +309,14 @@ export async function applyQuoteScopeRevisionAction(
       }
 
       if (line.operation === QuoteScopeRevisionLineOperation.MODIFY) {
-        const replacement = await tx.jobScopeItem.create({
-          data: {
-            organizationId: revision.organizationId,
-            jobId: revision.jobId,
-            sourceQuoteScopeRevisionLineId: line.id,
-            description: line.description,
-            quantity: line.quantity,
-            unitPriceCents: line.unitPriceCents,
-            executionRelevant: line.executionRelevant,
-            status: JobScopeItemStatus.ACTIVE,
-          },
-          select: { id: true },
+        const replacement = await createScopeItemDeltaInTx(tx, {
+          organizationId: revision.organizationId,
+          jobId: revision.jobId,
+          sourceQuoteScopeRevisionLineId: line.id,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPriceCents: line.unitPriceCents,
+          executionRelevant: line.executionRelevant,
         });
 
         await tx.jobScopeItem.update({
@@ -308,108 +327,25 @@ export async function applyQuoteScopeRevisionAction(
           },
         });
 
-        const scopedTasks = await tx.jobTaskScope.findMany({
-          where: { jobScopeItemId: sourceItem.id },
-          select: {
-            jobTaskId: true,
-            jobTask: { select: { id: true, status: true } },
-          },
+        await relinkFutureTaskScopesForSupersessionInTx(tx, {
+          organizationId: revision.organizationId,
+          sourceScopeItemId: sourceItem.id,
+          replacementScopeItemId: replacement.id,
         });
-        for (const taskScope of scopedTasks) {
-          const status = taskScope.jobTask.status;
-          if (status === JobTaskStatus.DONE || status === JobTaskStatus.CANCELED) {
-            continue;
-          }
-          await tx.jobTaskScope.upsert({
-            where: {
-              jobTaskId_jobScopeItemId: {
-                jobTaskId: taskScope.jobTaskId,
-                jobScopeItemId: replacement.id,
-              },
-            },
-            create: {
-              organizationId: revision.organizationId,
-              jobTaskId: taskScope.jobTaskId,
-              jobScopeItemId: replacement.id,
-            },
-            update: {},
-          });
-          await tx.jobTaskScope.deleteMany({
-            where: {
-              jobTaskId: taskScope.jobTaskId,
-              jobScopeItemId: sourceItem.id,
-            },
-          });
-        }
         continue;
       }
 
-      await tx.jobScopeItem.update({
-        where: { id: sourceItem.id },
-        data: { status: JobScopeItemStatus.REMOVED },
-      });
-
-      const scopedTasks = await tx.jobTaskScope.findMany({
-        where: { jobScopeItemId: sourceItem.id },
-        select: {
-          jobTaskId: true,
-          jobTask: {
-            select: {
-              id: true,
-              title: true,
-              status: true,
-              canceledAt: true,
-            },
-          },
+      await removeScopeItemAndApplyFutureTaskDispositionInTx(tx, {
+        organizationId: revision.organizationId,
+        jobId: revision.jobId,
+        sourceScopeItemId: sourceItem.id,
+        actorUserId: session.userId,
+        canceledReason: "Scope removed by approved scope revision",
+        metadataJson: {
+          sourceQuoteScopeRevisionId: revision.id,
+          scopeItemId: sourceItem.id,
         },
       });
-      for (const taskScope of scopedTasks) {
-        const task = taskScope.jobTask;
-        if (task.status === JobTaskStatus.DONE || task.status === JobTaskStatus.CANCELED) {
-          continue;
-        }
-        const remainingScopesCount = await tx.jobTaskScope.count({
-          where: {
-            jobTaskId: task.id,
-            jobScopeItemId: { not: sourceItem.id },
-          },
-        });
-        if (remainingScopesCount > 0) {
-          await tx.jobTaskScope.deleteMany({
-            where: {
-              jobTaskId: task.id,
-              jobScopeItemId: sourceItem.id,
-            },
-          });
-          continue;
-        }
-
-        await tx.jobTask.update({
-          where: { id: task.id },
-          data: {
-            status: JobTaskStatus.CANCELED,
-            canceledAt: task.canceledAt ?? new Date(),
-            canceledByUserId: session.userId,
-            canceledReason: "Scope removed by approved scope revision",
-          },
-        });
-        await recordJobActivity(
-          {
-            organizationId: revision.organizationId,
-            jobId: revision.jobId,
-            type: JobActivityType.TASK_CANCELED,
-            title: `Task canceled due to scope removal: ${task.title}`,
-            entityType: "JobTask",
-            entityId: task.id,
-            actorUserId: session.userId,
-            metadataJson: {
-              sourceQuoteScopeRevisionId: revision.id,
-              scopeItemId: sourceItem.id,
-            },
-          },
-          tx,
-        );
-      }
     }
 
     const postScopeItems = await tx.jobScopeItem.findMany({
@@ -539,5 +475,18 @@ export async function applyQuoteScopeRevisionAction(
     executionPlanRevisionId: applied.executionPlanRevisionId,
     resultingJobPlanVersion: applied.resultingJobPlanVersion,
   };
+}
+
+/**
+ * Customer-facing alias for applying an approved Change Order.
+ */
+export async function applyChangeOrderAction(
+  revisionId: string,
+  options?: {
+    expectedJobPlanVersion?: number | null;
+    hasApprovedPaymentImpactOperationInTx?: boolean;
+  },
+): Promise<QuoteScopeRevisionApplyResult> {
+  return applyQuoteScopeRevisionAction(revisionId, options);
 }
 

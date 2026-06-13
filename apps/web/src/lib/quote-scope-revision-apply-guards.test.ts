@@ -122,3 +122,44 @@ test("scope revision apply guards block hard-signal orphan dependencies", () => 
   assert.ok(result.errors.some((error) => error.includes("hard-signal dependencies")));
 });
 
+test("scope revision apply guards allow shared future task when one scope remains active", () => {
+  const result = validateScopeRevisionApplyGuards({
+    priceDeltaCents: 0,
+    hasApprovedPaymentImpactOperationInTx: false,
+    scopeItems: [
+      { id: "removed", executionRelevant: true, status: JobScopeItemStatus.REMOVED },
+      { id: "active", executionRelevant: true, status: JobScopeItemStatus.ACTIVE },
+    ],
+    tasks: [
+      {
+        id: "shared-task",
+        status: JobTaskStatus.TODO,
+        hardSignal: false,
+        requiresSignals: [],
+        providesSignals: [],
+        jobScopeItemIds: ["removed", "active"],
+      },
+    ],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("scope revision apply guards allow completed historical task on removed scope", () => {
+  const result = validateScopeRevisionApplyGuards({
+    priceDeltaCents: 0,
+    hasApprovedPaymentImpactOperationInTx: false,
+    scopeItems: [{ id: "removed", executionRelevant: true, status: JobScopeItemStatus.REMOVED }],
+    tasks: [
+      {
+        id: "historical-done-task",
+        status: JobTaskStatus.DONE,
+        hardSignal: false,
+        requiresSignals: [],
+        providesSignals: [],
+        jobScopeItemIds: ["removed"],
+      },
+    ],
+  });
+  assert.equal(result.ok, true);
+});
+

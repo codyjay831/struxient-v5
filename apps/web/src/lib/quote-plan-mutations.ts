@@ -260,3 +260,82 @@ export async function syncQuoteExecutionTaskFromSourceTaskInTx(
   return { ok: true as const };
 }
 
+export async function reorderQuoteExecutionTasksBySourceTaskIdInTx(
+  tx: ExtendedTransactionClient,
+  params: {
+    quoteId: string;
+    organizationId: string;
+    sortOrderBySourceTaskId: Record<string, number>;
+  },
+) {
+  const sourceTaskIds = Object.keys(params.sortOrderBySourceTaskId)
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (sourceTaskIds.length === 0) {
+    return { ok: false as const, error: "SOURCE_TASK_REQUIRED" as const };
+  }
+  const plan = await tx.quoteExecutionPlan.findFirst({
+    where: {
+      quoteId: params.quoteId,
+      organizationId: params.organizationId,
+    },
+    select: { id: true, status: true },
+  });
+  if (!plan) {
+    return { ok: false as const, error: "PLAN_NOT_FOUND" as const };
+  }
+  const tasks = await tx.quoteExecutionTask.findMany({
+    where: {
+      quoteExecutionPlanId: plan.id,
+      sourceQuoteLineExecutionTaskId: { in: sourceTaskIds },
+    },
+    select: { id: true, sourceQuoteLineExecutionTaskId: true },
+  });
+  for (const task of tasks) {
+    const sourceId = task.sourceQuoteLineExecutionTaskId;
+    if (!sourceId) continue;
+    const nextSortOrder = params.sortOrderBySourceTaskId[sourceId];
+    if (nextSortOrder == null) continue;
+    await tx.quoteExecutionTask.update({
+      where: { id: task.id },
+      data: { sortOrder: nextSortOrder },
+    });
+  }
+  if (tasks.length > 0) {
+    await markQuotePlanNeedsReviewInTx(tx, plan.id, plan.status);
+  }
+  return { ok: true as const };
+}
+
+export async function deleteQuoteExecutionTasksBySourceTaskIdInTx(
+  tx: ExtendedTransactionClient,
+  params: {
+    quoteId: string;
+    organizationId: string;
+    sourceTaskIds: string[];
+  },
+) {
+  const sourceTaskIds = [...new Set(params.sourceTaskIds.map((id) => id.trim()).filter(Boolean))];
+  if (sourceTaskIds.length === 0) return { ok: true as const, deletedCount: 0 };
+  const plan = await tx.quoteExecutionPlan.findFirst({
+    where: {
+      quoteId: params.quoteId,
+      organizationId: params.organizationId,
+    },
+    select: { id: true, status: true },
+  });
+  if (!plan) {
+    return { ok: true as const, deletedCount: 0 };
+  }
+  const deleted = await tx.quoteExecutionTask.deleteMany({
+    where: {
+      quoteExecutionPlanId: plan.id,
+      sourceQuoteLineExecutionTaskId: { in: sourceTaskIds },
+    },
+  });
+  if (deleted.count > 0) {
+    await markQuotePlanNeedsReviewInTx(tx, plan.id, plan.status);
+  }
+  return { ok: true as const, deletedCount: deleted.count };
+}
+

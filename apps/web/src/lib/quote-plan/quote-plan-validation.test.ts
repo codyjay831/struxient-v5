@@ -107,3 +107,109 @@ test("validateQuotePlanProposalForApply rejects cancellation that removes needed
   assert.equal(result.ok, false);
 });
 
+test("validateQuotePlanProposalForApply rejects update on protected task", () => {
+  const result = validateQuotePlanProposalForApply(
+    makeProposal({
+      operations: [
+        {
+          opId: "update-protected",
+          type: "UPDATE_TASK",
+          taskId: "protected-task",
+          task: { title: "New title" },
+        },
+      ],
+    }),
+    {
+      quoteId: "q1",
+      allowedLineItemIds: new Set(["line-1"]),
+      executionRelevantLineItemIds: new Set(["line-1"]),
+      plan: {
+        status: QuoteExecutionPlanStatus.READY_FOR_REVIEW,
+        planVersion: 3,
+        planningInputHash: "hash-a",
+      },
+      currentPlanningInputHash: "hash-a",
+      existingTasks: [
+        {
+          id: "protected-task",
+          protectedAt: new Date(),
+          humanEditedAt: null,
+          lineItemIds: ["line-1"],
+          requiresSignals: [],
+          providesSignals: [],
+        },
+      ],
+    },
+  );
+  assert.equal(result.ok, false);
+});
+
+test("validateQuotePlanProposalForApply allows relink when coverage remains", () => {
+  const result = validateQuotePlanProposalForApply(
+    makeProposal({
+      operations: [
+        {
+          opId: "relink-task",
+          type: "RELINK_TASK_SCOPE",
+          taskId: "task-1",
+          lineItemIds: ["line-1", "line-2"],
+        },
+      ],
+    }),
+    {
+      quoteId: "q1",
+      allowedLineItemIds: new Set(["line-1", "line-2"]),
+      executionRelevantLineItemIds: new Set(["line-1", "line-2"]),
+      plan: {
+        status: QuoteExecutionPlanStatus.READY_FOR_REVIEW,
+        planVersion: 3,
+        planningInputHash: "hash-a",
+      },
+      currentPlanningInputHash: "hash-a",
+      existingTasks: [
+        {
+          id: "task-1",
+          protectedAt: null,
+          humanEditedAt: null,
+          lineItemIds: ["line-1"],
+          requiresSignals: [],
+          providesSignals: [],
+        },
+      ],
+    },
+  );
+  assert.equal(result.ok, true);
+});
+
+test("validateQuotePlanProposalForApply rejects cancel that breaks coverage", () => {
+  const result = validateQuotePlanProposalForApply(
+    makeProposal({
+      operations: [
+        { opId: "cancel-only-task", type: "CANCEL_TASK", taskId: "task-1", reason: "cleanup" },
+      ],
+    }),
+    {
+      quoteId: "q1",
+      allowedLineItemIds: new Set(["line-1"]),
+      executionRelevantLineItemIds: new Set(["line-1"]),
+      plan: {
+        status: QuoteExecutionPlanStatus.READY_FOR_REVIEW,
+        planVersion: 3,
+        planningInputHash: "hash-a",
+      },
+      currentPlanningInputHash: "hash-a",
+      existingTasks: [
+        {
+          id: "task-1",
+          protectedAt: null,
+          humanEditedAt: null,
+          lineItemIds: ["line-1"],
+          requiresSignals: [],
+          providesSignals: [],
+        },
+      ],
+    },
+  );
+  assert.equal(result.ok, false);
+});
+

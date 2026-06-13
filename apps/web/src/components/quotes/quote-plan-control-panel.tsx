@@ -10,10 +10,11 @@ import {
 } from "@/app/(workspace)/quotes/quote-plan-actions";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
+import type { QuotePlanProposal } from "@/lib/quote-plan/quote-plan-proposal-schema";
 
 type PlanStatus = "DRAFT" | "READY_FOR_REVIEW" | "ACCEPTED";
 
-type GeneratingPhase = "idle" | "generating" | "applying" | "accepting";
+type GeneratingPhase = "idle" | "generating" | "proposal_ready" | "applying" | "accepting";
 
 export function QuotePlanControlPanel({
   quoteId,
@@ -34,15 +35,21 @@ export function QuotePlanControlPanel({
   const [phase, setPhase] = useState<GeneratingPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [fallbackWarning, setFallbackWarning] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<QuotePlanProposal | null>(null);
+  const [proposalSummary, setProposalSummary] = useState<string | null>(null);
+  const [proposalTaskCount, setProposalTaskCount] = useState(0);
   const [, startTransition] = useTransition();
 
   const hasExistingPlan = executionPlan !== null;
   const planAccepted = executionPlan?.status === "ACCEPTED";
   const planReadyForReview = executionPlan?.status === "READY_FOR_REVIEW";
 
-  function handleGenerateAndApply() {
+  function handleGenerateProposal() {
     setError(null);
     setFallbackWarning(null);
+    setProposal(null);
+    setProposalSummary(null);
+    setProposalTaskCount(0);
     setPhase("generating");
     startTransition(async () => {
       const genResult = await generateQuoteExecutionPlanProposalAction(quoteId);
@@ -54,16 +61,34 @@ export function QuotePlanControlPanel({
       if (genResult.usedFallback && genResult.fallbackReason) {
         setFallbackWarning(genResult.fallbackReason);
       }
-      setPhase("applying");
-      const applyResult = await applyQuoteExecutionPlanProposalAction(
-        quoteId,
-        genResult.proposal,
+      setProposal(genResult.proposal);
+      setProposalSummary(genResult.proposal.summary || null);
+      setProposalTaskCount(
+        genResult.proposal.operations.filter((operation) => operation.type === "ADD_TASK").length,
       );
+      setPhase("proposal_ready");
+    });
+  }
+
+  function handleApplyProposal() {
+    if (!proposal) {
+      setError("Generate a proposal before applying.");
+      return;
+    }
+    setError(null);
+    setPhase("applying");
+    startTransition(async () => {
+      const applyResult = await applyQuoteExecutionPlanProposalAction(quoteId, proposal, {
+        applyMode: "replace_unprotected",
+      });
       if (!applyResult.ok) {
         setError(applyResult.error);
-        setPhase("idle");
+        setPhase("proposal_ready");
         return;
       }
+      setProposal(null);
+      setProposalSummary(null);
+      setProposalTaskCount(0);
       setPhase("idle");
       router.refresh();
     });
@@ -147,13 +172,48 @@ export function QuotePlanControlPanel({
       {phase === "generating" && (
         <div className="mt-3 flex items-center gap-2 text-xs text-foreground-muted">
           <RefreshCw className="size-3.5 animate-spin" />
-          Generating whole-quote AI plan…
+          Generating whole-quote proposal…
+        </div>
+      )}
+      {phase === "proposal_ready" && proposal && (
+        <div className="mt-3 rounded-md border border-border bg-background/60 p-3">
+          <p className="text-xs font-medium text-foreground">Proposal ready for review</p>
+          <p className="mt-1 text-xs text-foreground-muted">
+            {proposalTaskCount} task{proposalTaskCount === 1 ? "" : "s"} will be added or reconciled.
+            Review then apply.
+          </p>
+          {proposalSummary ? (
+            <p className="mt-1 text-xs text-foreground-muted">Summary: {proposalSummary}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={handleApplyProposal}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Apply proposal
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setProposal(null);
+                setProposalSummary(null);
+                setProposalTaskCount(0);
+                setPhase("idle");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Discard proposal
+            </button>
+          </div>
         </div>
       )}
       {phase === "applying" && (
         <div className="mt-3 flex items-center gap-2 text-xs text-foreground-muted">
           <RefreshCw className="size-3.5 animate-spin" />
-          Applying plan to execution task list…
+          Applying reviewed proposal to execution task list…
         </div>
       )}
       {phase === "accepting" && (
@@ -169,11 +229,11 @@ export function QuotePlanControlPanel({
             <button
               type="button"
               disabled={isPending}
-              onClick={handleGenerateAndApply}
+              onClick={handleGenerateProposal}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Bot className="size-3.5" />
-              Generate AI plan
+              Generate proposal
             </button>
           )}
 
@@ -181,15 +241,15 @@ export function QuotePlanControlPanel({
             <button
               type="button"
               disabled={isPending}
-              onClick={handleGenerateAndApply}
+              onClick={handleGenerateProposal}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Bot className="size-3.5" />
-              Regenerate plan
+              Regenerate proposal
             </button>
           )}
 
-          {hasExistingPlan && (!planAccepted || isStale) && (
+          {hasExistingPlan && !isStale && !planAccepted && (
             <button
               type="button"
               disabled={isPending}
@@ -197,7 +257,7 @@ export function QuotePlanControlPanel({
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ShieldCheck className="size-3.5" />
-              {isStale ? "Re-accept plan" : "Accept plan"}
+              Accept plan
             </button>
           )}
         </div>

@@ -51,6 +51,7 @@ import {
 import { JobExecutionHealthBanner } from "@/components/jobs/job-execution-health-banner";
 import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import { jobChangeOrdersPath } from "@/lib/change-order-flow";
 
 export const dynamic = "force-dynamic";
 
@@ -608,20 +609,47 @@ export default async function JobDetailPage({
           </div>
         </div>
       </section>
-      
-      <JobIssueManager
-        jobId={job.id}
-        initialIssues={job.issues}
-        stages={job.stages}
-        createIssueIntent={createIssueIntent}
-      />
 
-      <JobPaymentManager
-        jobId={job.id}
-        initialRequirements={paymentRequirementsWithAnchors}
-        stages={job.stages}
-        effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
-      />
+      <WorkspacePanel id="execution-delta-actions">
+        <SectionHeading
+          title="Update what changed"
+          description="Field reality changes fast. Start here to update execution, capture recovery work, or route commercial scope changes into a formal Change Order."
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a href="#execution-stages" className={listLinkClass}>
+            Update job plan
+          </a>
+          <a href="#job-issues" className={listLinkClass}>
+            Create recovery work
+          </a>
+          <a href="#job-payments" className={listLinkClass}>
+            Review payment impact
+          </a>
+          {safeQuote ? (
+            <Link href={jobChangeOrdersPath(job.id)} className={listLinkClass}>
+              Change scope (Change Order)
+            </Link>
+          ) : null}
+        </div>
+      </WorkspacePanel>
+
+      <section id="job-issues">
+        <JobIssueManager
+          jobId={job.id}
+          initialIssues={job.issues}
+          stages={job.stages}
+          createIssueIntent={createIssueIntent}
+        />
+      </section>
+
+      <section id="job-payments">
+        <JobPaymentManager
+          jobId={job.id}
+          initialRequirements={paymentRequirementsWithAnchors}
+          stages={job.stages}
+          effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
+        />
+      </section>
 
       <JobScheduleCleanupReview
         jobId={job.id}
@@ -662,6 +690,7 @@ export default async function JobDetailPage({
         initialLogs={job.dailyJobLogs}
       />
 
+      <section id="execution-stages">
       {job.stages.length === 0 ? (
         <WorkspacePanel>
           <EmptyState
@@ -783,6 +812,7 @@ export default async function JobDetailPage({
           </div>
         </WorkspacePanel>
       )}
+      </section>
 
       <WorkspacePanel padding="compact" className="mt-6 border-dashed border-border bg-surface/80">
         <div className="flex gap-2">

@@ -36,7 +36,9 @@ import {
 import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
 import {
   createQuoteExecutionTaskInTx,
+  deleteQuoteExecutionTasksBySourceTaskIdInTx,
   patchQuoteExecutionTaskSignalsBySourceTaskIdInTx,
+  reorderQuoteExecutionTasksBySourceTaskIdInTx,
   syncQuoteExecutionTaskFromSourceTaskInTx,
 } from "@/lib/quote-plan-mutations";
 import type {
@@ -657,31 +659,16 @@ export async function moveQuoteLineExecutionTaskAction(
       data: { sortOrder: b.sortOrder },
     });
 
-    const linkedPlanTasks = await tx.quoteExecutionTask.findMany({
-      where: {
-        quoteExecutionPlan: {
-          quoteId: qid,
-          organizationId: ctx.organizationId,
-        },
-        sourceQuoteLineExecutionTaskId: { in: [a.id, b.id] },
+    const reorderPlanResult = await reorderQuoteExecutionTasksBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sortOrderBySourceTaskId: {
+        [a.id]: b.sortOrder,
+        [b.id]: a.sortOrder,
       },
-      select: { id: true, sourceQuoteLineExecutionTaskId: true, sortOrder: true },
     });
-    const planTaskA = linkedPlanTasks.find((task) => task.sourceQuoteLineExecutionTaskId === a.id);
-    const planTaskB = linkedPlanTasks.find((task) => task.sourceQuoteLineExecutionTaskId === b.id);
-    if (planTaskA && planTaskB) {
-      await tx.quoteExecutionTask.update({
-        where: { id: planTaskA.id },
-        data: { sortOrder: temp },
-      });
-      await tx.quoteExecutionTask.update({
-        where: { id: planTaskB.id },
-        data: { sortOrder: planTaskA.sortOrder },
-      });
-      await tx.quoteExecutionTask.update({
-        where: { id: planTaskA.id },
-        data: { sortOrder: planTaskB.sortOrder },
-      });
+    if (!reorderPlanResult.ok) {
+      return { ok: false as const };
     }
 
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
@@ -744,14 +731,10 @@ export async function deleteQuoteLineExecutionTaskAction(
 
     const stageId = existing.stageId;
     await tx.quoteLineExecutionTask.delete({ where: { id: kid } });
-    await tx.quoteExecutionTask.deleteMany({
-      where: {
-        sourceQuoteLineExecutionTaskId: kid,
-        quoteExecutionPlan: {
-          quoteId: qid,
-          organizationId: ctx.organizationId,
-        },
-      },
+    await deleteQuoteExecutionTasksBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceTaskIds: [kid],
     });
     await renumberSortOrdersInStage(tx, lid, stageId);
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
@@ -1160,14 +1143,10 @@ export async function applyQuoteLineExecutionAIProposalAction(
               id: { in: replacePlan.deleteTaskIds },
             },
           });
-          await tx.quoteExecutionTask.deleteMany({
-            where: {
-              sourceQuoteLineExecutionTaskId: { in: replacePlan.deleteTaskIds },
-              quoteExecutionPlan: {
-                quoteId: qid,
-                organizationId: ctx.organizationId,
-              },
-            },
+          await deleteQuoteExecutionTasksBySourceTaskIdInTx(tx, {
+            quoteId: qid,
+            organizationId: ctx.organizationId,
+            sourceTaskIds: replacePlan.deleteTaskIds,
           });
         }
       }

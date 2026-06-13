@@ -19,6 +19,7 @@ import { createQuoteExecutionTaskInTx } from "@/lib/quote-plan-mutations";
 import { ensureQuoteExecutionPlanInTx } from "@/lib/quote-line-item-template-apply-tx";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
+import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 
 type QuotePlanGenerateResult =
   | {
@@ -160,6 +161,7 @@ async function applyQuotePlanProposalInTx(
     userId: string;
     proposal: QuotePlanProposal;
     modelProviderMeta?: unknown;
+    applyMode?: "append" | "replace_unprotected";
   },
 ): Promise<QuotePlanApplyResult> {
   const quote = await tx.quote.findFirst({
@@ -259,38 +261,199 @@ async function applyQuotePlanProposalInTx(
   if (!validation.ok) {
     return { ok: false, error: validation.error };
   }
-  for (const operation of validation.proposal.operations) {
-    if (operation.type !== "ADD_TASK") {
+  const hasNonAddOperations = validation.proposal.operations.some(
+    (operation) => operation.type !== "ADD_TASK",
+  );
+  const shouldReplaceExisting =
+    (params.applyMode ?? "replace_unprotected") === "replace_unprotected" && !hasNonAddOperations;
+  if (shouldReplaceExisting && plan.tasks.length > 0) {
+    const hasProtectedOrHumanEditedTasks = plan.tasks.some(
+      (task) => task.protectedAt || task.humanEditedAt,
+    );
+    if (hasProtectedOrHumanEditedTasks) {
       return {
         ok: false,
-        error: `Operation ${operation.type} is not enabled in Gate 4 apply.`,
+        error:
+          "This plan contains protected or human-edited tasks. Review and reconcile task operations explicitly before replacing the plan.",
       };
     }
-    const created = await createQuoteExecutionTaskInTx(tx, {
-      quoteId: params.quoteId,
-      organizationId: params.organizationId,
-      input: {
-        title: operation.task.title,
-        category: operation.task.category,
-        stageId: operation.task.stageId ?? null,
-        instructions: operation.task.instructions ?? null,
-        providesSignals: operation.task.providesSignals,
-        requiresSignals: operation.task.requiresSignals,
-        hardSignal: operation.task.hardSignal,
-        requirementsJson: (operation.task.requirementsJson ?? {}) as Prisma.InputJsonValue,
-        partsRequiredJson: (operation.task.partsRequiredJson ?? {}) as Prisma.InputJsonValue,
-        sourceType: operation.task.sourceType,
-        sourceTaskTemplateId: operation.task.sourceTaskTemplateId ?? null,
-        sourceLineItemTemplateTaskId: null,
-        sourceQuoteLineExecutionTaskId: null,
-        origin: operation.task.origin ?? "AI_PLAN",
-        relatedLineItemIds: operation.task.lineItemIds,
-        protectedAt: operation.task.protected ? new Date() : null,
+    await tx.quoteExecutionTask.deleteMany({
+      where: {
+        quoteExecutionPlanId: plan.id,
       },
     });
-    if (!created.ok) {
-      return { ok: false, error: `Failed to apply operation ${operation.opId}: ${created.error}` };
+    plan.tasks = [];
+  }
+  let usedDirectTaskMutation = false;
+  for (const operation of validation.proposal.operations) {
+    if (operation.type === "ADD_TASK") {
+      const created = await createQuoteExecutionTaskInTx(tx, {
+        quoteId: params.quoteId,
+        organizationId: params.organizationId,
+        input: {
+          title: operation.task.title,
+          category: operation.task.category,
+          stageId: operation.task.stageId ?? null,
+          instructions: operation.task.instructions ?? null,
+          providesSignals: operation.task.providesSignals,
+          requiresSignals: operation.task.requiresSignals,
+          hardSignal: operation.task.hardSignal,
+          requirementsJson: (operation.task.requirementsJson ?? {}) as Prisma.InputJsonValue,
+          partsRequiredJson: (operation.task.partsRequiredJson ?? {}) as Prisma.InputJsonValue,
+          sourceType: operation.task.sourceType,
+          sourceTaskTemplateId: operation.task.sourceTaskTemplateId ?? null,
+          sourceLineItemTemplateTaskId: operation.task.sourceLineItemTemplateTaskId ?? null,
+          sourceQuoteLineExecutionTaskId: null,
+          origin: operation.task.origin ?? "AI_PLAN",
+          planningTags: operation.task.planningTags,
+          relatedLineItemIds: operation.task.lineItemIds,
+          protectedAt: operation.task.protected ? new Date() : null,
+        },
+      });
+      if (!created.ok) {
+        return { ok: false, error: `Failed to apply operation ${operation.opId}: ${created.error}` };
+      }
+      continue;
     }
+    if (operation.type === "UPDATE_TASK") {
+      const target = await tx.quoteExecutionTask.findFirst({
+        where: {
+          id: operation.taskId,
+          quoteExecutionPlanId: plan.id,
+        },
+        select: { id: true },
+      });
+      if (!target) {
+        return { ok: false, error: `Failed to apply operation ${operation.opId}: task not found.` };
+      }
+      const updateData: Prisma.QuoteExecutionTaskUncheckedUpdateInput = {};
+      if (operation.task.title !== undefined) updateData.title = operation.task.title;
+      if (operation.task.category !== undefined) updateData.category = operation.task.category;
+      if (operation.task.stageId !== undefined) updateData.stageId = operation.task.stageId;
+      if (operation.task.instructions !== undefined) updateData.instructions = operation.task.instructions;
+      if (operation.task.requiresSignals !== undefined) {
+        updateData.requiresSignals = operation.task.requiresSignals;
+      }
+      if (operation.task.providesSignals !== undefined) {
+        updateData.providesSignals = operation.task.providesSignals;
+      }
+      if (operation.task.hardSignal !== undefined) updateData.hardSignal = operation.task.hardSignal;
+      if (operation.task.requirementsJson !== undefined) {
+        updateData.requirementsJson = operation.task.requirementsJson as Prisma.InputJsonValue;
+      }
+      if (operation.task.partsRequiredJson !== undefined) {
+        updateData.partsRequiredJson = operation.task.partsRequiredJson as Prisma.InputJsonValue;
+      }
+      if (operation.task.assigneeRole !== undefined) updateData.assigneeRole = operation.task.assigneeRole;
+      if (operation.task.sourceTaskTemplateId !== undefined) {
+        updateData.sourceTaskTemplateId = operation.task.sourceTaskTemplateId;
+      }
+      if (operation.task.sourceLineItemTemplateTaskId !== undefined) {
+        updateData.sourceLineItemTemplateTaskId = operation.task.sourceLineItemTemplateTaskId;
+      }
+      if (operation.task.sourceType !== undefined) updateData.sourceType = operation.task.sourceType;
+      if (operation.task.origin !== undefined) updateData.origin = operation.task.origin;
+      if (operation.task.planningTags !== undefined) updateData.planningTags = operation.task.planningTags;
+      if (operation.task.protected !== undefined) {
+        updateData.protectedAt = operation.task.protected ? new Date() : null;
+      }
+      if (Object.keys(updateData).length > 0) {
+        await tx.quoteExecutionTask.update({
+          where: { id: target.id },
+          data: updateData,
+        });
+        usedDirectTaskMutation = true;
+      }
+      if (operation.task.lineItemIds) {
+        const lineItemIds = [...new Set(operation.task.lineItemIds)];
+        await tx.quoteExecutionTaskScope.deleteMany({
+          where: {
+            quoteExecutionTaskId: target.id,
+            quoteLineItemId: { notIn: lineItemIds },
+          },
+        });
+        for (const lineItemId of lineItemIds) {
+          await tx.quoteExecutionTaskScope.upsert({
+            where: {
+              quoteExecutionTaskId_quoteLineItemId: {
+                quoteExecutionTaskId: target.id,
+                quoteLineItemId: lineItemId,
+              },
+            },
+            create: {
+              organizationId: params.organizationId,
+              quoteExecutionTaskId: target.id,
+              quoteLineItemId: lineItemId,
+            },
+            update: {},
+          });
+        }
+        usedDirectTaskMutation = true;
+      }
+      continue;
+    }
+    if (operation.type === "RELINK_TASK_SCOPE") {
+      const target = await tx.quoteExecutionTask.findFirst({
+        where: {
+          id: operation.taskId,
+          quoteExecutionPlanId: plan.id,
+        },
+        select: { id: true },
+      });
+      if (!target) {
+        return { ok: false, error: `Failed to apply operation ${operation.opId}: task not found.` };
+      }
+      const lineItemIds = [...new Set(operation.lineItemIds)];
+      await tx.quoteExecutionTaskScope.deleteMany({
+        where: {
+          quoteExecutionTaskId: target.id,
+          quoteLineItemId: { notIn: lineItemIds },
+        },
+      });
+      for (const lineItemId of lineItemIds) {
+        await tx.quoteExecutionTaskScope.upsert({
+          where: {
+            quoteExecutionTaskId_quoteLineItemId: {
+              quoteExecutionTaskId: target.id,
+              quoteLineItemId: lineItemId,
+            },
+          },
+          create: {
+            organizationId: params.organizationId,
+            quoteExecutionTaskId: target.id,
+            quoteLineItemId: lineItemId,
+          },
+          update: {},
+        });
+      }
+      usedDirectTaskMutation = true;
+      continue;
+    }
+    if (operation.type === "CANCEL_TASK") {
+      const removed = await tx.quoteExecutionTask.deleteMany({
+        where: {
+          id: operation.taskId,
+          quoteExecutionPlanId: plan.id,
+        },
+      });
+      if (removed.count === 0) {
+        return {
+          ok: false,
+          error: `Failed to apply operation ${operation.opId}: task no longer exists.`,
+        };
+      }
+      usedDirectTaskMutation = true;
+      continue;
+    }
+  }
+  if (usedDirectTaskMutation) {
+    await tx.quoteExecutionPlan.update({
+      where: { id: plan.id },
+      data: {
+        planVersion: { increment: 1 },
+        status: plan.status === "ACCEPTED" ? "READY_FOR_REVIEW" : plan.status,
+      },
+    });
   }
   const refreshedPlan = await tx.quoteExecutionPlan.findUnique({
     where: { id: plan.id },
@@ -398,7 +561,7 @@ export async function generateQuoteExecutionPlanProposalAction(
 export async function applyQuoteExecutionPlanProposalAction(
   quoteId: string,
   proposal: QuotePlanProposal,
-  options?: { modelProviderMeta?: unknown },
+  options?: { modelProviderMeta?: unknown; applyMode?: "append" | "replace_unprotected" },
 ): Promise<QuotePlanApplyResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
@@ -414,6 +577,7 @@ export async function applyQuoteExecutionPlanProposalAction(
       userId: ctx.userId,
       proposal: parsed.data,
       modelProviderMeta: options?.modelProviderMeta,
+      applyMode: options?.applyMode,
     }),
   );
   if (result.ok) {
@@ -485,7 +649,29 @@ export async function acceptQuoteExecutionPlanAction(
         status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
         job: { is: null },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true,
+        totalCents: true,
+        paymentSchedule: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            title: true,
+            anchorType: true,
+            amountCents: true,
+            percentage: true,
+          },
+        },
+        lineItems: {
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            description: true,
+            executionRelevant: true,
+          },
+        },
+      },
     });
     if (!quote) {
       return { ok: false as const, error: "Quote is not editable for plan acceptance." };
@@ -508,9 +694,24 @@ export async function acceptQuoteExecutionPlanAction(
       buildQuotePlanPlanningInput(context),
       QUOTE_PLAN_INPUT_SCHEMA_VERSION,
     );
+    const approvalCheckpoint = await tx.quoteCheckpoint.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        quoteId: qid,
+        kind: "APPROVAL",
+      },
+      orderBy: { sequence: "desc" },
+      select: { id: true },
+    });
     const planTasks = await tx.quoteExecutionTask.findMany({
       where: { quoteExecutionPlanId: plan.id },
       select: {
+        id: true,
+        title: true,
+        stageId: true,
+        providesSignals: true,
+        requiresSignals: true,
+        hardSignal: true,
         scopes: { select: { quoteLineItemId: true } },
       },
     });
@@ -533,6 +734,63 @@ export async function acceptQuoteExecutionPlanAction(
         ok: false as const,
         error:
           "Cannot accept plan: one or more execution-relevant lines have no task coverage.",
+      };
+    }
+    const tasksByLineId = new Map<string, Array<{
+      id: string;
+      title: string;
+      stageId: string | null;
+      providesSignals: string[];
+      requiresSignals: string[];
+      hardSignal: boolean;
+    }>>();
+    for (const line of quote.lineItems) {
+      tasksByLineId.set(line.id, []);
+    }
+    for (const task of planTasks) {
+      for (const scope of task.scopes) {
+        const scopedTasks = tasksByLineId.get(scope.quoteLineItemId);
+        if (!scopedTasks) continue;
+        scopedTasks.push({
+          id: task.id,
+          title: task.title,
+          stageId: task.stageId,
+          providesSignals: task.providesSignals,
+          requiresSignals: task.requiresSignals,
+          hardSignal: task.hardSignal,
+        });
+      }
+    }
+    const readiness = evaluateQuoteJobActivationReadiness({
+      status: quote.status,
+      hasApprovalCheckpoint: Boolean(approvalCheckpoint),
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: plan.planVersion,
+        expectedPlanVersion: options?.expectedPlanVersion ?? null,
+        acceptedPlanningInputHash: planningInputHash,
+        currentPlanningInputHash: planningInputHash,
+      },
+      lines: quote.lineItems.map((line) => ({
+        id: line.id,
+        description: line.description,
+        executionRelevant: line.executionRelevant,
+        tasks: tasksByLineId.get(line.id) ?? [],
+      })),
+      quoteTotalCents: quote.totalCents,
+      paymentSchedule: quote.paymentSchedule.map((item) => ({
+        id: item.id,
+        title: item.title,
+        anchorType: item.anchorType,
+        amountCents: item.amountCents,
+        percentage: item.percentage,
+      })),
+    });
+    if (!readiness.ready) {
+      const first = readiness.blockReasons[0];
+      return {
+        ok: false as const,
+        error: `Cannot accept plan: ${first?.message ?? "Activation-readiness checks failed."}`,
       };
     }
     const accepted = await tx.quoteExecutionPlan.update({
