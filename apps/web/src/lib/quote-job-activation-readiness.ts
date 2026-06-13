@@ -17,6 +17,7 @@ export type QuoteActivationTaskInput = {
 export type QuoteActivationLineInput = {
   id: string;
   description: string;
+  executionRelevant?: boolean;
   tasks: QuoteActivationTaskInput[];
 };
 
@@ -32,6 +33,13 @@ export type QuoteActivationReadinessInput = {
   status: QuoteStatus;
   /** Whether an APPROVAL checkpoint exists for this quote. */
   hasApprovalCheckpoint: boolean;
+  executionPlan?: {
+    status: "DRAFT" | "READY_FOR_REVIEW" | "ACCEPTED";
+    planVersion: number;
+    expectedPlanVersion?: number | null;
+    acceptedPlanningInputHash: string | null;
+    currentPlanningInputHash: string;
+  } | null;
   lines: QuoteActivationLineInput[];
   quoteTotalCents: number;
   paymentSchedule: QuoteActivationPaymentScheduleItemInput[];
@@ -45,6 +53,10 @@ export type QuoteActivationBlockReasonCode =
   | "APPROVAL_CHECKPOINT_MISSING"
   | "QUOTE_HAS_NO_LINES"
   | "NO_EXECUTION_TASKS"
+  | "PLAN_NOT_ACCEPTED"
+  | "PLAN_STALE"
+  | "PLAN_VERSION_MISMATCH"
+  | "EXECUTION_SCOPE_NOT_COVERED"
   | "TASK_MISSING_STAGE"
   | "HARD_SIGNAL_NO_PROVIDER"
   | "CIRCULAR_SIGNAL_DEPENDENCY"
@@ -101,6 +113,45 @@ export function evaluateQuoteJobActivationReadiness(
     reasons.push({
       code: "NO_EXECUTION_TASKS",
       message: "No execution tasks to activate—add at least one task before activation.",
+    });
+  }
+
+  if (input.executionPlan && input.executionPlan.status !== "ACCEPTED") {
+    reasons.push({
+      code: "PLAN_NOT_ACCEPTED",
+      message: "Execution plan must be accepted before activation.",
+    });
+  }
+  if (
+    input.executionPlan &&
+    input.executionPlan.acceptedPlanningInputHash !== input.executionPlan.currentPlanningInputHash
+  ) {
+    reasons.push({
+      code: "PLAN_STALE",
+      message: "Execution plan inputs changed. Re-review and accept the latest plan before activation.",
+    });
+  }
+  if (
+    input.executionPlan &&
+    input.executionPlan.expectedPlanVersion != null &&
+    input.executionPlan.expectedPlanVersion !== input.executionPlan.planVersion
+  ) {
+    reasons.push({
+      code: "PLAN_VERSION_MISMATCH",
+      message: "Execution plan changed. Refresh and retry activation.",
+    });
+  }
+
+  const uncoveredExecutionRelevantLines = input.lines
+    .filter((line) => line.executionRelevant !== false)
+    .filter((line) => line.tasks.length === 0)
+    .map((line) => line.description);
+  if (uncoveredExecutionRelevantLines.length > 0) {
+    reasons.push({
+      code: "EXECUTION_SCOPE_NOT_COVERED",
+      message:
+        "Every execution-relevant line requires at least one planned task before activation.",
+      details: uncoveredExecutionRelevantLines,
     });
   }
 

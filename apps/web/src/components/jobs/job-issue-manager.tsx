@@ -237,7 +237,9 @@ function IssueCard({
   const recoveryTasks = issue.recoveryFlow?.tasks || [];
   const allRecoveryTasksDone =
     recoveryTasks.length > 0 &&
-    recoveryTasks.every((t) => t.status === JobTaskStatus.DONE);
+    recoveryTasks.every(
+      (t) => t.status === JobTaskStatus.DONE || t.status === JobTaskStatus.CANCELED,
+    );
   const isOpenRecoveryFlow =
     !!issue.recoveryFlow &&
     (issue.recoveryFlow.status === JobRecoveryFlowStatus.DRAFT ||
@@ -245,7 +247,9 @@ function IssueCard({
   const recoveryIncomplete =
     isOpenRecoveryFlow &&
     (recoveryTasks.length === 0 ||
-      recoveryTasks.some((t) => t.status !== JobTaskStatus.DONE));
+      recoveryTasks.some(
+        (t) => t.status !== JobTaskStatus.DONE && t.status !== JobTaskStatus.CANCELED,
+      ));
 
   const handleResume = async () => {
     setIsResuming(true);
@@ -355,7 +359,7 @@ function IssueCard({
                   <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border border-border bg-foreground/[0.01] px-2 py-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-[10px] font-bold text-foreground-subtle">{idx + 1}</span>
-                      <span className={`truncate text-xs ${t.status === JobTaskStatus.DONE ? "text-foreground-subtle line-through" : "text-foreground font-medium"}`}>
+                      <span className={`truncate text-xs ${t.status === JobTaskStatus.DONE || t.status === JobTaskStatus.CANCELED ? "text-foreground-subtle line-through" : "text-foreground font-medium"}`}>
                         {t.title}
                       </span>
                     </div>

@@ -68,7 +68,9 @@ export function JobTaskCard({
   const primaryRecoveryIssue = issuesWithRecovery[0];
   const recoveryTasks = primaryRecoveryIssue?.recoveryFlow?.tasks || [];
   const totalRecoveryTasks = recoveryTasks.length;
-  const completedRecoveryTasks = recoveryTasks.filter((t) => t.status === "DONE").length;
+  const completedRecoveryTasks = recoveryTasks.filter(
+    (t) => t.status === "DONE" || t.status === "CANCELED",
+  ).length;
   const recoveryProgress = totalRecoveryTasks > 0 ? `${completedRecoveryTasks}/${totalRecoveryTasks} steps done` : "";
   const missingSignals = task.requiresSignals.filter(
     (s) => !includesEquivalentSignal(liveSignals, s),

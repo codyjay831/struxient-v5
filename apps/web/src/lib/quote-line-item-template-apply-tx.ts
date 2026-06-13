@@ -6,6 +6,11 @@ import type { ExtendedTransactionClient } from "@/lib/db";
 
 export type QuoteRollupTx = Pick<ExtendedTransactionClient, "quoteLineItem" | "quote">;
 
+export type QuotePlanTx = Pick<
+  ExtendedTransactionClient,
+  "quoteExecutionPlan" | "quoteExecutionTask" | "quoteExecutionTaskScope"
+>;
+
 export async function recalculateQuoteRollupsInTx(
   tx: QuoteRollupTx,
   params: { quoteId: string; organizationId: string },
@@ -26,6 +31,25 @@ export async function recalculateQuoteRollupsInTx(
       subtotalCents: subtotal,
       totalCents: subtotal,
     },
+  });
+}
+
+export async function ensureQuoteExecutionPlanInTx(
+  tx: QuotePlanTx,
+  params: { quoteId: string; organizationId: string },
+) {
+  const { quoteId, organizationId } = params;
+  return tx.quoteExecutionPlan.upsert({
+    where: { quoteId },
+    create: {
+      quoteId,
+      organizationId,
+      status: "DRAFT",
+      planVersion: 1,
+      planningInputSchemaVersion: 1,
+    },
+    update: {},
+    select: { id: true, planVersion: true, status: true },
   });
 }
 
@@ -91,35 +115,8 @@ export async function performApplyLineItemTemplateToQuoteTx(
     },
   });
 
-  const templateTasks = await tx.lineItemTemplateTask.findMany({
-    where: { lineItemTemplateId: template.id },
-    include: { stage: { select: { sortOrder: true } } },
-  });
-  const sortedTemplateTasks = [...templateTasks].sort((a, b) => {
-    const sa = a.stage?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-    const sb = b.stage?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-    if (sa !== sb) return sa - sb;
-    return a.sortOrder - b.sortOrder;
-  });
-  for (const tt of sortedTemplateTasks) {
-    await tx.quoteLineExecutionTask.create({
-      data: {
-        quoteLineItemId: createdLine.id,
-        sourceLineItemTemplateTaskId: tt.id,
-        sourceTaskTemplateId: tt.sourceTaskTemplateId,
-        sourceType: tt.sourceType,
-        title: tt.title,
-        stageId: tt.stageId,
-        category: tt.category,
-        instructions: tt.instructions,
-        sortOrder: tt.sortOrder,
-        requirementsJson: tt.requirementsJson ?? {},
-        providesSignals: tt.providesSignals ?? [],
-        requiresSignals: tt.requiresSignals ?? [],
-        hardSignal: tt.hardSignal ?? false,
-      },
-    });
-  }
+  // Whole-quote planning owns execution task creation now; applying a line template
+  // only creates commercial scope rows.
 
   await recalculateQuoteRollupsInTx(tx, { quoteId, organizationId });
   return { ok: true };

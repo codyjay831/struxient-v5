@@ -268,6 +268,51 @@ export type AIQuoteExecutionReviewContext = {
   }[];
 };
 
+export type AIQuoteExecutionPlanContext = {
+  quoteId: string;
+  quoteTitle: string;
+  organizationId: string;
+  organizationName?: string;
+  lines: Array<{
+    id: string;
+    description: string;
+    executionRelevant: boolean;
+    clarifications: Array<{
+      questionSetKey: string;
+      questionSetVersion: number;
+      answersJson: unknown;
+    }>;
+  }>;
+  existingStages: { id: string; name: string }[];
+  userInstructions?: string;
+};
+
+const AIQuoteExecutionPlanTaskSchema = z.object({
+  title: z.string().min(1),
+  category: z.nativeEnum(TaskTemplateCategory),
+  stageId: z.string().nullable(),
+  instructions: z.string().nullable().optional(),
+  providesSignals: z.array(z.string()).default([]),
+  requiresSignals: z.array(z.string()).default([]),
+  hardSignal: z.boolean().default(false),
+  sourceTaskTemplateId: z.string().nullable().optional(),
+  lineItemIds: z.array(z.string().min(1)).min(1),
+});
+
+const AIQuoteExecutionPlanProposalSchema = z.object({
+  summary: z.string().default(""),
+  assumptions: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+  missingContext: z.array(z.string()).default([]),
+  tasks: z.array(AIQuoteExecutionPlanTaskSchema).default([]),
+});
+
+export type AIQuoteExecutionPlanProposal = z.infer<typeof AIQuoteExecutionPlanProposalSchema>;
+export type AIQuoteExecutionPlanGenerationResult = {
+  proposal: AIQuoteExecutionPlanProposal;
+  generation: AILibraryProposalGenerationResult["generation"];
+};
+
 export type AIQuoteExecutionReviewProposalGenerationResult = {
   proposal: QuoteExecutionReviewProposal;
   generation: AILibraryProposalGenerationResult["generation"];
@@ -2129,6 +2174,131 @@ OUTPUT JSON ONLY:
       existingStages,
       existingSignals,
       userInstructions,
+    });
+  }
+
+  static async generateQuoteExecutionPlan(
+    context: AIQuoteExecutionPlanContext,
+  ): Promise<AIQuoteExecutionPlanGenerationResult> {
+    const gemini = this.getGeminiClient();
+    if (!gemini) {
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateQuoteExecutionPlan(context, "GEMINI_API_KEY is missing."),
+          generation: buildSimulatedGenerationMeta(),
+        };
+      }
+      throw new AiProviderTemporarilyUnavailableError();
+    }
+    const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+    const model = gemini.getGenerativeModel({
+      model: modelName,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+    const stageList = context.existingStages.map((stage) => `- ${stage.name} (${stage.id})`).join("\n");
+    const lineList = context.lines
+      .map((line) => {
+        const clarifications =
+          line.clarifications.length > 0
+            ? JSON.stringify(line.clarifications)
+            : "[]";
+        return `- ${line.id}: ${line.description} (executionRelevant=${line.executionRelevant}) clarifications=${clarifications}`;
+      })
+      .join("\n");
+    const prompt = `
+You are Struxient's whole-quote execution planner.
+Return ONLY valid JSON:
+{
+  "summary": "string",
+  "assumptions": ["string"],
+  "warnings": ["string"],
+  "missingContext": ["string"],
+  "tasks": [
+    {
+      "title": "string",
+      "category": "GENERAL|PERMIT|INSPECTION|MATERIAL|PAYMENT|CUSTOMER_COMMUNICATION|PHOTO_EVIDENCE|SCHEDULING",
+      "stageId": "string|null",
+      "instructions": "string|null",
+      "providesSignals": ["string"],
+      "requiresSignals": ["string"],
+      "hardSignal": false,
+      "sourceTaskTemplateId": "string|null",
+      "lineItemIds": ["line-id-1","line-id-2"]
+    }
+  ]
+}
+
+Rules:
+- Build one coordinated plan for the full quote.
+- Shared tasks may reference multiple lineItemIds.
+- Every execution-relevant line must appear in at least one task lineItemIds list.
+- Use only stage IDs from the allowed stage list (or null if truly unknown).
+- Do not include corrections-stage tasks.
+- Keep to <= 24 tasks.
+
+Quote:
+- quoteId: ${context.quoteId}
+- quoteTitle: ${context.quoteTitle}
+- organization: ${context.organizationName ?? "Unknown"}
+
+Allowed stages:
+${stageList || "- none"}
+
+Lines:
+${lineList || "- none"}
+
+Optional planning instructions:
+${context.userInstructions?.trim() || "- none"}
+`;
+    try {
+      const result = await this.retryWithBackoff(() =>
+        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
+      );
+      const response = await result.response;
+      const parsed = this.parseGeminiJsonResponse(response.text());
+      const proposal = AIQuoteExecutionPlanProposalSchema.parse(parsed);
+      return { proposal, generation: buildValidGenerationMeta() };
+    } catch (e) {
+      if (isAiProviderTemporarilyUnavailable(e)) {
+        throw new AiProviderTemporarilyUnavailableError();
+      }
+      if (isAiSimulatedExecutionPlansEnabled()) {
+        return {
+          proposal: this.simulateQuoteExecutionPlan(
+            context,
+            e instanceof Error ? e.message : "Provider parsing failure",
+          ),
+          generation: buildSimulatedGenerationMeta(),
+        };
+      }
+      throw new AiExecutionPlanInvalidError();
+    }
+  }
+
+  private static simulateQuoteExecutionPlan(
+    context: AIQuoteExecutionPlanContext,
+    reason: string,
+  ): AIQuoteExecutionPlanProposal {
+    const fallbackStageId = context.existingStages[0]?.id ?? null;
+    const tasks = context.lines
+      .filter((line) => line.executionRelevant)
+      .map((line) => ({
+        title: `Plan ${line.description}`,
+        category: TaskTemplateCategory.GENERAL,
+        stageId: fallbackStageId,
+        instructions: null,
+        providesSignals: [],
+        requiresSignals: [],
+        hardSignal: false,
+        sourceTaskTemplateId: null,
+        lineItemIds: [line.id],
+      }));
+    return AIQuoteExecutionPlanProposalSchema.parse({
+      summary: "Simulated whole-quote draft proposal.",
+      assumptions: [`simulated: ${reason}`],
+      warnings: ["Demo AI output — not from the live provider."],
+      missingContext: [],
+      tasks,
     });
   }
 

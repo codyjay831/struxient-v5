@@ -18,8 +18,9 @@
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
 | Task readiness (blocked / ready / needs proof) | **Derived** | `apps/web/src/lib/task-readiness.ts` — `toTaskReadinessInput()`, `deriveTaskState()` | UI shows ready while server rejects completion, or vice versa |
-| Task completion | **Stored** | `JobTask.status`, `completedAt`, `completedByUserId`, `completionNote`, `completionRequirementsJson` | DONE without proof fields or activity |
+| Task completion / cancellation | **Stored** | `JobTask.status`, `completedAt`, `completedByUserId`, `completionNote`, `completionRequirementsJson`, cancellation audit fields | Terminal transitions without audit lineage |
 | Stage readiness | **Derived** (helper exists; limited UI use) | `deriveStageState()` in `task-readiness.ts` | Wrong stage-level attention |
+| Stage execution state (`OPEN` / `COMPLETED` / `SKIPPED`) | **Derived** | `job-payment-readiness.ts` payment progression helpers | Deadlocked progression or false stage-anchor payment triggering |
 | Live signals | **Stored facts** | `JobSignal` via `apps/web/src/lib/signal-bus.ts` | Stale or local-only signal lists |
 | Task completion gate (server) | **Derived check at write** | `completeJobTaskAction` in `job-task-actions.ts` | Bypass of issue/signal/proof rules |
 
@@ -85,7 +86,8 @@
 | Lead intake projection (AI-ready DTO) | **Derived** | `buildLeadIntakeProjection()` in `lead-intake-projection.ts` | Duplicating readiness/progress in prompt strings |
 | Lead→Quote handoff | **Stored writes via canonical promotion** | `promoteLeadToQuote()` in `promote-to-quote.ts` | `createQuoteDraft` bypass for lead-origin flows |
 | Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
-| Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` | One-off checks in activation action |
+| Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` (accepted plan + hash/version + coverage + blockers) | One-off checks in activation action |
+| Quote plan staleness (`isStale`) | **Derived** | `currentPlanningInputHash !== QuoteExecutionPlan.planningInputHash` | Stored stale status drift |
 | Quote totals | **Stored** | `Quote.totalCents`, line items | Different totals in UI vs PDF vs checkpoint |
 | Approved commercial baseline | **Stored proof** | `QuoteCheckpoint` — see [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md) | “Version browser” UX or silent sold-truth mutation |
 
@@ -118,6 +120,7 @@
 | Tag usage counts | **Derived** | Prisma `_count` on relations — **not** `Tag.usageCount*` fields | Writing deprecated cached columns |
 | AI library proposal | **Ephemeral until apply** | `ai-service.ts` + `applyLineItemTemplateAIProposalAction` + review panel | Silent AI → DB writes |
 | AI recovery proposal | **Ephemeral until apply** | `recovery-flow-builder.tsx` + `recovery-actions.ts` | Auto-created recovery tasks without review |
+| Whole-quote execution proposal | **Ephemeral until apply** | Whole-quote planner generate/apply boundary with generated-against hash | Applying stale proposals over newer planning inputs |
 
 ## UI theme
 

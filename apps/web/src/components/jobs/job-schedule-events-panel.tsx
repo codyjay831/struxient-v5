@@ -18,7 +18,7 @@ import {
   rescheduleJobScheduleEventFromScheduleAction,
 } from "@/app/(workspace)/schedule/schedule-actions";
 
-type ScheduleTask = { id: string; title: string; status: "TODO" | "DONE" };
+type ScheduleTask = { id: string; title: string; status: "TODO" | "DONE" | "CANCELED" };
 
 type ScheduleEventRow = {
   id: string;

@@ -103,9 +103,22 @@ function uniqueSignalsByEquivalence(signals: string[]): string[] {
 export function buildQuoteExecutionReviewPreviewModel(
   quote: QuoteExecutionReviewQuoteInput,
 ): QuoteExecutionReviewPreviewModel {
-  const allTasks = quote.lines.flatMap((l) => 
-    l.tasks.map(t => ({ ...t, lineDescription: l.description, lineId: l.id }))
-  );
+  const allTasksById = new Map<
+    string,
+    QuoteExecutionReviewTaskInput & { lineDescription: string; lineId: string }
+  >();
+  for (const line of quote.lines) {
+    for (const task of line.tasks) {
+      if (!allTasksById.has(task.id)) {
+        allTasksById.set(task.id, {
+          ...task,
+          lineDescription: line.description,
+          lineId: line.id,
+        });
+      }
+    }
+  }
+  const allTasks = Array.from(allTasksById.values());
 
   const providedSignalsMap = new Map<string, typeof allTasks[number][]>();
   for (const t of allTasks) {

@@ -1,11 +1,8 @@
 export type ActivationTaskOrderInput = {
   id: string;
   stageId: string | null;
-  /** QuoteLineExecutionTask.sortOrder (scoped per line item). */
+  /** QuoteExecutionTask.sortOrder (plan-wide canonical ordering). */
   sortOrder: number;
-  lineId: string;
-  /** QuoteLineItem.sortOrder */
-  lineSortOrder: number;
 };
 
 export type ActivationTaskWithJobSortOrder<T extends ActivationTaskOrderInput> = T & {
@@ -15,7 +12,7 @@ export type ActivationTaskWithJobSortOrder<T extends ActivationTaskOrderInput> =
 /**
  * Deterministic per-JobStage sort order for materialized JobTask rows at activation.
  *
- * Tuple: line sort -> line id -> draft task sort -> draft task id.
+ * Tuple: plan sort -> task id.
  * Output sortOrder is unique within each stageId bucket (0..n-1).
  */
 export function assignJobTaskSortOrdersAtActivation<T extends ActivationTaskOrderInput>(
@@ -25,8 +22,6 @@ export function assignJobTaskSortOrdersAtActivation<T extends ActivationTaskOrde
     const stageA = a.stageId ?? "";
     const stageB = b.stageId ?? "";
     if (stageA !== stageB) return stageA.localeCompare(stageB);
-    if (a.lineSortOrder !== b.lineSortOrder) return a.lineSortOrder - b.lineSortOrder;
-    if (a.lineId !== b.lineId) return a.lineId.localeCompare(b.lineId);
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
     return a.id.localeCompare(b.id);
   });
@@ -43,7 +38,6 @@ export function assignJobTaskSortOrdersAtActivation<T extends ActivationTaskOrde
 
 export type ActivationLineItemForTaskOrder = {
   id: string;
-  sortOrder: number;
   draftExecutionTasks: Array<{
     id: string;
     stageId: string | null;
@@ -60,8 +54,6 @@ export function buildJobTaskSortOrderMap(
       id: task.id,
       stageId: task.stageId,
       sortOrder: task.sortOrder,
-      lineId: line.id,
-      lineSortOrder: line.sortOrder,
     })),
   );
 
@@ -71,4 +63,40 @@ export function buildJobTaskSortOrderMap(
       task.jobTaskSortOrder,
     ]),
   );
+}
+
+export type ActivationQuotePlanTaskOrderInput = {
+  id: string;
+  stageId: string | null;
+  sortOrder: number;
+  sourceQuoteLineExecutionTaskId: string | null;
+};
+
+/** Map QuoteLineExecutionTask.id -> JobTask.sortOrder using quote-plan-wide ordering. */
+export function buildJobTaskSortOrderMapFromQuotePlanTasks(
+  planTasks: ActivationQuotePlanTaskOrderInput[],
+): Map<string, number> {
+  const sourceByPlanTaskId = new Map<string, string>();
+  for (const task of planTasks) {
+    if (task.sourceQuoteLineExecutionTaskId) {
+      sourceByPlanTaskId.set(task.id, task.sourceQuoteLineExecutionTaskId);
+    }
+  }
+  const ordered = assignJobTaskSortOrdersAtActivation(
+    planTasks
+      .filter((task) => task.sourceQuoteLineExecutionTaskId != null)
+      .map((task) => ({
+        id: task.id,
+        stageId: task.stageId,
+        sortOrder: task.sortOrder,
+      })),
+  );
+  const taskOrderBySourceId = new Map<string, number>();
+  for (const task of ordered) {
+    const sourceId = sourceByPlanTaskId.get(task.id);
+    if (sourceId) {
+      taskOrderBySourceId.set(sourceId, task.jobTaskSortOrder);
+    }
+  }
+  return taskOrderBySourceId;
 }

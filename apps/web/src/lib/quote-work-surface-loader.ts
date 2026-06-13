@@ -150,6 +150,31 @@ export async function loadQuoteWorkSurface(
           },
         },
       },
+      executionPlan: {
+        select: {
+          id: true,
+          tasks: {
+            orderBy: [{ sortOrder: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              stageId: true,
+              category: true,
+              instructions: true,
+              sortOrder: true,
+              sourceType: true,
+              sourceTaskTemplateId: true,
+              sourceLineItemTemplateTaskId: true,
+              providesSignals: true,
+              requiresSignals: true,
+              hardSignal: true,
+              requirementsJson: true,
+              partsRequiredJson: true,
+              scopes: { select: { quoteLineItemId: true } },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -306,7 +331,7 @@ export async function loadQuoteWorkSurface(
       db.stage.findMany({
         where: { organizationId: orgId, archivedAt: null },
         orderBy: { sortOrder: "asc" },
-        select: { id: true, name: true },
+        select: { id: true, name: true, sortOrder: true },
       }),
       db.organization.findUnique({
         where: { id: orgId },
@@ -323,6 +348,7 @@ export async function loadQuoteWorkSurface(
   const latestSend = sendCheckpointRows[sendCheckpointRows.length - 1] ?? null;
   const latestApproval =
     approvalCheckpointRows[approvalCheckpointRows.length - 1] ?? null;
+  const stageById = new Map(stages.map((stage) => [stage.id, stage] as const));
 
   const activationReadiness = evaluateQuoteJobActivationReadiness({
     status: row.status,
@@ -413,8 +439,36 @@ export async function loadQuoteWorkSurface(
   };
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
+  const planTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
   for (const line of row.lineItems) {
-    draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
+    planTasksByLineId[line.id] = [];
+  }
+  for (const task of row.executionPlan?.tasks ?? []) {
+    const payload: QuoteLineDraftExecutionTaskRow = {
+      id: task.id,
+      title: task.title,
+      stageId: task.stageId,
+      category: task.category,
+      instructions: task.instructions,
+      sortOrder: task.sortOrder,
+      sourceType: task.sourceType,
+      sourceTaskTemplateId: task.sourceTaskTemplateId,
+      sourceLineItemTemplateTaskId: task.sourceLineItemTemplateTaskId,
+      providesSignals: task.providesSignals,
+      requiresSignals: task.requiresSignals,
+      hardSignal: task.hardSignal,
+      requirementsJson: task.requirementsJson,
+      partsRequiredJson: task.partsRequiredJson,
+    };
+    for (const scope of task.scopes) {
+      if (!planTasksByLineId[scope.quoteLineItemId]) {
+        planTasksByLineId[scope.quoteLineItemId] = [];
+      }
+      planTasksByLineId[scope.quoteLineItemId].push(payload);
+    }
+  }
+  for (const line of row.lineItems) {
+    const fallbackTasks = line.draftExecutionTasks.map((t) => ({
       id: t.id,
       title: t.title,
       stageId: t.stageId,
@@ -430,10 +484,19 @@ export async function loadQuoteWorkSurface(
       requirementsJson: t.requirementsJson,
       partsRequiredJson: t.partsRequiredJson,
     }));
+    draftTasksByLineId[line.id] = planTasksByLineId[line.id]?.length
+      ? planTasksByLineId[line.id]
+      : fallbackTasks;
   }
 
   const lineItems: QuoteLineItemPayload[] = row.lineItems.map((line) => {
-    const exec = buildDefaultExecutionSummaryLine(line.draftExecutionTasks);
+    const lineTasksForSummary = draftTasksByLineId[line.id] ?? [];
+    const exec = buildDefaultExecutionSummaryLine(
+      lineTasksForSummary.map((task) => ({
+        category: task.category,
+        stage: task.stageId ? (stageById.get(task.stageId) ?? null) : null,
+      })),
+    );
     const clarifications = line.clarifications
       .map((clarification) => {
         const parsed = LineClarificationAnswersSchema.safeParse(clarification.answersJson);

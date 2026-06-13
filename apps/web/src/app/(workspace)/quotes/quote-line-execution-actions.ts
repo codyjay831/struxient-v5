@@ -34,6 +34,11 @@ import {
   selectBusinessProfileAiContext,
 } from "@/lib/business-profile/business-profile-ai-context";
 import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
+import {
+  createQuoteExecutionTaskInTx,
+  patchQuoteExecutionTaskSignalsBySourceTaskIdInTx,
+  syncQuoteExecutionTaskFromSourceTaskInTx,
+} from "@/lib/quote-plan-mutations";
 import type {
   ExecutionContextAssessment,
   ExecutionPlanningContextManifest,
@@ -234,6 +239,12 @@ async function assertDraftQuoteLine(
 
 const QUOTE_LINE_EXECUTION_LOCKED_ERROR =
   "This quote line is not editable. The quote may be archived, a job may already be activated, or it is outside your organization.";
+const QUOTE_LINE_AI_RETIRED_ERROR =
+  "Per-line AI execution planning is retired. Use whole-quote execution planning from Execution Review.";
+
+function isPerLineAiPlanningRetired(): boolean {
+  return true;
+}
 
 function parseRevalidateScope(
   value: FormDataEntryValue | null,
@@ -288,7 +299,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
 
     const sortOrder = await nextSortOrderInStage(tx, lid, reusable.stageId);
 
-    await tx.quoteLineExecutionTask.create({
+    const created = await tx.quoteLineExecutionTask.create({
       data: {
         quoteLineItemId: lid,
         sourceLineItemTemplateTaskId: null,
@@ -304,6 +315,29 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
         requirementsJson: reusable.requirementsJson || {},
         partsRequiredJson: reusable.partsRequiredJson || {},
         sortOrder,
+      },
+      select: { id: true },
+    });
+
+    await createQuoteExecutionTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      input: {
+        title: reusable.title,
+        stageId: reusable.stageId,
+        category: reusable.category,
+        instructions: reusable.instructions ?? null,
+        providesSignals: reusable.providesSignals,
+        requiresSignals: reusable.requiresSignals,
+        hardSignal: reusable.hardSignal,
+        requirementsJson: (reusable.requirementsJson || {}) as Prisma.InputJsonValue,
+        partsRequiredJson: (reusable.partsRequiredJson || {}) as Prisma.InputJsonValue,
+        sourceType: "TASK_TEMPLATE",
+        sourceTaskTemplateId: reusable.id,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: created.id,
+        origin: "TEMPLATE_COPY",
+        relatedLineItemIds: [lid],
       },
     });
 
@@ -357,7 +391,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
 
     const sortOrder = await nextSortOrderInStage(tx, lid, parsed.data.stageId);
 
-    await tx.quoteLineExecutionTask.create({
+    const created = await tx.quoteLineExecutionTask.create({
       data: {
         quoteLineItemId: lid,
         sourceLineItemTemplateTaskId: null,
@@ -373,6 +407,29 @@ export async function addQuoteLineExecutionTaskCustomAction(
         requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         sortOrder,
+      },
+      select: { id: true },
+    });
+
+    await createQuoteExecutionTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      input: {
+        title: parsed.data.title,
+        stageId: parsed.data.stageId,
+        category: parsed.data.category,
+        instructions: parsed.data.instructions,
+        providesSignals: parsed.data.providesSignals,
+        requiresSignals: parsed.data.requiresSignals,
+        hardSignal: parsed.data.hardSignal,
+        requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        sourceType: "CUSTOM",
+        sourceTaskTemplateId: null,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: created.id,
+        origin: "MANUAL",
+        relatedLineItemIds: [lid],
       },
     });
 
@@ -463,10 +520,41 @@ export async function updateQuoteLineExecutionTaskAction(
           sortOrder,
         },
       });
+      await syncQuoteExecutionTaskFromSourceTaskInTx(tx, {
+        quoteId: qid,
+        organizationId: ctx.organizationId,
+        sourceQuoteLineExecutionTaskId: kid,
+        data: {
+          title: parsed.data.title,
+          category: parsed.data.category,
+          stageId: newStageId,
+          instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        },
+      });
       await renumberSortOrdersInStage(tx, lid, oldStageId);
     } else {
       await tx.quoteLineExecutionTask.update({
         where: { id: kid },
+        data: {
+          title: parsed.data.title,
+          category: parsed.data.category,
+          instructions: parsed.data.instructions,
+          providesSignals: parsed.data.providesSignals,
+          requiresSignals: parsed.data.requiresSignals,
+          hardSignal: parsed.data.hardSignal,
+          requirementsJson: (parsed.data.requirementsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          partsRequiredJson: (parsed.data.partsRequiredJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        },
+      });
+      await syncQuoteExecutionTaskFromSourceTaskInTx(tx, {
+        quoteId: qid,
+        organizationId: ctx.organizationId,
+        sourceQuoteLineExecutionTaskId: kid,
         data: {
           title: parsed.data.title,
           category: parsed.data.category,
@@ -569,6 +657,33 @@ export async function moveQuoteLineExecutionTaskAction(
       data: { sortOrder: b.sortOrder },
     });
 
+    const linkedPlanTasks = await tx.quoteExecutionTask.findMany({
+      where: {
+        quoteExecutionPlan: {
+          quoteId: qid,
+          organizationId: ctx.organizationId,
+        },
+        sourceQuoteLineExecutionTaskId: { in: [a.id, b.id] },
+      },
+      select: { id: true, sourceQuoteLineExecutionTaskId: true, sortOrder: true },
+    });
+    const planTaskA = linkedPlanTasks.find((task) => task.sourceQuoteLineExecutionTaskId === a.id);
+    const planTaskB = linkedPlanTasks.find((task) => task.sourceQuoteLineExecutionTaskId === b.id);
+    if (planTaskA && planTaskB) {
+      await tx.quoteExecutionTask.update({
+        where: { id: planTaskA.id },
+        data: { sortOrder: temp },
+      });
+      await tx.quoteExecutionTask.update({
+        where: { id: planTaskB.id },
+        data: { sortOrder: planTaskA.sortOrder },
+      });
+      await tx.quoteExecutionTask.update({
+        where: { id: planTaskA.id },
+        data: { sortOrder: planTaskB.sortOrder },
+      });
+    }
+
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
   });
@@ -629,6 +744,15 @@ export async function deleteQuoteLineExecutionTaskAction(
 
     const stageId = existing.stageId;
     await tx.quoteLineExecutionTask.delete({ where: { id: kid } });
+    await tx.quoteExecutionTask.deleteMany({
+      where: {
+        sourceQuoteLineExecutionTaskId: kid,
+        quoteExecutionPlan: {
+          quoteId: qid,
+          organizationId: ctx.organizationId,
+        },
+      },
+    });
     await renumberSortOrdersInStage(tx, lid, stageId);
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return { ok: true as const };
@@ -644,13 +768,15 @@ export async function deleteQuoteLineExecutionTaskAction(
 
 async function createQuoteLineExecutionTasksFromProposal(
   tx: ExtendedTransactionClient,
+  quoteId: string,
+  organizationId: string,
   quoteLineItemId: string,
   proposal: AILibraryProposal,
 ) {
   for (const gTask of proposal.tasks) {
     const sortOrder = await nextSortOrderInStage(tx, quoteLineItemId, gTask.stageId ?? null);
 
-    await tx.quoteLineExecutionTask.create({
+    const created = await tx.quoteLineExecutionTask.create({
       data: {
         quoteLineItemId,
         sourceType: gTask.sourceTaskTemplateId
@@ -660,7 +786,7 @@ async function createQuoteLineExecutionTasksFromProposal(
         title: gTask.title,
         category: gTask.category,
         instructions: gTask.instructions,
-        stageId: gTask.stageId,
+        stageId: gTask.stageId ?? null,
         providesSignals: gTask.providesSignals,
         requiresSignals: gTask.requiresSignals,
         hardSignal: gTask.hardSignal,
@@ -673,6 +799,34 @@ async function createQuoteLineExecutionTasksFromProposal(
           })),
         } as Prisma.InputJsonValue,
         sortOrder,
+      },
+      select: { id: true },
+    });
+
+    await createQuoteExecutionTaskInTx(tx, {
+      quoteId,
+      organizationId,
+      input: {
+        title: gTask.title,
+        stageId: gTask.stageId ?? null,
+        category: gTask.category,
+        instructions: gTask.instructions ?? null,
+        providesSignals: gTask.providesSignals,
+        requiresSignals: gTask.requiresSignals,
+        hardSignal: gTask.hardSignal,
+        requirementsJson: buildTaskCompletionRequirementsFromAiTask(gTask) as Prisma.InputJsonValue,
+        partsRequiredJson: {
+          resources: gTask.resources.map((r) => ({
+            id: crypto.randomUUID(),
+            ...r,
+          })),
+        } as Prisma.InputJsonValue,
+        sourceType: gTask.sourceTaskTemplateId ? "TASK_TEMPLATE" : "CUSTOM",
+        sourceTaskTemplateId: gTask.sourceTaskTemplateId ?? null,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: created.id,
+        origin: "AI_PLAN",
+        relatedLineItemIds: [quoteLineItemId],
       },
     });
   }
@@ -689,6 +843,9 @@ export async function generateQuoteLineExecutionAIProposalAction(
   contextManifest?: ExecutionPlanningContextManifest;
   contextPreview?: string;
 }> {
+  if (isPerLineAiPlanningRetired()) {
+    return { error: QUOTE_LINE_AI_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
@@ -824,6 +981,9 @@ export async function assessQuoteLineExecutionContextAction(
   contextManifest?: ExecutionPlanningContextManifest;
   contextPreview?: string;
 }> {
+  if (isPerLineAiPlanningRetired()) {
+    return { error: QUOTE_LINE_AI_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
@@ -945,6 +1105,9 @@ export async function applyQuoteLineExecutionAIProposalAction(
   generation?: AILibraryProposalGenerationMeta,
   options?: QuoteLineExecutionAiApplyOptions,
 ): Promise<{ error?: string; success?: boolean; warnings?: string[] }> {
+  if (isPerLineAiPlanningRetired()) {
+    return { error: QUOTE_LINE_AI_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   const lid = lineItemId.trim();
   if (!qid || !lid) {
@@ -997,10 +1160,25 @@ export async function applyQuoteLineExecutionAIProposalAction(
               id: { in: replacePlan.deleteTaskIds },
             },
           });
+          await tx.quoteExecutionTask.deleteMany({
+            where: {
+              sourceQuoteLineExecutionTaskId: { in: replacePlan.deleteTaskIds },
+              quoteExecutionPlan: {
+                quoteId: qid,
+                organizationId: ctx.organizationId,
+              },
+            },
+          });
         }
       }
 
-      await createQuoteLineExecutionTasksFromProposal(tx, lid, parsedProposal);
+      await createQuoteLineExecutionTasksFromProposal(
+        tx,
+        qid,
+        ctx.organizationId,
+        lid,
+        parsedProposal,
+      );
       await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     });
 
@@ -1174,7 +1352,7 @@ export async function addQuoteLineDependencyProviderTaskAction(params: {
     const title = buildProviderTaskTitle(signal, consumerTask.title);
     const sortOrder = await nextSortOrderInStage(tx, consumerTask.quoteLineItemId, stageId);
 
-    await tx.quoteLineExecutionTask.create({
+    const created = await tx.quoteLineExecutionTask.create({
       data: {
         quoteLineItemId: consumerTask.quoteLineItemId,
         sourceLineItemTemplateTaskId: null,
@@ -1190,6 +1368,29 @@ export async function addQuoteLineDependencyProviderTaskAction(params: {
         requirementsJson: {},
         partsRequiredJson: {},
         sortOrder,
+      },
+      select: { id: true },
+    });
+
+    await createQuoteExecutionTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      input: {
+        title,
+        stageId,
+        category,
+        instructions: null,
+        providesSignals: [signal],
+        requiresSignals: [],
+        hardSignal: false,
+        requirementsJson: {} as Prisma.InputJsonValue,
+        partsRequiredJson: {} as Prisma.InputJsonValue,
+        sourceType: "CUSTOM",
+        sourceTaskTemplateId: null,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: created.id,
+        origin: "MANUAL",
+        relatedLineItemIds: [consumerTask.quoteLineItemId],
       },
     });
 
@@ -1239,6 +1440,12 @@ export async function connectQuoteLineDependencyGapToTaskAction(params: {
         providesSignals: addSignalByEquivalence(providerTask.providesSignals, signal),
       },
     });
+    await patchQuoteExecutionTaskSignalsBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceQuoteLineExecutionTaskId: providerTask.id,
+      providesSignals: addSignalByEquivalence(providerTask.providesSignals, signal),
+    });
 
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
     return true;
@@ -1277,6 +1484,12 @@ export async function removeQuoteLineDependencyRequirementAction(params: {
       data: {
         requiresSignals: removeSignalByEquivalence(consumerTask.requiresSignals, signal),
       },
+    });
+    await patchQuoteExecutionTaskSignalsBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceQuoteLineExecutionTaskId: consumerTask.id,
+      requiresSignals: removeSignalByEquivalence(consumerTask.requiresSignals, signal),
     });
 
     await touchQuoteUpdatedAt(tx, qid, ctx.organizationId);
@@ -1318,6 +1531,12 @@ export async function relaxQuoteLineDependencyHardSignalAction(params: {
 
     await tx.quoteLineExecutionTask.update({
       where: { id: consumerTask.id },
+      data: { hardSignal: false },
+    });
+    await syncQuoteExecutionTaskFromSourceTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceQuoteLineExecutionTaskId: consumerTask.id,
       data: { hardSignal: false },
     });
 

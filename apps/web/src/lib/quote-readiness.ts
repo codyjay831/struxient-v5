@@ -174,7 +174,7 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
         ? { kind: "ACTIVATE_JOB", label: "Create job" }
         : { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
       secondaryAction: input.revisionDriftSinceLastProof
-        ? { kind: "RESTORE_TO_DRAFT", label: "Restore to draft" }
+        ? { kind: "RESTORE_TO_DRAFT", label: "Revise by clone" }
         : isReady
           ? { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" }
           : null,
@@ -198,7 +198,7 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
         : "The proposal has been sent to the customer. Waiting on their commercial acceptance.",
       primaryAction: { kind: "MARK_APPROVED", label: "Mark approved" },
       secondaryAction: input.revisionDriftSinceLastProof
-        ? { kind: "RESTORE_TO_DRAFT", label: "Restore to draft" }
+        ? { kind: "RESTORE_TO_DRAFT", label: "Revise by clone" }
         : { kind: "OPEN_PROPOSAL_PREVIEW", label: "Open live proposal preview" },
       stepIndex: STATE_STEP_INDEX.SENT_AWAITING_CUSTOMER,
       totalSteps: TOTAL_STEPS,

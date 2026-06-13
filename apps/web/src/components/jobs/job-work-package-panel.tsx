@@ -14,7 +14,7 @@ type WorkPackageTask = {
   title: string;
   stageTitle: string;
   workPackageId: string | null;
-  status: "TODO" | "DONE";
+  status: "TODO" | "DONE" | "CANCELED";
 };
 
 type WorkPackageRow = {
@@ -23,7 +23,7 @@ type WorkPackageRow = {
   workType: string | null;
   plannedStartDate: Date | null;
   plannedEndDate: Date | null;
-  tasks: Array<{ id: string; status: "TODO" | "DONE" }>;
+  tasks: Array<{ id: string; status: "TODO" | "DONE" | "CANCELED" }>;
 };
 
 export function JobWorkPackagePanel({

@@ -14,6 +14,7 @@ const line = (
   overrides: Partial<{
     id: string;
     description: string;
+    executionRelevant: boolean;
     tasks: {
       id: string;
       title: string;
@@ -26,6 +27,7 @@ const line = (
 ) => ({
   id: "line-1",
   description: "Rough-in",
+  executionRelevant: true,
   tasks: [
     {
       id: "task-1",
@@ -300,4 +302,60 @@ test("activation readiness parity: approved without checkpoint blocks same gate 
     readiness.blockReasons.some((r) => r.code === "APPROVAL_CHECKPOINT_MISSING"),
     "UI readiness must block before server-only checkpoint gate would reject",
   );
+});
+
+test("evaluateQuoteJobActivationReadiness blocks when execution plan is not accepted", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [line()],
+      executionPlan: {
+        status: "READY_FOR_REVIEW",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+  assert.equal(readiness.ready, false);
+  assert.ok(readiness.blockReasons.some((r) => r.code === "PLAN_NOT_ACCEPTED"));
+});
+
+test("evaluateQuoteJobActivationReadiness blocks stale accepted plan hash", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [line()],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-b",
+      },
+    }),
+  );
+  assert.equal(readiness.ready, false);
+  assert.ok(readiness.blockReasons.some((r) => r.code === "PLAN_STALE"));
+});
+
+test("evaluateQuoteJobActivationReadiness blocks uncovered execution-relevant lines", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [
+        line({ id: "line-covered", description: "Covered scope" }),
+        line({
+          id: "line-uncovered",
+          description: "Uncovered scope",
+          executionRelevant: true,
+          tasks: [],
+        }),
+      ],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+  assert.equal(readiness.ready, false);
+  assert.ok(readiness.blockReasons.some((r) => r.code === "EXECUTION_SCOPE_NOT_COVERED"));
 });

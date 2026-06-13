@@ -19,9 +19,13 @@ import {
 } from "@/lib/quote-job-activation-readiness";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { publishSignal } from "@/lib/signal-bus";
-import { buildJobTaskSortOrderMap } from "@/lib/quote-job-activation-task-order";
+import {
+  assignJobTaskSortOrdersAtActivation,
+} from "@/lib/quote-job-activation-task-order";
 import { materializePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
 import { normalizeSignalKey, toNormalizedSignalSet } from "@/lib/signal-key";
+import { QUOTE_PLAN_INPUT_SCHEMA_VERSION, buildQuotePlanPlanningInput, loadQuotePlanContext } from "@/lib/quote-plan/quote-plan-context";
+import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
 
 export type QuoteJobActivationFormState = {
   error?: string;
@@ -33,6 +37,7 @@ type PerformActivateQuoteJobResult =
 
 async function performActivateQuoteJob(
   rawQuoteId: string,
+  formData?: FormData,
 ): Promise<PerformActivateQuoteJobResult> {
   const id = rawQuoteId.trim();
   if (!id) return { ok: false, error: "Missing quote record id." };
@@ -74,6 +79,9 @@ async function performActivateQuoteJob(
               id: true,
               description: true,
               sortOrder: true,
+              quantity: true,
+              unitAmountCents: true,
+              executionRelevant: true,
               draftExecutionTasks: {
                 orderBy: [{ sortOrder: "asc" }],
                 select: {
@@ -89,6 +97,40 @@ async function performActivateQuoteJob(
                   sortOrder: true,
                   sourceTaskTemplateId: true,
                   sourceType: true,
+                },
+              },
+            },
+          },
+          executionPlan: {
+            select: {
+              id: true,
+              status: true,
+              planVersion: true,
+              planningInputHash: true,
+              planningInputSchemaVersion: true,
+              tasks: {
+                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+                select: {
+                  id: true,
+                  title: true,
+                  category: true,
+                  instructions: true,
+                  stageId: true,
+                  sourceTaskTemplateId: true,
+                  sourceType: true,
+                  sourceQuoteLineExecutionTaskId: true,
+                  sourceLineItemTemplateTaskId: true,
+                  origin: true,
+                  planningTags: true,
+                  requirementsJson: true,
+                  partsRequiredJson: true,
+                  providesSignals: true,
+                  requiresSignals: true,
+                  hardSignal: true,
+                  sortOrder: true,
+                  scopes: {
+                    select: { quoteLineItemId: true },
+                  },
                 },
               },
             },
@@ -131,22 +173,61 @@ async function performActivateQuoteJob(
         );
       }
 
-      const readinessLines: QuoteActivationLineInput[] = quote.lineItems.map((l) => ({
-        id: l.id,
-        description: l.description,
-        tasks: l.draftExecutionTasks.map(t => ({
-          id: t.id,
-          title: t.title,
-          stageId: t.stageId,
-          providesSignals: t.providesSignals,
-          requiresSignals: t.requiresSignals,
-          hardSignal: t.hardSignal,
-        })),
+      if (!quote.executionPlan) {
+        throw new ActivationError(
+          "NOT_READY",
+          "Execution plan is missing. Build and accept a whole-quote plan before activation.",
+        );
+      }
+      const planContext = await loadQuotePlanContext(quote.id, ctx.organizationId, tx);
+      if (!planContext) {
+        throw new ActivationError("NOT_READY", "Could not load plan context for activation checks.");
+      }
+      const currentPlanningInputHash = computeQuotePlanningInputHash(
+        buildQuotePlanPlanningInput(planContext),
+        quote.executionPlan.planningInputSchemaVersion ?? QUOTE_PLAN_INPUT_SCHEMA_VERSION,
+      );
+      const expectedPlanVersionRaw = formData?.get("expectedPlanVersion");
+      const expectedPlanVersion =
+        typeof expectedPlanVersionRaw === "string" && expectedPlanVersionRaw.trim()
+          ? Number.parseInt(expectedPlanVersionRaw.trim(), 10)
+          : null;
+
+      const tasksByLineId = new Map<string, QuoteActivationLineInput["tasks"]>();
+      for (const line of quote.lineItems) {
+        tasksByLineId.set(line.id, []);
+      }
+      for (const task of quote.executionPlan.tasks) {
+        for (const scope of task.scopes) {
+          const lineTasks = tasksByLineId.get(scope.quoteLineItemId);
+          if (!lineTasks) continue;
+          lineTasks.push({
+            id: task.id,
+            title: task.title,
+            stageId: task.stageId,
+            providesSignals: task.providesSignals,
+            requiresSignals: task.requiresSignals,
+            hardSignal: task.hardSignal,
+          });
+        }
+      }
+      const readinessLines: QuoteActivationLineInput[] = quote.lineItems.map((line) => ({
+        id: line.id,
+        description: line.description,
+        executionRelevant: line.executionRelevant,
+        tasks: tasksByLineId.get(line.id) ?? [],
       }));
 
       const readiness = evaluateQuoteJobActivationReadiness({
         status: quote.status,
         hasApprovalCheckpoint: Boolean(approvalCheckpoint),
+        executionPlan: {
+          status: quote.executionPlan.status,
+          planVersion: quote.executionPlan.planVersion,
+          expectedPlanVersion: Number.isFinite(expectedPlanVersion) ? expectedPlanVersion : null,
+          acceptedPlanningInputHash: quote.executionPlan.planningInputHash,
+          currentPlanningInputHash,
+        },
         lines: readinessLines,
         quoteTotalCents: quote.totalCents,
         paymentSchedule: quote.paymentSchedule.map((item) => ({
@@ -182,12 +263,10 @@ async function performActivateQuoteJob(
         select: { id: true },
       });
 
-      // 1. Collect all unique stage IDs used in the quote
+      // 1. Collect all unique stage IDs used in accepted quote plan tasks
       const usedStageIds = new Set<string>();
-      for (const line of quote.lineItems) {
-        for (const task of line.draftExecutionTasks) {
-          if (task.stageId) usedStageIds.add(task.stageId);
-        }
+      for (const task of quote.executionPlan.tasks) {
+        if (task.stageId) usedStageIds.add(task.stageId);
       }
 
       // 2. Materialize JobStages from the Stage table
@@ -211,12 +290,38 @@ async function performActivateQuoteJob(
         stageIdToJobStageId[stage.id] = jobStage.id;
       }
 
-      // 3. Materialize JobTasks
-      const jobTaskSortOrderByExecutionTaskId = buildJobTaskSortOrderMap(quote.lineItems);
+      // 2b. Materialize active job scope rows from execution-relevant quote lines.
+      const jobScopeItemByLineId = new Map<string, string>();
+      for (const line of quote.lineItems) {
+        if (!line.executionRelevant) continue;
+        const scopeItem = await tx.jobScopeItem.create({
+          data: {
+            organizationId: ctx.organizationId,
+            jobId: job.id,
+            sourceQuoteLineItemId: line.id,
+            description: line.description,
+            quantity: line.quantity,
+            unitPriceCents: line.unitAmountCents,
+            executionRelevant: line.executionRelevant,
+            status: "ACTIVE",
+          },
+          select: { id: true },
+        });
+        jobScopeItemByLineId.set(line.id, scopeItem.id);
+      }
 
-      const allTasksToActivate = quote.lineItems.flatMap(l => 
-        l.draftExecutionTasks.map(t => ({ ...t, lineId: l.id }))
+      // 3. Materialize JobTasks from quote plan tasks, preserving deterministic ordering.
+      const orderedPlanTasks = assignJobTaskSortOrdersAtActivation(
+        quote.executionPlan.tasks.map((task) => ({
+          id: task.id,
+          stageId: task.stageId,
+          sortOrder: task.sortOrder,
+        })),
       );
+      const jobTaskSortOrderByPlanTaskId = new Map<string, number>(
+        orderedPlanTasks.map((task) => [task.id, task.jobTaskSortOrder]),
+      );
+      const allTasksToActivate = quote.executionPlan.tasks;
 
       let activatedTaskCount = 0;
 
@@ -229,7 +334,7 @@ async function performActivateQuoteJob(
           );
         }
 
-        const jobTaskSortOrder = jobTaskSortOrderByExecutionTaskId.get(task.id);
+        const jobTaskSortOrder = jobTaskSortOrderByPlanTaskId.get(task.id);
         if (jobTaskSortOrder === undefined) {
           throw new ActivationError(
             "NOT_READY",
@@ -237,26 +342,45 @@ async function performActivateQuoteJob(
           );
         }
 
-        await tx.jobTask.create({
+        const createdJobTask = await tx.jobTask.create({
           data: {
             jobId: job.id,
             jobStageId: jobStageId,
-            sourceQuoteLineItemId: task.lineId,
-            sourceQuoteLineExecutionTaskId: task.id,
+            sourceQuoteLineItemId: task.scopes[0]?.quoteLineItemId ?? null,
+            sourceQuoteLineExecutionTaskId: task.sourceQuoteLineExecutionTaskId,
+            sourceQuoteExecutionTaskId: task.id,
             sourceTaskTemplateId: task.sourceTaskTemplateId,
             sourceType: task.sourceType,
+            origin: task.origin,
+            planningTags: task.planningTags,
             title: task.title,
             category: task.category,
             stageId: task.stageId,
             instructions: task.instructions,
-            completionRequirementsJson: task.requirementsJson || {},
+            completionRequirementsJson: (task.requirementsJson ?? {}) as Prisma.InputJsonValue,
+            partsRequiredJson:
+              task.partsRequiredJson == null
+                ? Prisma.JsonNull
+                : (task.partsRequiredJson as Prisma.InputJsonValue),
             providesSignals: task.providesSignals,
             requiresSignals: task.requiresSignals,
             hardSignal: task.hardSignal,
             status: JobTaskStatus.TODO,
             sortOrder: jobTaskSortOrder,
           },
+          select: { id: true },
         });
+        for (const scope of task.scopes) {
+          const jobScopeItemId = jobScopeItemByLineId.get(scope.quoteLineItemId);
+          if (!jobScopeItemId) continue;
+          await tx.jobTaskScope.create({
+            data: {
+              organizationId: ctx.organizationId,
+              jobTaskId: createdJobTask.id,
+              jobScopeItemId,
+            },
+          });
+        }
         activatedTaskCount += 1;
       }
 
@@ -393,8 +517,7 @@ export async function activateQuoteJobAction(
   _prev: QuoteJobActivationFormState,
   formData: FormData,
 ): Promise<QuoteJobActivationFormState> {
-  void formData;
-  const result = await performActivateQuoteJob(quoteId);
+  const result = await performActivateQuoteJob(quoteId, formData);
   if (!result.ok) {
     return { error: result.error };
   }

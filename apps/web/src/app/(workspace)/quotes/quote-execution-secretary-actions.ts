@@ -28,6 +28,10 @@ import { normalizeSignalKey } from "@/lib/signal-key";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
+import {
+  createQuoteExecutionTaskInTx,
+  patchQuoteExecutionTaskSignalsBySourceTaskIdInTx,
+} from "@/lib/quote-plan-mutations";
 
 export type QuoteExecutionSecretaryReviewResult =
   | {
@@ -58,6 +62,12 @@ export type QuoteExecutionReviewMode = "signals" | "tasks";
 
 const LOCKED_ERROR =
   "This quote is not editable. It may be archived, a job may already exist, or it is outside your organization.";
+const QUOTE_SECRETARY_PATCH_RETIRED_ERROR =
+  "AI Secretary patch flow is retired. Use whole-quote planning review and apply instead.";
+
+function isQuoteSecretaryPatchFlowRetired(): boolean {
+  return true;
+}
 
 async function loadQuoteLinesForSecretary(quoteId: string, organizationId: string) {
   return db.quote.findFirst({
@@ -223,6 +233,9 @@ export async function applyQuoteCrossLineWiringSuggestionAction(
   quoteId: string,
   suggestionKey: string,
 ): Promise<QuoteExecutionSecretaryApplyResult> {
+  if (isQuoteSecretaryPatchFlowRetired()) {
+    return { ok: false, error: QUOTE_SECRETARY_PATCH_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   const key = suggestionKey.trim();
   if (!qid || !key) {
@@ -292,12 +305,24 @@ export async function applyQuoteCrossLineWiringSuggestionAction(
         requiresSignals: mergeSignalsForCrossLineApply(consumer.requiresSignals, [signal]),
       },
     });
+    await patchQuoteExecutionTaskSignalsBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceQuoteLineExecutionTaskId: consumer.id,
+      requiresSignals: mergeSignalsForCrossLineApply(consumer.requiresSignals, [signal]),
+    });
 
     await tx.quoteLineExecutionTask.update({
       where: { id: provider.id },
       data: {
         providesSignals: mergeSignalsForCrossLineApply(provider.providesSignals, [signal]),
       },
+    });
+    await patchQuoteExecutionTaskSignalsBySourceTaskIdInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      sourceQuoteLineExecutionTaskId: provider.id,
+      providesSignals: mergeSignalsForCrossLineApply(provider.providesSignals, [signal]),
     });
 
     await tx.$executeRaw`
@@ -322,6 +347,9 @@ export async function generateQuoteExecutionReviewAIProposalAction(
   quoteId: string,
   options?: { mode?: QuoteExecutionReviewMode },
 ): Promise<QuoteExecutionReviewAIResult> {
+  if (isQuoteSecretaryPatchFlowRetired()) {
+    return { ok: false, error: QUOTE_SECRETARY_PATCH_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   if (!qid) {
     return { ok: false, error: "Missing quote id." };
@@ -425,6 +453,9 @@ export async function applyQuoteExecutionReviewAIProposalAction(
   selectedOperationIds: string[],
   generation?: AILibraryProposalGenerationMeta,
 ): Promise<QuoteExecutionReviewApplyResult> {
+  if (isQuoteSecretaryPatchFlowRetired()) {
+    return { ok: false, error: QUOTE_SECRETARY_PATCH_RETIRED_ERROR };
+  }
   const qid = quoteId.trim();
   if (!qid) {
     return { ok: false, error: "Missing quote id." };
@@ -521,7 +552,7 @@ export async function applyQuoteExecutionReviewAIProposalAction(
         });
         const nextSortOrder = (agg._max.sortOrder ?? -1) + 1;
 
-        await tx.quoteLineExecutionTask.create({
+        const created = await tx.quoteLineExecutionTask.create({
           data: {
             quoteLineItemId: operation.lineItemId,
             title: operation.task.title,
@@ -537,6 +568,28 @@ export async function applyQuoteExecutionReviewAIProposalAction(
             hardSignal: operation.task.hardSignal,
             requirementsJson: buildRequirementsJson(operation),
             partsRequiredJson: buildResourcesJson(operation),
+          },
+          select: { id: true },
+        });
+        await createQuoteExecutionTaskInTx(tx, {
+          quoteId: qid,
+          organizationId: ctx.organizationId,
+          input: {
+            title: operation.task.title,
+            category: operation.task.category,
+            stageId: operation.task.stageId,
+            instructions: operation.task.instructions ?? null,
+            providesSignals: operation.task.providesSignals,
+            requiresSignals: operation.task.requiresSignals,
+            hardSignal: operation.task.hardSignal,
+            requirementsJson: buildRequirementsJson(operation),
+            partsRequiredJson: buildResourcesJson(operation),
+            sourceType: "CUSTOM",
+            sourceTaskTemplateId: null,
+            sourceLineItemTemplateTaskId: null,
+            sourceQuoteLineExecutionTaskId: created.id,
+            origin: "AI_PLAN",
+            relatedLineItemIds: [operation.lineItemId],
           },
         });
         continue;
@@ -572,6 +625,21 @@ export async function applyQuoteExecutionReviewAIProposalAction(
             operation.removeRequires,
           ),
         },
+      });
+      await patchQuoteExecutionTaskSignalsBySourceTaskIdInTx(tx, {
+        quoteId: qid,
+        organizationId: ctx.organizationId,
+        sourceQuoteLineExecutionTaskId: task.id,
+        providesSignals: mergeSignals(
+          task.providesSignals,
+          operation.addProvides,
+          operation.removeProvides,
+        ),
+        requiresSignals: mergeSignals(
+          task.requiresSignals,
+          operation.addRequires,
+          operation.removeRequires,
+        ),
       });
     }
 

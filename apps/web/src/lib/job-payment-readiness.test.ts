@@ -28,8 +28,8 @@ function baseCtx(overrides: Partial<PaymentDueContext> = {}): PaymentDueContext 
   return {
     jobIsActive: true,
     stages: [
-      { id: "stage-1", sortOrder: 0, allTasksDone: false },
-      { id: "stage-2", sortOrder: 10, allTasksDone: false },
+      { id: "stage-1", sortOrder: 0, executionState: "OPEN" },
+      { id: "stage-2", sortOrder: 10, executionState: "OPEN" },
     ],
     orgStageIdToJobStageId: {},
     allRequirements: [],
@@ -93,8 +93,8 @@ test("isPaymentEffectivelyDue: UPON_APPROVAL due when job active", () => {
 test("isPaymentEffectivelyDue: BEFORE_STAGE not due until stage reached", () => {
   const notReachedCtx = baseCtx({
     stages: [
-      { id: "stage-1", sortOrder: 0, allTasksDone: false },
-      { id: "stage-2", sortOrder: 10, allTasksDone: false },
+      { id: "stage-1", sortOrder: 0, executionState: "OPEN" },
+      { id: "stage-2", sortOrder: 10, executionState: "OPEN" },
     ],
   });
 
@@ -115,8 +115,8 @@ test("isPaymentEffectivelyDue: BEFORE_STAGE not due until stage reached", () => 
 
   const reachedCtx = baseCtx({
     stages: [
-      { id: "stage-1", sortOrder: 0, allTasksDone: true },
-      { id: "stage-2", sortOrder: 10, allTasksDone: false },
+      { id: "stage-1", sortOrder: 0, executionState: "COMPLETED" },
+      { id: "stage-2", sortOrder: 10, executionState: "OPEN" },
     ],
   });
   // Earliest incomplete is stage-2 (sortOrder 10), target is stage-2 → reached
@@ -148,7 +148,7 @@ test("isPaymentEffectivelyDue: FINAL_BALANCE conservative — hidden when milest
   const ctx = baseCtx({
     allRequirements: [deposit, finalBal],
     stages: [
-      { id: "stage-1", sortOrder: 0, allTasksDone: true },
+      { id: "stage-1", sortOrder: 0, executionState: "COMPLETED" },
     ],
   });
 
@@ -180,7 +180,7 @@ test("isPaymentEffectivelyDue: FINAL_BALANCE due only when milestones settled an
   const ctx = baseCtx({
     allRequirements: [deposit, finalBal],
     stages: [
-      { id: "stage-1", sortOrder: 0, allTasksDone: true },
+      { id: "stage-1", sortOrder: 0, executionState: "COMPLETED" },
     ],
   });
 
@@ -189,7 +189,7 @@ test("isPaymentEffectivelyDue: FINAL_BALANCE due only when milestones settled an
 
 test("isPaymentEffectivelyDue: FINAL_BALANCE with missing anchor join not auto-due", () => {
   const ctx = baseCtx({
-    stages: [{ id: "stage-1", sortOrder: 0, allTasksDone: true }],
+    stages: [{ id: "stage-1", sortOrder: 0, executionState: "COMPLETED" }],
   });
   assert.equal(
     isPaymentEffectivelyDue(
@@ -226,4 +226,25 @@ test("getUnsettledEffectivelyDueRequirements filters correctly", () => {
   const due = getUnsettledEffectivelyDueRequirements([deposit], ctx);
   assert.equal(due.length, 1);
   assert.equal(due[0].id, "dep");
+});
+
+test("buildPaymentDueContextFromJob derives SKIPPED when all applicable tasks are canceled", () => {
+  const ctx = buildPaymentDueContextFromJob({
+    status: "ACTIVE",
+    stages: [
+      {
+        id: "stage-1",
+        sortOrder: 0,
+        stageId: "org-stage-1",
+        title: "Installation",
+        tasks: [
+          { status: JobTaskStatus.CANCELED },
+          { status: JobTaskStatus.CANCELED },
+        ],
+      },
+    ],
+    paymentRequirements: [],
+  });
+
+  assert.equal(ctx.stages[0]?.executionState, "SKIPPED");
 });

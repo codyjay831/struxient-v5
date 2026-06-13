@@ -109,6 +109,7 @@ import { QuoteSendPanel } from "@/components/quotes/quote-send-panel";
 import {
   QuoteArchivedRestorePanel,
   QuoteDraftArchivePanel,
+  QuoteIssuedRevisePanel,
 } from "@/components/quotes/quote-archive-controls";
 import {
   QuoteLineDraftExecutionSummary,
@@ -2121,6 +2122,7 @@ function RecordTab({
   workspaceTabs: QuoteWorkspaceTabData;
 }) {
   const { isCommercialEditable, isArchived, internalNotes } = workspaceTabs;
+  const isIssued = quote.status === "SENT" || quote.status === "APPROVED";
 
   return (
     <div className="space-y-4">
@@ -2131,6 +2133,8 @@ function RecordTab({
             <ArchivedQuoteReadOnlyNotice />
             <QuoteArchivedRestorePanel id="archive-restore" quoteId={quote.id} />
           </>
+        ) : isIssued ? (
+          <QuoteIssuedRevisePanel id="archive-restore" quoteId={quote.id} />
         ) : (
           <QuoteDraftArchivePanel id="archive-restore" quoteId={quote.id} />
         )}
@@ -2138,18 +2142,24 @@ function RecordTab({
       <div className="hidden @lg:block">
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className={`${sectionLabelClass} mb-1`}>
-            {isArchived ? "Restore to draft" : "Archive quote"}
+            {isArchived ? "Restore to draft" : isIssued ? "Revise by clone" : "Archive quote"}
           </p>
           <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
             {isArchived
               ? "Returns this quote to Draft so commercial editing is possible again. Open the full quote page to apply."
-              : "Sets status to Archived; commercial fields and line items lock until restored. Open the full quote page to apply."}
+              : isIssued
+                ? "Issued quotes are immutable. Create a new DRAFT revision clone for pre-activation changes."
+                : "Sets status to Archived; commercial fields and line items lock until restored. Open the full quote page to apply."}
           </p>
           <Link
             href={`${quote.quoteHref}#archive-restore`}
             className={listLinkClass}
           >
-            {isArchived ? "Restore on full quote page" : "Archive on full quote page"}
+            {isArchived
+              ? "Restore on full quote page"
+              : isIssued
+                ? "Revise by clone on full quote page"
+                : "Archive on full quote page"}
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>

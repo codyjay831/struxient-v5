@@ -62,8 +62,8 @@ export function attachScheduleAnchorsToRequirements<
 export type PaymentDueStageInfo = {
   id: string;
   sortOrder: number;
-  /** True when all non-recovery tasks in this stage are DONE. */
-  allTasksDone: boolean;
+  /** Derived stage execution state for progression and payment anchors. */
+  executionState: "OPEN" | "COMPLETED" | "SKIPPED";
   /** True for corrections/recovery-only stages (excluded from FINAL_BALANCE main-path check). */
   isRecoveryStage?: boolean;
 };
@@ -99,12 +99,13 @@ function getMainPathStages(ctx: PaymentDueContext): PaymentDueStageInfo[] {
 function hasReachedStage(ctx: PaymentDueContext, targetJobStageId: string): boolean {
   const target = ctx.stages.find((s) => s.id === targetJobStageId);
   if (!target) return false;
+  if (target.executionState === "SKIPPED") return false;
 
   const mainStages = getMainPathStages(ctx);
-  const earliestIncomplete = mainStages.find((s) => !s.allTasksDone);
-  if (!earliestIncomplete) return true;
+  const earliestOpen = mainStages.find((s) => s.executionState === "OPEN");
+  if (!earliestOpen) return true;
 
-  return earliestIncomplete.sortOrder >= target.sortOrder;
+  return earliestOpen.sortOrder >= target.sortOrder;
 }
 
 function isAfterStageAnchorMet(
@@ -115,7 +116,7 @@ function isAfterStageAnchorMet(
   const jobStageId = ctx.orgStageIdToJobStageId[anchorStageId];
   if (!jobStageId) return false;
   const stage = ctx.stages.find((s) => s.id === jobStageId);
-  return stage?.allTasksDone ?? false;
+  return stage?.executionState === "COMPLETED";
 }
 
 function areOtherRequirementsSettled(
@@ -130,7 +131,7 @@ function areOtherRequirementsSettled(
 function isMainPathComplete(ctx: PaymentDueContext): boolean {
   const main = getMainPathStages(ctx);
   if (main.length === 0) return false;
-  return main.every((s) => s.allTasksDone);
+  return main.every((s) => s.executionState === "COMPLETED");
 }
 
 /**
@@ -241,9 +242,20 @@ export function buildPaymentDueContextFromJob(job: BuildPaymentDueContextJobInpu
   const stages: PaymentDueStageInfo[] = job.stages.map((stage) => {
     const nonRecoveryTasks = stage.tasks.filter((t) => !t.recoveryFlowId);
     const tasksForCompletion = nonRecoveryTasks.length > 0 ? nonRecoveryTasks : stage.tasks;
-    const allTasksDone =
-      tasksForCompletion.length > 0 &&
-      tasksForCompletion.every((t) => t.status === JobTaskStatus.DONE);
+    const hasExecutionTasks = tasksForCompletion.length > 0;
+    const nonCanceledTasks = tasksForCompletion.filter((t) => t.status !== JobTaskStatus.CANCELED);
+    const hasNonCanceledTasks = nonCanceledTasks.length > 0;
+    const allNonCanceledDone =
+      hasNonCanceledTasks &&
+      nonCanceledTasks.every((t) => t.status === JobTaskStatus.DONE);
+    const allApplicableCanceled =
+      hasExecutionTasks &&
+      tasksForCompletion.every((t) => t.status === JobTaskStatus.CANCELED);
+    const executionState: PaymentDueStageInfo["executionState"] = allNonCanceledDone
+      ? "COMPLETED"
+      : allApplicableCanceled
+        ? "SKIPPED"
+        : "OPEN";
     const isRecoveryStage =
       stage.title === CORRECTIONS_STAGE_NAME ||
       (stage.tasks.length > 0 && stage.tasks.every((t) => !!t.recoveryFlowId));
@@ -251,7 +263,7 @@ export function buildPaymentDueContextFromJob(job: BuildPaymentDueContextJobInpu
     return {
       id: stage.id,
       sortOrder: stage.sortOrder,
-      allTasksDone,
+      executionState,
       isRecoveryStage,
     };
   });

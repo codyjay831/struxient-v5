@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { QuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import { QuoteCrossLineWiringReviewTrigger } from "@/components/quotes/quote-cross-line-wiring-review";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
+import { acceptQuoteExecutionPlanAction } from "@/app/(workspace)/quotes/quote-plan-actions";
 
 const primaryButtonClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-4 py-2 text-xs font-medium text-accent-contrast opacity-50 cursor-not-allowed";
@@ -24,8 +27,27 @@ function getBlockReasonAction(
     case "PAYMENT_MILESTONE_INVALID_PERCENTAGE":
     case "PAYMENT_SCHEDULE_EXCEEDS_QUOTE_TOTAL":
       return { href: `/quotes/${quoteId}`, label: "Review payment schedule" };
+    case "PLAN_NOT_ACCEPTED":
+    case "PLAN_STALE":
+      return { href: `/quotes/${quoteId}/execution-review`, label: "Review and accept current plan" };
     default:
       return null;
+  }
+}
+
+function getBlockReasonSeverity(
+  code: QuoteJobActivationReadiness["blockReasons"][number]["code"],
+): "BLOCKING" | "WARNING" | "INFO" {
+  switch (code) {
+    case "QUOTE_NOT_APPROVED":
+      return "INFO";
+    case "APPROVAL_CHECKPOINT_MISSING":
+    case "PLAN_NOT_ACCEPTED":
+    case "PLAN_STALE":
+    case "PLAN_VERSION_MISMATCH":
+      return "WARNING";
+    default:
+      return "BLOCKING";
   }
 }
 
@@ -42,6 +64,13 @@ export function QuoteBlockedActivationPanel({
   showCrossLineReview: boolean;
   hardOrphanCount: number;
 }) {
+  const [isAcceptingPlan, startAcceptPlan] = useTransition();
+  const [acceptPlanError, setAcceptPlanError] = useState<string | null>(null);
+  const router = useRouter();
+  const canAcceptPlan = readiness.blockReasons.some(
+    (reason) => reason.code === "PLAN_NOT_ACCEPTED" || reason.code === "PLAN_STALE",
+  );
+
   return (
     <WorkspacePanel className="border-l-[3px] border-l-accent/70 bg-accent/[0.04]">
       <SectionHeading
@@ -70,9 +99,23 @@ export function QuoteBlockedActivationPanel({
       <ul className="space-y-3">
         {readiness.blockReasons.map((reason) => {
           const action = getBlockReasonAction(quoteId, reason.code);
+          const severity = getBlockReasonSeverity(reason.code);
+          const severityClass =
+            severity === "BLOCKING"
+              ? "text-danger border-danger/40 bg-danger/[0.08]"
+              : severity === "WARNING"
+                ? "text-warning border-warning/40 bg-warning/[0.08]"
+                : "text-foreground-muted border-border bg-background/70";
           return (
             <li key={reason.code} className="rounded-md border border-border bg-background/40 px-3 py-2">
-              <p className="text-sm font-medium text-foreground">{reason.message}</p>
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${severityClass}`}
+                >
+                  {severity}
+                </span>
+                <p className="text-sm font-medium text-foreground">{reason.message}</p>
+              </div>
               {action ? (
                 <Link href={action.href} className="mt-2 inline-flex text-xs font-medium text-primary hover:underline">
                   {action.label}
@@ -89,6 +132,38 @@ export function QuoteBlockedActivationPanel({
           );
         })}
       </ul>
+      {canAcceptPlan ? (
+        <div className="mt-4 rounded-md border border-border bg-background/50 p-3">
+          <p className="text-xs text-foreground-muted">
+            Plan status changed or inputs drifted. Re-accepting stamps the current planning input hash.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isAcceptingPlan}
+              className="inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                setAcceptPlanError(null);
+                startAcceptPlan(async () => {
+                  const result = await acceptQuoteExecutionPlanAction(quoteId);
+                  if (!result.ok) {
+                    setAcceptPlanError(result.error);
+                    return;
+                  }
+                  router.refresh();
+                });
+              }}
+            >
+              {isAcceptingPlan ? "Accepting plan..." : "Accept current plan"}
+            </button>
+            {acceptPlanError ? (
+              <span className="text-xs text-danger" role="alert">
+                {acceptPlanError}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {showCrossLineReview ? (
         <div className="mt-4 border-t border-border pt-4">

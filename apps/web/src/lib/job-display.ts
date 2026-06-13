@@ -9,6 +9,7 @@ const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 const JOB_TASK_STATUS_LABELS: Record<JobTaskStatus, string> = {
   TODO: "To do",
   DONE: "Done",
+  CANCELED: "Canceled",
 };
 
 export function formatJobStatus(status: JobStatus): string {
@@ -33,6 +34,8 @@ export function jobTaskStatusBadgeTone(status: JobTaskStatus): StatusBadgeTone {
   switch (status) {
     case "DONE":
       return "approved";
+    case "CANCELED":
+      return "warning";
     case "TODO":
     default:
       return "draft";

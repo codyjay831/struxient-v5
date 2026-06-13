@@ -5,7 +5,7 @@
 
 ## Canonical phrases
 
-- **Quote** is the **working record** (what the team authors and revises under normal rules).
+- **Quote** is the working record while `DRAFT`; once `SENT` or `APPROVED`, it is an immutable issued version.
 - **Checkpoint** is the **hidden proof record** created only when the product must preserve **what was true at a commitment moment** (send, approval/signature, activation, approved customer-facing change, void/supersede when needed). **Quote checkpoints** primarily prove **commercial** commitments and controlled customer-facing projections; **execution plan confirmation** at activation (or immediately before) may use **additional** checkpoint or proof rows later—still **hidden receipts**, not a user-managed version browser.
 - **Job** is the **execution record** materialized after customer approval **and** internal **Execution Review** confirmation (when that gate exists), from **approved commercial baseline** plus **confirmed execution planning**—where day-to-day operational truth lives after activation.
 - **Activity** (events, job activity, holds, corrections, approved change records) is the **explanation layer** after activation: **sold baseline** is not silently rewritten; **what changed and why** stays legible.
@@ -32,6 +32,13 @@ Do **not** design the primary experience around:
 
 Change orders, re-sign thresholds, and **no silent mutation of sold customer-visible or monetary truth** remain as in [locked-decisions-v1.md](./locked-decisions-v1.md) §7 and [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) **I20**. This document refines **where that immutability lives** (checkpoint + execution + activity) and **what not to expose** in the shell.
 
+## Revision cloning (pre-activation commercial changes)
+
+- A `SENT` or `APPROVED` quote is never reverted in place.
+- Pre-activation commercial changes create a new `DRAFT` quote revision linked to the issued quote.
+- The issued quote remains immutable proof; the new draft is sent/approved independently.
+- Quote revisions do not carry accepted execution-plan state by default; planning is re-reviewed.
+
 ## Customer-facing projection (foundation)
 
 The **internal “proposal preview”** and **customer-facing quote projection** (e.g. `customerDocumentTitle`, per-line customer scope fields, template defaults, controlled server projection) are **disclosure and authoring aids** on the **working quote**. They are **not** a substitute for **checkpoints** at commitment time unless the product explicitly defines an exception.
@@ -46,11 +53,12 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 ---
 
 *Canon update (2026-05-06): Added v5 current-state-first model; checkpoints as hidden proof; jobs as execution; activity as explanation; UX and naming guardrails.*  
-*Canon update (2026-05-06): Commercial checkpoints vs future execution/activation proof; Execution Review before job materialization.*
+*Canon update (2026-05-06): Commercial checkpoints vs future execution/activation proof; Execution Review before job materialization.*  
+*Canon update (2026-06-13): Locked immutable issued quote behavior after send/approval and revise-by-clone pre-activation.*
 
 ## v5 app slice: quote lifecycle statuses (Draft → Sent → Approved → Archived)
 
-- **`QuoteStatus`:** `DRAFT` (commercial editing), `SENT` (commercial locked; staff records send + internal proof), `APPROVED` (commercial acceptance recorded; internal execution planning may still change until activation), `ARCHIVED` (read-only; restore returns to Draft for commercial edits).
+- **`QuoteStatus`:** `DRAFT` (commercial editing), `SENT` (commercial locked immutable issued version), `APPROVED` (commercial acceptance immutable issued version), `ARCHIVED` (read-only historical).
 - **`QuoteCheckpointKind.SEND`:** hidden staff proof of **commercial proposal projection** at send; does not include internal execution planning.
 - **`QuoteCheckpointKind.APPROVAL`:** hidden staff proof of **commercial acceptance** (same projection shape as send in v1; no e-sign provider yet—staff-recorded acceptance).
 - **Execution Review** remains an **internal** pre-activation step; **Job** runtime is still separate materialization.
@@ -61,6 +69,6 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 - **Activation** copies the approved quote's draft execution into runtime rows (`JobStage`, `JobTask`, `JobSignal`) inside one transaction; later quote / template edits **do not** mutate tasks already on the job.
 - **Signal Bus** is materialized at activation. Any required signals without a provider are auto-satisfied (soft dependencies) unless marked as **Hard Signals**.
 - **JobStage** rows are materialized from the org-scoped **Stage** table.
-- **Activation readiness rules (V1):** quote must be `APPROVED`, must have at least one line, no `UNREVIEWED` lines without tasks, no `NO_EXECUTION_NEEDED` lines that still carry tasks, and at least one executable task across the quote. "All commercial-only / zero tasks" currently **blocks** activation (no shell job in this slice). Hard signal orphans without a provider also block activation.
+- **Activation readiness rules (whole-quote plan path):** quote must be `APPROVED`; execution plan must be `ACCEPTED`; accepted planning-input hash must match current deterministic hash; expected plan version must match; execution-relevant scope must have valid coverage; dependency blockers and blocking issues must be resolved.
 - **No execution-confirmation checkpoint** at activation in V1—`Job.activatedAt` is the proof. A future `ACTIVATION` checkpoint may be added if customer-facing acceptance proof of activation is needed.
 - **Customer-facing checkpoints unchanged**: SEND / APPROVAL projections stay commercial-only; no internal execution leakage at activation.

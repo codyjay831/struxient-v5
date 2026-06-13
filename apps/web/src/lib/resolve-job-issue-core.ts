@@ -24,7 +24,9 @@ export function recoveryFlowHasIncompleteTasks(
   flow: NonNullable<IssueWithRecovery["recoveryFlow"]>,
 ): boolean {
   if (flow.tasks.length === 0) return true;
-  return flow.tasks.some((t) => t.status !== JobTaskStatus.DONE);
+  return flow.tasks.some(
+    (t) => t.status !== JobTaskStatus.DONE && t.status !== JobTaskStatus.CANCELED,
+  );
 }
 
 export function assertCanResolveIssue(

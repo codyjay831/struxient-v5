@@ -346,7 +346,9 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       flow.status === JobRecoveryFlowStatus.ACTIVE;
     if (!flowOpen) return false;
     if (flow.tasks.length === 0) return false;
-    return flow.tasks.every((t) => t.status === JobTaskStatus.DONE);
+    return flow.tasks.every(
+      (t) => t.status === JobTaskStatus.DONE || t.status === JobTaskStatus.CANCELED,
+    );
   });
 
   if (recoveryReadyIssue) {
@@ -383,7 +385,9 @@ export function deriveJobExecutionHealth(ctx: JobExecutionContext): ExecutionHea
       flow.status === JobRecoveryFlowStatus.DRAFT ||
       flow.status === JobRecoveryFlowStatus.ACTIVE;
     if (!flowOpen) return false;
-    return flow.tasks.some((t) => t.status !== JobTaskStatus.DONE);
+    return flow.tasks.some(
+      (t) => t.status !== JobTaskStatus.DONE && t.status !== JobTaskStatus.CANCELED,
+    );
   });
 
   if (activeRecoveryIssue) {

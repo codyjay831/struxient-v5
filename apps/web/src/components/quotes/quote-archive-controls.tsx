@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import {
   archiveQuoteAction,
+  reviseQuoteByCloneAction,
   restoreQuoteToDraftAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
@@ -77,6 +78,33 @@ export function QuoteArchivedRestorePanel({ id, quoteId }: { id?: string; quoteI
           aria-busy={isPending}
         >
           {isPending ? "Restoring…" : "Restore to draft"}
+        </button>
+      </form>
+    </WorkspacePanel>
+  );
+}
+
+export function QuoteIssuedRevisePanel({ id, quoteId }: { id?: string; quoteId: string }) {
+  const [state, formAction, isPending] = useActionState(
+    reviseQuoteByCloneAction.bind(null, quoteId),
+    initialActionState,
+  );
+
+  return (
+    <WorkspacePanel id={id} padding="compact" className="mb-6 border-border-strong">
+      <SectionHeading
+        title="Revise by clone"
+        description="Issued quotes are immutable. Create a new DRAFT revision clone to make pre-activation commercial changes."
+      />
+      <form action={formAction} className="mt-3 space-y-3">
+        {state.error ? <FormError message={state.error} /> : null}
+        <button
+          type="submit"
+          className={primaryOutlineButtonClass}
+          disabled={isPending}
+          aria-busy={isPending}
+        >
+          {isPending ? "Creating revision..." : "Create draft revision"}
         </button>
       </form>
     </WorkspacePanel>

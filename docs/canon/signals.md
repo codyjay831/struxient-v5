@@ -22,6 +22,16 @@ A **Signal** is a named string (e.g., `roof-sealed`, `permit-approved`, `payment
 - Stage-level signal gates are **deferred** until a future release defines authoring + activation + UX.
 - Stage-level **issue blocking remains valid** (open `BLOCKS_WORK` issues on a stage still block tasks in that stage).
 
+### 5. Canceled and skipped semantics
+
+- Runtime task status includes `CANCELED` for scope-revision and operational disposition.
+- Canceled tasks do not block readiness and do not provide active signal progression.
+- Stage execution state is derived as:
+  - `OPEN`: non-canceled incomplete task exists
+  - `COMPLETED`: non-canceled tasks exist and all are DONE
+  - `SKIPPED`: stage had execution tasks but all applicable tasks are now CANCELED
+- `SKIPPED` stages are passable for progression but are not evidence of completed contracted work.
+
 ## Readiness Logic
 
 A task's state is derived from the Signal Bus:

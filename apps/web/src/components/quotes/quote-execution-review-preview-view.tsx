@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { QuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { jobDetailPath } from "@/lib/job-path";
 import type {
@@ -23,8 +24,10 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
-import type { ReactNode } from "react";
-import { Briefcase, CheckCircle2, ClipboardList, Info, Zap, Package, Hammer, ListChecks } from "lucide-react";
+import { useState, useTransition, type ReactNode } from "react";
+import { Briefcase, CheckCircle2, ClipboardList, Info, Zap, Package, Hammer, ListChecks, Lock, Unlock } from "lucide-react";
+import { toggleQuoteExecutionTaskProtectionAction } from "@/app/(workspace)/quotes/quote-plan-actions";
+import { QuotePlanControlPanel } from "@/components/quotes/quote-plan-control-panel";
 
 const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
@@ -44,6 +47,10 @@ export function QuoteExecutionReviewPreviewView({
   planningContextByLineId,
   reusableTaskOptions,
   stages,
+  executionPlanTasks,
+  lineLabelById,
+  executionPlanState,
+  isStale,
 }: {
   quoteId: string;
   quoteTitle: string;
@@ -57,6 +64,23 @@ export function QuoteExecutionReviewPreviewView({
   /** Org-scoped reusable task picker options. Empty when execution edits are not allowed. */
   reusableTaskOptions: ReusableTaskPickerOption[];
   stages: { id: string; name: string }[];
+  executionPlanTasks: Array<{
+    id: string;
+    title: string;
+    stageName: string;
+    protectedAt: Date | null;
+    humanEditedAt: Date | null;
+    providesSignals: string[];
+    requiresSignals: string[];
+    scopeLineIds: string[];
+  }>;
+  lineLabelById: Record<string, string>;
+  executionPlanState: {
+    status: "DRAFT" | "READY_FOR_REVIEW" | "ACCEPTED";
+    planVersion: number;
+    taskCount: number;
+  } | null;
+  isStale: boolean;
 }) {
   const { summary, handshakes, orphans, lineReadiness, equipmentRollup } = model;
   const showCrossLineReview =
@@ -64,6 +88,15 @@ export function QuoteExecutionReviewPreviewView({
 
   const reviewContent = (
     <>
+      {activation.state !== "activated" && (
+        <QuotePlanControlPanel
+          quoteId={quoteId}
+          executionPlan={executionPlanState}
+          isStale={isStale}
+          canEdit={executionPlanningEditable}
+        />
+      )}
+
       <ActivationPanel
         activation={activation}
         quoteId={quoteId}
@@ -130,36 +163,86 @@ export function QuoteExecutionReviewPreviewView({
             </WorkspacePanel>
           )}
 
-          {handshakes.length > 0 && (
+          {executionPlanTasks.length > 0 && (
             <WorkspacePanel>
               <SectionHeading
-                title="Task dependencies"
-                description="How work unlocks across line items. When the upstream task is complete, downstream work can become ready."
+                title="Plan tasks"
+                description="Task scope links and task locks for this whole-quote plan."
               />
-              <ul className="mt-4 space-y-4">
-                {handshakes.map((h, i) => (
-                  <li key={i} className="relative flex items-center gap-4 rounded-xl border border-border bg-surface p-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Upstream</p>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground">{h.providerTaskTitle}</p>
-                      <p className="truncate text-[10px] text-foreground-muted">{h.providerLineDescription}</p>
-                    </div>
-                    <div className="flex flex-col items-center gap-1 shrink-0">
-                      <div className="h-px w-8 bg-border" />
-                      <div className="rounded-full bg-accent/10 p-1.5">
-                        <Zap className="size-3.5 text-accent" />
+              <ul className="mt-4 space-y-3">
+                {executionPlanTasks.map((task) => (
+                  <li key={task.id} className="rounded-lg border border-border bg-surface p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{task.title}</p>
+                        <p className="text-[11px] text-foreground-muted">{task.stageName}</p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {task.scopeLineIds.map((lineId) => (
+                            <span key={`${task.id}-${lineId}`} className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                              {lineLabelById[lineId] ?? "Unknown scope"}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {task.protectedAt ? (
+                            <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">Protected</span>
+                          ) : null}
+                          {task.humanEditedAt ? (
+                            <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">Human edited</span>
+                          ) : null}
+                        </div>
                       </div>
-                      <span className="font-mono text-[10px] font-bold text-accent">{h.signal}</span>
-                      <div className="h-px w-8 bg-border" />
-                    </div>
-                    <div className="flex-1 min-w-0 text-right">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Downstream</p>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground">{h.consumerTaskTitle}</p>
-                      <p className="truncate text-[10px] text-foreground-muted">{h.consumerLineDescription}</p>
+                      {executionPlanningEditable ? (
+                        <TaskProtectionButton
+                          quoteId={quoteId}
+                          taskId={task.id}
+                          protectedMode={!task.protectedAt}
+                        />
+                      ) : null}
                     </div>
                   </li>
                 ))}
               </ul>
+            </WorkspacePanel>
+          )}
+
+          {(handshakes.length > 0 || orphans.length > 0) && (
+            <WorkspacePanel>
+              <SectionHeading
+                title="Advanced dependencies"
+                description="Detailed signal handshakes and dependency wiring across quote tasks."
+              />
+              <details className="mt-3 rounded-lg border border-border bg-surface p-3">
+                <summary className="cursor-pointer text-xs font-medium text-foreground">
+                  Show dependency graph details
+                </summary>
+                {handshakes.length > 0 ? (
+                  <ul className="mt-4 space-y-4">
+                    {handshakes.map((h, i) => (
+                      <li key={i} className="relative flex items-center gap-4 rounded-xl border border-border bg-background p-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Upstream</p>
+                          <p className="mt-1 truncate text-sm font-medium text-foreground">{h.providerTaskTitle}</p>
+                          <p className="truncate text-[10px] text-foreground-muted">{h.providerLineDescription}</p>
+                        </div>
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <div className="h-px w-8 bg-border" />
+                          <div className="rounded-full bg-accent/10 p-1.5">
+                            <Zap className="size-3.5 text-accent" />
+                          </div>
+                          <span className="font-mono text-[10px] font-bold text-accent">{h.signal}</span>
+                          <div className="h-px w-8 bg-border" />
+                        </div>
+                        <div className="flex-1 min-w-0 text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">Downstream</p>
+                          <p className="mt-1 truncate text-sm font-medium text-foreground">{h.consumerTaskTitle}</p>
+                          <p className="truncate text-[10px] text-foreground-muted">{h.consumerLineDescription}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </details>
             </WorkspacePanel>
           )}
 
@@ -332,6 +415,48 @@ export function QuoteExecutionReviewPreviewView({
         executionPlanningEditable,
         children: reviewContent,
       })}
+    </div>
+  );
+}
+
+function TaskProtectionButton({
+  quoteId,
+  taskId,
+  protectedMode,
+}: {
+  quoteId: string;
+  taskId: string;
+  protectedMode: boolean;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] text-foreground-muted hover:border-border-strong hover:text-foreground disabled:opacity-60"
+        disabled={isPending}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const result = await toggleQuoteExecutionTaskProtectionAction(
+              quoteId,
+              taskId,
+              protectedMode,
+            );
+            if (!result.ok) {
+              setError(result.error);
+              return;
+            }
+            router.refresh();
+          });
+        }}
+      >
+        {protectedMode ? <Lock className="size-3" /> : <Unlock className="size-3" />}
+        {isPending ? "Saving..." : protectedMode ? "Protect" : "Unprotect"}
+      </button>
+      {error ? <span className="text-[10px] text-danger">{error}</span> : null}
     </div>
   );
 }

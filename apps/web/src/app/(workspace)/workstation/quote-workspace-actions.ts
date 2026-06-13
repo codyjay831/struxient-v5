@@ -18,6 +18,7 @@ import {
   performUpdateQuoteLineItem,
   performUpdateDraftQuoteDetails,
   performCopyLeadToQuoteNotes,
+  performReviseQuoteByClone,
 } from "@/app/(workspace)/quotes/quote-form-actions";
 import {
   addPaymentScheduleItemAction,
@@ -235,6 +236,24 @@ export async function approveQuoteWorkspaceAction(
   }
   revalidateQuoteCommercialSurfaces(quoteId);
   return { success: true };
+}
+
+/**
+ * Creates a new DRAFT revision from a pre-activation SENT/APPROVED quote.
+ */
+export async function reviseQuoteByCloneWorkspaceAction(
+  quoteId: string,
+  _prevState: QuoteWorkspaceActionState,
+  _formData: FormData,
+): Promise<QuoteWorkspaceActionState & { revisedQuoteId?: string }> {
+  void _formData;
+  const result = await performReviseQuoteByClone(quoteId);
+  if (!result.ok) {
+    return { success: false, error: result.error };
+  }
+  revalidateQuoteCommercialSurfaces(quoteId);
+  revalidateQuoteCommercialSurfaces(result.revisedQuoteId);
+  return { success: true, revisedQuoteId: result.revisedQuoteId };
 }
 
 /**

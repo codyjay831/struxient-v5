@@ -37,6 +37,14 @@ model Organization {
   memberships               Membership[]
   publicRequestSettings     PublicRequestSettings?
   quotes                    Quote[]
+  quoteExecutionPlans       QuoteExecutionPlan[]
+  executionPlanRevisions    ExecutionPlanRevision[]
+  quoteScopeRevisions       QuoteScopeRevision[]
+  quoteScopeRevisionLines   QuoteScopeRevisionLine[]
+  jobScopeItems             JobScopeItem[]
+  jobTaskScopes             JobTaskScope[]
+  quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
+  quoteExecutionTasks       QuoteExecutionTask[]
   quoteChangeRequests       QuoteChangeRequest[]
   quoteCheckpoints          QuoteCheckpoint[]
   quoteShareTokens          QuoteShareToken[]
@@ -68,6 +76,7 @@ model Stage {
   jobTasks                JobTask[]
   lineItemTemplateTasks   LineItemTemplateTask[]
   quoteLineExecutionTasks QuoteLineExecutionTask[]
+  quoteExecutionTasks     QuoteExecutionTask[]
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taskTemplates           TaskTemplate[]
   paymentScheduleItems    PaymentScheduleItem[]
@@ -221,6 +230,10 @@ model User {
   siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
   serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
   updatedBusinessProfiles    OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
+  acceptedQuoteExecutionPlans QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
+  approvedExecutionPlanRevisions ExecutionPlanRevision[]    @relation("ExecutionPlanRevisionApprovedBy")
+  approvedQuoteScopeRevisions QuoteScopeRevision[]          @relation("QuoteScopeRevisionApprovedBy")
+  canceledTasks               JobTask[]                     @relation("CanceledTasks")
 }
 
 model OrganizationBusinessProfile {
@@ -342,6 +355,8 @@ model Quote {
   customerDocumentTitle String?
   lastSentEmailAt       DateTime?
   leadId                String?
+  revisionOfQuoteId     String?
+  revisionNumber        Int                      @default(1)
   presentation          Json?
   attachments           Attachment[]
   job                   Job?
@@ -354,12 +369,18 @@ model Quote {
   lineItems             QuoteLineItem[]
   paymentSchedule       PaymentScheduleItem[]
   shareToken            QuoteShareToken?
+  revisionOfQuote       Quote?                   @relation("QuoteRevisionLineage", fields: [revisionOfQuoteId], references: [id], onDelete: SetNull)
+  revisedQuotes         Quote[]                  @relation("QuoteRevisionLineage")
+  executionPlan         QuoteExecutionPlan?
+  executionPlanRevisions ExecutionPlanRevision[]
+  scopeRevisions        QuoteScopeRevision[]
 
   @@index([organizationId])
   @@index([customerId])
   @@index([leadId])
   @@index([serviceLocationId])
   @@index([status])
+  @@index([revisionOfQuoteId])
 }
 
 model QuoteShareToken {
@@ -493,6 +514,7 @@ model TaskTemplate {
   jobTaskCopies           JobTask[]
   lineItemTemplateTasks   LineItemTemplateTask[]
   quoteLineExecutionTasks QuoteLineExecutionTask[]
+  quoteExecutionTasks     QuoteExecutionTask[]
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stage                   Stage?                   @relation(fields: [stageId], references: [id])
 
@@ -529,6 +551,7 @@ model LineItemTemplateTask {
   sourceTaskTemplate   TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                Stage?                     @relation(fields: [stageId], references: [id])
   quoteLineCopies      QuoteLineExecutionTask[]
+  quoteExecutionCopies QuoteExecutionTask[]
 
   @@index([lineItemTemplateId, sortOrder])
 }
@@ -552,12 +575,15 @@ model QuoteLineItem {
   customerPresentationGroup String?
   customerScopeDescription  String?
   customerScopeTitle        String?
+  executionRelevant         Boolean                  @default(true)
   jobStageCopies            JobStage[]
   jobTaskCopies             JobTask[]
   draftExecutionTasks       QuoteLineExecutionTask[]
   clarifications            QuoteLineClarification[]
   quote                     Quote                    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   sourceLineItemTemplate    LineItemTemplate?        @relation(fields: [sourceLineItemTemplateId], references: [id])
+  quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
+  jobScopeItems             JobScopeItem[]
 
   @@index([quoteId])
   @@index([sourceLineItemTemplateId])
@@ -676,8 +702,170 @@ model QuoteLineExecutionTask {
   sourceLineItemTemplateTask   LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id])
   sourceTaskTemplate           TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                        Stage?                     @relation(fields: [stageId], references: [id])
+  quoteExecutionTaskCopies     QuoteExecutionTask[]
 
   @@index([quoteLineItemId, sortOrder])
+}
+
+model QuoteExecutionPlan {
+  id                        String                  @id @default(cuid())
+  organizationId            String
+  quoteId                   String                  @unique
+  status                    QuoteExecutionPlanStatus @default(DRAFT)
+  planVersion               Int                     @default(1)
+  planningInputHash         String?
+  planningInputSchemaVersion Int                    @default(1)
+  acceptedByUserId          String?
+  acceptedAt                DateTime?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  organization              Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                     Quote                   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  acceptedByUser            User?                   @relation("QuoteExecutionPlanAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  tasks                     QuoteExecutionTask[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model QuoteExecutionTask {
+  id                           String                    @id @default(cuid())
+  organizationId               String
+  quoteExecutionPlanId         String
+  sourceLineItemTemplateTaskId String?
+  sourceQuoteLineExecutionTaskId String?
+  sourceTaskTemplateId         String?
+  sourceType                   LineItemTemplateTaskSource
+  origin                       ExecutionTaskOrigin       @default(MANUAL)
+  title                        String
+  category                     TaskTemplateCategory
+  instructions                 String?
+  sortOrder                    Int                       @default(0)
+  createdAt                    DateTime                  @default(now())
+  updatedAt                    DateTime                  @updatedAt
+  humanEditedAt                DateTime?
+  protectedAt                  DateTime?
+  createdByPlanRevisionId      String?
+  requirementsJson             Json                      @default("{}")
+  assigneeRole                 StaffRole?
+  costBudgetCents              Int?
+  estimatedMinutes             Int?
+  hardSignal                   Boolean                   @default(false)
+  partsRequiredJson            Json?
+  providesSignals              String[]                  @default([])
+  requiresSignals              String[]                  @default([])
+  planningTags                 String[]                  @default([])
+  stageId                      String?
+  organization                 Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteExecutionPlan           QuoteExecutionPlan        @relation(fields: [quoteExecutionPlanId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplateTask   LineItemTemplateTask?     @relation(fields: [sourceLineItemTemplateTaskId], references: [id], onDelete: SetNull)
+  sourceQuoteLineExecutionTask QuoteLineExecutionTask?   @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id], onDelete: SetNull)
+  sourceTaskTemplate           TaskTemplate?             @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
+  stage                        Stage?                    @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  scopes                       QuoteExecutionTaskScope[]
+  jobTaskCopies                JobTask[]                 @relation("JobTaskSourceQuoteExecutionTask")
+
+  @@index([organizationId])
+  @@index([quoteExecutionPlanId, sortOrder])
+  @@index([createdByPlanRevisionId])
+  @@index([sourceQuoteLineExecutionTaskId])
+}
+
+model QuoteExecutionTaskScope {
+  id                   String              @id @default(cuid())
+  organizationId       String
+  quoteExecutionTaskId String
+  quoteLineItemId      String
+  createdAt            DateTime            @default(now())
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteExecutionTask   QuoteExecutionTask  @relation(fields: [quoteExecutionTaskId], references: [id], onDelete: Cascade)
+  quoteLineItem        QuoteLineItem       @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteExecutionTaskId, quoteLineItemId])
+  @@index([organizationId])
+  @@index([quoteLineItemId])
+}
+
+model ExecutionPlanRevision {
+  id                     String                @id @default(cuid())
+  organizationId         String
+  quoteId                String
+  jobId                  String?
+  quoteScopeRevisionId   String?
+  kind                   ExecutionPlanRevisionKind
+  status                 ExecutionPlanRevisionStatus @default(DRAFT)
+  basePlanVersion        Int
+  resultingPlanVersion   Int?
+  proposalJson           Json
+  proposalSchemaVersion  Int
+  plannerVersion         String
+  modelProviderMeta      Json?
+  planningInputHash      String?
+  reasoningSummary       String?
+  approvedByUserId       String?
+  appliedAt              DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                  Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job                    Job?                  @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  quoteScopeRevision     QuoteScopeRevision?   @relation(fields: [quoteScopeRevisionId], references: [id], onDelete: SetNull)
+  approvedByUser         User?                 @relation("ExecutionPlanRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([jobId])
+  @@index([quoteScopeRevisionId])
+}
+
+model QuoteScopeRevision {
+  id               String                    @id @default(cuid())
+  organizationId   String
+  quoteId          String
+  jobId            String
+  status           QuoteScopeRevisionStatus  @default(DRAFT)
+  reasoning        String
+  priceDeltaCents  Int                       @default(0)
+  approvedByUserId String?
+  approvedAt       DateTime?
+  appliedAt        DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote            Quote                     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job              Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  approvedByUser   User?                     @relation("QuoteScopeRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  lines            QuoteScopeRevisionLine[]
+  executionPlanRevisions ExecutionPlanRevision[]
+  paymentRequirements JobPaymentRequirement[]
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([jobId])
+}
+
+model QuoteScopeRevisionLine {
+  id                      String                  @id @default(cuid())
+  organizationId          String
+  quoteScopeRevisionId    String
+  operation               QuoteScopeRevisionLineOperation
+  sourceJobScopeItemId    String?
+  description             String
+  quantity                Decimal                 @db.Decimal(18, 6)
+  unitPriceCents          Int?
+  priceDeltaCents         Int?
+  executionRelevant       Boolean                 @default(true)
+  scopeDataJson           Json?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  organization            Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteScopeRevision      QuoteScopeRevision      @relation(fields: [quoteScopeRevisionId], references: [id], onDelete: Cascade)
+  sourceJobScopeItem      JobScopeItem?           @relation("QuoteScopeRevisionLineSourceScope", fields: [sourceJobScopeItemId], references: [id], onDelete: SetNull)
+  resultingJobScopeItems  JobScopeItem[]          @relation("JobScopeItemFromQuoteScopeRevisionLine")
+
+  @@index([organizationId])
+  @@index([quoteScopeRevisionId])
+  @@index([sourceJobScopeItemId])
 }
 
 model PaymentScheduleItem {
@@ -714,6 +902,7 @@ model Job {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   leadId              String?
+  jobPlanVersion      Int                      @default(1)
   attachments         Attachment[]
   dailyJobLogs        DailyJobLog[]
   customer            Customer?                @relation(fields: [customerId], references: [id])
@@ -731,6 +920,9 @@ model Job {
   visits              JobVisit[]
   scheduleEvents      JobScheduleEvent[]
   workPackages        JobWorkPackage[]
+  scopeItems          JobScopeItem[]
+  scopeRevisions      QuoteScopeRevision[]
+  executionPlanRevisions ExecutionPlanRevision[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -789,6 +981,7 @@ model JobTask {
   jobStageId                     String
   sourceQuoteLineItemId          String?
   sourceQuoteLineExecutionTaskId String?
+  sourceQuoteExecutionTaskId     String?
   sourceTaskTemplateId           String?
   sourceType                     LineItemTemplateTaskSource
   title                          String
@@ -803,6 +996,9 @@ model JobTask {
   recoveryFlowOrder              Int                        @default(0)
   completedAt                    DateTime?
   completedByUserId              String?
+  canceledAt                     DateTime?
+  canceledByUserId               String?
+  canceledReason                 String?
   assignedUserId                 String?
   completionNote                 String?
   completionRequirementsJson     Json                       @default("{}")
@@ -822,6 +1018,9 @@ model JobTask {
   dueFirstReadyAt                DateTime?
   schedulingRequirement          TaskSchedulingRequirement  @default(NONE)
   workPackageId                  String?
+  origin                         ExecutionTaskOrigin       @default(MANUAL)
+  sourcePlanRevisionId           String?
+  planningTags                   String[]                  @default([])
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
   /// Reserved for future job costing.
@@ -837,17 +1036,20 @@ model JobTask {
   attachments                    Attachment[]
   issues                         JobIssue[]
   completedByUser                User?                      @relation("CompletedTasks", fields: [completedByUserId], references: [id])
+  canceledByUser                 User?                      @relation("CanceledTasks", fields: [canceledByUserId], references: [id])
   assignedUser                   User?                      @relation("AssignedTasks", fields: [assignedUserId], references: [id])
   job                            Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   jobStage                       JobStage                   @relation(fields: [jobStageId], references: [id], onDelete: Cascade)
   recoveryFlow                   JobRecoveryFlow?           @relation(fields: [recoveryFlowId], references: [id])
   sourceJobIssue                 JobIssue?                  @relation("IssueFollowUpTask", fields: [sourceJobIssueId], references: [id])
   sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id])
+  sourceQuoteExecutionTask       QuoteExecutionTask?        @relation("JobTaskSourceQuoteExecutionTask", fields: [sourceQuoteExecutionTaskId], references: [id], onDelete: SetNull)
   sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id])
   sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
   stage                          Stage?                     @relation(fields: [stageId], references: [id])
   scheduleEventLinks             JobScheduleEventTask[]
   workPackage                    JobWorkPackage?            @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
+  scopes                         JobTaskScope[]
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
@@ -857,6 +1059,51 @@ model JobTask {
   @@index([scheduledStartAt])
   @@index([schedulingRequirement])
   @@index([workPackageId])
+  @@index([sourceQuoteExecutionTaskId])
+}
+
+model JobScopeItem {
+  id                           String              @id @default(cuid())
+  organizationId               String
+  jobId                        String
+  sourceQuoteLineItemId        String?
+  sourceQuoteScopeRevisionLineId String?
+  description                  String
+  quantity                     Decimal             @db.Decimal(18, 6)
+  unitPriceCents               Int?
+  executionRelevant            Boolean             @default(true)
+  status                       JobScopeItemStatus  @default(ACTIVE)
+  supersededByJobScopeItemId   String?             @unique
+  createdAt                    DateTime            @default(now())
+  updatedAt                    DateTime            @updatedAt
+  organization                 Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job                          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceQuoteLineItem          QuoteLineItem?      @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
+  sourceQuoteScopeRevisionLine QuoteScopeRevisionLine? @relation("JobScopeItemFromQuoteScopeRevisionLine", fields: [sourceQuoteScopeRevisionLineId], references: [id], onDelete: SetNull)
+  supersededByJobScopeItem     JobScopeItem?       @relation("JobScopeItemSupersession", fields: [supersededByJobScopeItemId], references: [id], onDelete: SetNull)
+  supersedesJobScopeItem       JobScopeItem?       @relation("JobScopeItemSupersession")
+  sourceForRevisionLines       QuoteScopeRevisionLine[] @relation("QuoteScopeRevisionLineSourceScope")
+  taskScopes                   JobTaskScope[]
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([sourceQuoteLineItemId])
+  @@index([sourceQuoteScopeRevisionLineId])
+}
+
+model JobTaskScope {
+  id             String       @id @default(cuid())
+  organizationId String
+  jobTaskId      String
+  jobScopeItemId String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobTask        JobTask      @relation(fields: [jobTaskId], references: [id], onDelete: Cascade)
+  jobScopeItem   JobScopeItem @relation(fields: [jobScopeItemId], references: [id], onDelete: Cascade)
+
+  @@unique([jobTaskId, jobScopeItemId])
+  @@index([organizationId])
+  @@index([jobScopeItemId])
 }
 
 model JobWorkPackage {
@@ -1099,6 +1346,7 @@ model JobPaymentRequirement {
   status                      JobPaymentRequirementStatus @default(PENDING)
   requiredBeforeStageId       String?
   sourcePaymentScheduleItemId String?
+  sourceQuoteScopeRevisionId  String?
   paidAt                      DateTime?
   waivedAt                    DateTime?
   canceledAt                  DateTime?
@@ -1108,12 +1356,14 @@ model JobPaymentRequirement {
   job                         Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   organization                Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   requiredBeforeStage         JobStage?                   @relation(fields: [requiredBeforeStageId], references: [id])
+  sourceQuoteScopeRevision    QuoteScopeRevision?         @relation(fields: [sourceQuoteScopeRevisionId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([jobId])
   @@index([organizationId, status])
   @@index([requiredBeforeStageId])
   @@index([sourcePaymentScheduleItemId])
+  @@index([sourceQuoteScopeRevisionId])
 }
 
 model LeadVisitRequest {
@@ -1508,6 +1758,51 @@ enum DailyJobLogStatus {
 enum JobTaskStatus {
   TODO
   DONE
+  CANCELED
+}
+
+enum QuoteExecutionPlanStatus {
+  DRAFT
+  READY_FOR_REVIEW
+  ACCEPTED
+}
+
+enum ExecutionTaskOrigin {
+  AI_PLAN
+  TEMPLATE_COPY
+  MANUAL
+  SCOPE_REVISION
+  ISSUE_RECOVERY
+}
+
+enum ExecutionPlanRevisionKind {
+  INITIAL_PLAN
+  SCOPE_RECONCILIATION
+}
+
+enum ExecutionPlanRevisionStatus {
+  DRAFT
+  APPLIED
+  DISCARDED
+}
+
+enum QuoteScopeRevisionStatus {
+  DRAFT
+  APPROVED
+  APPLIED
+  REJECTED
+}
+
+enum QuoteScopeRevisionLineOperation {
+  ADD
+  MODIFY
+  REMOVE
+}
+
+enum JobScopeItemStatus {
+  ACTIVE
+  SUPERSEDED
+  REMOVED
 }
 
 enum JobVisitStatus {
@@ -1786,6 +2081,7 @@ enum JobActivityType {
   PAYMENT_REQUIREMENT_WAIVED
   PAYMENT_REQUIREMENT_CANCELED
   TASK_COMPLETED
+  TASK_CANCELED
   ATTACHMENT_UPLOADED
   VISIT_SCHEDULED
   VISIT_RESCHEDULED
@@ -1807,6 +2103,7 @@ enum JobActivityType {
   SCHEDULE_EVENT_TASK_UNLINKED
   JOB_ARCHIVED
   JOB_SCHEDULE_CLEANUP_COMPLETED
+  SCOPE_REVISION_APPLIED
 }
 
 model Tag {

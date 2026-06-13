@@ -1111,7 +1111,9 @@ export async function queryWorkstationWorkItems(
       } else if (
         flow.status === JobRecoveryFlowStatus.ACTIVE &&
         flow.tasks.length > 0 &&
-        flow.tasks.every((t) => t.status === JobTaskStatus.DONE)
+        flow.tasks.every(
+          (t) => t.status === JobTaskStatus.DONE || t.status === JobTaskStatus.CANCELED,
+        )
       ) {
         priority = "critical";
       }

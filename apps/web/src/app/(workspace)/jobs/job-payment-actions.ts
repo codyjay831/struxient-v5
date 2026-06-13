@@ -7,6 +7,7 @@ import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { formatCents } from "@/lib/job-payment-display";
 import { publishSignal } from "@/lib/signal-bus";
+import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
 
 export type CreateJobPaymentRequirementInput = {
   jobId: string;
@@ -20,6 +21,10 @@ export type CreateJobPaymentRequirementInput = {
 export async function createJobPaymentRequirementAction(input: CreateJobPaymentRequirementInput) {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
 
   // Verify job belongs to organization
   const job = await db.job.findFirst({
@@ -76,6 +81,10 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
 export async function markJobPaymentRequirementPaidAction(requirementId: string) {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
@@ -119,6 +128,10 @@ export async function markJobPaymentRequirementPaidAction(requirementId: string)
 export async function waiveJobPaymentRequirementAction(requirementId: string) {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
@@ -161,6 +174,10 @@ export async function waiveJobPaymentRequirementAction(requirementId: string) {
 export async function cancelJobPaymentRequirementAction(requirementId: string) {
   const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
