@@ -2,113 +2,139 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import {
-  CalendarDays,
-  ClipboardList,
-  FolderKanban,
-  LayoutDashboard,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { parseWorkstationUrlState } from "@/lib/workstation/url-state";
+import type { WorkstationLens } from "@/lib/workstation-query";
 
-import {
-  parseWorkstationUrlState,
-  buildWorkstationUrl,
-} from "@/lib/workstation/url-state";
-import { WORKSTATION_LENS_LABELS } from "@/lib/workstation-copy";
-import { WorkstationLens } from "@/lib/workstation-query";
+const SUBROUTE_LABELS: Record<string, string> = {
+  "/workstation/tasks": "Tasks",
+  "/workstation/jobs": "Jobs",
+  "/workstation/schedule": "Schedule",
+};
 
-const LENSES: { href: string; label: string; icon: LucideIcon; lens: WorkstationLens }[] = [
-  { href: "/workstation", label: WORKSTATION_LENS_LABELS.attention, icon: LayoutDashboard, lens: "attention" },
-  { href: "/workstation?lens=today", label: WORKSTATION_LENS_LABELS.today, icon: ClipboardList, lens: "today" },
-  { href: "/workstation?lens=waiting", label: WORKSTATION_LENS_LABELS.waiting, icon: FolderKanban, lens: "waiting" },
-  { href: "/workstation?lens=upcoming", label: WORKSTATION_LENS_LABELS.upcoming, icon: CalendarDays, lens: "upcoming" },
-  { href: "/workstation?lens=all", label: WORKSTATION_LENS_LABELS.all, icon: LayoutDashboard, lens: "all" },
+// Secondary lens links exposed in the main nav (not the landing itself).
+// Each maps to a WorkstationLens value so they can be filtered by allowedLenses.
+const SECONDARY_LENSES: { lens: WorkstationLens; label: string; href: string }[] = [
+  { lens: "waiting", label: "Waiting", href: "/workstation?lens=waiting" },
+  { lens: "all", label: "All items", href: "/workstation?lens=all" },
 ];
 
-function lensActive(pathname: string, currentLens: string, targetLens: string) {
-  if (pathname !== "/workstation") return false;
-  return currentLens === targetLens;
-}
-
-export function WorkstationShell() {
+/**
+ * Workstation page chrome.
+ *
+ * On the main route: shows today's date when on the default landing, or the
+ * secondary-lens label when active. Secondary navigation offers only the lenses
+ * allowed for the current role, plus browse links to Tasks, Jobs, Schedule.
+ *
+ * On subroutes: shows the subroute label and a ← Today link back.
+ */
+export function WorkstationShell({
+  allowedSecondaryLenses,
+}: {
+  allowedSecondaryLenses?: WorkstationLens[];
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const urlState = parseWorkstationUrlState(searchParams);
-  const activeLens = LENSES.find(l => lensActive(pathname, urlState.lens, l.lens)) || LENSES[0];
-  const isMainWorkstation = pathname === "/workstation";
+  const { lens } = parseWorkstationUrlState(searchParams);
 
-  const subrouteLabels: Record<string, string> = {
-    "/workstation/tasks": "Tasks",
-    "/workstation/jobs": "Jobs",
-    "/workstation/schedule": "Schedule",
-  };
-  const activeSubrouteLabel = subrouteLabels[pathname] ?? null;
+  const isMainWorkstation = pathname === "/workstation";
+  const activeSubrouteLabel = SUBROUTE_LABELS[pathname] ?? null;
+
+  // Filter secondary lens links by what the role is allowed to see.
+  // If no allowedLenses prop provided (e.g. during SSR hydration), show all.
+  const visibleSecondaryLenses =
+    allowedSecondaryLenses && allowedSecondaryLenses.length > 0
+      ? SECONDARY_LENSES.filter((l) => allowedSecondaryLenses.includes(l.lens))
+      : SECONDARY_LENSES;
+
+  const landingTitle =
+    lens === "waiting" ? "Waiting" : lens === "all" ? "All work" : "The Board";
+
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const showDate = isMainWorkstation && lens === "attention";
 
   return (
-    <div className="mb-8 space-y-6">
+    <div className="mb-8">
       <header className="border-b border-border pb-6">
-        <div className="flex items-baseline justify-between gap-4">
+        <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="mb-1 text-sm font-medium text-foreground-subtle">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-foreground-subtle">
               Workstation
             </p>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {isMainWorkstation ? activeLens.label : activeSubrouteLabel ?? "Workstation"}
+              {isMainWorkstation
+                ? landingTitle
+                : (activeSubrouteLabel ?? "Workstation")}
             </h1>
+            {showDate && (
+              <p className="mt-1 text-sm text-foreground-muted">{todayLabel}</p>
+            )}
           </div>
-          {isMainWorkstation ? (
-            <nav aria-label="Workstation lenses">
-              <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-                {LENSES.map(({ label, icon: Icon, lens }) => {
-                  const active = lensActive(pathname, urlState.lens, lens);
-                  const finalHref = buildWorkstationUrl(urlState, {
-                    lens,
-                    selected: undefined,
-                  });
 
-                  return (
-                    <li key={lens}>
-                      <Link
-                        href={finalHref}
-                        className={[
-                          "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          active
-                            ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
-                            : "text-foreground-muted hover:text-foreground",
-                        ].join(" ")}
-                      >
-                        <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
-                        {label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          ) : (
-            <nav aria-label="Workstation sections">
-              <ul className="flex items-center gap-1 rounded-lg border border-border bg-foreground/[0.02] p-1">
-                {Object.entries(subrouteLabels).map(([href, label]) => {
-                  const active = pathname === href;
-                  return (
-                    <li key={href}>
-                      <Link
-                        href={href}
-                        className={[
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          active
-                            ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
-                            : "text-foreground-muted hover:text-foreground",
-                        ].join(" ")}
-                      >
-                        {label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          )}
+          <nav
+            aria-label="Workstation navigation"
+            className="flex flex-wrap items-center gap-5 text-sm font-medium"
+          >
+            {isMainWorkstation ? (
+              <>
+                {visibleSecondaryLenses.map(({ lens: lensKey, label, href }) => (
+                  <Link
+                    key={lensKey}
+                    href={href}
+                    className={
+                      lens === lensKey
+                        ? "text-foreground underline decoration-accent underline-offset-4"
+                        : "text-foreground-muted transition-colors hover:text-foreground"
+                    }
+                    aria-current={lens === lensKey ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                ))}
+                {visibleSecondaryLenses.length > 0 && (
+                  <span className="select-none text-border" aria-hidden>
+                    ·
+                  </span>
+                )}
+                {Object.entries(SUBROUTE_LABELS).map(([href, label]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="text-foreground-muted transition-colors hover:text-foreground"
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/workstation"
+                  className="text-foreground-muted transition-colors hover:text-foreground"
+                >
+                  ← Today
+                </Link>
+                {Object.entries(SUBROUTE_LABELS).map(([href, label]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={
+                      pathname === href
+                        ? "text-foreground"
+                        : "text-foreground-muted transition-colors hover:text-foreground"
+                    }
+                    aria-current={pathname === href ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </>
+            )}
+          </nav>
         </div>
       </header>
     </div>

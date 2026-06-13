@@ -43,6 +43,10 @@ export async function WorkstationPanelContent({
     );
   }
 
+  if (item.kind === "schedule" && item.actionTaskId) {
+    return <WorkstationTaskDetail taskId={item.actionTaskId} />;
+  }
+
   if (item.kind === "schedule") {
     const jobId = item.parentRecordId ?? item.recordId;
     const scheduleMode = item.id.startsWith("job-unscheduled-")

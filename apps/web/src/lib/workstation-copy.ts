@@ -6,27 +6,27 @@ export const WORKSTATION_LENS_LABELS: Record<
   "attention" | "today" | "waiting" | "upcoming" | "all",
   string
 > = {
-  attention: "Needs attention",
+  attention: "The Board",
   today: "Today",
   waiting: "Waiting",
   upcoming: "Upcoming",
-  all: "All",
+  all: "All items",
 };
 
 export const WORKSTATION_COPY = {
   investigate: {
-    sectionTitle: "Review",
+    sectionTitle: "Needs action",
     sectionDescription:
-      "Records that need a second look before you move forward.",
+      "Records that are blocked, need a decision, or require follow-up.",
     severityTitle: "Priority",
     previewLabel: "Preview",
-    previewTooltip: "Sample layout — live data coming soon",
-    previewSectionTitle: "Coming soon",
+    previewTooltip: "Preview signal — live data feeds this section",
+    previewSectionTitle: "Signals",
     previewSectionLead:
-      "Duplicate detection, quote readiness, payment follow-ups, and activity alerts will show up here.",
-    emptyTitle: "Nothing to review right now.",
+      "Blocked tasks, payment holds, overdue follow-ups, and coordination needs appear here.",
+    emptyTitle: "Nothing needs action right now.",
     emptyDescription:
-      "When something looks off or incomplete, it will appear here before it becomes a problem.",
+      "When something is blocked, late, or needs a decision, it surfaces here.",
   },
 
   severity: {
@@ -36,8 +36,8 @@ export const WORKSTATION_COPY = {
   },
 
   summaryStrip: {
-    investigateLabel: "Review",
-    investigateHint: "Items flagged for a closer look.",
+    investigateLabel: "Needs action",
+    investigateHint: "Blocked or blocked-pending items.",
     openPipelineLabel: "Open opportunities",
     openPipelineHint: "Opportunity records still in the pipeline.",
     unlinkedLabel: "Unlinked opportunities",
@@ -45,16 +45,15 @@ export const WORKSTATION_COPY = {
   },
 
   reservedAreas: {
-    title: "More views",
-    description:
-      "Tasks, jobs, and schedule each get their own lens as more data comes online.",
+    title: "Browse",
+    description: "Deep views for tasks, jobs, and scheduling.",
     tasksLabel: "Tasks",
     jobsLabel: "Jobs",
     scheduleLabel: "Schedule",
   },
 
   continuation: {
-    backToToday: "Back to Workstation",
+    backToToday: "← Today",
     backToWorkstation: "← Workstation",
     openLeads: "Sales",
     openCustomers: "Customers",

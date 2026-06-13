@@ -141,9 +141,6 @@ export default async function WorkstationJobsLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <ButtonLink href="/jobs" variant="ghost" size="sm">
-          {WORKSTATION_COPY.continuation.openJobs}
-        </ButtonLink>
         <ButtonLink href="/workstation" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.backToToday}
         </ButtonLink>

@@ -98,10 +98,16 @@ export function WorkstationFocusCard({
               <span className={badgeClass}>
                 {isHighPriority ? "Urgent Action" : "Next Action"}
               </span>
-              {item.isBlocked && (
+              {item.isWaitingOnSignals && (
+                <span className="flex items-center gap-1 text-xs font-medium text-accent">
+                  <AlertCircle className="size-3" />
+                  Waiting on prior work
+                </span>
+              )}
+              {item.isBlocked && !item.isWaitingOnSignals && (
                 <span className="flex items-center gap-1 text-xs font-medium text-danger">
                   <AlertCircle className="size-3" />
-                  {item.missingSignals ? "Waiting on info" : "Blocked"}
+                  Blocked
                 </span>
               )}
               {item.missingSignals && (
@@ -165,84 +171,87 @@ export function WorkstationFocusCard({
   );
 }
 
-function isGenericWorkstationAction(label: string | undefined): boolean {
-  return /^(Complete the task\.?|Resolve blocker\.?)$/i.test(label ?? "");
+function isGenericAction(label: string | undefined): boolean {
+  return /^(Complete the task\.?|Resolve blocker\.?|Wait for prerequisites\.?)$/i.test(label ?? "");
 }
 
-export function WorkstationQueueItem({ 
-  item, 
-  isSelected 
-}: { 
-  item: WorkstationWorkItem; 
+export function WorkstationQueueItem({
+  item,
+  isSelected,
+}: {
+  item: WorkstationWorkItem;
   isSelected?: boolean;
 }) {
-  const isHighPriority = item.priority === "critical" || item.priority === "high";
+  const isCritical = item.priority === "critical" || (item.isBlocked && !item.isWaitingOnSignals);
+  const isHigh = item.priority === "high";
   const contextLine = item.contextLine ?? item.parentLabel ?? item.subtitle;
   const actionLabel = item.actionLabel ?? item.nextStep;
-  const showAction = Boolean(actionLabel) && !isGenericWorkstationAction(actionLabel);
+  const showAction = Boolean(actionLabel) && !isGenericAction(actionLabel);
 
-  const itemClass = [
-    "group relative flex items-center justify-between rounded-lg border border-border p-4 transition-all hover:bg-foreground/[0.02] hover:border-border-strong",
-    isSelected ? "ring-2 ring-accent ring-offset-2" : "",
-    isHighPriority ? "bg-danger/[0.005] border-danger/10" : "",
-  ].filter(Boolean).join(" ");
+  const stripClass = isCritical
+    ? "bg-danger"
+    : isHigh
+      ? "bg-danger/40"
+      : item.filterCategory === "payments"
+        ? "bg-amber-500"
+        : "bg-foreground/10";
 
   return (
-    <Link 
+    <Link
       href={item.href || "#"}
-      className={itemClass}
       scroll={false}
       onClick={() => workstationTelemetry.trackLaneClick(item.lane, item.id, item.kind)}
+      className={[
+        "group flex items-center gap-3 rounded-lg border border-border px-4 py-3.5 transition-all hover:border-border-strong hover:bg-foreground/[0.015]",
+        isSelected ? "ring-2 ring-accent ring-offset-1 border-accent/30" : "",
+        isCritical ? "border-danger/15 bg-danger/[0.005]" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      <div className="min-w-0 flex-1 space-y-1">
+      {/* Priority strip */}
+      <div
+        className={`h-8 w-0.5 shrink-0 rounded-full ${stripClass}`}
+        aria-hidden
+      />
+
+      <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium capitalize text-foreground-subtle">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-foreground-subtle">
             {item.kind.replace("-", " ")}
           </span>
-          {item.isBlocked && (
-            <span className="flex items-center gap-1 text-xs font-medium text-danger">
-              <AlertCircle className="size-2.5" />
-              {item.missingSignals ? "Waiting" : "Blocked"}
+          {item.isWaitingOnSignals && (
+            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-accent">
+              <AlertCircle className="size-2.5" aria-hidden />
+              Waiting
             </span>
           )}
-          {item.missingSignals && (
-            <div className="flex flex-wrap gap-1">
-              {item.missingSignals.map(s => (
-                <span key={s} className="rounded-md bg-brand-muted px-1 py-0.5 text-[0.6rem] font-medium text-accent">
-                  {s.replace(/_/g, " ").toLowerCase()}
-                </span>
-              ))}
-            </div>
-          )}
-          {isHighPriority && !item.isBlocked && (
-            <span className="inline-flex size-1.5 rounded-full bg-danger animate-pulse" />
-          )}
-        </div>
-        <div className="flex items-baseline gap-3">
-          <h4 className="truncate text-sm font-bold text-foreground">
-            {item.title}
-          </h4>
-          {showAction ? (
-            <span className="shrink-0 text-xs font-semibold text-foreground">
-              {actionLabel}
+          {item.isBlocked && !item.isWaitingOnSignals && (
+            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-danger">
+              <AlertCircle className="size-2.5" aria-hidden />
+              Blocked
             </span>
-          ) : null}
+          )}
         </div>
-        {contextLine ? (
-          <p
-            className="truncate text-xs text-foreground-muted"
-            title={contextLine}
-          >
+
+        <h4 className="truncate text-sm font-semibold text-foreground">
+          {item.title}
+        </h4>
+
+        {contextLine && (
+          <p className="truncate text-xs text-foreground-muted" title={contextLine}>
             {contextLine}
           </p>
-        ) : null}
-        <p className="truncate text-xs text-foreground-muted">
-          {item.reason}
-        </p>
+        )}
+
+        {showAction && (
+          <p className="truncate text-xs font-medium text-foreground-subtle">
+            {actionLabel}
+          </p>
+        )}
       </div>
-      <div className="ml-4 shrink-0 text-foreground-subtle group-hover:text-foreground transition-colors">
-        <ChevronRight className="size-5" />
-      </div>
+
+      <ChevronRight className="ml-2 size-4 shrink-0 text-foreground-subtle opacity-0 transition-opacity group-hover:opacity-60" />
     </Link>
   );
 }
@@ -294,17 +303,17 @@ export function WorkstationClearedState({
           </Link>
         ) : (
           <>
-            <Link 
-              href="/leads" 
+            <Link
+              href={buildWorkstationUrl(urlState, { lens: "all", filter: "tasks", selected: undefined })}
               className="text-sm font-medium text-foreground-muted hover:text-foreground"
             >
-              Browse Sales
+              Browse tasks
             </Link>
-            <Link 
-              href="/jobs" 
+            <Link
+              href="/workstation/jobs"
               className="text-sm font-medium text-foreground-muted hover:text-foreground"
             >
-              Review Jobs
+              Browse jobs
             </Link>
           </>
         )}

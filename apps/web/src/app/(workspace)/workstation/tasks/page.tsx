@@ -80,12 +80,6 @@ export default async function WorkstationTasksLensPage({
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <ButtonLink href="/leads" variant="ghost" size="sm">
-          Browse Sales
-        </ButtonLink>
-        <ButtonLink href="/jobs" variant="ghost" size="sm">
-          {WORKSTATION_COPY.continuation.openJobs}
-        </ButtonLink>
         <ButtonLink href="/workstation" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.backToToday}
         </ButtonLink>

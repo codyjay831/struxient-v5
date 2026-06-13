@@ -54,6 +54,7 @@ import {
 } from "./workstation-recovery-routing";
 import { includesEquivalentSignal } from "./signal-key";
 import { deriveSchedulingAttentionOverride, mapLinkedEventsFromRows } from "./workstation-scheduling-attention";
+import { pickPrimaryLinkedOpenTaskId } from "./workstation/schedule-event-task-routing";
 import {
   deriveEventPotentiallyMissed,
   deriveEventUpcoming,
@@ -120,7 +121,16 @@ export type WorkstationWorkItem = {
   parentLabel?: string;
   href?: string;
   updatedAt: Date;
+  /** Assignee user id (tasks only) — additive exposure for "my work" filtering. */
+  assignedUserId?: string | null;
+  /** Task deadline (tasks only) — additive exposure for time ordering. */
+  dueAt?: Date | null;
+  /** Task scheduled start (tasks only) — additive exposure for time ordering. */
+  scheduledStartAt?: Date | null;
+  /** True when blocked by an open issue — not when waiting on prerequisite signals. */
   isBlocked?: boolean;
+  /** True when waiting on prerequisite task signals (normal pipeline, not an exception). */
+  isWaitingOnSignals?: boolean;
   missingSignals?: string[];
   signalId?: string;
   /** Shared readiness / checklist model for Workstation + full-record alignment. */
@@ -572,6 +582,13 @@ export async function queryWorkstationWorkItems(
           endAt: true,
           title: true,
           updatedAt: true,
+          taskLinks: {
+            select: {
+              jobTask: {
+                select: { id: true, completedAt: true, status: true },
+              },
+            },
+          },
         },
       },
     },
@@ -793,6 +810,7 @@ export async function queryWorkstationWorkItems(
       ),
     );
     for (const event of potentiallyMissedCommitments) {
+      const linkedTaskId = pickPrimaryLinkedOpenTaskId(event.taskLinks);
       const { lane, withinLaneRank } = rank({
         kind: "schedule",
         priority: "high",
@@ -820,10 +838,12 @@ export async function queryWorkstationWorkItems(
         contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: event.updatedAt,
+        ...(linkedTaskId ? { actionTaskId: linkedTaskId } : {}),
       });
     }
 
     for (const event of upcomingCommitments) {
+      const linkedTaskId = pickPrimaryLinkedOpenTaskId(event.taskLinks);
       const isToday = event.startAt.toDateString() === now.toDateString();
       const priority: WorkstationWorkItemPriority = isToday ? "high" : "medium";
       const group: WorkstationWorkItemGroup = isToday ? "active" : "scheduled";
@@ -855,6 +875,7 @@ export async function queryWorkstationWorkItems(
         contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: event.updatedAt,
+        ...(linkedTaskId ? { actionTaskId: linkedTaskId } : {}),
       });
     }
 
@@ -881,7 +902,8 @@ export async function queryWorkstationWorkItems(
       }
 
       const linkedEvents = mapLinkedEventsFromRows(task.scheduleEventLinks ?? []);
-      const isBlocked = derivedState === "BLOCKED_BY_ISSUE" || derivedState === "BLOCKED_BY_SIGNAL";
+      const isBlockedByIssue = derivedState === "BLOCKED_BY_ISSUE";
+      const isWaitingOnSignals = derivedState === "BLOCKED_BY_SIGNAL";
       const taskIsOverdue = deriveTaskOverdue(
         { dueAt: task.dueAt, dueMode: task.dueMode, dueGranularity: task.dueGranularity },
         orgTimezone,
@@ -905,20 +927,22 @@ export async function queryWorkstationWorkItems(
         dueAt: task.dueAt,
       });
 
-      if (taskIsOverdue && !isBlocked) {
+      if (taskIsOverdue && !isBlockedByIssue && !isWaitingOnSignals) {
         priority = "critical";
-      } else if (taskIsDueToday && !isBlocked) {
+      } else if (taskIsDueToday && !isBlockedByIssue && !isWaitingOnSignals) {
         priority = "high";
       }
       if (schedulingAttentionOverride) {
         priority = schedulingAttentionOverride.priority;
       }
 
-      let group: WorkstationWorkItemGroup = isBlocked
+      let group: WorkstationWorkItemGroup = isBlockedByIssue
         ? "blocked"
-        : taskIsScheduledSoon
-          ? "scheduled"
-          : "active";
+        : isWaitingOnSignals
+          ? "waiting"
+          : taskIsScheduledSoon
+            ? "scheduled"
+            : "active";
       if (schedulingAttentionOverride) {
         group = schedulingAttentionOverride.group;
       }
@@ -928,7 +952,7 @@ export async function queryWorkstationWorkItems(
         priority,
         group,
         updatedAt: task.updatedAt,
-        isBlocked,
+        isBlocked: isBlockedByIssue,
       }, role, now);
 
       const missingSignals = task.requiresSignals.filter(
@@ -983,14 +1007,22 @@ export async function queryWorkstationWorkItems(
                       : "Task is ready to complete.",
         nextStep: taskRecoveryRoute?.nextStep ??
           (schedulingAttentionOverride?.nextStep ??
-            (isBlocked ? "Resolve blocker." : "Complete the task.")),
+            (isWaitingOnSignals
+              ? "Wait for prerequisites."
+              : isBlockedByIssue
+                ? "Resolve blocker."
+                : "Complete the task.")),
         recordId: task.id,
         parentRecordId: job.id,
         parentLabel: jobParentLabel ?? undefined,
         contextLine: jobContextLine ?? undefined,
         href: `/jobs/${job.id}`,
         updatedAt: task.updatedAt,
-        isBlocked,
+        assignedUserId: task.assignedUserId,
+        dueAt: task.dueAt,
+        scheduledStartAt: task.scheduledStartAt,
+        isBlocked: isBlockedByIssue,
+        isWaitingOnSignals,
         missingSignals: missingSignals.length > 0 ? missingSignals : undefined,
         executionHealthState: isPrimary ? executionHealth.primaryState : undefined,
         executionHealthHeadline: isPrimary ? executionHealth.headline : undefined,

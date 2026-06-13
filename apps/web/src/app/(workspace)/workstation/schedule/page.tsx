@@ -1,17 +1,35 @@
 import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
-import { WorkstationClearedState } from "@/components/workstation/workstation-ui";
+import { redirect } from "next/navigation";
+import {
+  parseWorkstationUrlState,
+  buildWorkstationUrl,
+} from "@/lib/workstation/url-state";
+import { WorkstationSelectionModal } from "@/components/workstation/workstation-selection-modal";
+import { usesGenericPanel } from "@/lib/workstation/uses-generic-panel";
+import { WorkstationPanelContent } from "@/components/workstation/workstation-panel-content";
+import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
+import {
+  WorkstationQueueItem,
+  WorkstationClearedState,
+} from "@/components/workstation/workstation-ui";
 import { ButtonLink } from "@/components/ui/button";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { StatusBadge } from "@/components/ui/status-badge";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkstationScheduleLensPage() {
+export default async function WorkstationScheduleLensPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const ctx = await getRequestContextOrThrow();
-  const items = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
-  const scheduleItems = items.filter(
+  const sp = await searchParams;
+  const urlState = parseWorkstationUrlState(sp);
+  const selectedId = urlState.selected?.id;
+
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
+  const scheduleItems = allItems.filter(
     (item) =>
       item.kind === "schedule" ||
       (item.kind === "task" &&
@@ -19,9 +37,30 @@ export default async function WorkstationScheduleLensPage() {
           item.status === "Due today" ||
           item.status === "Needs schedule")),
   );
-  const todayCount = scheduleItems.filter((item) => item.status === "Today" || item.status === "Due today").length;
-  const missedCount = scheduleItems.filter((item) => item.status === "Missed" || item.status === "Overdue").length;
-  const unscheduledCount = scheduleItems.filter((item) => item.status === "Needs schedule").length;
+  const todayCount = scheduleItems.filter(
+    (item) => item.status === "Today" || item.status === "Due today",
+  ).length;
+  const missedCount = scheduleItems.filter(
+    (item) => item.status === "Missed" || item.status === "Overdue",
+  ).length;
+  const unscheduledCount = scheduleItems.filter(
+    (item) => item.status === "Needs schedule",
+  ).length;
+
+  const selectedItemRaw = selectedId
+    ? scheduleItems.find((i) => i.id === selectedId) ??
+      allItems.find((i) => i.id === selectedId)
+    : null;
+  const selectedItem = selectedItemRaw
+    ? resolveExecutableWorkItem(selectedItemRaw, allItems)
+    : null;
+  if (selectedId && !selectedItem) {
+    const cleared = buildWorkstationUrl(urlState, { selected: undefined });
+    redirect(`/workstation/schedule${cleared}`);
+  }
+
+  const buildItemHref = (item: (typeof scheduleItems)[number]) =>
+    buildWorkstationUrl(urlState, { selected: { id: item.id, kind: item.kind } });
 
   return (
     <div className="space-y-8">
@@ -36,36 +75,35 @@ export default async function WorkstationScheduleLensPage() {
         </div>
       </div>
 
+      <WorkstationSelectionModal
+        item={selectedItem ?? null}
+        genericContent={
+          selectedItem && usesGenericPanel(selectedItem) ? (
+            <WorkstationPanelContent item={selectedItem} />
+          ) : undefined
+        }
+      />
+
       {scheduleItems.length > 0 ? (
-        <WorkspacePanel padding="compact">
-          <div className="space-y-3">
-            {scheduleItems.slice(0, 20).map((item) => (
-              <a
+        <div className="grid gap-2">
+          {scheduleItems.slice(0, 20).map((item) => {
+            const executable = resolveExecutableWorkItem(item, allItems);
+            return (
+              <WorkstationQueueItem
                 key={item.id}
-                href={item.href || "/schedule"}
-                className="block rounded border border-border bg-surface p-3 hover:border-border-strong"
-              >
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                  {item.status ? <StatusBadge label={item.status} tone="sent" /> : null}
-                </div>
-                {item.subtitle ? (
-                  <p className="text-xs text-foreground-muted">{item.subtitle}</p>
-                ) : null}
-                <p className="mt-1 text-xs text-foreground-muted">{item.reason}</p>
-                <p className="mt-1 text-xs font-medium text-foreground">{item.nextStep}</p>
-              </a>
-            ))}
-          </div>
-        </WorkspacePanel>
+                item={{ ...executable, href: buildItemHref(executable) }}
+                isSelected={
+                  selectedId === item.id || selectedId === executable.id
+                }
+              />
+            );
+          })}
+        </div>
       ) : (
         <WorkstationClearedState lens="upcoming" />
       )}
 
       <div className="mt-12 flex flex-wrap gap-4 border-t border-border pt-8">
-        <ButtonLink href="/schedule" variant="ghost" size="sm">
-          {WORKSTATION_COPY.continuation.openSchedule}
-        </ButtonLink>
         <ButtonLink href="/workstation" variant="ghost" size="sm">
           {WORKSTATION_COPY.continuation.backToToday}
         </ButtonLink>
