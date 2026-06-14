@@ -76,6 +76,16 @@
 | Embedded lead/quote workflow | **Derived** | `record-workflow-surface.ts` + readiness/progress helpers | Duplicate next-action copy in Workstation only |
 | Job blocked (issues + payments) | **Derived** | `workstation-query.ts` (job loop) | Task items ignoring job-level payment block |
 
+## Authentication & authorization
+
+| Concept | Stored or derived? | Canonical location | Risk if duplicated |
+|---------|-------------------|-------------------|-------------------|
+| Actor context (`userId`, `organizationId`, `role`) | **Derived at request time** | `apps/web/src/lib/auth-context.ts` (moving to `lib/authz/context.ts`) | JWT stale-role leaks or wrong-tenant reads |
+| Role capability map | **Derived from role enum** | `apps/web/src/lib/staff-authz.ts` (moving to `lib/authz/capabilities.ts`) | Conflicting permission behavior across routes/actions |
+| Resource visibility predicate (`job/task/schedule`) | **Derived** | Authz resource helpers + query builders (`workstation-query.ts`, schedule/jobs queries) | Field/subcontractor overexposure on list/count/search |
+| Public token access scope | **Stored token metadata + derived checks** | `/q/[token]`, `/co/[token]` actions and token helpers (moving to dedicated public-token service) | Raw bearer token misuse and replay scope drift |
+| Security audit stream | **Stored** | Dedicated security audit events (planned), not `JobActivity` | Lost accountability for role/invite/session/token actions |
+
 ## Commercial pipeline
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
@@ -138,4 +148,5 @@
 ---
 
 *Created 2026-05-16 — Guardrails v1 Pass 1.*  
-*Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*
+*Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*  
+*Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*

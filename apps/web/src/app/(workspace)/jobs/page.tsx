@@ -2,6 +2,7 @@ import Link from "next/link";
 import { JobStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 
 import { jobDetailPath } from "@/lib/job-path";
 import { formatJobStatus, jobStatusBadgeTone } from "@/lib/job-display";
@@ -20,9 +21,11 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage() {
   const ctx = await getRequestContextOrThrow();
 
+  const jobVisibilityWhere = getJobVisibilityWhere(ctx.role, ctx.userId);
+
   const [jobs, totalCount, activeCount, archivedCount] = await Promise.all([
     db.job.findMany({
-      where: { organizationId: ctx.organizationId },
+      where: { organizationId: ctx.organizationId, ...jobVisibilityWhere },
       orderBy: [{ activatedAt: "desc" }],
       select: {
         id: true,
@@ -36,9 +39,9 @@ export default async function JobsPage() {
         _count: { select: { tasks: true, stages: true } },
       },
     }),
-    db.job.count({ where: { organizationId: ctx.organizationId } }),
-    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE } }),
-    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ARCHIVED } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, ...jobVisibilityWhere } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE, ...jobVisibilityWhere } }),
+    db.job.count({ where: { organizationId: ctx.organizationId, status: JobStatus.ARCHIVED, ...jobVisibilityWhere } }),
   ]);
 
 

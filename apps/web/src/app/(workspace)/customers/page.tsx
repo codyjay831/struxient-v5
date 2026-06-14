@@ -9,9 +9,10 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { UserCircle } from "lucide-react";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,19 @@ export default async function CustomersPage({
   const sq = await (searchParams ?? Promise.resolve({} as { from?: string; section?: string }));
   const fromWorkstation = sq.from === "workstation";
   const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb items={[{ label: "Relationships" }, { label: "Customers" }]} />
+        <PageHeader
+          title="Customers"
+          description="People and companies you work with."
+        />
+        <AccessDeniedPanel description="This role cannot access customer and sales records." />
+      </div>
+    );
+  }
   const [customers, totalLeads, unlinkedLeads, openPipelineLeads] = await Promise.all([
     db.customer.findMany({
       where: { organizationId: ctx.organizationId },

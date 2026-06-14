@@ -1,21 +1,20 @@
-import { StaffRole, Job, Quote } from "@prisma/client";
-import { DEV_ORGANIZATION_ID, DEV_USER_ID, DEV_ORGANIZATION_NAME, DEV_ORGANIZATION_SLUG } from "./dev-organization";
-import { auth } from "@/auth";
+import { Job, Quote } from "@prisma/client";
 import { db } from "./db";
 import {
   denyUnlessCanManageCommercial,
   denyUnlessCanManageOrgSettings,
   denyUnlessCanMutate,
 } from "./staff-authz";
+import {
+  getJobVisibilityWhere,
+  getTaskVisibilityWhere,
+} from "@/lib/authz/resource-access";
+import {
+  resolveActorContextOrThrow,
+  type ActorContext,
+} from "@/lib/authz/context";
 
-export interface RequestContext {
-  organizationId: string;
-  organizationName: string;
-  organizationSlug: string;
-  userId: string;
-  role: StaffRole;
-  authSource: "dev" | "session";
-}
+export type RequestContext = ActorContext;
 
 /**
  * Central resolver for the current request's tenant and user context.
@@ -24,56 +23,7 @@ export interface RequestContext {
  * In production: Strictly requires a valid session from an auth provider.
  */
 export async function getRequestContextOrThrow(): Promise<RequestContext> {
-  const session = await auth();
-
-  if (session?.user?.id) {
-    const activeOrganizationId =
-      typeof session.user.activeOrganizationId === "string" ? session.user.activeOrganizationId : null;
-
-    const membership = await db.membership.findFirst({
-      where: {
-        userId: session.user.id,
-        ...(activeOrganizationId ? { organizationId: activeOrganizationId } : {}),
-      },
-      include: { organization: true },
-    });
-
-    if (membership) {
-      return {
-        organizationId: membership.organizationId,
-        organizationName: membership.organization.name,
-        organizationSlug: membership.organization.slug || "",
-        userId: session.user.id,
-        role: membership.role,
-        authSource: "session",
-      };
-    }
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    const orgExists = await db.organization.findUnique({
-      where: { id: DEV_ORGANIZATION_ID },
-      select: { id: true },
-    });
-
-    if (!orgExists) {
-      throw new Error(
-        "Development organization not found. Run `npx prisma db seed` in apps/web.",
-      );
-    }
-
-    // Return the stable dev context for local development
-    return {
-      organizationId: DEV_ORGANIZATION_ID,
-      organizationName: DEV_ORGANIZATION_NAME,
-      organizationSlug: DEV_ORGANIZATION_SLUG,
-      userId: DEV_USER_ID,
-      role: StaffRole.OWNER,
-      authSource: "dev",
-    };
-  }
-
-  throw new Error("Unauthorized: No active session found and dev fallback is disabled in production.");
+  return resolveActorContextOrThrow();
 }
 
 /**
@@ -99,6 +49,14 @@ export async function getCommercialRequestContextOrThrow(): Promise<RequestConte
     throw new Error(denied);
   }
   return ctx;
+}
+
+export async function getCommercialRequestContextOrNull(): Promise<RequestContext | null> {
+  try {
+    return await getCommercialRequestContextOrThrow();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -130,7 +88,11 @@ export async function getOptionalRequestContext(): Promise<RequestContext | null
 export async function requireJobAccess(jobId: string): Promise<Job> {
   const ctx = await getRequestContextOrThrow();
   const job = await db.job.findFirst({
-    where: { id: jobId, organizationId: ctx.organizationId },
+    where: {
+      id: jobId,
+      organizationId: ctx.organizationId,
+      ...getJobVisibilityWhere(ctx.role, ctx.userId),
+    },
   });
   if (!job) {
     throw new Error("Job not found or access denied.");
@@ -143,6 +105,10 @@ export async function requireJobAccess(jobId: string): Promise<Job> {
  */
 export async function requireQuoteAccess(quoteId: string): Promise<Quote> {
   const ctx = await getRequestContextOrThrow();
+  const denied = denyUnlessCanManageCommercial(ctx.role);
+  if (denied) {
+    throw new Error(denied);
+  }
   const quote = await db.quote.findFirst({
     where: { id: quoteId, organizationId: ctx.organizationId },
   });
@@ -150,5 +116,24 @@ export async function requireQuoteAccess(quoteId: string): Promise<Quote> {
     throw new Error("Quote not found or access denied.");
   }
   return quote;
+}
+
+export async function requireTaskAccess(taskId: string) {
+  const ctx = await getRequestContextOrThrow();
+  const task = await db.jobTask.findFirst({
+    where: {
+      id: taskId,
+      job: {
+        organizationId: ctx.organizationId,
+        ...getJobVisibilityWhere(ctx.role, ctx.userId),
+      },
+      ...getTaskVisibilityWhere(ctx.role, ctx.userId),
+    },
+    select: { id: true, jobId: true },
+  });
+  if (!task) {
+    throw new Error("Task not found or access denied.");
+  }
+  return task;
 }
 

@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import {
   formatLeadChannel,
   formatLeadStatus,
@@ -22,6 +22,7 @@ import { CustomerServiceLocationsPanel } from "@/components/customers/customer-s
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { Phone, UserRound, Mail, History, Briefcase, FileText, ChevronRight, ArrowUpRight } from "lucide-react";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,22 @@ export default async function CustomerDetailPage({
   const fromWorkstation = sq.from === "workstation";
   const returnSection = typeof sq.section === "string" ? sq.section : "investigate";
   const returnHref = fromWorkstation ? workstationReturnHref(returnSection) : undefined;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Relationships" },
+            { label: "Customers", href: "/customers" },
+            { label: "Access denied" },
+          ]}
+        />
+        <PageHeader title="Customer profile" description="View customer relationship records." />
+        <AccessDeniedPanel description="This role cannot access customer profiles." />
+      </div>
+    );
+  }
   const customer = await db.customer.findFirst({
     where: {
       id: customerId,

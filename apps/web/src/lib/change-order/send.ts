@@ -5,7 +5,6 @@ import {
   ChangeOrderStatus,
   Prisma,
 } from "@prisma/client";
-import { randomBytes } from "crypto";
 import { addDays } from "date-fns";
 import {
   CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
@@ -17,6 +16,7 @@ import {
 } from "@/lib/change-order-checkpoint-snapshot";
 import { notifyChangeOrderSent } from "@/lib/notifications";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 
 export interface ChangeOrderSendOptions {
   expiresInDays?: number | null;
@@ -97,20 +97,20 @@ export async function transitionChangeOrderToSent(
 
   let shareToken: string;
   if (!existingToken) {
-    shareToken = randomBytes(32).toString("hex");
+    shareToken = createPublicAccessToken();
     await tx.changeOrderShareToken.create({
       data: {
         organizationId,
         changeOrderId,
-        token: shareToken,
+        token: hashPublicAccessToken(shareToken),
         expiresAt,
       },
     });
   } else {
-    shareToken = existingToken.token;
+    shareToken = createPublicAccessToken();
     await tx.changeOrderShareToken.update({
       where: { changeOrderId },
-      data: { expiresAt },
+      data: { token: hashPublicAccessToken(shareToken), expiresAt },
     });
   }
 

@@ -65,6 +65,11 @@ import {
 import { getOrgTimezone } from "./scheduling/deadline-timezone";
 import { queryJobsNeedingScheduleCleanupAttention } from "./scheduling/job-cancel-cleanup";
 import { LEAD_PIPELINE_OPEN_STATUSES } from "./lead-display";
+import {
+  getJobVisibilityWhere,
+  getTaskVisibilityWhere,
+} from "@/lib/authz/resource-access";
+import { canReadCommercial } from "@/lib/authz/capabilities";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
@@ -170,6 +175,7 @@ function formatDependencyLabel(raw: string): string {
 export async function queryWorkstationWorkItems(
   organizationId: string,
   role: StaffRole,
+  userId: string,
   urgentThresholdHours: number = 24
 ): Promise<WorkstationWorkItem[]> {
   const items: WorkstationWorkItem[] = [];
@@ -181,13 +187,17 @@ export async function queryWorkstationWorkItems(
   });
   const orgTimezone = getOrgTimezone(organization?.timezone);
 
+  const commercialReadable = canReadCommercial(role);
+  const jobVisibilityWhere = getJobVisibilityWhere(role, userId);
+  const taskVisibilityWhere = getTaskVisibilityWhere(role, userId);
+
   const knownLeadStatuses = new Set(Object.values(LeadStatus));
   const pipelineStatuses = LEAD_PIPELINE_OPEN_STATUSES.filter((s) =>
     knownLeadStatuses.has(s),
   );
 
   // 1. Opportunities
-  const leads = await db.lead.findMany({
+  const leads = commercialReadable ? await db.lead.findMany({
     where: { organizationId, status: { in: pipelineStatuses } },
     include: {
       customer: true,
@@ -203,7 +213,7 @@ export async function queryWorkstationWorkItems(
         },
       },
     },
-  });
+  }) : [];
 
   for (const lead of leads) {
     const hasActiveQuote = lead.quotes.length > 0;
@@ -290,7 +300,7 @@ export async function queryWorkstationWorkItems(
   }
 
   // 2. Quotes
-  const quotes = await db.quote.findMany({
+  const quotes = commercialReadable ? await db.quote.findMany({
     where: { organizationId, status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] } },
     include: {
       customer: true,
@@ -317,7 +327,7 @@ export async function queryWorkstationWorkItems(
         },
       },
     },
-  });
+  }) : [];
 
   for (const quote of quotes) {
     const latestApproval = quote.checkpoints[0];
@@ -431,7 +441,7 @@ export async function queryWorkstationWorkItems(
   }
 
   // 2b. Change Orders
-  const changeOrders = await db.changeOrder.findMany({
+  const changeOrders = commercialReadable ? await db.changeOrder.findMany({
     where: {
       organizationId,
       status: {
@@ -457,7 +467,7 @@ export async function queryWorkstationWorkItems(
       },
     },
     orderBy: [{ updatedAt: "desc" }],
-  });
+  }) : [];
 
   for (const changeOrder of changeOrders) {
     const priority: WorkstationWorkItemPriority =
@@ -508,7 +518,7 @@ export async function queryWorkstationWorkItems(
 
   // 3. Jobs & Tasks
   const jobs = await db.job.findMany({
-    where: { organizationId, status: JobStatus.ACTIVE },
+    where: { organizationId, status: JobStatus.ACTIVE, ...jobVisibilityWhere },
     include: {
       serviceLocation: {
         select: { id: true, organizationId: true, formattedAddress: true, addressLine1: true },
@@ -526,7 +536,7 @@ export async function queryWorkstationWorkItems(
       },
       lead: true,
       tasks: {
-        where: { completedAt: null },
+        where: { completedAt: null, ...taskVisibilityWhere },
         select: {
           id: true,
           title: true,
@@ -1152,6 +1162,7 @@ export async function queryWorkstationWorkItems(
       organizationId,
       status: JobIssueStatus.OPEN,
       severity: JobIssueSeverity.BLOCKS_WORK,
+      job: jobVisibilityWhere,
     },
     include: {
       job: {
@@ -1267,7 +1278,7 @@ export async function queryWorkstationWorkItems(
     where: {
       organizationId,
       status: { in: [JobPaymentRequirementStatus.DUE, JobPaymentRequirementStatus.PENDING] },
-      job: { status: JobStatus.ACTIVE },
+      job: { status: JobStatus.ACTIVE, ...jobVisibilityWhere },
     },
     include: {
       job: {
@@ -1385,6 +1396,7 @@ export async function queryWorkstationWorkItems(
     where: {
       organizationId,
       status: DailyJobLogStatus.DRAFT,
+      job: jobVisibilityWhere,
     },
     include: {
       job: {

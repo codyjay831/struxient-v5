@@ -2,6 +2,7 @@ export const SETTINGS_SECTIONS = [
   "workstation",
   "customer-intake",
   "appearance",
+  "commercial",
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -44,6 +45,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsSection, string> = {
   workstation: "Workstation",
   "customer-intake": "Customer intake",
   appearance: "Appearance",
+  commercial: "Sales & relationships",
 };
 
 export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
@@ -86,6 +88,17 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     category: "customer-intake",
     targetSection: "customer-intake",
     rowId: "row-accept-public-requests",
+  },
+  {
+    id: "commercial-access-note",
+    type: "setting",
+    title: "Sales & relationships access",
+    description:
+      "Commercial pages require Office, Admin, Owner, or Viewer; Field/Subcontractor are restricted.",
+    keywords: ["sales access", "customers access", "quotes access", "role access"],
+    category: "commercial",
+    targetSection: "commercial",
+    rowId: "row-commercial-access-note",
   },
   {
     id: "manage-public-request",

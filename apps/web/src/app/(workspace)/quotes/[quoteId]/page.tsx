@@ -3,10 +3,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { ButtonLink } from "@/components/ui/button";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { FileText } from "lucide-react";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,25 @@ export default async function QuoteDetailPage({
     ? workstationReturnHref(returnSection)
     : undefined;
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Sales", href: "/leads" },
+            { label: "Access denied" },
+          ]}
+        />
+        <PageHeader
+          eyebrow="Sales"
+          title="Quote"
+          description="Review and update commercial proposal details."
+        />
+        <AccessDeniedPanel description="This role cannot access quote records." />
+      </div>
+    );
+  }
   const result = await loadQuoteWorkSurface(quoteId, ctx.organizationId);
 
   if (!result) {

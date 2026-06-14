@@ -1,11 +1,12 @@
 "use server";
 
-import { StaffRole } from "@prisma/client";
+import { OrganizationInviteStatus, StaffRole } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { isBetaSignupEnabled } from "@/lib/env-validation";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { hashOrganizationInviteToken } from "@/lib/invite-token";
 import { z } from "zod";
 
 const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -91,23 +92,57 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
     return { ok: false, error: "An account with this email already exists." };
   }
 
-  const organizationSlug = await resolveUniqueOrganizationSlug(parsed.data.companyName);
   const passwordHash = await hash(parsed.data.password, 10);
 
-  await db.$transaction(async (tx) => {
-    const organization = await tx.organization.create({
-      data: {
-        name: parsed.data.companyName,
-        slug: organizationSlug,
-      },
-      select: { id: true },
-    });
+  const inviteTokenRaw = (input as { inviteToken?: unknown })?.inviteToken;
+  const requestedInviteToken =
+    typeof inviteTokenRaw === "string" ? inviteTokenRaw.trim() : "";
 
+  await db.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         name: parsed.data.name,
         email,
         passwordHash,
+      },
+      select: { id: true },
+    });
+
+    if (requestedInviteToken) {
+      const inviteHash = hashOrganizationInviteToken(requestedInviteToken);
+      const invite = await tx.organizationInvite.findFirst({
+        where: {
+          tokenHash: inviteHash,
+          normalizedEmail: email,
+          status: OrganizationInviteStatus.PENDING,
+          expiresAt: { gt: new Date() },
+        },
+      });
+      if (invite) {
+        await tx.membership.create({
+          data: {
+            userId: user.id,
+            organizationId: invite.organizationId,
+            role: invite.role,
+          },
+        });
+        await tx.organizationInvite.update({
+          where: { id: invite.id },
+          data: {
+            status: OrganizationInviteStatus.ACCEPTED,
+            acceptedByUserId: user.id,
+            acceptedAt: new Date(),
+          },
+        });
+        return;
+      }
+    }
+
+    const organizationSlug = await resolveUniqueOrganizationSlug(parsed.data.companyName);
+    const organization = await tx.organization.create({
+      data: {
+        name: parsed.data.companyName,
+        slug: organizationSlug,
       },
       select: { id: true },
     });

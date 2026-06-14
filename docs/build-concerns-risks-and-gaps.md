@@ -38,6 +38,8 @@
 | A2 | **Customer portal auth** | Link-first (magic / SMS) primary; optional password later (locked §9). | Friction or insecure shortcuts. | Specify token TTL, replay, device binding in a short security note. |
 | A3 | **Subcontractor job scope** | Role + `JobCollaborator` server-side (locked §1). | Client-only nav hiding (violates I19). | Centralize authz helper used by all server actions / route handlers. |
 | A4 | **E-sign vendor** | Acceptable third-party with Struxient-owned redirect (locked §9); legal varies by jurisdiction. | Compliance gaps. | Track “legal review” row in §12 overview; environment-specific config. |
+| A5 | **Stale session / active org validation** | JWT can drift from DB membership role/status and selected org validity. | Privilege persistence after role/status changes; wrong-tenant context. | **Resolved in canon (2026-06-14):** lock fail-closed per-request membership validation and selected-org revalidation in locked decisions + conceptual model. |
+| A6 | **Role surfacing vs permission boundary** | UX role defaults and server authz boundary can be conflated. | Hidden-nav false confidence; read leaks via direct URL/list/count/search. | **Resolved in canon (2026-06-14):** role determines default surface; permissions/resource relations determine enforced access. |
 
 ---
 
@@ -188,3 +190,4 @@ Canon intent from [product-philosophy.md](./canon/product-philosophy.md) and [ex
 | 2026-05-13 | Added P5 (Signal Engine) and P6 (Payment signals); updated P4 (Construction issues) for signal muting. |
 | 2026-05-13 | Resolved P5 and P6; updated §11 for JobTaskStatus collapse. |
 | 2026-05-25 | §13 — product philosophy canon vs implementation gaps ([product-philosophy.md](./canon/product-philosophy.md), execution-engine §12). |
+| 2026-06-14 | Added A5/A6 rows for stale-session + active-org validation and role-surface vs permission-boundary decisions, marked canon-resolved. |

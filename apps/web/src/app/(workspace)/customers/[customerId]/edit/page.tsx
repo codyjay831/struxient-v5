@@ -5,10 +5,11 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ButtonLink } from "@/components/ui/button";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { UserRound } from "lucide-react";
 import { updateCustomerAction } from "../../customer-form-actions";
 import { CustomerRecordForm } from "../../customer-record-form";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,26 @@ export default async function EditCustomerPage({
   params: Promise<{ customerId: string }>;
 }) {
   const { customerId } = await params;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Relationships" },
+            { label: "Customers", href: "/customers" },
+            { label: "Edit" },
+          ]}
+        />
+        <PageHeader
+          eyebrow="Relationships"
+          title="Edit customer"
+          description="Update customer profile details."
+        />
+        <AccessDeniedPanel description="This role cannot edit customer records." />
+      </div>
+    );
+  }
   const customer = await db.customer.findFirst({
     where: {
       id: customerId,

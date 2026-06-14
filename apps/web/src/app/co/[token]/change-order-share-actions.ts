@@ -17,6 +17,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notifyChangeOrderAccepted } from "@/lib/notifications";
+import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
+import { resolveChangeOrderShareToken } from "@/lib/public-access/public-token-service";
+import { auditPublicTokenEvent } from "@/lib/public-access/public-token-audit";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -51,9 +54,10 @@ export async function acceptChangeOrderFromTokenAction(
   }
 
   try {
+    const resolvedShareToken = await resolveChangeOrderShareToken(token);
     const result = await db.$transaction(async (tx) => {
-      const shareToken = await tx.changeOrderShareToken.findUnique({
-        where: { token },
+      const shareToken = await tx.changeOrderShareToken.findFirst({
+        where: { id: resolvedShareToken?.id ?? "" },
         include: {
           changeOrder: {
             select: {
@@ -146,6 +150,11 @@ export async function acceptChangeOrderFromTokenAction(
       acceptedByName: acceptedByName.trim(),
       deltaCents: result.deltaCents,
     });
+    auditPublicTokenEvent("change_order.accept", {
+      changeOrderId: result.changeOrderId,
+      organizationId: result.organizationId,
+      ip,
+    });
 
     return { success: true };
   } catch (e) {
@@ -166,26 +175,28 @@ export async function recordChangeOrderViewAction(token: string) {
   const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
   const userAgent = headerList.get("user-agent") || "unknown";
 
-  const shareToken = await db.changeOrderShareToken.findUnique({
-    where: { token },
-    select: { changeOrderId: true, organizationId: true },
-  });
+  const shareToken = await resolveChangeOrderShareToken(token);
 
   if (shareToken) {
     await db.$transaction([
       db.changeOrderShareToken.update({
-        where: { token },
+        where: { id: shareToken.id },
         data: { lastViewedAt: new Date() },
       }),
       db.changeOrderView.create({
         data: {
           organizationId: shareToken.organizationId,
           changeOrderId: shareToken.changeOrderId,
-          token,
+          token: hashPublicAccessToken(token),
           ip,
           userAgent,
         },
       }),
     ]);
+    auditPublicTokenEvent("change_order.view", {
+      changeOrderId: shareToken.changeOrderId,
+      organizationId: shareToken.organizationId,
+      ip,
+    });
   }
 }

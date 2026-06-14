@@ -10,7 +10,7 @@ import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-l
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { buildQuoteLineExecutionPlanningContextSeed } from "@/lib/ai/quote-execution-planning-context";
@@ -22,6 +22,7 @@ import {
   loadQuotePlanContext,
 } from "@/lib/quote-plan/quote-plan-context";
 import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,21 @@ export default async function QuoteExecutionReviewPreviewPage({
     notFound();
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Sales", href: "/leads" },
+            { label: "Execution review" },
+          ]}
+        />
+        <PageHeader title="Execution review" description="Review execution plan before activation." />
+        <AccessDeniedPanel description="This role cannot review quote execution plans." />
+      </div>
+    );
+  }
 
   const [row, stages, approvalCheckpoint] = await Promise.all([
     db.quote.findFirst({

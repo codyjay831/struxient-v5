@@ -1,5 +1,6 @@
-import { JobScheduleEventStatus, type Prisma } from "@prisma/client";
+import { JobScheduleEventStatus, StaffRole, type Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 
 const ACTIVE_AND_HISTORY_STATUSES: JobScheduleEventStatus[] = [
   JobScheduleEventStatus.TENTATIVE,
@@ -11,13 +12,18 @@ const ACTIVE_AND_HISTORY_STATUSES: JobScheduleEventStatus[] = [
 export async function queryOrganizationScheduleProjection(input: {
   organizationId: string;
   range: { startAt: Date; endAt: Date };
+  role: StaffRole;
+  userId: string;
 }) {
+  const jobVisibilityWhere = getJobVisibilityWhere(input.role, input.userId);
+
   return db.jobScheduleEvent.findMany({
     where: {
       organizationId: input.organizationId,
       status: { in: ACTIVE_AND_HISTORY_STATUSES },
       startAt: { lte: input.range.endAt },
       endAt: { gte: input.range.startAt },
+      job: jobVisibilityWhere,
     },
     select: {
       id: true,

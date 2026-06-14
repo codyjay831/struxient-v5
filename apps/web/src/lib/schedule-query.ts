@@ -1,4 +1,5 @@
 import {
+  StaffRole,
   JobIssueSeverity,
   JobIssueStatus,
   JobScheduleEventStatus,
@@ -12,6 +13,11 @@ import { deriveTaskState, toTaskReadinessInput } from "@/lib/task-readiness";
 import { deriveUnscheduledTaskItems, type ReadyUnscheduledTaskCandidate } from "@/lib/schedule-unscheduled-tasks";
 import { deriveScheduleConflicts as deriveCanonicalScheduleConflicts } from "@/lib/scheduling/scheduling-derivation";
 import { queryOrganizationScheduleProjection } from "@/lib/scheduling/schedule-projection";
+import {
+  getJobVisibilityWhere,
+  getTaskVisibilityWhere,
+} from "@/lib/authz/resource-access";
+import { canReadCommercial } from "@/lib/authz/capabilities";
 
 export type ScheduleView = "month" | "week" | "day" | "agenda" | "dispatch";
 
@@ -85,9 +91,16 @@ export function hasActiveCanonicalTaskScheduleLink(
 export async function queryOrganizationSchedule(
   organizationId: string,
   range: { startAt: Date; endAt: Date },
+  role: StaffRole,
+  userId: string,
 ): Promise<ScheduleQueryResult> {
+  const commercialReadable = canReadCommercial(role);
+  const jobVisibilityWhere = getJobVisibilityWhere(role, userId);
+  const taskVisibilityWhere = getTaskVisibilityWhere(role, userId);
+
   const [leadRequests, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
-    db.leadVisitRequest.findMany({
+    commercialReadable
+      ? db.leadVisitRequest.findMany({
       where: {
         organizationId,
         status: { in: [LeadVisitRequestStatus.PENDING, LeadVisitRequestStatus.CONFIRMED] },
@@ -112,11 +125,13 @@ export async function queryOrganizationSchedule(
         },
       },
       orderBy: [{ confirmedDate: "asc" }, { requestedDate: "asc" }],
-    }),
-    queryOrganizationScheduleProjection({ organizationId, range }),
+      })
+      : Promise.resolve([]),
+    queryOrganizationScheduleProjection({ organizationId, range, role, userId }),
     db.scheduleBlock.findMany({
       where: {
         organizationId,
+        ...(commercialReadable ? {} : { userId }),
         startAt: { lte: range.endAt },
         OR: [{ endAt: null }, { endAt: { gte: range.startAt } }],
       },
@@ -134,8 +149,9 @@ export async function queryOrganizationSchedule(
     }),
     db.jobTask.findMany({
       where: {
-        job: { organizationId },
+        job: { organizationId, ...jobVisibilityWhere },
         status: JobTaskStatus.TODO,
+        ...taskVisibilityWhere,
         OR: [
           { dueAt: { gte: range.startAt, lte: range.endAt } },
         ],
@@ -188,9 +204,10 @@ export async function queryOrganizationSchedule(
     }),
     db.jobTask.findMany({
       where: {
-        job: { organizationId },
+        job: { organizationId, ...jobVisibilityWhere },
         status: JobTaskStatus.TODO,
         schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
+        ...taskVisibilityWhere,
       },
       select: {
         id: true,

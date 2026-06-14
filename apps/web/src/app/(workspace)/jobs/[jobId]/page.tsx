@@ -30,6 +30,7 @@ import {
   buildScheduleCleanupReviewItems,
   loadPendingScheduleCleanupEvents,
 } from "@/lib/scheduling/job-cancel-cleanup";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobEventButton } from "@/components/jobs/job-event-button";
 import { JobTaskAddButton } from "@/components/jobs/job-task-add-button";
@@ -73,11 +74,12 @@ export default async function JobDetailPage({
   }
 
   const ctx = await getRequestContextOrThrow();
+  const jobVisibilityWhere = getJobVisibilityWhere(ctx.role, ctx.userId);
   const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
 
   const [job, liveSignals] = await Promise.all([
     db.job.findFirst({
-      where: { id, organizationId: ctx.organizationId },
+      where: { id, organizationId: ctx.organizationId, ...jobVisibilityWhere },
       select: {
         id: true,
         title: true,

@@ -6,12 +6,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import {
   parseQuoteCheckpointStaffOnly,
   parseQuoteSendCheckpointSnapshot,
 } from "@/lib/quote-checkpoint-snapshot";
 import { FileText } from "lucide-react";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,21 @@ export default async function QuoteCheckpointViewPage({
   params: Promise<{ quoteId: string; checkpointId: string }>;
 }) {
   const { quoteId, checkpointId } = await params;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Sales", href: "/leads" },
+            { label: "Checkpoint" },
+          ]}
+        />
+        <PageHeader title="Checkpoint" description="Immutable quote proof records." />
+        <AccessDeniedPanel description="This role cannot access quote checkpoint records." />
+      </div>
+    );
+  }
 
   const checkpoint = await db.quoteCheckpoint.findFirst({
     where: {

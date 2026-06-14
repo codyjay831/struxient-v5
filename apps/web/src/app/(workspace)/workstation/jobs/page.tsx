@@ -3,6 +3,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { queryWorkstationWorkItems } from "@/lib/workstation-query";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
@@ -33,11 +34,15 @@ export default async function WorkstationJobsLensPage({
   }
   const selectedId = urlState.selected?.id;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role, ctx.userId);
   const jobItems = allItems.filter((i) => i.kind === "job");
   
   const activeJobs = await db.job.findMany({
-    where: { organizationId: ctx.organizationId, status: JobStatus.ACTIVE },
+    where: {
+      organizationId: ctx.organizationId,
+      status: JobStatus.ACTIVE,
+      ...getJobVisibilityWhere(ctx.role, ctx.userId),
+    },
     include: {
       customer: true,
       lead: true,
@@ -152,7 +157,11 @@ export default async function WorkstationJobsLensPage({
 async function JobDetailWrapper({ jobId }: { jobId: string }) {
   const ctx = await getRequestContextOrThrow();
   const job = await db.job.findFirst({
-    where: { id: jobId, organizationId: ctx.organizationId },
+    where: {
+      id: jobId,
+      organizationId: ctx.organizationId,
+      ...getJobVisibilityWhere(ctx.role, ctx.userId),
+    },
     include: {
       stages: true,
       tasks: {
@@ -170,7 +179,10 @@ async function JobDetailWrapper({ jobId }: { jobId: string }) {
     where: {
       jobId: job.id,
       status: JobTaskStatus.TODO,
-      job: { organizationId: ctx.organizationId },
+      job: {
+        organizationId: ctx.organizationId,
+        ...getJobVisibilityWhere(ctx.role, ctx.userId),
+      },
     },
   });
 

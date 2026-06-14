@@ -14,7 +14,7 @@
  *   - never trusts a client-supplied org id
  */
 
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import {
   loadQuoteWorkSurface,
   type QuoteWorkSurfaceLoaderResult,
@@ -35,7 +35,10 @@ export async function loadQuoteWorkSurfaceAction(
   const id = quoteId.trim();
   if (!id) return { ok: false, error: "Missing quote id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return { ok: false, error: "You do not have access to quote records." };
+  }
   const result = await loadQuoteWorkSurface(id, ctx.organizationId);
   if (!result) {
     return { ok: false, error: "Quote not found in your organization." };

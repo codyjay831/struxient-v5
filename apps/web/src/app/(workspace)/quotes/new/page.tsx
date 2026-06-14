@@ -5,10 +5,11 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { performCreateQuoteDraftFromLead } from "../quote-form-actions";
 import { QuoteDraftForm } from "../quote-draft-form";
 import { parseIntakeNotes } from "@/lib/lead-display";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,29 @@ export default async function NewQuotePage({
   searchParams: Promise<SearchRecord>;
 }) {
   const sp = await searchParams;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Sales", href: "/leads" },
+            { label: "New quote" },
+          ]}
+        />
+        <PageHeader
+          title="New quote"
+          description="Create and send customer proposals."
+          actions={
+            <Link href="/leads" className={listLinkClass}>
+              ← Sales pipeline
+            </Link>
+          }
+        />
+        <AccessDeniedPanel description="This role cannot create quotes." />
+      </div>
+    );
+  }
   const rawLead = firstString(sp.leadId);
   const rawCustomer = firstString(sp.customerId);
 

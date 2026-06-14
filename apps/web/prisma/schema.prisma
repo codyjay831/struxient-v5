@@ -65,6 +65,10 @@ model Organization {
   siteDetailsReviews        SiteDetailsReview[]
   aiUsageLogs               AiUsageLog[]
   businessProfile           OrganizationBusinessProfile?
+  organizationInvites       OrganizationInvite[]
+  crews                     Crew[]
+  crewMembers               CrewMember[]
+  jobCollaborators          JobCollaborator[]
 }
 
 model Stage {
@@ -237,6 +241,12 @@ model User {
   approvedExecutionPlanRevisions ExecutionPlanRevision[]    @relation("ExecutionPlanRevisionApprovedBy")
   approvedChangeOrders       ChangeOrder[]                  @relation("ChangeOrderApprovedBy")
   canceledTasks               JobTask[]                     @relation("CanceledTasks")
+  invitedOrganizationInvites  OrganizationInvite[]          @relation("OrganizationInviteInvitedBy")
+  acceptedOrganizationInvites OrganizationInvite[]          @relation("OrganizationInviteAcceptedBy")
+  revokedOrganizationInvites  OrganizationInvite[]          @relation("OrganizationInviteRevokedBy")
+  crewMemberships             CrewMember[]
+  jobCollaborations           JobCollaborator[]
+  lastActiveOrganizationId    String?
 }
 
 model OrganizationBusinessProfile {
@@ -303,6 +313,86 @@ model Membership {
   @@unique([userId, organizationId])
   @@index([organizationId])
   @@index([userId])
+}
+
+model OrganizationInvite {
+  id               String                   @id @default(cuid())
+  organizationId   String
+  normalizedEmail  String
+  role             StaffRole
+  tokenHash        String                   @unique
+  status           OrganizationInviteStatus @default(PENDING)
+  invitedByUserId  String
+  acceptedByUserId String?
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  lastSentAt       DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy        User                     @relation("OrganizationInviteInvitedBy", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+  acceptedBy       User?                    @relation("OrganizationInviteAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  revokedBy        User?                    @relation("OrganizationInviteRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([normalizedEmail])
+  @@index([expiresAt])
+}
+
+model Crew {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  archivedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        CrewMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, archivedAt])
+}
+
+model CrewMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  crewId         String
+  userId         String
+  startsAt       DateTime?
+  endsAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  crew           Crew         @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId])
+  @@index([organizationId, crewId])
+  @@unique([crewId, userId, startsAt])
+}
+
+model JobCollaborator {
+  id               String               @id @default(cuid())
+  organizationId   String
+  jobId            String
+  userId           String
+  permissionsJson  Json
+  status           JobCollaboratorStatus @default(ACTIVE)
+  grantedAt        DateTime             @default(now())
+  revokedAt        DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job              Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, userId])
+  @@index([organizationId, userId, status])
+  @@index([organizationId, jobId, status])
+  @@index([expiresAt])
 }
 
 model Lead {
@@ -991,6 +1081,7 @@ model Job {
   scopeItems          JobScopeItem[]
   changeOrders        ChangeOrder[]
   executionPlanRevisions ExecutionPlanRevision[]
+  collaborators       JobCollaborator[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -2066,6 +2157,19 @@ enum StaffRole {
   FIELD
   VIEWER
   SUBCONTRACTOR
+}
+
+enum OrganizationInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum JobCollaboratorStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
 }
 
 enum BusinessProfileTrade {

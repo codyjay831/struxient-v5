@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import {
   quoteRowToCustomerPreviewInput,
@@ -21,6 +21,7 @@ import {
   quoteStatusBadgeTone,
 } from "@/lib/quote-display";
 import { FileText } from "lucide-react";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,21 @@ export default async function QuoteLiveProposalPreviewPage({
   params: Promise<{ quoteId: string }>;
 }) {
   const { quoteId } = await params;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb
+          items={[
+            { label: "Sales", href: "/leads" },
+            { label: "Quote preview" },
+          ]}
+        />
+        <PageHeader title="Quote preview" description="Customer-facing proposal preview." />
+        <AccessDeniedPanel description="This role cannot preview quote records." />
+      </div>
+    );
+  }
 
   const row = await db.quote.findFirst({
     where: {

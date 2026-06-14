@@ -136,6 +136,9 @@ Customers are usually **not** rows in the same “staff User + membership” mod
 - **Never rely on UI alone** to hide buttons; **always** enforce org + role + resource rules **on the server**.  
 - **Separate channels** — staff session vs customer token are **different permission systems** that can share infrastructure (same app, same auth library) but **must not** confuse customer scope with staff scope.  
 - **Exact role matrix** — locked for v1 in [locked-decisions-v1.md](./locked-decisions-v1.md) §1 (adjust via canon changelog when needed).
+- **Stale-session posture** — role/status/membership changes must take effect on protected server requests immediately; treat JWT as a transport hint and revalidate current user + membership from DB.
+- **Active-org posture** — selected org hints (session/cookie) must always validate against active membership; invalid context fails closed.
+- **Role vs permission split** — role selects default product surface; capability + resource relationship checks decide data/action access.
 
 ### Account creation and permission modeling (recommended patterns)
 
@@ -203,3 +206,4 @@ Canon expects implementations to **avoid duplicate conflicting sources of truth*
 *Canon update (2026-05-05): Customer signals vs user tags; payment schedule as money truth (pointer to domains-and-boundaries).*  
 *Canon update (2026-05-06): Quote section — **working record** vs **checkpoints** pointer to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
 *Canon update (2026-05-06): Stage entry rewritten as **preset / container** per **I24** canon phrase; default MVP preset **Standard Project** named; reserved future preset **Service Work** noted (same core model, no separate task engine). Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*
+*Canon update (2026-06-14): Auth/permissions section clarified stale-session fail-closed checks, selected-org validation, and role-surfacing vs permission-enforcement split.*

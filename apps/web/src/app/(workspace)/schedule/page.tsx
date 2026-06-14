@@ -5,6 +5,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryOrganizationSchedule, type ScheduleView } from "@/lib/schedule-query";
 import { ScheduleBoard } from "@/components/schedule/schedule-board";
 import { db } from "@/lib/db";
+import { isAssignmentScopedRole } from "@/lib/authz/resource-access";
 
 export const dynamic = "force-dynamic";
 
@@ -76,9 +77,12 @@ export default async function ScheduleRecordPage({
 
   const ctx = await getRequestContextOrThrow();
   const [schedule, members] = await Promise.all([
-    queryOrganizationSchedule(ctx.organizationId, range),
+    queryOrganizationSchedule(ctx.organizationId, range, ctx.role, ctx.userId),
     db.membership.findMany({
-      where: { organizationId: ctx.organizationId },
+      where: {
+        organizationId: ctx.organizationId,
+        ...(isAssignmentScopedRole(ctx.role) ? { userId: ctx.userId } : {}),
+      },
       select: {
         user: { select: { id: true, name: true, email: true } },
       },

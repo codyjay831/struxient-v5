@@ -19,8 +19,10 @@
 | **Struxient authentication (v5)** | **No Clerk.** First-party sessions and sign-in UI; **reference prior art:** Auth.js (NextAuth) v5 **Credentials** + **bcrypt** + **Prisma** as in **Struxient_v4** (email/password + org membership in session) or **Struxient_v3** (email/password/**tenantId** when tenant must be chosen at login). |
 | **Authorization (authZ)** | **What** a principal may do and **which org’s data** they access—**after** auth. Implemented with **org-scoped resources** + **membership role** (staff) or **scoped portal tokens / customer grants** (customers); **always server-enforced** (I19). |
 | **Organization context** | Active **company / tenant** bound to the session for staff; every internal entity that matters for isolation should be keyed for **server checks**. |
+| **Active organization selection** | The currently selected org for a multi-org user. Session/cookie values are hints; server must validate selection against active membership per request. |
 | **Membership** | Join of **User** ↔ **Organization** with a **role** (and optional metadata); primary lever for staff permissions inside an org. |
 | **Invite (staff)** | Signed, expiring link or code used to create or link a **User** and **Membership** without shared passwords; preferred team onboarding pattern in canon. |
+| **Security audit event** | Internal security log for auth/session/role/invite/token/access-denial events. Separate from job-facing operational activity feed. |
 | **Customer-facing quote view** | Projection of a quote for customers; may simplify or group line items compared to internal authoring view. |
 | **Internal quote view** | Full quote authoring view including operational fields not meant for customers by default. |
 
@@ -121,3 +123,4 @@
 *Canon update (2026-05-06): Job runtime models (`Job`, `JobStage`, `JobTask`) introduced — one job per quote; stages carry `blockType` (`SHARED` vs `SEPARATE_LINE_ITEM`). Activation copies execution forward; later quote edits do not mutate activated job rows.*  
 *Canon update (2026-05-06): Stage entry rewritten as **preset / container**; added **Stage preset**, **Standard Project (default stage preset)**, **Service Work (reserved preset)**; usage note bans **kanban** and **placement** language for stages (I24).*  
 *Canon update (2026-06-11): Added scheduling glossary terms for work groups, planned ranges, schedule events, event-task coverage, tentative/confirmed commitments, event completion outcome, and return work.*
+*Canon update (2026-06-14): Added Active organization selection and Security audit event terms for access-control hardening alignment.*

@@ -70,8 +70,8 @@ export function SettingsPageClient({
   const availableSections: SettingsSectionKey[] = useMemo(
     () =>
       includeAppearance
-        ? ["workstation", "customer-intake", "appearance"]
-        : ["workstation", "customer-intake"],
+        ? ["workstation", "customer-intake", "commercial", "appearance"]
+        : ["workstation", "customer-intake", "commercial"],
     [includeAppearance],
   );
 
@@ -274,6 +274,28 @@ export function SettingsPageClient({
               description="Manage additional public and custom intake forms."
               href="/settings/intake-forms"
             />
+          </SettingsSection>
+        </div>
+      );
+    }
+
+    if (section === "commercial") {
+      return (
+        <div className="space-y-8">
+          <SettingsSection
+            title="Sales & relationships"
+            description="Commercial records are role-gated server-side."
+          >
+            <div
+              id="row-commercial-access-note"
+              className="rounded-lg border border-border bg-surface px-4 py-3"
+            >
+              <p className="text-sm font-medium text-foreground">Role access behavior</p>
+              <p className="mt-1 text-xs text-foreground-muted">
+                Office, Admin, Owner, and Viewer can open sales and customer records.
+                Field and Subcontractor roles are denied and redirected to a safe access-denied state.
+              </p>
+            </div>
           </SettingsSection>
         </div>
       );

@@ -4,18 +4,29 @@ import { db } from "@/lib/db";
 import { ChangeOrderPublicPreview } from "@/components/jobs/change-order-public-preview";
 import { changeOrderRowToCustomerPreviewDocument } from "@/lib/change-order-checkpoint-snapshot";
 import { recordChangeOrderViewAction } from "./change-order-share-actions";
+import { resolveChangeOrderShareToken } from "@/lib/public-access/public-token-service";
+import { unstable_noStore as noStore } from "next/cache";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function PublicChangeOrderPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
+  noStore();
   const { token } = await params;
 
-  const shareToken = await db.changeOrderShareToken.findUnique({
-    where: { token },
+  const resolved = await resolveChangeOrderShareToken(token);
+  const shareToken = await db.changeOrderShareToken.findFirst({
+    where: { id: resolved?.id ?? "" },
     include: {
       changeOrder: {
         select: {

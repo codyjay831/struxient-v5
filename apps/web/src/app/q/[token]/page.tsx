@@ -7,18 +7,29 @@ import {
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import { recordQuoteViewAction } from "./quote-share-actions";
 import { QuoteStatus } from "@prisma/client";
+import { resolveQuoteShareToken } from "@/lib/public-access/public-token-service";
+import { unstable_noStore as noStore } from "next/cache";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function PublicQuotePage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
+  noStore();
   const { token } = await params;
 
-  const shareToken = await db.quoteShareToken.findUnique({
-    where: { token },
+  const resolved = await resolveQuoteShareToken(token);
+  const shareToken = await db.quoteShareToken.findFirst({
+    where: { id: resolved?.id ?? "" },
     include: {
       quote: {
         include: {

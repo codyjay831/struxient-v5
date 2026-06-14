@@ -54,6 +54,15 @@ export type ChangeOrderAcceptedNotificationPayload = {
   deltaCents: number;
 };
 
+export type TeamInviteNotificationPayload = {
+  organizationId: string;
+  recipientEmail: string;
+  organizationDisplayName: string;
+  inviteUrl: string;
+  invitedRole: string;
+  expiresAt: Date;
+};
+
 /**
  * Triggered when a new lead is submitted via the public intake form.
  */
@@ -376,5 +385,33 @@ export async function notifyChangeOrderAccepted(payload: ChangeOrderAcceptedNoti
     }
   } catch (error) {
     console.error("[Notification] Failed to send change order accepted notifications:", error);
+  }
+}
+
+export async function notifyTeamInviteSent(payload: TeamInviteNotificationPayload) {
+  console.log(
+    `[Notification] Team invite sent for org=${payload.organizationId} email=${payload.recipientEmail}`,
+  );
+
+  if (!resend) {
+    console.warn("[Notification] Resend API key not found, skipping invite email.");
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: "Struxient <notifications@struxient.com>",
+      to: payload.recipientEmail,
+      subject: `You've been invited to ${escapeHtml(payload.organizationDisplayName)} on Struxient`,
+      html: `
+        <h1>You're invited to join ${escapeHtml(payload.organizationDisplayName)}</h1>
+        <p>You were invited as <strong>${escapeHtml(payload.invitedRole)}</strong>.</p>
+        <p><a href="${payload.inviteUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 16px 0;">Accept invite</a></p>
+        <p style="font-size: 14px; color: #666;">Or copy this link: ${payload.inviteUrl}</p>
+        <p style="font-size: 14px; color: #666;">This invitation expires on ${payload.expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.</p>
+      `,
+    });
+  } catch (error) {
+    console.error("[Notification] Failed to send team invite notification:", error);
   }
 }

@@ -31,7 +31,7 @@ export default async function WorkstationTasksLensPage({
   }
   const selectedId = urlState.selected?.id;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role, ctx.userId);
   const taskItems = allItems.filter((i) => i.kind === "task");
 
   const selectedItem = selectedId ? taskItems.find((i) => i.id === selectedId) : null;

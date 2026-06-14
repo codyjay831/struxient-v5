@@ -84,6 +84,7 @@ export default async function WorkstationPage({
   const allItems = await queryWorkstationWorkItems(
     ctx.organizationId,
     ctx.role,
+    ctx.userId,
     urgentThresholdHours,
   );
 
@@ -96,7 +97,7 @@ export default async function WorkstationPage({
     const weekDays = getWeekDays(now);
 
     const [schedule, recentActivity, unreviewedIntakesCount] = await Promise.all([
-      queryOrganizationSchedule(ctx.organizationId, weekRange),
+      queryOrganizationSchedule(ctx.organizationId, weekRange, ctx.role, ctx.userId),
       db.jobActivity.findMany({
         where: { job: { organizationId: ctx.organizationId } },
         orderBy: { createdAt: "desc" },

@@ -12,6 +12,8 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { StaffRole } from "@prisma/client";
+import { canReadCommercial } from "@/lib/authz/capabilities";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; soon?: boolean };
 
@@ -108,16 +110,20 @@ function NavSection({
   );
 }
 
-export function SidebarNav() {
+export function SidebarNav({ role }: { role: StaffRole }) {
   const pathname = usePathname();
+  const showCommercial = canReadCommercial(role);
+  const salesItems = showCommercial ? salesNav : [];
+  const relationshipItems = showCommercial ? relationshipsNav : [];
+  const financeItems = showCommercial ? financeNav : [];
 
   return (
     <nav className="flex flex-1 flex-col" aria-label="Main">
       <NavSection title="" items={workstationEntry} pathname={pathname} />
-      <NavSection title="Sales" items={salesNav} pathname={pathname} />
-      <NavSection title="Relationships" items={relationshipsNav} pathname={pathname} />
+      <NavSection title="Sales" items={salesItems} pathname={pathname} />
+      <NavSection title="Relationships" items={relationshipItems} pathname={pathname} />
       <NavSection title="Work" items={workNav} pathname={pathname} />
-      <NavSection title="Finance" items={financeNav} pathname={pathname} />
+      <NavSection title="Finance" items={financeItems} pathname={pathname} />
       <div className="mt-auto">
         <NavSection title="" items={utilityNav} pathname={pathname} />
       </div>

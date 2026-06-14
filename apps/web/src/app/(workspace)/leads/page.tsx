@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,6 +28,7 @@ import {
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { Users, Search } from "lucide-react";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,16 @@ export default async function LeadsPage({
   const { q, sort, pipeline } = parseLeadListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb items={[{ label: "Sales" }]} />
+        <PageHeader title="Sales" description="Track open opportunities and outcomes." />
+        <AccessDeniedPanel description="This role cannot access sales records." />
+      </div>
+    );
+  }
   const now = new Date();
 
   const listWhere = leadListWhere(ctx.organizationId, q);

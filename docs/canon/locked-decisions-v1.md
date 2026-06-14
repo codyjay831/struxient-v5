@@ -34,6 +34,17 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 - **Permissions** on collaborator: `view_job`, `view_tasks`, `update_assigned_tasks`, `upload_files`, `comment` — **v1 default**: view + upload + complete **only tasks explicitly assigned to them** on that job. **No** default access to **internal cost** or **other jobs**.  
 - **No separate “sub portal product”** in v1: same app shell, **heavily filtered** nav and job URL access enforced **server-side** (I19).
 
+### Access-control baseline (implementation lock)
+
+- **Role surfacing vs permission enforcement:** roles determine default Workstation/navigation surfaces; permissions and resource checks determine allowed server reads/writes.
+- **Server authority:** UI hiding never counts as enforcement. Every protected read and mutation must enforce org scope + role/capability + resource relationship checks server-side (I19).
+- **Stale sessions:** role changes, membership suspension/removal, user disablement, password change, and explicit revoke must take effect immediately on protected requests; JWT claims are hints, not final authority.
+- **Active organization:** selected org may be cached in session/cookie hints, but every protected request must validate selected org against an active membership. If invalid, fail closed to org selection/sign-out.
+- **FIELD v1 visibility:** assignment-first. Field access is limited to assigned work (direct assignment now; crew-derived assignment when crew model lands).
+- **SUBCONTRACTOR v1 visibility:** membership role alone grants no org-wide access; active job collaborator grant is required for each accessible job resource.
+- **Customer/public links:** customer token channel is separate from staff membership authorization and must remain scoped, expiring, and revocable.
+- **Owner/Admin boundary:** Owner-only actions include owner transfer, org deletion, and final-owner destructive changes; Admin manages non-owner staff but cannot perform owner-only destructive actions.
+
 ---
 
 ## 2. Lifecycle naming — leads, quotes, jobs
@@ -262,3 +273,4 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 *Canon update (2026-05-19): §2 updated runtime `JobTaskStatus` to binary `TODO`/`DONE`; §10 clarified follow-up-task wording vs RecoveryFlow-only blocker mitigation; §14 replaced event-hijack row with issue/recovery wording aligned to execution-engine canon.*  
 *Canon update (2026-05-25): §16 — product phasing (execution before commodity parity), no trigger builder, opinionated automation toggles; link [product-philosophy.md](./product-philosophy.md).*  
 *Canon update (2026-06-11): §5 scheduling rows explicitly marked historical and deferred to [scheduling-canon.md](./scheduling-canon.md) + [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md).*
+*Canon update (2026-06-14): §1 added access-control baseline lock: stale-session fail-closed behavior, selected-org validation, assignment-first Field visibility, collaborator-required subcontractor visibility, customer token channel separation, and Owner/Admin destructive boundary.*

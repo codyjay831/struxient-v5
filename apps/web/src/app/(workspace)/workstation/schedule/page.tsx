@@ -28,7 +28,7 @@ export default async function WorkstationScheduleLensPage({
   const urlState = parseWorkstationUrlState(sp);
   const selectedId = urlState.selected?.id;
 
-  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role);
+  const allItems = await queryWorkstationWorkItems(ctx.organizationId, ctx.role, ctx.userId);
   const scheduleItems = allItems.filter(
     (item) =>
       item.kind === "schedule" ||

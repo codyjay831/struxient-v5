@@ -5,7 +5,6 @@ import {
   QuoteCheckpointSource,
   QuoteStatus,
 } from "@prisma/client";
-import { randomBytes } from "crypto";
 import { addDays } from "date-fns";
 import {
   QUOTE_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
@@ -19,6 +18,7 @@ import { buildCustomerQuotePreviewDocument } from "../quote-customer-projection"
 import { readContact } from "../lead/lead-projection";
 import { notifyQuoteSent } from "../notifications";
 import { getRequestContextOrThrow } from "../auth-context";
+import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 
 export interface QuoteSendOptions {
   expiresInDays?: number | null;
@@ -111,20 +111,20 @@ export async function transitionQuoteToSent(
 
   let shareToken: string;
   if (!existingToken) {
-    shareToken = randomBytes(32).toString("hex");
+    shareToken = createPublicAccessToken();
     await tx.quoteShareToken.create({
       data: {
         organizationId,
         quoteId,
-        token: shareToken,
+        token: hashPublicAccessToken(shareToken),
         expiresAt,
       },
     });
   } else {
-    shareToken = existingToken.token;
+    shareToken = createPublicAccessToken();
     await tx.quoteShareToken.update({
       where: { quoteId },
-      data: { expiresAt },
+      data: { token: hashPublicAccessToken(shareToken), expiresAt },
     });
   }
 

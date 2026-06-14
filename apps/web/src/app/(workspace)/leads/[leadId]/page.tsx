@@ -3,10 +3,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
 import { Users } from "lucide-react";
+import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,20 @@ export default async function LeadDetailPage({
   params: Promise<{ leadId: string }>;
 }) {
   const { leadId } = await params;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrNull();
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <WorkspaceBreadcrumb items={[{ label: "Sales", href: "/leads" }, { label: "Access denied" }]} />
+        <PageHeader
+          eyebrow="Sales"
+          title="Lead review"
+          description="Triage request and commercial details."
+        />
+        <AccessDeniedPanel description="This role cannot access lead records." />
+      </div>
+    );
+  }
 
   const payload = await loadLeadCommercialSurface(leadId, ctx);
   if (!payload) {

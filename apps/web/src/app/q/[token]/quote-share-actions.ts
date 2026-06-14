@@ -22,6 +22,9 @@ import { renderQuoteAcceptancePdf } from "@/lib/quote-pdf";
 import { getStorageProvider } from "@/lib/storage";
 import { LocalStorageProvider } from "@/lib/storage/local-storage-provider";
 import { AttachmentStatus } from "@prisma/client";
+import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
+import { resolveQuoteShareToken } from "@/lib/public-access/public-token-service";
+import { auditPublicTokenEvent } from "@/lib/public-access/public-token-audit";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -53,9 +56,10 @@ export async function requestQuoteChangesAction(
   }
 
   try {
+    const resolvedShareToken = await resolveQuoteShareToken(token);
     const result = await db.$transaction(async (tx) => {
-      const shareToken = await tx.quoteShareToken.findUnique({
-        where: { token },
+      const shareToken = await tx.quoteShareToken.findFirst({
+        where: { id: resolvedShareToken?.id ?? "" },
         include: {
           quote: {
             select: {
@@ -83,7 +87,7 @@ export async function requestQuoteChangesAction(
         data: {
           organizationId: quote.organizationId,
           quoteId: quote.id,
-          token,
+          token: hashPublicAccessToken(token),
           message: message.trim(),
           submittedFromIp: ip,
           userAgent: headerList.get("user-agent") ?? null,
@@ -103,6 +107,11 @@ export async function requestQuoteChangesAction(
       quoteId: result.quoteId,
       message: result.message,
       submittedFromIp: ip,
+    });
+    auditPublicTokenEvent("quote.request_changes", {
+      quoteId: result.quoteId,
+      organizationId: result.organizationId,
+      ip,
     });
 
     return { success: true };
@@ -138,9 +147,10 @@ export async function acceptQuoteFromTokenAction(
   }
 
   try {
+    const resolvedShareToken = await resolveQuoteShareToken(token);
     const result = await db.$transaction(async (tx) => {
-      const shareToken = await tx.quoteShareToken.findUnique({
-        where: { token },
+      const shareToken = await tx.quoteShareToken.findFirst({
+        where: { id: resolvedShareToken?.id ?? "" },
         include: {
           quote: {
             select: {
@@ -234,6 +244,11 @@ export async function acceptQuoteFromTokenAction(
       acceptedByName: acceptedByName.trim(),
       totalCents: result.totalCents,
     });
+    auditPublicTokenEvent("quote.accept", {
+      quoteId: result.quoteId,
+      organizationId: result.organizationId,
+      ip,
+    });
 
     // Generate and store signed PDF artifact
     try {
@@ -318,26 +333,28 @@ export async function recordQuoteViewAction(token: string) {
     return;
   }
 
-  const shareToken = await db.quoteShareToken.findUnique({
-    where: { token },
-    select: { quoteId: true, organizationId: true },
-  });
+  const shareToken = await resolveQuoteShareToken(token);
 
   if (shareToken) {
     await db.$transaction([
       db.quoteShareToken.update({
-        where: { token },
+        where: { id: shareToken.id },
         data: { lastViewedAt: new Date() },
       }),
       db.quoteView.create({
         data: {
           organizationId: shareToken.organizationId,
           quoteId: shareToken.quoteId,
-          token,
+          token: hashPublicAccessToken(token),
           ip,
           userAgent,
         },
       }),
     ]);
+    auditPublicTokenEvent("quote.view", {
+      quoteId: shareToken.quoteId,
+      organizationId: shareToken.organizationId,
+      ip,
+    });
   }
 }
