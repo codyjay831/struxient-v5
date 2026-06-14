@@ -120,6 +120,28 @@ function collectAttachmentIds(formData: FormData): string[] {
     .filter(Boolean);
 }
 
+function collectAttachmentUploadTokens(formData: FormData): Record<string, string> | undefined {
+  const raw = trimOrEmpty(formData.get("attachmentUploadTokens"));
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const tokens: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof key === "string" && typeof value === "string" && key.length > 0 && value.length > 0) {
+        tokens[key] = value;
+      }
+    }
+    return Object.keys(tokens).length > 0 ? tokens : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function collectSuggestedTemplateIds(formData: FormData): string[] {
   const raw = trimOrEmpty(formData.get("suggestedTemplateIds"));
   if (!raw) {
@@ -250,6 +272,7 @@ export function mapIntakeFormDataToLeadInput({
 
   const address = parseAddress(formData);
   const attachmentIds = collectAttachmentIds(formData);
+  const attachmentUploadTokens = collectAttachmentUploadTokens(formData);
   const suggestedTemplateIds = collectSuggestedTemplateIds(formData);
   const customFields = collectCustomFields(formData);
   const requestedDate = parseDate(requestedVisitDate);
@@ -293,6 +316,7 @@ export function mapIntakeFormDataToLeadInput({
     notes,
     publicClientKey: publicClientKey ?? undefined,
     attachmentIds,
+    attachmentUploadTokens,
     customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
     visitRequest:
       requestedDate || requestedVisitWindow

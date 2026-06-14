@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, QuoteStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import {
   getClarificationQuestionSetByKey,
   listActiveClarificationQuestionSetSummaries,
@@ -200,7 +200,7 @@ export async function getClarificationLineModelAction(
     return { error: "Missing quote or line id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
@@ -269,7 +269,7 @@ export async function getClarificationSetByKeyAction(
   if (!qid || !lid || !key) {
     return { error: "Missing quote, line, or question set key." };
   }
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const line = await loadDraftLine(qid, lid, ctx.organizationId);
   if (!line) {
     return { error: LINE_LOCKED_ERROR };
@@ -305,7 +305,7 @@ export async function searchActiveClarificationQuestionSetsAction(
   const qid = quoteId.trim();
   const lid = lineId.trim();
   if (!qid || !lid) return { error: "Missing quote or line id." };
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
     if (!line) return { error: LINE_LOCKED_ERROR };
@@ -336,7 +336,7 @@ export async function suggestLineClarificationAnswersAction(
     return { error: "Missing quote, line, or question set id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
@@ -388,7 +388,7 @@ export async function checkClarificationSetKeyAction(key: string): Promise<{
   const normalized = normalizeSetKey(key);
   if (!normalized) return { error: "Set key is required." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   try {
     const row = await db.clarificationQuestionSet.findFirst({
       where: { organizationId: ctx.organizationId, key: normalized },
@@ -419,7 +419,7 @@ export async function generateClarificationQuestionSetForLineAction(
   const lid = lineId.trim();
   if (!qid || !lid) return { error: "Missing quote or line id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
     if (!line) return { error: LINE_LOCKED_ERROR };
@@ -481,7 +481,7 @@ export async function createClarificationQuestionSetForLineAction(
   const lid = lineId.trim();
   if (!qid || !lid) return { error: "Missing quote or line id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   let parsed: z.infer<typeof CreateSetPayloadSchema>;
   try {
     parsed = CreateSetPayloadSchema.parse(payload);
@@ -613,7 +613,7 @@ export async function updateClarificationQuestionSetForLineAction(
     return { error: "Invalid question update payload." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
@@ -817,7 +817,7 @@ export async function applyLineClarificationAnswersAction(
     return { error: "Missing quote or line id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   let parsed;
   try {

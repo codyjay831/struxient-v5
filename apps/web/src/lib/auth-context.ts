@@ -2,6 +2,11 @@ import { StaffRole, Job, Quote } from "@prisma/client";
 import { DEV_ORGANIZATION_ID, DEV_USER_ID, DEV_ORGANIZATION_NAME, DEV_ORGANIZATION_SLUG } from "./dev-organization";
 import { auth } from "@/auth";
 import { db } from "./db";
+import {
+  denyUnlessCanManageCommercial,
+  denyUnlessCanManageOrgSettings,
+  denyUnlessCanMutate,
+} from "./staff-authz";
 
 export interface RequestContext {
   organizationId: string;
@@ -69,6 +74,43 @@ export async function getRequestContextOrThrow(): Promise<RequestContext> {
   }
 
   throw new Error("Unauthorized: No active session found and dev fallback is disabled in production.");
+}
+
+/**
+ * Requires an authenticated staff member who can perform field-level mutations.
+ * Blocks VIEWER and SUBCONTRACTOR.
+ */
+export async function getMutableRequestContextOrThrow(): Promise<RequestContext> {
+  const ctx = await getRequestContextOrThrow();
+  const denied = denyUnlessCanMutate(ctx.role);
+  if (denied) {
+    throw new Error(denied);
+  }
+  return ctx;
+}
+
+/**
+ * Requires OFFICE, ADMIN, or OWNER for commercial workflows (leads, quotes, customers).
+ */
+export async function getCommercialRequestContextOrThrow(): Promise<RequestContext> {
+  const ctx = await getRequestContextOrThrow();
+  const denied = denyUnlessCanManageCommercial(ctx.role);
+  if (denied) {
+    throw new Error(denied);
+  }
+  return ctx;
+}
+
+/**
+ * Requires OWNER or ADMIN for organization configuration changes.
+ */
+export async function getSettingsRequestContextOrThrow(): Promise<RequestContext> {
+  const ctx = await getRequestContextOrThrow();
+  const denied = denyUnlessCanManageOrgSettings(ctx.role);
+  if (denied) {
+    throw new Error(denied);
+  }
+  return ctx;
 }
 
 /**

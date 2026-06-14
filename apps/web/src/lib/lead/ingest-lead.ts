@@ -6,10 +6,12 @@ import { Prisma, QuoteStatus } from "@prisma/client";
 import { enqueueSideEffect } from "../queue/local-queue";
 import { notifyLeadSubmitted } from "../notifications";
 import { performApplyLineItemTemplateToQuoteTx } from "../quote-line-item-template-apply-tx";
+import { finalizeLeadAttachments } from "../finalize-lead-attachments";
 
 export interface IngestLeadContext {
   organizationId: string;
   userId?: string;
+  clientIp?: string;
   /**
    * Optional immutable snapshot of which `IntakeFormDefinition` the user actually
    * filled out. Stored under `signals.formSnapshot` so we can later reconstruct
@@ -114,16 +116,13 @@ export async function ingestLead(input: LeadInput, ctx: IngestLeadContext): Prom
 
   enqueueSideEffect(async () => {
     if (validated.attachmentIds && validated.attachmentIds.length > 0) {
-      await db.attachment.updateMany({
-        where: {
-          id: { in: validated.attachmentIds },
-          organizationId: ctx.organizationId,
-          leadId: null,
-        },
-        data: {
-          leadId: ingested.id,
-          status: "READY",
-        },
+      await finalizeLeadAttachments({
+        organizationId: ctx.organizationId,
+        leadId: ingested.id,
+        attachmentIds: validated.attachmentIds,
+        uploadedByUserId: ctx.userId,
+        publicUploadTokensById: validated.attachmentUploadTokens,
+        clientIp: ctx.clientIp,
       });
     }
 

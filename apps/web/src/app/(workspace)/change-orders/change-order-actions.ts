@@ -11,7 +11,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireCommercialSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
@@ -70,7 +70,7 @@ function formatChangeOrderNumber(number: number): string {
 export async function createChangeOrderDraftAction(
   input: CreateChangeOrderDraftInput,
 ): Promise<ChangeOrderActionResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -153,7 +153,7 @@ export async function sendChangeOrderAction(
     customMessage?: string;
   },
 ): Promise<ChangeOrderActionResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -170,7 +170,7 @@ export async function sendChangeOrderAction(
 export async function markChangeOrderAcceptedAction(
   changeOrderId: string,
 ): Promise<ChangeOrderActionResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -204,7 +204,7 @@ export async function markChangeOrderAcceptedAction(
 }
 
 export async function rejectChangeOrderAction(changeOrderId: string): Promise<ChangeOrderActionResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -233,7 +233,7 @@ export async function rejectChangeOrderAction(changeOrderId: string): Promise<Ch
 }
 
 export async function voidChangeOrderAction(changeOrderId: string): Promise<ChangeOrderActionResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "approve_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -267,7 +267,7 @@ export async function applyChangeOrderAction(
     expectedJobPlanVersion?: number | null;
   },
 ): Promise<ChangeOrderApplyResult> {
-  const session = await requireCurrentSession();
+  const session = await requireCommercialSession();
   const permission = assertExecutionPlanPermission(session.role, "apply_scope_revision");
   if (!permission.ok) return { ok: false, error: permission.error };
 

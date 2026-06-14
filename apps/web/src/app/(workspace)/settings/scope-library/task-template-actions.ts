@@ -3,7 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
@@ -150,7 +150,7 @@ export async function createTaskTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   await db.taskTemplate.create({
     data: {
@@ -201,7 +201,7 @@ export async function updateTaskTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const result = await db.taskTemplate.update({
     where: {
@@ -260,7 +260,7 @@ export async function archiveTaskTemplateFromScopeLibraryAction(
     return { error: "Missing template id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const result = await db.taskTemplate.updateMany({
     where: {

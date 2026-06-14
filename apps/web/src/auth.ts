@@ -4,6 +4,10 @@ import { compare } from "bcryptjs";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "@/auth.config";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS_PER_WINDOW = 10;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -19,6 +23,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = typeof credentials?.password === "string" ? credentials.password : "";
 
         if (!email || !password) {
+          return null;
+        }
+
+        const allowed = await checkRateLimit(email, {
+          windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+          max: LOGIN_MAX_ATTEMPTS_PER_WINDOW,
+          keyPrefix: "auth-login",
+        });
+        if (!allowed) {
           return null;
         }
 

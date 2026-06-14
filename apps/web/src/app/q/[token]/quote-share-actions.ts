@@ -308,6 +308,16 @@ export async function recordQuoteViewAction(token: string) {
   const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
   const userAgent = headerList.get("user-agent") || "unknown";
 
+  if (
+    !(await checkRateLimit(`${token}:${ip}`, {
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      max: MAX_REQUESTS_PER_WINDOW,
+      keyPrefix: "quote-view",
+    }))
+  ) {
+    return;
+  }
+
   const shareToken = await db.quoteShareToken.findUnique({
     where: { token },
     select: { quoteId: true, organizationId: true },

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { saveBusinessProfile } from "@/lib/business-profile/business-profile-service";
 
 export type BusinessProfileSettingsFormState = {
@@ -28,7 +28,7 @@ export async function saveBusinessProfileSettingsAction(
   formData: FormData,
 ): Promise<BusinessProfileSettingsFormState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   const result = await saveBusinessProfile(ctx, {
     trades: parseMultiValue(formData, "trades"),
     workTypes: parseMultiValue(formData, "workTypes"),

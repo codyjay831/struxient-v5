@@ -9,7 +9,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 import {
@@ -48,7 +48,7 @@ export async function createJobVisitAction(
     notes?: string;
   }
 ): Promise<JobVisitActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   if (data.scheduledEndAt && data.scheduledEndAt <= data.scheduledStartAt) {
@@ -145,7 +145,7 @@ export async function rescheduleJobVisitAction(
     notes?: string;
   }
 ): Promise<JobVisitActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   if (data.scheduledEndAt && data.scheduledEndAt <= data.scheduledStartAt) {
@@ -245,7 +245,7 @@ export async function cancelJobVisitAction(
   visitId: string,
   reason?: string
 ): Promise<JobVisitActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -330,7 +330,7 @@ export async function completeJobVisitAction(
   visitId: string,
   notes?: string
 ): Promise<JobVisitActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {

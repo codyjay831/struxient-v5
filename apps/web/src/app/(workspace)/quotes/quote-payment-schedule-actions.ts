@@ -3,7 +3,7 @@
 import { PaymentScheduleAnchorType, QuoteStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { parsePercentageString, parseUsdStringToCents } from "@/lib/quote-money";
 import { QUOTE_PAYMENT_SCHEDULE_FIELD_LIMITS } from "./quote-field-limits";
 
@@ -45,7 +45,7 @@ export async function addPaymentScheduleItemAction(
   _prevState: PaymentScheduleFormState,
   formData: FormData,
 ): Promise<PaymentScheduleFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const qid = quoteId.trim();
 
   const title = trimRequired(formData.get("title"));
@@ -118,7 +118,7 @@ export async function updatePaymentScheduleItemAction(
   _prevState: PaymentScheduleFormState,
   formData: FormData,
 ): Promise<PaymentScheduleFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const qid = quoteId.trim();
   const iid = itemId.trim();
 
@@ -178,7 +178,7 @@ export async function deletePaymentScheduleItemAction(
   _prevState: PaymentScheduleFormState,
   _formData: FormData,
 ): Promise<PaymentScheduleFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const qid = quoteId.trim();
   const iid = itemId.trim();
 
@@ -227,7 +227,7 @@ export async function reorderPaymentScheduleItemsAction(
   quoteId: string,
   itemIds: string[],
 ): Promise<PaymentScheduleFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const qid = quoteId.trim();
 
   try {

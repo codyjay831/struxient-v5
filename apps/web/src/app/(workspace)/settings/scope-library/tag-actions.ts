@@ -6,7 +6,7 @@
 import { TagStatus, TagSource, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { AIService } from "@/lib/ai/ai-service";
 
 export type TagActionState = {
@@ -18,7 +18,7 @@ export async function createTagAction(
   _prevState: TagActionState,
   formData: FormData,
 ): Promise<TagActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   const name = formData.get("name") as string;
   const color = formData.get("color") as string;
 
@@ -46,7 +46,7 @@ export async function updateTagAction(
   _prevState: TagActionState,
   formData: FormData,
 ): Promise<TagActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   const name = formData.get("name") as string;
   const color = formData.get("color") as string;
   const status = formData.get("status") as TagStatus;
@@ -70,7 +70,7 @@ export async function updateTagAction(
 }
 
 export async function archiveTagAction(tagId: string): Promise<TagActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   try {
     await db.tag.update({
       where: { id: tagId, organizationId: ctx.organizationId },
@@ -87,7 +87,7 @@ export async function mergeTagsAction(
   sourceTagId: string,
   targetTagId: string,
 ): Promise<TagActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   if (sourceTagId === targetTagId) return { error: "Cannot merge a tag into itself" };
 
@@ -186,7 +186,7 @@ export async function mergeTagsAction(
 }
 
 export async function suggestTagMergesAction() {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   
   const tags = await db.tag.findMany({
     where: { organizationId: ctx.organizationId, status: "ACTIVE" },

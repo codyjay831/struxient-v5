@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { JobPaymentRequirementStatus, JobActivityType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { formatCents } from "@/lib/job-payment-display";
 import { publishSignal } from "@/lib/signal-bus";
@@ -19,7 +19,7 @@ export type CreateJobPaymentRequirementInput = {
 };
 
 export async function createJobPaymentRequirementAction(input: CreateJobPaymentRequirementInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
   const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
   if (!permission.ok) {
@@ -79,7 +79,7 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
 }
 
 export async function markJobPaymentRequirementPaidAction(requirementId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
   const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
   if (!permission.ok) {
@@ -126,7 +126,7 @@ export async function markJobPaymentRequirementPaidAction(requirementId: string)
 }
 
 export async function waiveJobPaymentRequirementAction(requirementId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
   const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
   if (!permission.ok) {
@@ -172,7 +172,7 @@ export async function waiveJobPaymentRequirementAction(requirementId: string) {
 }
 
 export async function cancelJobPaymentRequirementAction(requirementId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
   const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
   if (!permission.ok) {

@@ -36,6 +36,7 @@ export const LeadInputSchema = z.object({
   publicClientKey: z.string().uuid().nullable().optional(),
   customFields: z.record(z.string(), z.string()).optional(),
   attachmentIds: z.array(z.string()).optional(),
+  attachmentUploadTokens: z.record(z.string(), z.string()).optional(),
   visitRequest: z.object({
     requestedDate: z.date().nullable().optional(),
     requestedWindow: z.string().max(120).nullable().optional(),

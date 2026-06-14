@@ -2,8 +2,14 @@
 
 import { StaffRole } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { isBetaSignupEnabled } from "@/lib/env-validation";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
+
+const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const SIGNUP_MAX_ATTEMPTS_PER_WINDOW = 5;
 
 const signupSchema = z.object({
   companyName: z.string().trim().min(2).max(120),
@@ -51,6 +57,25 @@ export type SignupActionResult =
     };
 
 export async function createAccountAction(input: unknown): Promise<SignupActionResult> {
+  if (!isBetaSignupEnabled()) {
+    return {
+      ok: false,
+      error: "Sign-up is currently invite-only. Contact support for access.",
+    };
+  }
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (
+    !(await checkRateLimit(ip, {
+      windowMs: SIGNUP_RATE_LIMIT_WINDOW_MS,
+      max: SIGNUP_MAX_ATTEMPTS_PER_WINDOW,
+      keyPrefix: "auth-signup",
+    }))
+  ) {
+    return { ok: false, error: "Too many sign-up attempts. Please try again later." };
+  }
+
   const parsed = signupSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

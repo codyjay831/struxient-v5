@@ -1,11 +1,11 @@
 "use server";
 
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
 import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
 import { redirect } from "next/navigation";
 
 export async function seedTradeStartersAction(tradeSlug: string) {
-  await getRequestContextOrThrow();
+  await getMutableRequestContextOrThrow();
 
   const template = TRADE_STARTERS.find(s => s.slug === tradeSlug);
   if (!template) throw new Error("Template not found");

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { DailyJobLogStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { generateDailyJobLogDraft } from "@/lib/daily-job-log-helper";
 
 export type CreateOrUpdateDailyJobLogDraftInput = {
@@ -14,7 +14,7 @@ export type CreateOrUpdateDailyJobLogDraftInput = {
 };
 
 export async function createOrUpdateDailyJobLogDraftAction(input: CreateOrUpdateDailyJobLogDraftInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   // Verify job belongs to organization
@@ -73,7 +73,7 @@ export async function createOrUpdateDailyJobLogDraftAction(input: CreateOrUpdate
 }
 
 export async function markDailyJobLogReviewedAction(logId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const log = await db.dailyJobLog.findFirst({
@@ -99,7 +99,7 @@ export async function markDailyJobLogReviewedAction(logId: string) {
 }
 
 export async function voidDailyJobLogAction(logId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const log = await db.dailyJobLog.findFirst({

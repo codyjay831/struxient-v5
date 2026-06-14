@@ -11,7 +11,7 @@ import {
   JobActivityType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
 import {
@@ -47,7 +47,7 @@ export type CreateAndActivateRecoveryFlowInput = {
 export async function createAndActivateRecoveryFlowWithTasksAction(
   input: CreateAndActivateRecoveryFlowInput,
 ) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const normalizedTasks = validateRecoveryFlowTasksInput(input.tasks);
@@ -126,7 +126,7 @@ export async function createAndActivateRecoveryFlowWithTasksAction(
  * Do not compose with addRecoveryTaskAction for UI submit — use createAndActivateRecoveryFlowWithTasksAction.
  */
 export async function createRecoveryFlowAction(input: CreateRecoveryFlowInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   // Verify issue belongs to organization
@@ -191,7 +191,7 @@ export type AddRecoveryTaskInput = {
  * Not used for initial recovery path creation from the UI.
  */
 export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const flow = await db.jobRecoveryFlow.findFirst({
@@ -277,7 +277,7 @@ export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
  * Not used for initial recovery path creation from the UI.
  */
 export async function activateRecoveryFlowAction(flowId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const flow = await db.jobRecoveryFlow.findFirst({
@@ -313,7 +313,7 @@ export async function activateRecoveryFlowAction(flowId: string) {
  * This unmutes the original path.
  */
 export async function resolveIssueAndResumeAction(jobIssueId: string, resolutionNote?: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const issue = await db.jobIssue.findFirst({
@@ -351,7 +351,7 @@ export async function resolveIssueAndResumeAction(jobIssueId: string, resolution
 }
 
 export async function suggestRecoveryPathAction(jobIssueId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const issue = await db.jobIssue.findFirst({

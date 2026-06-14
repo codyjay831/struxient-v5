@@ -12,7 +12,7 @@ import { validateLibraryDefaultExecutionProposalForApply } from "@/lib/ai/librar
 import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-task-requirements";
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
@@ -206,7 +206,7 @@ export async function addLineItemTemplateTaskFromReusableAction(
     return { error: "Missing saved line item or reusable task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const preset = await tx.lineItemTemplate.findFirst({
@@ -291,7 +291,7 @@ export async function addLineItemTemplateTaskCustomAction(
     return { error: stageCheck.message };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const preset = await tx.lineItemTemplate.findFirst({
@@ -361,7 +361,7 @@ export async function updateLineItemTemplateTaskAction(
     return { error: stageCheck.message };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -442,7 +442,7 @@ export async function deleteLineItemTemplateTaskAction(
     return { error: "Missing saved line item or task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -490,7 +490,7 @@ export async function moveLineItemTemplateTaskAction(
     return { error: "Missing saved line item or task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const existing = await tx.lineItemTemplateTask.findFirst({
@@ -564,7 +564,7 @@ export async function generateLineItemTemplateAIProposalAction(
     return { error: "Missing saved line item." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   try {
     const preset = await db.lineItemTemplate.findFirst({
@@ -630,7 +630,7 @@ export async function assessLineItemTemplateExecutionContextAction(
     };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   try {
     const preset = await db.lineItemTemplate.findFirst({
@@ -693,7 +693,7 @@ export async function applyLineItemTemplateAIProposalAction(
     return { error: "Missing saved line item." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   try {
     const stages = await db.stage.findMany({

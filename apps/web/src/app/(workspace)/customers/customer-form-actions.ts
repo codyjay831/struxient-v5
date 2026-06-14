@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { LEAD_FIELD_LIMITS } from "@/app/(workspace)/leads/lead-field-limits";
 import { upsertCustomerServiceLocationFromIntakeSnapshot } from "@/lib/customer-service-location-from-lead";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
@@ -59,7 +59,7 @@ export async function createCustomerAction(
     return displayErr;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));
@@ -156,7 +156,7 @@ export async function updateCustomerAction(
     return displayErr;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const companyName = trimOrNull(formData.get("companyName"));
   const email = trimOrNull(formData.get("email"));
   const phone = trimOrNull(formData.get("phone"));

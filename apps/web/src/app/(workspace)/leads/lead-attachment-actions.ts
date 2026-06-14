@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { AttachmentStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
+import { denyUnlessCanMutate } from "@/lib/staff-authz";
 import { requireCurrentSession } from "@/lib/session";
 
 export type LeadUploadAttachmentState = {
@@ -19,6 +20,10 @@ export async function getLeadAttachmentUploadUrlAction(
   fileSize: number,
 ): Promise<LeadUploadAttachmentState> {
   const session = await requireCurrentSession();
+  const denied = denyUnlessCanMutate(session.role);
+  if (denied) {
+    return { error: denied };
+  }
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();

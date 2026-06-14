@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 
 export type WorkstationSettingsUpdatePayload = {
@@ -11,7 +11,7 @@ export type WorkstationSettingsUpdatePayload = {
 };
 
 export async function updateWorkstationSettingsAction(payload: WorkstationSettingsUpdatePayload) {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
   const updates: {
     showQuickActions?: boolean;
     quickActionsJson?: string[];

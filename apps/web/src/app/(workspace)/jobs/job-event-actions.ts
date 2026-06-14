@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { JobActivityType, JobTaskStatus, LineItemTemplateTaskSource } from "@prisma/client";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import {
@@ -28,7 +28,7 @@ export async function addJobEventAction(
   description: string,
   targetTaskIds: string[],
 ): Promise<JobEventActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -119,7 +119,7 @@ export async function removeJobEventAction(
   jobId: string,
   eventTaskId: string,
 ): Promise<JobEventActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {

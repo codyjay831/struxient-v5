@@ -8,7 +8,7 @@ import {
   JobActivityType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
 
@@ -23,7 +23,7 @@ export type CreateJobIssueInput = {
 };
 
 export async function createJobIssueAction(input: CreateJobIssueInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   // Verify job belongs to organization
@@ -98,7 +98,7 @@ export type ResolveJobIssueInput = {
 };
 
 export async function resolveJobIssueAction(input: ResolveJobIssueInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const issue = await db.jobIssue.findFirst({
@@ -137,7 +137,7 @@ export async function resolveJobIssueAction(input: ResolveJobIssueInput) {
 }
 
 export async function forceResolveJobIssueAction(input: ResolveJobIssueInput) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const issue = await db.jobIssue.findFirst({

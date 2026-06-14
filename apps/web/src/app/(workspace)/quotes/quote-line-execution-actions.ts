@@ -12,7 +12,7 @@ import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
@@ -280,7 +280,7 @@ export async function addQuoteLineExecutionTaskFromReusableAction(
     return { error: "Missing quote line or reusable task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await assertDraftQuoteLine(tx, qid, lid, ctx.organizationId);
@@ -383,7 +383,7 @@ export async function addQuoteLineExecutionTaskCustomAction(
     return { error: stageCheck.message };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const line = await assertDraftQuoteLine(tx, qid, lid, ctx.organizationId);
@@ -471,7 +471,7 @@ export async function updateQuoteLineExecutionTaskAction(
     return { error: stageCheck.message };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -598,7 +598,7 @@ export async function moveQuoteLineExecutionTaskAction(
     return { error: "Missing quote, line item, or task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -698,7 +698,7 @@ export async function deleteQuoteLineExecutionTaskAction(
     return { error: "Missing quote, line item, or task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const existing = await tx.quoteLineExecutionTask.findFirst({
@@ -835,7 +835,7 @@ export async function generateQuoteLineExecutionAIProposalAction(
     return { error: "Missing quote or line item." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const startedAt = Date.now();
 
   try {
@@ -974,7 +974,7 @@ export async function assessQuoteLineExecutionContextAction(
   }
   const preflightEnabled = isAiExecutionContextPreflightEnabled();
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const startedAt = Date.now();
 
   try {
@@ -1097,7 +1097,7 @@ export async function applyQuoteLineExecutionAIProposalAction(
     return { error: "Missing quote or line item." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const parsedProposal = AILibraryProposalSchema.parse(proposal);
@@ -1284,7 +1284,7 @@ export async function addQuoteLineDependencyProviderTaskAction(params: {
     return { ok: false, error: "Missing quote, task, or signal." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);
@@ -1402,7 +1402,7 @@ export async function connectQuoteLineDependencyGapToTaskAction(params: {
     return { ok: false, error: "Selected task cannot provide its own missing dependency." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const [consumerTask, providerTask] = await Promise.all([
@@ -1450,7 +1450,7 @@ export async function removeQuoteLineDependencyRequirementAction(params: {
     return { ok: false, error: "Missing quote, task, or signal." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);
@@ -1493,7 +1493,7 @@ export async function relaxQuoteLineDependencyHardSignalAction(params: {
     return { ok: false, error: "Missing quote or task." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuoteTask(tx, consumerTaskId, qid, ctx.organizationId);

@@ -208,6 +208,7 @@ export async function submitPublicLeadAction(
   try {
     await ingestLead(mapped.input, {
       organizationId: record.id,
+      clientIp: ip,
       formSnapshot:
         mapped.formDefinitionId &&
         !isSyntheticIntakeFormDefinitionId(mapped.formDefinitionId)

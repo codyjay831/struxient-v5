@@ -31,8 +31,8 @@ export function PublicIntakeClient({
     formData: FormData,
   ): Promise<IntakeSubmitState> => submitPublicLeadAction(companySlug, prevState, formData);
 
-  const handleFilesSelected = async (files: File[]): Promise<string[]> => {
-    const ids: string[] = [];
+  const handleFilesSelected = async (files: File[]): Promise<Array<{ id: string; uploadToken?: string }>> => {
+    const bindings: Array<{ id: string; uploadToken?: string }> = [];
     for (const file of files) {
       try {
         const prep = await getPublicLeadAttachmentUploadUrlAction(
@@ -55,12 +55,15 @@ export function PublicIntakeClient({
             body: file,
           });
         }
-        ids.push(prep.attachmentId);
+        bindings.push({
+          id: prep.attachmentId,
+          uploadToken: prep.uploadToken,
+        });
       } catch {
         // Swallow upload failures — the rest of the form still submits.
       }
     }
-    return ids;
+    return bindings;
   };
 
   return (

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
 import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
@@ -37,7 +37,7 @@ export async function updatePublicRequestSettingsAction(
 ): Promise<PublicRequestSettingsFormState> {
   void _prevState;
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const enabled = formData.get("publicRequestEnabled") === "on";
   const instantQuoteEnabled =
@@ -142,7 +142,7 @@ export async function updatePublicRequestSettingsAction(
 }
 
 export async function updatePublicRequestEnabledAction(enabled: boolean) {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   if (typeof enabled !== "boolean") {
     return { success: false, error: "Invalid request status." };

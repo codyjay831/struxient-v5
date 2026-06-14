@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { LeadChannel, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -28,7 +28,7 @@ export async function createIntakeFormAction(
   _prevState: IntakeFormState,
   formData: FormData,
 ): Promise<IntakeFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const name = formData.get("name") as string;
   const slugRaw = formData.get("slug") as string | null;
@@ -100,7 +100,7 @@ export async function updateIntakeFormAction(
   _prevState: IntakeFormState,
   formData: FormData,
 ): Promise<IntakeFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const name = formData.get("name") as string;
   const isPublic = formData.get("isPublic") === "on";

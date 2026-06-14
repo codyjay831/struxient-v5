@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { JobActivityType, AttachmentStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
@@ -23,7 +23,7 @@ export async function uploadTaskAttachmentAction(
   taskId: string,
   formData: FormData,
 ): Promise<UploadAttachmentState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();
@@ -131,7 +131,7 @@ export async function getTaskAttachmentUploadUrlAction(
   contentType: string,
   fileSize: number,
 ): Promise<UploadAttachmentState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();
@@ -210,7 +210,7 @@ export async function getTaskAttachmentUploadUrlAction(
 export async function completeTaskAttachmentUploadAction(
   attachmentId: string,
 ): Promise<UploadAttachmentState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();

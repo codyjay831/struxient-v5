@@ -50,8 +50,8 @@ export async function checkRateLimit(
       await redis.incr(key);
       return true;
     } catch (err) {
-      console.error("Rate limit check failed, falling back to allow:", err);
-      return true; // Fail open if Redis is down
+      console.error("Rate limit check failed, denying request:", err);
+      return false;
     }
   }
 

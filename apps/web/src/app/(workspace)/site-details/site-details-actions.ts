@@ -10,7 +10,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import {
   materialAddressChanged,
   pickHigherPriorityStatus,
@@ -71,7 +71,7 @@ async function revalidateLocationSurfaces(serviceLocationId: string) {
 }
 
 export async function loadQuoteSiteDetailsAction(quoteId: string): Promise<SiteDetailsActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const serviceLocationId = await resolveServiceLocationIdFromEntity(resolverDb, {
     organizationId: ctx.organizationId,
     quoteId: quoteId.trim(),
@@ -85,7 +85,7 @@ export async function loadQuoteSiteDetailsAction(quoteId: string): Promise<SiteD
 }
 
 export async function listElectricUtilityOptionsAction(): Promise<SiteDetailsOption[]> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const rows = await db.utility.findMany({
     where: {
       organizationId: ctx.organizationId,
@@ -99,7 +99,7 @@ export async function listElectricUtilityOptionsAction(): Promise<SiteDetailsOpt
 }
 
 export async function listJurisdictionOptionsAction(): Promise<SiteDetailsOption[]> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const rows = await db.jurisdiction.findMany({
     where: {
       organizationId: ctx.organizationId,
@@ -117,7 +117,7 @@ export async function saveSiteDetailsApnAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const apn = trimField(formData, "apn");
   const reason = trimField(formData, "reason") || "manual_apn_entry";
@@ -197,7 +197,7 @@ export async function saveSiteDetailsApnAction(
 export async function confirmSiteDetailsApnAction(
   serviceLocationId: string,
 ): Promise<SiteDetailsActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   if (!id) return { error: "Missing service location id." };
   const existing = await db.customerServiceLocation.findFirst({
@@ -254,7 +254,7 @@ export async function saveSiteDetailsUtilityAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const utilityId = trimField(formData, "utilityId");
   const reason = trimField(formData, "reason") || "manual_utility_update";
@@ -333,7 +333,7 @@ export async function saveSiteDetailsJurisdictionAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const jurisdictionId = trimField(formData, "jurisdictionId");
   const reason = trimField(formData, "reason") || "manual_jurisdiction_update";
@@ -407,7 +407,7 @@ export async function markSiteDetailsReviewedAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const notes = trimField(formData, "notes");
   if (!id) return { error: "Missing service location id." };
@@ -453,7 +453,7 @@ export async function markSiteDetailsReviewedAction(
 export async function clearUnreviewedAiSiteDetailsAction(
   serviceLocationId: string,
 ): Promise<SiteDetailsActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   if (!id) return { error: "Missing service location id." };
 
@@ -531,7 +531,7 @@ export async function updateServiceLocationAddressAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   const formattedAddress = trimField(formData, "formattedAddress");
   const addressLine1 = trimField(formData, "addressLine1");
@@ -614,7 +614,7 @@ export async function requestSiteDetailsResearchAction(
   serviceLocationId: string,
   requestedScopes?: string[],
 ): Promise<SiteDetailsActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = serviceLocationId.trim();
   if (!id) return { error: "Missing service location id." };
   const key = `${ctx.organizationId}:${id}`;
@@ -1098,7 +1098,7 @@ export async function reassignQuoteServiceLocationAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const qid = quoteId.trim();
   const serviceLocationId = trimField(formData, "serviceLocationId");
   const reason = trimField(formData, "reason") || "quote_location_reassignment";
@@ -1140,7 +1140,7 @@ export async function reassignJobServiceLocationAction(
   formData: FormData,
 ): Promise<SiteDetailsActionState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const jid = jobId.trim();
   const serviceLocationId = trimField(formData, "serviceLocationId");
   const reason = trimField(formData, "reason") || "job_location_reassignment";

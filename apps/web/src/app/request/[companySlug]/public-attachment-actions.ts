@@ -6,12 +6,14 @@ import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 import { isValidPublicCompanySlugSegment } from "@/lib/public-request-slug";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { createPublicAttachmentUploadToken } from "@/lib/attachment-upload-token";
 
 export type PublicUploadAttachmentState = {
   error?: string;
   success?: boolean;
   attachmentId?: string;
   uploadUrl?: string;
+  uploadToken?: string;
   storageProvider?: "local" | "gcs";
 };
 
@@ -97,10 +99,17 @@ export async function getPublicLeadAttachmentUploadUrlAction(
       expiresInSeconds: 600, // 10 minutes for public intake
     });
 
+    const uploadToken = createPublicAttachmentUploadToken({
+      attachmentId: attachment.id,
+      organizationId: org.id,
+      clientIp: ip,
+    });
+
     return {
       success: true,
       attachmentId: attachment.id,
       uploadUrl,
+      uploadToken,
       storageProvider: provider instanceof LocalStorageProvider ? "local" : "gcs",
     };
   } catch (e) {

@@ -31,7 +31,7 @@ import {
   QUOTE_FIELD_LIMITS,
 } from "@/app/(workspace)/quotes/quote-field-limits";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { randomBytes } from "crypto";
 import { addDays } from "date-fns";
 import { notifyQuoteSent } from "@/lib/notifications";
@@ -369,7 +369,7 @@ export async function revokeQuoteShareTokenAction(
   _formData: FormData,
 ): Promise<QuoteWorkspaceActionState> {
   void _formData;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const updated = await db.quoteShareToken.updateMany({
@@ -403,7 +403,7 @@ export async function extendQuoteShareTokenAction(
   _prevState: QuoteWorkspaceActionState,
   formData: FormData,
 ): Promise<QuoteWorkspaceActionState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   
   const expiresInDaysStr = formData.get("expiresInDays") as string | null;
   const rotateToken = formData.get("rotateToken") === "true";

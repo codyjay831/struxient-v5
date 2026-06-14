@@ -11,7 +11,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { jobDetailPath } from "@/lib/job-path";
 import {
   evaluateQuoteJobActivationReadiness,
@@ -42,7 +42,7 @@ async function performActivateQuoteJob(
   const id = rawQuoteId.trim();
   if (!id) return { ok: false, error: "Missing quote record id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   let createdJobId: string | null = null;
   let leadIdForRevalidation: string | null = null;

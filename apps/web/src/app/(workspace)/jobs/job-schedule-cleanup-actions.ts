@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import {
   buildScheduleCleanupReviewItems,
   executeScheduleCleanupBatch,
@@ -21,7 +21,7 @@ export async function confirmJobScheduleCleanupAction(input: {
   selections: ScheduleCleanupSelection[];
   spawnExternalFollowUpTasks?: boolean;
 }): Promise<JobScheduleCleanupActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -54,7 +54,7 @@ export async function confirmJobScheduleCleanupAction(input: {
 }
 
 export async function loadJobScheduleCleanupReviewAction(jobId: string) {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   const job = await db.job.findFirst({

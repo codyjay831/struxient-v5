@@ -28,6 +28,7 @@ import {
   readRequest,
   readSignals,
 } from "./lead/lead-projection";
+import { validateProductionEnv } from "./env-validation";
 
 const DEV_USER_EMAIL = "owner@dev.local";
 const DEV_USER_NAME = "Dev Owner";
@@ -158,6 +159,7 @@ const prismaClientSingleton = () => {
       "DATABASE_URL is not set. Copy apps/web/.env.example to apps/web/.env and set DATABASE_URL for your environment."
     );
   }
+  validateProductionEnv();
   return buildExtendedClient(new PrismaClient());
 };
 

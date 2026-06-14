@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
 import { saveBusinessProfile } from "@/lib/business-profile/business-profile-service";
 
 export type OnboardingBusinessProfileState = {
@@ -28,7 +28,7 @@ export async function saveBusinessProfileOnboardingAction(
   formData: FormData,
 ): Promise<OnboardingBusinessProfileState> {
   void _prevState;
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getMutableRequestContextOrThrow();
   const result = await saveBusinessProfile(ctx, {
     trades: parseMultiValue(formData, "trades"),
     workTypes: parseMultiValue(formData, "workTypes"),

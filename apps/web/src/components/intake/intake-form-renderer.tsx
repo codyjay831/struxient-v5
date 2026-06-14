@@ -44,6 +44,11 @@ export type IntakeLayoutMode = "progressive" | "compact";
 const PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE =
   "Please select what you need help with.";
 
+export type IntakeAttachmentBinding = {
+  id: string;
+  uploadToken?: string;
+};
+
 export type IntakeFormRendererProps = {
   formDefinition: IntakeFormDefinitionShape;
   organizationDisplayName: string;
@@ -56,7 +61,7 @@ export type IntakeFormRendererProps = {
    * Optional uploader. Receives the user-selected files and returns the persisted
    * attachment ids that should be POSTed back as the `attachmentIds` form value.
    */
-  onFilesSelected?: (files: File[]) => Promise<string[]>;
+  onFilesSelected?: (files: File[]) => Promise<IntakeAttachmentBinding[]>;
   /**
    * Optional list of request-type choices (driven by `PublicRequestSettings.offerings`).
    * When provided, the `request.type` atom renders as a SELECT and posts the value's
@@ -93,6 +98,7 @@ export function IntakeFormRenderer({
   const [stepError, setStepError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({});
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+  const [attachmentUploadTokens, setAttachmentUploadTokens] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
 
   const publicIntakeClientKey = useMemo(
@@ -230,8 +236,17 @@ export function IntakeFormRenderer({
     if (!onFilesSelected) return;
     setIsUploading(true);
     try {
-      const ids = await onFilesSelected(files);
-      setAttachmentIds((prev) => [...prev, ...ids]);
+      const bindings = await onFilesSelected(files);
+      setAttachmentIds((prev) => [...prev, ...bindings.map((binding) => binding.id)]);
+      setAttachmentUploadTokens((prev) => {
+        const next = { ...prev };
+        for (const binding of bindings) {
+          if (binding.uploadToken) {
+            next[binding.id] = binding.uploadToken;
+          }
+        }
+        return next;
+      });
     } finally {
       setIsUploading(false);
     }
@@ -304,6 +319,13 @@ export function IntakeFormRenderer({
 
       {/* Persisted attachment ids (from object-storage upload). */}
       <input type="hidden" name="attachmentIds" value={attachmentIds.join(",")} />
+      {Object.keys(attachmentUploadTokens).length > 0 ? (
+        <input
+          type="hidden"
+          name="attachmentUploadTokens"
+          value={JSON.stringify(attachmentUploadTokens)}
+        />
+      ) : null}
 
       {isProgressive && (
         <div className="mb-10">

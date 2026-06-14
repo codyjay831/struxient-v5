@@ -1,5 +1,10 @@
 import { StaffRole } from "@prisma/client";
-import { getRequestContextOrThrow } from "./auth-context";
+import {
+  getCommercialRequestContextOrThrow,
+  getMutableRequestContextOrThrow,
+  getRequestContextOrThrow,
+  getSettingsRequestContextOrThrow,
+} from "./auth-context";
 
 export type CurrentSession = {
   userId: string;
@@ -46,4 +51,34 @@ export async function requireCurrentSession(): Promise<CurrentSession> {
 export async function requireOrganizationId(): Promise<string> {
   const session = await requireCurrentSession();
   return session.organizationId;
+}
+
+export async function requireMutableSession(): Promise<CurrentSession> {
+  const ctx = await getMutableRequestContextOrThrow();
+  return {
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    role: ctx.role,
+    isDevFallback: ctx.authSource === "dev",
+  };
+}
+
+export async function requireCommercialSession(): Promise<CurrentSession> {
+  const ctx = await getCommercialRequestContextOrThrow();
+  return {
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    role: ctx.role,
+    isDevFallback: ctx.authSource === "dev",
+  };
+}
+
+export async function requireSettingsSession(): Promise<CurrentSession> {
+  const ctx = await getSettingsRequestContextOrThrow();
+  return {
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    role: ctx.role,
+    isDevFallback: ctx.authSource === "dev",
+  };
 }

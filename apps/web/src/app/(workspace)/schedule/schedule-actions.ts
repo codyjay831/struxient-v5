@@ -9,7 +9,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 import { setTaskScheduleActionCore } from "@/lib/task-timing";
 import {
@@ -44,7 +44,7 @@ export async function confirmLeadVisitRequestAction(
   confirmedDate: Date,
   notifyCustomer: boolean,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
 
   try {
     const request = await db.leadVisitRequest.findFirst({
@@ -103,7 +103,7 @@ export async function cancelLeadVisitRequestAction(
   requestId: string,
   note?: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
 
   try {
     const request = await db.leadVisitRequest.findFirst({
@@ -155,7 +155,7 @@ export async function rescheduleLeadVisitRequestAction(
   confirmedDate: Date,
   notifyCustomer: boolean,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
 
   try {
     const request = await db.leadVisitRequest.findFirst({
@@ -214,7 +214,7 @@ export async function rescheduleJobScheduleEventFromScheduleAction(
     externalWindowEndAt?: Date | null;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(
     session.role,
     "reschedule_confirmed",
@@ -242,7 +242,7 @@ export async function cancelJobScheduleEventFromScheduleAction(
   eventId: string,
   reason: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "cancel");
   if (denied) return { error: denied };
   const result = await cancelScheduleEvent({
@@ -264,7 +264,7 @@ export async function completeJobScheduleEventFromScheduleAction(
   outcome: JobScheduleEventCompletionOutcome,
   reason?: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "complete");
   if (denied) return { error: denied };
   const result = await completeScheduleEvent({
@@ -301,7 +301,7 @@ export async function createJobScheduleEventAction(input: {
   externalWindowSource?: string;
   customerVisible?: boolean;
 }): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "create_tentative");
   if (denied) return { error: denied };
 
@@ -356,7 +356,7 @@ export async function createJobScheduleEventAction(input: {
 export async function confirmJobScheduleEventAction(
   eventId: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "confirm");
   if (denied) return { error: denied };
   const result = await confirmScheduleEvent({
@@ -376,7 +376,7 @@ export async function linkTasksToScheduleEventAction(
   eventId: string,
   taskIds: string[],
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
   if (denied) return { error: denied };
   const result = await linkTasksToScheduleEvent({
@@ -397,7 +397,7 @@ export async function unlinkTasksFromScheduleEventAction(
   eventId: string,
   taskIds: string[],
 ): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
   if (denied) return { error: denied };
   const result = await unlinkTasksFromScheduleEvent({
@@ -424,7 +424,7 @@ export async function upsertScheduleBlockAction(data: {
   userId?: string | null;
   notes?: string;
 }): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
 
   if (data.endAt && data.endAt <= data.startAt) {
     return { error: "Schedule block end must be after start." };
@@ -475,7 +475,7 @@ export async function updateTaskScheduleFromCalendarAction(data: {
   scheduledEndAt?: Date | null;
   assignedUserId?: string | null;
 }): Promise<ScheduleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const denied = requireSchedulePermission(session.role, "deadline_set_recalc");
   if (denied) return { error: denied };
   if (data.taskId.startsWith("schedule-event-")) {

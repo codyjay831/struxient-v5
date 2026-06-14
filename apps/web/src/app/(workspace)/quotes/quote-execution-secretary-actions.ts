@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import {
   buildValidGenerationMeta,
   type AILibraryProposalGenerationMeta,
@@ -202,7 +202,7 @@ export async function reviewQuoteCrossLineWiringAction(
     return { ok: false, error: "Missing quote id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const quote = await loadQuoteLinesForSecretary(qid, ctx.organizationId);
   if (!quote) {
     return { ok: false, error: LOCKED_ERROR };
@@ -242,7 +242,7 @@ export async function applyQuoteCrossLineWiringSuggestionAction(
     return { ok: false, error: "Missing quote or suggestion." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const review = await reviewQuoteCrossLineWiringAction(qid);
   if (!review.ok) {
     return { ok: false, error: review.error };
@@ -355,7 +355,7 @@ export async function generateQuoteExecutionReviewAIProposalAction(
     return { ok: false, error: "Missing quote id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const [quote, stages] = await Promise.all([
     loadQuoteForExecutionReviewAI(qid, ctx.organizationId),
     db.stage.findMany({
@@ -466,7 +466,7 @@ export async function applyQuoteExecutionReviewAIProposalAction(
     return { ok: false, error: "Proposal does not match this quote." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const quote = await loadQuoteForExecutionReviewAI(qid, ctx.organizationId);
   if (!quote) {

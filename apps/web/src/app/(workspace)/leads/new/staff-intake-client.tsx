@@ -35,8 +35,8 @@ export function StaffIntakeClient({
 }: StaffIntakeClientProps) {
   const [suggestedTemplateIds, setSuggestedTemplateIds] = useState<string[]>([]);
 
-  const handleFilesSelected = async (files: File[]): Promise<string[]> => {
-    const ids: string[] = [];
+  const handleFilesSelected = async (files: File[]): Promise<Array<{ id: string }>> => {
+    const bindings: Array<{ id: string }> = [];
     for (const file of files) {
       try {
         const prep = await getLeadAttachmentUploadUrlAction(
@@ -58,12 +58,12 @@ export function StaffIntakeClient({
             body: file,
           });
         }
-        ids.push(prep.attachmentId);
+        bindings.push({ id: prep.attachmentId });
       } catch {
         // Ignore upload failures; submit still works without those files.
       }
     }
-    return ids;
+    return bindings;
   };
 
   return (

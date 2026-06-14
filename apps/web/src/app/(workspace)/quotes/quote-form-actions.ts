@@ -9,7 +9,7 @@ import {
   type ParsedQuoteLineInput as ParsedQuoteLineInputLib,
 } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { promoteLeadToQuote } from "@/lib/lead/promote-to-quote";
 import type { QuoteRollupTx } from "@/lib/quote-line-item-template-apply-tx";
 import {
@@ -407,7 +407,7 @@ export async function createQuoteDraftAction(
   _prevState: QuoteFormState,
   formData: FormData,
 ): Promise<QuoteFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const formLeadId = trimOrNull(formData.get("leadId"));
   const formCustomerId = trimOrNull(formData.get("customerId"));
@@ -479,7 +479,7 @@ export async function performUpdateDraftQuoteDetails(
     return { ok: false, error: "Missing quote record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
@@ -573,7 +573,7 @@ export async function performCopyLeadToQuoteNotes(
     return { ok: false, error: "Missing quote record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
@@ -672,7 +672,7 @@ export async function performAddQuoteLineItem(
     return { ok: false, error: "Missing quote record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const quote = await tx.quote.findFirst({
@@ -771,7 +771,7 @@ export async function performUpdateQuoteLineItem(
     return { ok: false, error: "Missing quote or line item id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
@@ -864,7 +864,7 @@ export async function performDeleteQuoteLineItem(
     return { ok: false, error: "Missing quote or line item id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const line = await tx.quoteLineItem.findFirst({
@@ -948,7 +948,7 @@ export async function createLineItemTemplateAction(
     return parsed;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const { tags: tagNames, ...rest } = parsed.data;
 
   const quoteExists = await db.quote.findFirst({
@@ -1001,7 +1001,7 @@ export async function createLineItemTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const { tags: tagNames, ...rest } = parsed.data;
 
   await db.lineItemTemplate.create({
@@ -1048,7 +1048,7 @@ export async function updateLineItemTemplateFromScopeLibraryAction(
     return parsed;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const { tags: tagNames, ...rest } = parsed.data;
 
   const result = await db.lineItemTemplate.update({
@@ -1103,7 +1103,7 @@ export async function archiveLineItemTemplateFromScopeLibraryAction(
     return { error: "Missing template id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const result = await db.lineItemTemplate.updateMany({
     where: {
@@ -1140,7 +1140,7 @@ export async function archiveLineItemTemplateAction(
     return { error: "Missing quote or template id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const quoteExists = await db.quote.findFirst({
     where: { id: rid, organizationId: ctx.organizationId, status: QuoteStatus.DRAFT },
@@ -1192,7 +1192,7 @@ export async function performApplyLineItemTemplateToQuote(
     return { ok: false, error: "Missing quote or template id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     return await performApplyLineItemTemplateToQuoteTx(tx, qid, tid, ctx.organizationId);
@@ -1254,7 +1254,7 @@ export async function restoreQuoteToDraftAction(
     return { error: "Missing quote record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
@@ -1369,7 +1369,7 @@ export async function archiveQuoteAction(
     return { error: "Missing quote record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const result = await db.quote.updateMany({
     where: {
       id,
@@ -1401,7 +1401,7 @@ export async function performReviseQuoteByClone(
   if (!id) {
     return { ok: false, error: "Missing quote record id." };
   }
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const result = await db.$transaction(async (tx) => {
     const quote = await tx.quote.findFirst({
       where: {

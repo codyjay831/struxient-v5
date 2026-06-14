@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 
 export type StageFormState = {
@@ -15,7 +15,7 @@ export async function createStageAction(
   const name = formData.get("name")?.toString().trim();
   if (!name) return { error: "Name is required." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   const maxSortOrder = await db.stage.aggregate({
     where: { organizationId: ctx.organizationId },
@@ -42,7 +42,7 @@ export async function updateStageAction(
   const name = formData.get("name")?.toString().trim();
   if (!name) return { error: "Name is required." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   await db.stage.update({
     where: { id: stageId, organizationId: ctx.organizationId },
@@ -56,7 +56,7 @@ export async function updateStageAction(
 export async function archiveStageAction(
   stageId: string,
 ): Promise<StageFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   // Check if stage is in use
   const inUse = await db.taskTemplate.findFirst({
@@ -80,7 +80,7 @@ export async function moveStageAction(
   stageId: string,
   direction: "up" | "down",
 ): Promise<StageFormState> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getSettingsRequestContextOrThrow();
 
   await db.$transaction(async (tx) => {
     const stages = await tx.stage.findMany({

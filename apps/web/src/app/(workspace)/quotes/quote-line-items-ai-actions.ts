@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { QuoteStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { AIService } from "@/lib/ai/ai-service";
 import { buildQuoteScopeCaptureContext } from "@/lib/ai/quote-scope-capture-context";
 import {
@@ -55,7 +55,7 @@ export async function generateQuoteScopeSuggestionsAction(
     return { error: "Missing quote id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const startedAt = Date.now();
 
   try {
@@ -168,7 +168,7 @@ export async function applyQuoteScopeSuggestionsAction(
     return { error: "Missing quote id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const parsedProposal = QuoteScopeSuggestionsProposalSchema.parse(proposal);

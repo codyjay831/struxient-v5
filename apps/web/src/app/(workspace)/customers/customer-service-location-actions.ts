@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { CustomerServiceLocationSource } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import {
   normalizeAddressDedupKey,
   upsertCustomerServiceLocationFromIntakeSnapshot,
@@ -65,7 +65,7 @@ export async function createCustomerServiceLocationAction(
     return { error: "Missing customer record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const customer = await db.customer.findFirst({
     where: { id: cid, organizationId: ctx.organizationId },
     select: { id: true },
@@ -119,7 +119,7 @@ export async function updateCustomerServiceLocationAction(
     return { error: "Missing service location id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const existing = await db.customerServiceLocation.findFirst({
     where: { id: lid, organizationId: ctx.organizationId },
     select: { id: true, customerId: true },
@@ -198,7 +198,7 @@ export async function setPrimaryCustomerServiceLocationAction(
     return { error: "Missing customer or location id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const loc = await db.customerServiceLocation.findFirst({
     where: {
       id: locId,

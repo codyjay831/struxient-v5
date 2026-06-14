@@ -21,7 +21,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer";
 import {
   attachIntakeServiceLocationToCustomerFromLead,
@@ -138,7 +138,7 @@ export async function createCustomerFromLeadWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   let createdCustomerId: string | undefined;
 
@@ -253,7 +253,7 @@ export async function linkLeadToCustomerWorkspaceAction(
     return { error: "Choose a customer to link, or create one first." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const customer = await db.customer.findFirst({
     where: { id: customerIdRaw, organizationId: ctx.organizationId },
@@ -358,7 +358,7 @@ export async function updateLeadStatusWorkspaceAction(
   const status = v as LeadStatus;
   const now = new Date();
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -420,7 +420,7 @@ export async function closeOrPauseLeadWorkspaceAction(
     return { error: "Choose a valid close outcome." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
@@ -532,7 +532,7 @@ export async function archiveLeadInboxAction(
   if (!id) {
     return { success: false, error: "Missing lead id." };
   }
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const closedAt = new Date();
   const result = await db.lead.updateMany({
     where: { id, organizationId: ctx.organizationId },
@@ -566,7 +566,7 @@ export async function updateLeadContactWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -642,7 +642,7 @@ export async function searchCustomersForLeadAttachAction(
   const q = query.trim();
   if (!q) return { ok: true, matches: [] };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     const matches = await db.customer.findMany({
@@ -681,7 +681,7 @@ export async function searchCustomersForLeadAttachAction(
  * full page) do not need this — they pass `activeQuoteWorkSurface` directly.
  *
  * Security:
- *   - org-scoped via `getRequestContextOrThrow`
+ *   - org-scoped via `getCommercialRequestContextOrThrow`
  *   - never trusts a client-supplied quote id; the active quote is derived
  *     server-side from the lead's quotes using the same
  *     `getLeadCommercialProgress` logic the other containers use
@@ -697,7 +697,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -775,7 +775,7 @@ export async function loadLeadCommercialSurfaceAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const payload = await loadLeadCommercialSurface(id, ctx);
   if (!payload) {
@@ -794,7 +794,7 @@ export async function loadLeadMatchHintsAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -924,7 +924,7 @@ function intakePayloadFromLeadRow(row: {
  *
  * Returns the linked customer's service-location rows when applicable plus
  * the intake snapshot for prefill — never trusts a client-supplied customer
- * id, never mutates. Org-scoped via `getRequestContextOrThrow`.
+ * id, never mutates. Org-scoped via `getCommercialRequestContextOrThrow`.
  */
 export async function loadLeadServiceAddressContextAction(
   leadId: string,
@@ -932,7 +932,7 @@ export async function loadLeadServiceAddressContextAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: {
@@ -1070,7 +1070,7 @@ export async function updateLeadServiceAddressWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, address: true },

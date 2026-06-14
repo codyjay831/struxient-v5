@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import {
   assignTaskWorkPackage,
   createWorkPackage,
@@ -24,7 +24,7 @@ export async function createJobWorkPackageAction(input: {
   source?: string | null;
   taskIds?: string[];
 }): Promise<WorkPackageActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const permission = assertSchedulePermission(session.role, "create_tentative");
   if (!permission.ok) return { error: permission.error };
 
@@ -72,7 +72,7 @@ export async function setTaskWorkPackageAction(
   taskId: string,
   workPackageId: string | null,
 ): Promise<WorkPackageActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const permission = assertSchedulePermission(session.role, "link_unlink_tasks");
   if (!permission.ok) return { error: permission.error };
 

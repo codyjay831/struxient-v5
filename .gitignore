@@ -1,3 +1,8 @@
+# Environment files (defense in depth — apps/web/.gitignore also covers app-local .env)
+.env
+.env.*
+!.env.example
+
 # Repo root must stay deps-free — all Node deps live in apps/web/.
 # If you see node_modules/ here, someone ran `npm install` at the root by mistake.
 /node_modules

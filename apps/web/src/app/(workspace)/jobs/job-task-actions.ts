@@ -12,7 +12,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import {
   deriveTaskState,
@@ -60,7 +60,7 @@ export type JobTaskScheduleActionInput = {
 export async function addJobTaskAction(
   input: AddJobTaskInput,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -160,7 +160,7 @@ export async function saveJobTaskCompletionNoteAction(
   taskId: string,
   completionNote: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -200,7 +200,7 @@ export async function completeJobTaskAction(
   taskId: string,
   completionNote?: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -330,7 +330,7 @@ export async function updateJobTaskStatusAction(
   taskId: string,
   status: JobTaskStatus,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   if (status === JobTaskStatus.DONE) {
@@ -435,7 +435,7 @@ export async function overrideJobTaskReadinessAction(
   taskId: string,
   completionNote?: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {
@@ -533,7 +533,7 @@ export async function overrideJobTaskReadinessAction(
 export async function updateJobTaskScheduleAction(
   input: JobTaskScheduleActionInput,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
   const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
   if (!permission.ok) return { error: permission.error };
@@ -585,7 +585,7 @@ export async function setJobTaskManualDeadlineAction(input: {
   granularity: TaskDueGranularity;
   dateOnlyInput?: string;
 }): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
   if (!permission.ok) return { error: permission.error };
 
@@ -625,7 +625,7 @@ export async function setJobTaskDerivedDeadlineRuleAction(input: {
   offsetDays: number;
   granularity: TaskDueGranularity;
 }): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
   if (!permission.ok) return { error: permission.error };
 
@@ -663,7 +663,7 @@ export async function recalculateJobTaskDerivedDeadlineAction(
   taskId: string,
   reason: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
   if (!permission.ok) return { error: permission.error };
 
@@ -700,7 +700,7 @@ export async function toggleJobTaskChecklistItemAction(
   checklistItemId: string,
   completed: boolean,
 ): Promise<JobTaskActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {

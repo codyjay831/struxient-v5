@@ -3,7 +3,7 @@
 import { JobActivityType, JobStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireCurrentSession } from "@/lib/session";
+import { requireMutableSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 
 export type JobLifecycleActionState = {
@@ -15,7 +15,7 @@ export async function archiveJobAction(
   jobId: string,
   reason?: string,
 ): Promise<JobLifecycleActionState> {
-  const session = await requireCurrentSession();
+  const session = await requireMutableSession();
   const organizationId = session.organizationId;
 
   try {

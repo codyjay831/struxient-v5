@@ -13,7 +13,8 @@ import {
   intakeSnapshotForCustomerFromLead,
 } from "@/lib/customer-service-location-from-lead";
 import { db } from "@/lib/db";
-import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { finalizeLeadAttachments } from "@/lib/finalize-lead-attachments";
+import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
 
@@ -115,7 +116,7 @@ export async function updateLeadStatusAction(
   }
   const status = v as LeadStatus;
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -191,7 +192,7 @@ export async function updateLeadAction(
     return titleErr;
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { channel: true },
@@ -348,20 +349,6 @@ export async function updateLeadAction(
       },
     });
 
-    if (attachmentIds.length > 0) {
-      await tx.attachment.updateMany({
-        where: {
-          id: { in: attachmentIds },
-          organizationId: ctx.organizationId,
-          leadId: null,
-        },
-        data: {
-          leadId: id,
-          status: "READY",
-        },
-      });
-    }
-
     if (requestedDateRaw || requestedWindow) {
       let requestedDate: Date | null = null;
       if (requestedDateRaw) {
@@ -440,6 +427,15 @@ export async function updateLeadAction(
     };
   }
 
+  if (attachmentIds.length > 0) {
+    await finalizeLeadAttachments({
+      organizationId: ctx.organizationId,
+      leadId: id,
+      attachmentIds,
+      uploadedByUserId: ctx.userId,
+    });
+  }
+
   redirect(`/leads/${id}`);
 }
 
@@ -462,7 +458,7 @@ export async function linkLeadToCustomerAction(
     return { error: "Choose a customer to link, or create one first." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   const customer = await db.customer.findFirst({
     where: {
@@ -578,7 +574,7 @@ export async function createCustomerFromLeadAction(
     return { error: "Missing sales record id." };
   }
 
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     await db.$transaction(async (tx) => {
