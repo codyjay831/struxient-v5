@@ -27,7 +27,7 @@ export async function createCrewAction(formData: FormData): Promise<{ ok: boolea
     return { ok: false, error: "Crew already exists or could not be created." };
   }
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/field-access");
   return { ok: true };
 }
 
@@ -84,7 +84,7 @@ export async function addCrewMemberAction(formData: FormData): Promise<{ ok: boo
     },
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/field-access");
   return { ok: true };
 }
 
@@ -111,7 +111,7 @@ export async function archiveCrewAction(crewId: string): Promise<{ ok: boolean; 
     data: { endsAt: new Date() },
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/field-access");
   return { ok: true };
 }
 
@@ -173,7 +173,7 @@ export async function grantJobCollaboratorAction(formData: FormData): Promise<{ 
     userId: membership.userId,
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/field-access");
   return { ok: true };
 }
 
@@ -201,7 +201,6 @@ export async function revokeJobCollaboratorAction(
     collaboratorId,
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/field-access");
   return { ok: true };
 }
-

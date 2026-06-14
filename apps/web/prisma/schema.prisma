@@ -69,6 +69,7 @@ model Organization {
   crews                     Crew[]
   crewMembers               CrewMember[]
   jobCollaborators          JobCollaborator[]
+  platformAuditEvents     PlatformAuditEvent[]
 }
 
 model Stage {
@@ -247,6 +248,10 @@ model User {
   crewMemberships             CrewMember[]
   jobCollaborations           JobCollaborator[]
   lastActiveOrganizationId    String?
+  platformAccess              PlatformAccess?
+  platformAccessCreated       PlatformAccess[]            @relation("PlatformAccessCreatedBy")
+  platformAccessRevoked       PlatformAccess[]            @relation("PlatformAccessRevokedBy")
+  platformAuditEvents         PlatformAuditEvent[]        @relation("PlatformAuditActor")
 }
 
 model OrganizationBusinessProfile {
@@ -2349,4 +2354,61 @@ enum ClarificationQuestionSetStatus {
   active
   archived
   merged
+}
+
+enum PlatformRole {
+  OPERATOR
+}
+
+enum PlatformAuditActorType {
+  USER
+  SYSTEM
+}
+
+enum PlatformAuditOutcome {
+  SUCCESS
+  DENIED
+  ERROR
+}
+
+/// One current-state platform access record per user. Durable history lives in PlatformAuditEvent.
+model PlatformAccess {
+  id              String       @id @default(cuid())
+  userId          String       @unique
+  role            PlatformRole @default(OPERATOR)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  revokedAt       DateTime?
+  revokedByUserId String?
+  createdByUserId String?
+  user            User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdBy       User?        @relation("PlatformAccessCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedBy       User?        @relation("PlatformAccessRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([revokedAt])
+}
+
+/// Append-only privileged platform action audit stream.
+model PlatformAuditEvent {
+  id                 String                 @id @default(cuid())
+  createdAt          DateTime               @default(now())
+  actorType          PlatformAuditActorType
+  actorUserId        String?
+  actorEmailSnapshot String?
+  action             String
+  targetType         String
+  targetId           String?
+  organizationId     String?
+  reason             String?
+  outcome            PlatformAuditOutcome
+  requestId          String?
+  metadataJson       Json?
+  actor              User?                  @relation("PlatformAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  organization       Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([action, createdAt])
+  @@index([outcome, createdAt])
 }

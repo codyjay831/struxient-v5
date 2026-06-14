@@ -4,19 +4,27 @@ import { useState, useTransition } from "react";
 import { StaffRole } from "@prisma/client";
 import { createOrganizationInviteAction } from "./team-actions";
 import { Button } from "@/components/ui/button";
+import { MANAGEABLE_MEMBER_ROLES } from "@/lib/team/team-membership-rules";
 
-const ROLE_OPTIONS: Array<{ value: StaffRole; label: string }> = [
-  { value: StaffRole.ADMIN, label: "Admin" },
-  { value: StaffRole.OFFICE, label: "Office" },
-  { value: StaffRole.FIELD, label: "Field" },
-  { value: StaffRole.VIEWER, label: "Viewer" },
-  { value: StaffRole.SUBCONTRACTOR, label: "Subcontractor" },
+const ROLE_OPTIONS: Array<{ value: StaffRole; label: string; hint: string }> = [
+  { value: StaffRole.ADMIN, label: "Admin", hint: "Full org settings except owner-only actions." },
+  { value: StaffRole.OFFICE, label: "Office", hint: "Sales, customers, quotes, and scheduling." },
+  { value: StaffRole.FIELD, label: "Field", hint: "Assigned jobs and tasks only." },
+  { value: StaffRole.VIEWER, label: "Viewer", hint: "Read-only across the organization." },
+  {
+    value: StaffRole.SUBCONTRACTOR,
+    label: "Subcontractor",
+    hint: "No org-wide access; requires per-job grants in Field access.",
+  },
 ];
 
 export function TeamInviteForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<StaffRole>(StaffRole.FIELD);
+
+  const selectedHint = ROLE_OPTIONS.find((option) => option.value === selectedRole)?.hint;
 
   return (
     <form
@@ -53,7 +61,8 @@ export function TeamInviteForm() {
           <span className="mb-1.5 block text-sm font-medium text-foreground">Role</span>
           <select
             name="role"
-            defaultValue={StaffRole.FIELD}
+            value={selectedRole}
+            onChange={(event) => setSelectedRole(event.target.value as StaffRole)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
           >
             {ROLE_OPTIONS.map((option) => (
@@ -62,6 +71,9 @@ export function TeamInviteForm() {
               </option>
             ))}
           </select>
+          {selectedHint ? (
+            <p className="mt-1.5 text-xs text-foreground-muted">{selectedHint}</p>
+          ) : null}
         </label>
       </div>
 

@@ -20,7 +20,7 @@ export function TeamInviteRowActions({
   }
 
   return (
-    <div className="mt-1 flex items-center gap-2">
+    <div className="mt-1 flex flex-wrap items-center gap-2">
       <Button
         type="button"
         variant="ghost"
@@ -39,7 +39,7 @@ export function TeamInviteRowActions({
           });
         }}
       >
-        Resend
+        Resend invite
       </Button>
       <Button
         type="button"
@@ -59,11 +59,10 @@ export function TeamInviteRowActions({
           });
         }}
       >
-        Revoke
+        Revoke invite
       </Button>
       {message ? <span className="text-xs text-foreground-muted">{message}</span> : null}
       {error ? <span className="text-xs text-danger">{error}</span> : null}
     </div>
   );
 }
-

@@ -71,6 +71,14 @@ export async function getSettingsRequestContextOrThrow(): Promise<RequestContext
   return ctx;
 }
 
+export async function getSettingsRequestContextOrNull(): Promise<RequestContext | null> {
+  try {
+    return await getSettingsRequestContextOrThrow();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Optional context resolver. Returns null if no context can be resolved.
  */

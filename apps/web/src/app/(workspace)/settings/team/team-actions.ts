@@ -10,18 +10,11 @@ import {
   createOrganizationInviteToken,
   hashOrganizationInviteToken,
 } from "@/lib/invite-token";
+import { MANAGEABLE_MEMBER_ROLES } from "@/lib/team/team-membership-rules";
 
 const INVITE_EXPIRY_HOURS = 72;
 const INVITE_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const INVITE_RATE_LIMIT_MAX = 25;
-
-const MANAGEABLE_ROLES = [
-  StaffRole.ADMIN,
-  StaffRole.OFFICE,
-  StaffRole.FIELD,
-  StaffRole.VIEWER,
-  StaffRole.SUBCONTRACTOR,
-] as const;
 
 function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
@@ -40,7 +33,7 @@ export async function createOrganizationInviteAction(formData: FormData): Promis
     return { ok: false, error: "Enter a valid email address." };
   }
 
-  if (!MANAGEABLE_ROLES.includes(roleRaw as (typeof MANAGEABLE_ROLES)[number])) {
+  if (!MANAGEABLE_MEMBER_ROLES.includes(roleRaw as (typeof MANAGEABLE_MEMBER_ROLES)[number])) {
     return { ok: false, error: "Select a valid team role." };
   }
 
@@ -130,7 +123,7 @@ export async function createOrganizationInviteAction(formData: FormData): Promis
     emailed,
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/team");
   return { ok: true, inviteId: invite.id, inviteToken, inviteUrl, emailed };
 }
 
@@ -159,7 +152,7 @@ export async function revokeOrganizationInviteAction(inviteId: string): Promise<
     revokedByUserId: ctx.userId,
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/team");
   return { ok: true };
 }
 
@@ -212,6 +205,6 @@ export async function resendOrganizationInviteAction(
     emailed,
   });
 
-  revalidatePath("/settings/organization");
+  revalidatePath("/settings/team");
   return { ok: true, inviteUrl, emailed };
 }

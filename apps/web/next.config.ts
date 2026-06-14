@@ -24,6 +24,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    authInterrupts: true,
+  },
   turbopack: {
     root: resolvedRoot,
   },

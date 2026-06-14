@@ -85,6 +85,9 @@
 | Resource visibility predicate (`job/task/schedule`) | **Derived** | Authz resource helpers + query builders (`workstation-query.ts`, schedule/jobs queries) | Field/subcontractor overexposure on list/count/search |
 | Public token access scope | **Stored token metadata + derived checks** | `/q/[token]`, `/co/[token]` actions and token helpers (moving to dedicated public-token service) | Raw bearer token misuse and replay scope drift |
 | Security audit stream | **Stored** | Dedicated security audit events (planned), not `JobActivity` | Lost accountability for role/invite/session/token actions |
+| Platform operator context | **Derived at request time** | `apps/web/src/lib/platform/platform-context.ts` (`getPlatformContext()`) | Platform authority leaking through contractor session or JWT role claims |
+| Platform access grant (current state) | **Stored** | `PlatformAccess` in `apps/web/prisma/schema.prisma` | Accidental auto-grants via seed or membership coupling |
+| Platform audit stream | **Stored (append-only)** | `PlatformAuditEvent` + `apps/web/src/lib/platform/platform-audit.ts` | Mutable audit rows or secret metadata leakage |
 
 ## Commercial pipeline
 
@@ -149,4 +152,5 @@
 
 *Created 2026-05-16 — Guardrails v1 Pass 1.*  
 *Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*  
-*Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*
+*Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*  
+*Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
