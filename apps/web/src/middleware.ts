@@ -18,7 +18,8 @@ function isPublicPath(pathname: string) {
     pathname.startsWith("/co/") ||
     pathname === "/invite" ||
     pathname.startsWith("/invite/") ||
-    pathname.startsWith("/api/auth")
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/billing/webhook")
   );
 }
 
