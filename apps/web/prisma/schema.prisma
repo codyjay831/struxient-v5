@@ -73,6 +73,8 @@ model Organization {
   billingAccount          OrganizationBillingAccount?
   subscription            OrganizationSubscription?
   aiBillingPeriods        AiBillingPeriod[]
+  betaGrant               OrganizationBetaGrant?
+  betaSignupInvite        BetaSignupInvite?
 }
 
 model Stage {
@@ -257,6 +259,11 @@ model User {
   platformAccessCreated       PlatformAccess[]            @relation("PlatformAccessCreatedBy")
   platformAccessRevoked       PlatformAccess[]            @relation("PlatformAccessRevokedBy")
   platformAuditEvents         PlatformAuditEvent[]        @relation("PlatformAuditActor")
+  createdBetaSignupInvites    BetaSignupInvite[]          @relation("BetaSignupInviteCreatedBy")
+  acceptedBetaSignupInvites   BetaSignupInvite[]          @relation("BetaSignupInviteAcceptedBy")
+  revokedBetaSignupInvites    BetaSignupInvite[]          @relation("BetaSignupInviteRevokedBy")
+  grantedBetaGrants           OrganizationBetaGrant[]     @relation("OrganizationBetaGrantGrantedBy")
+  revokedBetaGrants           OrganizationBetaGrant[]     @relation("OrganizationBetaGrantRevokedBy")
 }
 
 model OrganizationBusinessProfile {
@@ -323,6 +330,63 @@ model Membership {
   @@unique([userId, organizationId])
   @@index([organizationId])
   @@index([userId])
+}
+
+enum BetaSignupInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model BetaSignupInvite {
+  id               String                 @id @default(cuid())
+  normalizedEmail  String
+  tokenHash        String                 @unique
+  status           BetaSignupInviteStatus @default(PENDING)
+  betaDays         Int
+  aiEnabled        Boolean                @default(false)
+  aiIncludedUnits  Int                    @default(50)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  organizationId   String?                @unique
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  createdByUserId  String
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  createdBy        User                   @relation("BetaSignupInviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  acceptedBy       User?                  @relation("BetaSignupInviteAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  revokedBy        User?                  @relation("BetaSignupInviteRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  organization     Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  betaGrant        OrganizationBetaGrant?
+
+  @@index([normalizedEmail, status])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model OrganizationBetaGrant {
+  id                 String           @id @default(cuid())
+  organizationId     String           @unique
+  betaSignupInviteId String?          @unique
+  startsAt           DateTime         @default(now())
+  expiresAt          DateTime
+  aiEnabled          Boolean          @default(false)
+  aiIncludedUnits    Int              @default(50)
+  usedAiUnits        Int              @default(0)
+  revokedAt          DateTime?
+  revokedByUserId    String?
+  grantedByUserId    String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  betaSignupInvite   BetaSignupInvite? @relation(fields: [betaSignupInviteId], references: [id], onDelete: SetNull)
+  revokedBy          User?            @relation("OrganizationBetaGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  grantedBy          User?            @relation("OrganizationBetaGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model OrganizationInvite {

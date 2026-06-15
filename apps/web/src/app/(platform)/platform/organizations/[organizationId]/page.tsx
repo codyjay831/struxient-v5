@@ -103,6 +103,26 @@ export default async function PlatformOrganizationDetailPage({
                 <dd>{format(summary.subscription.trialEndsAt, "MMM d, yyyy")}</dd>
               </div>
             ) : null}
+            {summary.betaGrant ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">Beta access</dt>
+                  <dd>{summary.betaGrant.active ? "Active" : summary.betaGrant.revokedAt ? "Revoked" : "Expired"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">Beta ends</dt>
+                  <dd>{format(summary.betaGrant.expiresAt, "MMM d, yyyy")}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">Beta AI</dt>
+                  <dd>
+                    {summary.betaGrant.aiEnabled
+                      ? `${summary.betaGrant.usedAiUnits} / ${summary.betaGrant.aiIncludedUnits} units`
+                      : "Disabled"}
+                  </dd>
+                </div>
+              </>
+            ) : null}
             {summary.aiBillingPeriod ? (
               <>
                 <div className="flex justify-between gap-4">

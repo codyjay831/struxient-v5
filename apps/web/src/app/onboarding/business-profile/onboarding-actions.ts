@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
+import { getPostOnboardingPathForOrganization } from "@/lib/beta/beta-onboarding";
 import { saveBusinessProfile } from "@/lib/business-profile/business-profile-service";
 
 export type OnboardingBusinessProfileState = {
@@ -43,10 +44,11 @@ export async function saveBusinessProfileOnboardingAction(
 
   revalidatePath("/settings/organization");
   revalidatePath("/onboarding/business-profile");
-  redirect("/onboarding/billing");
+  redirect(await getPostOnboardingPathForOrganization(ctx.organizationId));
 }
 
 export async function skipBusinessProfileOnboardingAction() {
-  redirect("/onboarding/billing");
+  const ctx = await getMutableRequestContextOrThrow();
+  redirect(await getPostOnboardingPathForOrganization(ctx.organizationId));
 }
 

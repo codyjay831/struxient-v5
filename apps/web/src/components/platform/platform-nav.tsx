@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, ClipboardList, LayoutDashboard, Users } from "lucide-react";
+import { Building2, ClipboardList, KeyRound, LayoutDashboard, Users } from "lucide-react";
 
 const navItems = [
   { href: "/platform", label: "Platform Home", icon: LayoutDashboard, exact: true },
   { href: "/platform/organizations", label: "Organizations", icon: Building2 },
+  { href: "/platform/beta-access", label: "Beta access", icon: KeyRound },
   { href: "/platform/users", label: "Users", icon: Users },
   { href: "/platform/audit", label: "Audit", icon: ClipboardList },
 ];

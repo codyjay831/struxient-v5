@@ -16,7 +16,7 @@ export default async function BillingOnboardingPage({
   const ctx = await getRequestContextOrThrow();
   const entitlement = await getOrganizationEntitlement(ctx.organizationId);
 
-  if (entitlement.hasSubscription && entitlement.canUseProduct) {
+  if (entitlement.canUseProduct) {
     redirect("/workstation");
   }
 

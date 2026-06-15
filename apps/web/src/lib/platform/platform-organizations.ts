@@ -8,6 +8,7 @@ import {
   StaffRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { isBetaGrantActive } from "@/lib/beta/beta-grant";
 import { normalizePageQuery, toPageResult } from "./platform-pagination";
 import { toRedactedAiFailure, toRedactedNotificationFailure } from "./platform-redaction";
 import type {
@@ -126,6 +127,15 @@ export async function getPlatformOrganizationSummary(
           trialEndsAt: true,
           currentPeriodEnd: true,
           cancelAtPeriodEnd: true,
+        },
+      },
+      betaGrant: {
+        select: {
+          expiresAt: true,
+          aiEnabled: true,
+          aiIncludedUnits: true,
+          usedAiUnits: true,
+          revokedAt: true,
         },
       },
     },
@@ -288,6 +298,16 @@ export async function getPlatformOrganizationSummary(
           overageUnits: currentAiBillingPeriod.overageUnits,
           overageAmountCents: currentAiBillingPeriod.overageAmountCents,
           invoiceStatus: currentAiBillingPeriod.invoiceStatus,
+        }
+      : null,
+    betaGrant: organization.betaGrant
+      ? {
+          expiresAt: organization.betaGrant.expiresAt,
+          aiEnabled: organization.betaGrant.aiEnabled,
+          aiIncludedUnits: organization.betaGrant.aiIncludedUnits,
+          usedAiUnits: organization.betaGrant.usedAiUnits,
+          revokedAt: organization.betaGrant.revokedAt,
+          active: isBetaGrantActive(organization.betaGrant),
         }
       : null,
   };

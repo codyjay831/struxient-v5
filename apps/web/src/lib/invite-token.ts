@@ -7,3 +7,11 @@ export function createOrganizationInviteToken(): string {
 export function hashOrganizationInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
+
+export function createBetaSignupInviteToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+export function hashBetaSignupInviteToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}

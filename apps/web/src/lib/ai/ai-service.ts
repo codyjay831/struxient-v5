@@ -72,7 +72,8 @@ import {
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertCanUseAi } from "@/lib/billing/billing-entitlement";
+import { assertCanUseAi, getOrganizationEntitlement } from "@/lib/billing/billing-entitlement";
+import { recordBetaGrantAiUsage } from "@/lib/beta/beta-grant";
 import {
   computeBillableUnits,
   getCurrentAiBillingPeriod,
@@ -3084,7 +3085,11 @@ OUTPUT JSON ONLY:
     const startedAt = new Date();
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
     await assertCanUseAi(params.organizationId, "site_details_research");
-    const billingPeriod = await getCurrentAiBillingPeriod(params.organizationId);
+    const entitlement = await getOrganizationEntitlement(params.organizationId);
+    const billingPeriod =
+      entitlement.accessSource === "stripe"
+        ? await getCurrentAiBillingPeriod(params.organizationId)
+        : null;
     const groundedResearchPrompt = `Research contractor site details for:
 Address: ${params.addressLine}
 Requested scopes: ${params.missingScopes.join(", ")}
@@ -3465,7 +3470,13 @@ Instructions:
       const responseChars = JSON.stringify(responsePayload).length;
       const billableUnits = computeBillableUnits(groundedResearchPrompt.length, responseChars);
       let billableStatus: "INCLUDED" | "OVERAGE" | "UNBILLABLE" = "UNBILLABLE";
-      if (billingPeriod && billableUnits > 0) {
+      if (entitlement.accessSource === "beta" && billableUnits > 0) {
+        const recorded = await recordBetaGrantAiUsage({
+          organizationId: params.organizationId,
+          billableUnits,
+        });
+        billableStatus = recorded.billableStatus === "INCLUDED" ? "INCLUDED" : "UNBILLABLE";
+      } else if (billingPeriod && billableUnits > 0) {
         const recorded = await recordAiUsageAgainstPeriod({
           aiBillingPeriodId: billingPeriod.id,
           billableUnits,

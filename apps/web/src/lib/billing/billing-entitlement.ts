@@ -1,5 +1,10 @@
 import type { OrganizationSubscription } from "@prisma/client";
 import { db } from "@/lib/db";
+import {
+  canBetaGrantUseAi,
+  getActiveOrganizationBetaGrant,
+  getBetaGrantRemainingAiUnits,
+} from "@/lib/beta/beta-grant";
 import { getIncludedAiUnits } from "./billing-config";
 import {
   isAiAllowedSubscriptionStatus,
@@ -16,6 +21,7 @@ export type OrgEntitlement = {
   canUseProduct: boolean;
   canUseAi: boolean;
   aiOverageAllowed: boolean;
+  accessSource: "none" | "beta" | "stripe" | "disabled";
   subscriptionStatus: OrganizationSubscription["status"] | null;
   trialEndsAt: Date | null;
   currentPeriodEnd: Date | null;
@@ -26,6 +32,38 @@ export type OrgEntitlement = {
   reason?: string;
   billingSetupPath: string;
 };
+
+function buildBetaEntitlement(
+  grant: NonNullable<Awaited<ReturnType<typeof getActiveOrganizationBetaGrant>>>,
+): OrgEntitlement {
+  const remaining = getBetaGrantRemainingAiUnits(grant);
+  const canUseAi = canBetaGrantUseAi(grant);
+
+  let reason: string | undefined;
+  if (!grant.aiEnabled) {
+    reason = "AI is not included in your beta access.";
+  } else if (remaining <= 0) {
+    reason = "Your beta AI allowance is exhausted.";
+  }
+
+  return {
+    billingEnabled: true,
+    hasSubscription: false,
+    canUseProduct: true,
+    canUseAi,
+    aiOverageAllowed: false,
+    accessSource: "beta",
+    subscriptionStatus: null,
+    trialEndsAt: grant.expiresAt,
+    currentPeriodEnd: grant.expiresAt,
+    includedAiUnits: grant.aiIncludedUnits,
+    usedAiUnits: grant.usedAiUnits,
+    remainingAiUnits: remaining,
+    overageUnits: 0,
+    reason,
+    billingSetupPath: "/onboarding/billing",
+  };
+}
 
 export async function getOrganizationEntitlement(
   organizationId: string,
@@ -40,6 +78,7 @@ export async function getOrganizationEntitlement(
       canUseProduct: true,
       canUseAi: true,
       aiOverageAllowed: true,
+      accessSource: "disabled",
       subscriptionStatus: null,
       trialEndsAt: null,
       currentPeriodEnd: null,
@@ -55,6 +94,41 @@ export async function getOrganizationEntitlement(
     where: { organizationId },
   });
 
+  if (subscription && isProductAccessSubscriptionStatus(subscription.status)) {
+    const period = await ensureAiBillingPeriodForSubscription(subscription);
+    const canUseProduct = true;
+    const canUseAi = isAiAllowedSubscriptionStatus(subscription.status);
+    const remaining = Math.max(0, period.includedAllowanceUnits - period.usedUnits);
+
+    let reason: string | undefined;
+    if (!canUseAi) {
+      reason = "AI is paused until your payment method is updated.";
+    }
+
+    return {
+      billingEnabled: true,
+      hasSubscription: true,
+      canUseProduct,
+      canUseAi,
+      aiOverageAllowed: canUseAi,
+      accessSource: "stripe",
+      subscriptionStatus: subscription.status,
+      trialEndsAt: subscription.trialEndsAt,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      includedAiUnits: period.includedAllowanceUnits,
+      usedAiUnits: period.usedUnits,
+      remainingAiUnits: remaining,
+      overageUnits: period.overageUnits,
+      reason,
+      billingSetupPath: "/onboarding/billing",
+    };
+  }
+
+  const betaGrant = await getActiveOrganizationBetaGrant(organizationId);
+  if (betaGrant) {
+    return buildBetaEntitlement(betaGrant);
+  }
+
   if (!subscription) {
     return {
       billingEnabled: true,
@@ -62,6 +136,7 @@ export async function getOrganizationEntitlement(
       canUseProduct: false,
       canUseAi: false,
       aiOverageAllowed: false,
+      accessSource: "none",
       subscriptionStatus: null,
       trialEndsAt: null,
       currentPeriodEnd: null,
@@ -92,6 +167,7 @@ export async function getOrganizationEntitlement(
     canUseProduct,
     canUseAi,
     aiOverageAllowed: canUseAi,
+    accessSource: "stripe",
     subscriptionStatus: subscription.status,
     trialEndsAt: subscription.trialEndsAt,
     currentPeriodEnd: subscription.currentPeriodEnd,

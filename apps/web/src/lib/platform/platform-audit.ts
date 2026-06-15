@@ -31,18 +31,40 @@ const BOOTSTRAP_METADATA_KEYS = new Set([
 
 const GRANTED_METADATA_KEYS = new Set(["granteeEmail", "role", "method"]);
 
+const BETA_INVITE_AUDIT_METADATA_KEYS = new Set([
+  "inviteeEmail",
+  "betaDays",
+  "aiEnabled",
+  "aiIncludedUnits",
+  "method",
+  "organizationId",
+]);
+
+const BETA_GRANT_AUDIT_METADATA_KEYS = new Set(["method", "organizationId"]);
+
+function metadataAllowlistForAction(action: string): Set<string> {
+  if (action === "platform.access.bootstrapped" || action === "platform.bootstrap.failed") {
+    return BOOTSTRAP_METADATA_KEYS;
+  }
+  if (action === "platform.access.granted") {
+    return GRANTED_METADATA_KEYS;
+  }
+  if (action.startsWith("platform.beta.invite.")) {
+    return BETA_INVITE_AUDIT_METADATA_KEYS;
+  }
+  if (action.startsWith("platform.beta.grant.")) {
+    return BETA_GRANT_AUDIT_METADATA_KEYS;
+  }
+  return new Set<string>();
+}
+
 export function sanitizePlatformAuditMetadata(
   action: string,
   raw: Record<string, unknown> | null | undefined,
 ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   if (!raw) return Prisma.JsonNull;
 
-  const allowlist =
-    action === "platform.access.bootstrapped" || action === "platform.bootstrap.failed"
-      ? BOOTSTRAP_METADATA_KEYS
-      : action === "platform.access.granted"
-        ? GRANTED_METADATA_KEYS
-        : new Set<string>();
+  const allowlist = metadataAllowlistForAction(action);
 
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {

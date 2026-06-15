@@ -14,7 +14,7 @@ The Platform Operations Console allows authorized Struxient operators to inspect
 3. **Platform access denied by default; grants are explicit rows in `PlatformAccess`.**
 4. **Platform access revalidated from DB on every privileged request; never sole authority from JWT claims.**
 5. **Development contractor fallback never grants platform access.**
-6. **MVP platform console is read-only** (except audit writes and bootstrap grants).
+6. **MVP platform console is read-only** (except audit writes, bootstrap grants, and beta access invite/grant mutations).
 7. **No impersonation, support switching, or contractor workspace shell reuse.**
 8. **Tenant inspection is summary-first; no customer/attachment/message browsing.**
 9. **`PlatformAuditEvent` is append-only; not `JobActivity` or console logs.**
@@ -65,6 +65,19 @@ explicit target organization IDs
 
 Impersonation, support view, user disable, session revoke, org suspend, billing UI, support desk, raw AI payloads, database editing, placeholder mutation buttons.
 
+## Beta access mutations (v1 exception)
+
+Platform operators may create, list, and revoke **beta signup invites** and **organization beta grants** from `/platform/beta-access`. These are the first intentional runtime platform mutations beyond bootstrap.
+
+Rules:
+- Beta invite creation and acceptance are audited in the same transaction as the mutation.
+- Beta invites are email-bound, token-hashed, single-use, and expiring.
+- Beta grants provide temporary product access without Stripe; AI is explicit and capped.
+- Expired or revoked beta grants fail closed into the existing Stripe billing flow.
+- Paid subscriptions always supersede expired beta grants.
+
 ---
+
+*Canon update (2026-06-15): Added narrow beta access mutation exception for operator-controlled early access.*
 
 *Canon update (2026-06-14): Initial platform operations canon for read-only console, PlatformAccess lifecycle, audit attribution, and bootstrap rules.*

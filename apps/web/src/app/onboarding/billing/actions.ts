@@ -18,7 +18,7 @@ export async function startTrialCheckoutAction(): Promise<BillingOnboardingActio
 
   const ctx = await getSettingsRequestContextOrThrow();
   const entitlement = await getOrganizationEntitlement(ctx.organizationId);
-  if (entitlement.hasSubscription && entitlement.canUseProduct) {
+  if (entitlement.canUseProduct) {
     redirect("/workstation");
   }
 

@@ -1,6 +1,7 @@
 import type { AiUsageBillableStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { assertCanUseAi } from "./billing-entitlement";
+import { recordBetaGrantAiUsage } from "@/lib/beta/beta-grant";
+import { assertCanUseAi, getOrganizationEntitlement } from "./billing-entitlement";
 import {
   computeBillableUnits,
   getCurrentAiBillingPeriod,
@@ -38,7 +39,11 @@ export async function runMeteredAiCall<T>(params: {
 }): Promise<AiMeteringResult<T>> {
   await assertCanUseAi(params.ctx.organizationId, params.ctx.feature);
 
-  const period = await getCurrentAiBillingPeriod(params.ctx.organizationId);
+  const entitlement = await getOrganizationEntitlement(params.ctx.organizationId);
+  const period =
+    entitlement.accessSource === "stripe"
+      ? await getCurrentAiBillingPeriod(params.ctx.organizationId)
+      : null;
 
   const usage = await db.aiUsageLog.create({
     data: {
@@ -64,7 +69,13 @@ export async function runMeteredAiCall<T>(params: {
     const billableUnits = computeBillableUnits(inputTokens, outputTokens);
 
     let billableStatus: AiUsageBillableStatus = "UNBILLABLE";
-    if (period && billableUnits > 0) {
+    if (entitlement.accessSource === "beta" && billableUnits > 0) {
+      const recorded = await recordBetaGrantAiUsage({
+        organizationId: params.ctx.organizationId,
+        billableUnits,
+      });
+      billableStatus = recorded.billableStatus === "INCLUDED" ? "INCLUDED" : "UNBILLABLE";
+    } else if (period && billableUnits > 0) {
       const recorded = await recordAiUsageAgainstPeriod({
         aiBillingPeriodId: period.id,
         billableUnits,

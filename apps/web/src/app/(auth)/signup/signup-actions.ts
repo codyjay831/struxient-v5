@@ -4,6 +4,11 @@ import { OrganizationInviteStatus, StaffRole } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { createOrganizationBetaGrantFromInvite } from "@/lib/beta/beta-onboarding";
+import {
+  betaInviteMatchesEmail,
+  validateBetaSignupInviteToken,
+} from "@/lib/beta/beta-signup-invite";
 import { isBetaSignupEnabled } from "@/lib/env-validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { hashOrganizationInviteToken } from "@/lib/invite-token";
@@ -62,7 +67,14 @@ export type SignupActionResult =
     };
 
 export async function createAccountAction(input: unknown): Promise<SignupActionResult> {
-  if (!isBetaSignupEnabled()) {
+  const betaTokenRaw = (input as { betaToken?: unknown })?.betaToken;
+  const betaToken = typeof betaTokenRaw === "string" ? betaTokenRaw.trim() : "";
+
+  const betaInviteValidation = betaToken
+    ? await validateBetaSignupInviteToken(betaToken)
+    : null;
+
+  if (!isBetaSignupEnabled() && (!betaInviteValidation || !betaInviteValidation.ok)) {
     return {
       ok: false,
       error: "Sign-up is currently invite-only. Contact support for access.",
@@ -96,6 +108,15 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
     return { ok: false, error: "An account with this email already exists." };
   }
 
+  if (betaInviteValidation) {
+    if (!betaInviteValidation.ok) {
+      return { ok: false, error: betaInviteValidation.error };
+    }
+    if (!betaInviteMatchesEmail(betaInviteValidation.invite, email)) {
+      return { ok: false, error: "This beta invite is for a different email address." };
+    }
+  }
+
   const passwordHash = await hash(parsed.data.password, 10);
 
   const inviteTokenRaw = (input as { inviteToken?: unknown })?.inviteToken;
@@ -103,24 +124,6 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
     typeof inviteTokenRaw === "string" ? inviteTokenRaw.trim() : "";
 
   await db.$transaction(async (tx) => {
-    // #region agent log
-    fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "2d4ee2" },
-      body: JSON.stringify({
-        sessionId: "2d4ee2",
-        runId: "post-fix",
-        hypothesisId: "A",
-        location: "signup-actions.ts:user.create:before",
-        message: "Creating user with terms fields",
-        data: {
-          hasTermsAcceptedAtField: "termsAcceptedAt" in (tx.user as object),
-          termsVersion: BILLING_TERMS_VERSION,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     const user = await tx.user.create({
       data: {
         name: parsed.data.name,
@@ -178,23 +181,30 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
         role: StaffRole.OWNER,
       },
     });
-  });
 
-  // #region agent log
-  fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "2d4ee2" },
-    body: JSON.stringify({
-      sessionId: "2d4ee2",
-      runId: "post-fix",
-      hypothesisId: "A",
-      location: "signup-actions.ts:transaction:success",
-      message: "Signup transaction completed",
-      data: { ok: true },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
+    if (betaInviteValidation?.ok) {
+      const inviteRecord = await tx.betaSignupInvite.findUniqueOrThrow({
+        where: { id: betaInviteValidation.invite.id },
+        select: {
+          id: true,
+          betaDays: true,
+          aiEnabled: true,
+          aiIncludedUnits: true,
+          createdByUserId: true,
+        },
+      });
+
+      await createOrganizationBetaGrantFromInvite(tx, {
+        inviteId: inviteRecord.id,
+        organizationId: organization.id,
+        userId: user.id,
+        betaDays: inviteRecord.betaDays,
+        aiEnabled: inviteRecord.aiEnabled,
+        aiIncludedUnits: inviteRecord.aiIncludedUnits,
+        grantedByUserId: inviteRecord.createdByUserId,
+      });
+    }
+  });
 
   return {
     ok: true,
