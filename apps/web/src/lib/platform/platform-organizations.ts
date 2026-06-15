@@ -155,6 +155,7 @@ export async function getPlatformOrganizationSummary(
     recentNotificationFailures,
     recentPlatformAuditEvents,
     currentAiBillingPeriod,
+    aiCostAggregate,
   ] = await Promise.all([
     db.job.groupBy({
       by: ["status"],
@@ -231,12 +232,17 @@ export async function getPlatformOrganizationSummary(
       where: { organizationId },
       orderBy: { periodStart: "desc" },
       select: {
+        periodStart: true,
         includedAllowanceUnits: true,
         usedUnits: true,
         overageUnits: true,
         overageAmountCents: true,
         invoiceStatus: true,
       },
+    }),
+    db.aiUsageLog.aggregate({
+      where: { organizationId, status: "success", createdAt: { gte: since } },
+      _sum: { estimatedCostCents: true },
     }),
   ]);
 
@@ -300,6 +306,7 @@ export async function getPlatformOrganizationSummary(
           invoiceStatus: currentAiBillingPeriod.invoiceStatus,
         }
       : null,
+    aiEstimatedCostCentsLast30Days: aiCostAggregate._sum.estimatedCostCents ?? 0,
     betaGrant: organization.betaGrant
       ? {
           expiresAt: organization.betaGrant.expiresAt,

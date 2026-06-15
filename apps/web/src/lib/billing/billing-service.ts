@@ -3,6 +3,7 @@ import {
   resolveOrganizationIdFromStripeCustomer,
   upsertSubscriptionFromStripe,
 } from "./billing-entitlement";
+import { getStripeClient } from "./billing-stripe";
 import type Stripe from "stripe";
 
 export async function isWebhookEventProcessed(eventId: string): Promise<boolean> {

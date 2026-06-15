@@ -3,10 +3,21 @@ import {
   type ApprovedGroundedSource,
 } from "@/lib/ai/site-details-approved-sources";
 import {
+  extractGeminiTextFromRestPayload,
+  extractGeminiUsageFromRestPayload,
+  parseGeminiJsonResponse,
+  type GeminiTokenUsage,
+} from "@/lib/ai/gemini-generate-content";
+import {
   buildGeminiGenerateContentEndpoint,
   sanitizeProviderErrorBody,
   SiteDetailsProviderError,
 } from "@/lib/ai/site-details-provider-error";
+
+export type SiteDetailsExtractionResult = {
+  parsed: unknown;
+  usage: GeminiTokenUsage | null;
+};
 
 export async function extractSiteDetailsFromGroundedResearch(params: {
   apiKey: string;
@@ -16,7 +27,7 @@ export async function extractSiteDetailsFromGroundedResearch(params: {
   missingScopes: string[];
   groundedSummary: string;
   approvedSources: ApprovedGroundedSource[];
-}): Promise<unknown> {
+}): Promise<SiteDetailsExtractionResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
   const startedAt = Date.now();
@@ -153,6 +164,11 @@ Return exact shape:
           parts?: Array<{ text?: string }>;
         };
       }>;
+      usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        totalTokenCount?: number;
+      };
     };
     try {
       payload = JSON.parse(responseText) as typeof payload;
@@ -176,11 +192,11 @@ Return exact shape:
         groundingMetadataExists: false,
       });
     }
-    const text =
-      payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("\n").trim() ?? "";
+    const text = extractGeminiTextFromRestPayload(payload);
+    const usage = extractGeminiUsageFromRestPayload(payload);
     try {
       const parsed = parseGeminiJsonResponse(text);
-      return parsed;
+      return { parsed, usage };
     } catch (error) {
       throw new SiteDetailsProviderError({
         code: "EXTRACTION_PARSE_ERROR",
@@ -203,20 +219,5 @@ Return exact shape:
     }
   } finally {
     clearTimeout(timeout);
-  }
-}
-
-function parseGeminiJsonResponse(text: string): unknown {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  const jsonStr = jsonMatch ? jsonMatch[0] : text.trim();
-  try {
-    return JSON.parse(jsonStr);
-  } catch (firstError) {
-    const repaired = jsonStr.replace(/,\s*([}\]])/g, "$1");
-    try {
-      return JSON.parse(repaired);
-    } catch {
-      throw firstError;
-    }
   }
 }

@@ -5,7 +5,10 @@ import { Prisma, QuoteStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import {
   getClarificationQuestionSetByKey,
   listActiveClarificationQuestionSetSummaries,
@@ -354,28 +357,45 @@ export async function suggestLineClarificationAnswersAction(
       .filter(Boolean)
       .join("\n");
 
-    const billingPreflight = await preflightAiUsage(ctx.organizationId, "clarification_answers");
-    if (billingPreflight) {
-      return { error: billingPreflight.error };
-    }
-
-    const result = await AIService.generateClarificationAnswerSuggestions({
-      set: {
-        key: set.key,
-        version: set.version,
-        label: set.label,
-        questions: set.questions.map((q) => ({
-          key: q.key,
-          label: q.label,
-          inputType: q.inputType,
-          allowOther: q.allowOther,
-          unit: q.unit,
-          options: q.options?.map((o) => ({ key: o.key, label: o.label })),
-        })),
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "clarification_answers",
+        requestKind: "generate",
+        promptChars: lineText.length,
+      }),
+      run: async () => {
+        const result = await AIService.generateClarificationAnswerSuggestions({
+          set: {
+            key: set.key,
+            version: set.version,
+            label: set.label,
+            questions: set.questions.map((q) => ({
+              key: q.key,
+              label: q.label,
+              inputType: q.inputType,
+              allowOther: q.allowOther,
+              unit: q.unit,
+              options: q.options?.map((o) => ({ key: o.key, label: o.label })),
+            })),
+          },
+          lineText,
+          organizationName: ctx.organizationName,
+        });
+        if (!result.metering) {
+          throw new Error("AI metering metadata missing from clarification answers.");
+        }
+        return {
+          result,
+          metering: result.metering,
+          responseChars: JSON.stringify(result.proposal).length,
+        };
       },
-      lineText,
-      organizationName: ctx.organizationName,
     });
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
+    const result = metered.data;
 
     return { proposal: result.proposal, generation: result.generation };
   } catch (e) {
@@ -446,19 +466,33 @@ export async function generateClarificationQuestionSetForLineAction(
     );
     const lineTextWithProfile = appendBusinessProfileContext(lineText, selectedProfileContext);
 
-    const billingPreflight = await preflightAiUsage(
-      ctx.organizationId,
-      "clarification_question_set",
-    );
-    if (billingPreflight) {
-      return { error: billingPreflight.error };
-    }
-
-    const result = await AIService.generateClarificationQuestionSet({
-      lineText: lineTextWithProfile ?? lineText,
-      organizationName: ctx.organizationName,
-      missingContext: [],
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "clarification_question_set",
+        requestKind: "generate",
+        promptChars: (lineTextWithProfile ?? lineText).length,
+      }),
+      run: async () => {
+        const result = await AIService.generateClarificationQuestionSet({
+          lineText: lineTextWithProfile ?? lineText,
+          organizationName: ctx.organizationName,
+          missingContext: [],
+        });
+        if (!result.metering) {
+          throw new Error("AI metering metadata missing from clarification question set.");
+        }
+        return {
+          result,
+          metering: result.metering,
+          responseChars: JSON.stringify(result.proposal).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
+    const result = metered.data;
     return { proposal: result.proposal, generation: result.generation };
   } catch (error) {
     console.error("[quote-clarification] generate set failed", {

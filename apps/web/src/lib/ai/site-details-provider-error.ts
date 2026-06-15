@@ -37,22 +37,10 @@ export class SiteDetailsProviderError extends Error {
   }
 }
 
-export function normalizeGeminiModelId(value: string): string {
-  return value.trim().replace(/^models\//i, "");
-}
-
-export function buildGeminiGenerateContentEndpoint(params: {
-  apiKey: string;
-  model: string;
-}): { endpoint: string; sanitizedEndpoint: string; normalizedModel: string } {
-  const normalizedModel = normalizeGeminiModelId(params.model);
-  const modelPath = encodeURIComponent(normalizedModel);
-  return {
-    endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${modelPath}:generateContent?key=${encodeURIComponent(params.apiKey)}`,
-    sanitizedEndpoint: `https://generativelanguage.googleapis.com/v1beta/models/${modelPath}:generateContent?key=[REDACTED]`,
-    normalizedModel,
-  };
-}
+export {
+  buildGeminiGenerateContentEndpoint,
+  normalizeGeminiModelId,
+} from "@/lib/ai/gemini-generate-content";
 
 export function sanitizeProviderErrorBody(text: string, maxChars = 2_000): string {
   if (!text) return "";

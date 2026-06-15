@@ -1,5 +1,6 @@
 import { PaymentScheduleAnchorType } from "@prisma/client";
 import { z } from "zod";
+import type { AiMeteringMetadata } from "./ai-metering-types";
 
 export const PaymentScheduleAnchorTypeSchema = z.nativeEnum(PaymentScheduleAnchorType);
 
@@ -37,6 +38,7 @@ export type QuotePaymentScheduleGenerationMeta = {
 export type QuotePaymentScheduleGenerationResult = {
   proposal: QuotePaymentScheduleProposal;
   generation: QuotePaymentScheduleGenerationMeta;
+  metering?: AiMeteringMetadata;
 };
 
 /** Approved milestone sent to apply (subset of reviewed proposal). */

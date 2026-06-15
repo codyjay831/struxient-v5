@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AiMeteringMetadata } from "./ai-metering-types";
 
 export const ScopeSuggestionConfidenceSchema = z.enum(["high", "medium", "low"]);
 
@@ -83,6 +84,7 @@ export type QuoteScopeSuggestionsGenerationMeta = {
 export type QuoteScopeSuggestionsGenerationResult = {
   proposal: QuoteScopeSuggestionsProposal;
   generation: QuoteScopeSuggestionsGenerationMeta;
+  metering?: AiMeteringMetadata;
 };
 
 /** Approved commercial line item sent to apply (may be edited in review). */

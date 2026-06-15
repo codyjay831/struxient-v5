@@ -13,7 +13,10 @@ import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
@@ -921,23 +924,37 @@ export async function generateQuoteLineExecutionAIProposalAction(
       itemOverrides: options?.itemOverrides,
     });
 
-    const billingPreflight = await preflightAiUsage(
-      ctx.organizationId,
-      "execution_plan_quote_line",
-    );
-    if (billingPreflight) {
-      return { error: billingPreflight.error };
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "execution_plan_quote_line",
+        requestKind: "generate",
+        promptChars: line.description.length,
+      }),
+      run: async () => {
+        const generated = await AIService.generateExecutionPlan(
+          line.description,
+          line.quote.organizationId,
+          tags,
+          stages,
+          [],
+          ctx.organizationName,
+          userInstructionsWithProfile,
+        );
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from line execution plan.");
+        }
+        return {
+          result: generated,
+          metering: generated.metering,
+          responseChars: JSON.stringify(generated.proposal).length,
+        };
+      },
+    });
+    if (!metered.ok) {
+      return { error: metered.error };
     }
-
-    const generated = await AIService.generateExecutionPlan(
-      line.description,
-      line.quote.organizationId,
-      tags,
-      stages,
-      [],
-      ctx.organizationName,
-      userInstructionsWithProfile,
-    );
+    const generated = metered.data;
 
     console.info("[quote-ai] generate ok", {
       quoteId: qid,
@@ -1060,18 +1077,42 @@ export async function assessQuoteLineExecutionContextAction(
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
     });
-    const assessment = preflightEnabled
-      ? await AIService.assessExecutionPlanningContext({
-          templateId: "compat",
-          description: line.description,
-          organizationId: line.quote.organizationId,
-          tags,
-          existingStages: stages,
-          existingSignals: [],
-          organizationName: ctx.organizationName,
-          userInstructions: userInstructionsWithProfile,
-        })
+    const assessmentResult = preflightEnabled
+      ? await (async () => {
+          const metered = await runMeteredAiFeature({
+            ctx: buildAiMeteringContext({
+              organizationId: ctx.organizationId,
+              feature: "execution_context_assess",
+              requestKind: "assess",
+              promptChars: line.description.length,
+            }),
+            run: async () => {
+              const result = await AIService.assessExecutionPlanningContext({
+                templateId: "compat",
+                description: line.description,
+                organizationId: line.quote.organizationId,
+                tags,
+                existingStages: stages,
+                existingSignals: [],
+                organizationName: ctx.organizationName,
+                userInstructions: userInstructionsWithProfile,
+              });
+              if (!result.metering) {
+                throw new Error("AI metering metadata missing from context assessment.");
+              }
+              return {
+                result: result.assessment,
+                metering: result.metering,
+              };
+            },
+          });
+          if (!metered.ok) {
+            throw new Error(metered.error);
+          }
+          return metered.data;
+        })()
       : { foundContext: [], missingContext: [], assumptions: [] };
+    const assessment = assessmentResult;
     console.info("[quote-ai] assess ok", {
       quoteId: qid,
       lineItemId: lid,

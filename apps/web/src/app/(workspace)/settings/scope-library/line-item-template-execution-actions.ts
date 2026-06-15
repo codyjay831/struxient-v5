@@ -13,7 +13,10 @@ import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
@@ -599,24 +602,38 @@ export async function generateLineItemTemplateAIProposalAction(
       selectedProfileContext,
     );
 
-    const billingPreflight = await preflightAiUsage(
-      ctx.organizationId,
-      "execution_plan_scope_library",
-    );
-    if (billingPreflight) {
-      return { error: billingPreflight.error };
-    }
-
-    const generated = await AIService.generateLibraryExecutionPlan({
-      organizationId: ctx.organizationId,
-      templateId: tid,
-      description: preset.description,
-      tags: preset.tags.map(t => t.name),
-      organizationName: ctx.organizationName,
-      existingStages: stages,
-      existingSignals,
-      userInstructions: userInstructionsWithProfile,
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "execution_plan_scope_library",
+        requestKind: "generate",
+        promptChars: preset.description.length,
+      }),
+      run: async () => {
+        const generated = await AIService.generateLibraryExecutionPlan({
+          organizationId: ctx.organizationId,
+          templateId: tid,
+          description: preset.description,
+          tags: preset.tags.map((t) => t.name),
+          organizationName: ctx.organizationName,
+          existingStages: stages,
+          existingSignals,
+          userInstructions: userInstructionsWithProfile,
+        });
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from library execution plan.");
+        }
+        return {
+          result: generated,
+          metering: generated.metering,
+          responseChars: JSON.stringify(generated.proposal).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
+    const generated = metered.data;
 
     return { proposal: generated.proposal, generation: generated.generation };
   } catch (e) {
@@ -674,18 +691,35 @@ export async function assessLineItemTemplateExecutionContextAction(
       selectedProfileContext,
     );
 
-    const assessment = await AIService.assessExecutionPlanningContext({
-      organizationId: ctx.organizationId,
-      templateId: tid,
-      description: preset.description,
-      tags: preset.tags.map((t) => t.name),
-      organizationName: ctx.organizationName,
-      existingStages: stages,
-      existingSignals: [],
-      userInstructions: userInstructionsWithProfile,
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "execution_context_assess",
+        requestKind: "assess",
+        promptChars: preset.description.length,
+      }),
+      run: async () => {
+        const result = await AIService.assessExecutionPlanningContext({
+          organizationId: ctx.organizationId,
+          templateId: tid,
+          description: preset.description,
+          tags: preset.tags.map((t) => t.name),
+          organizationName: ctx.organizationName,
+          existingStages: stages,
+          existingSignals: [],
+          userInstructions: userInstructionsWithProfile,
+        });
+        if (!result.metering) {
+          throw new Error("AI metering metadata missing from context assessment.");
+        }
+        return { result: result.assessment, metering: result.metering };
+      },
     });
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
 
-    return { assessment };
+    return { assessment: metered.data };
   } catch (e) {
     console.error("Failed to assess AI execution context", e);
     return { error: getAiActionErrorMessage(e, "Failed to assess execution context.") };

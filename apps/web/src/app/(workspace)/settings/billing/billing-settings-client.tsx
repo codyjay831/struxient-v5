@@ -39,6 +39,8 @@ type BillingSettingsClientProps = {
     status: string;
     billableUnits: number | null;
     billableStatus: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
     createdAt: string;
   }>;
   portalError?: string | null;
@@ -171,6 +173,9 @@ export function BillingSettingsClient(props: BillingSettingsClientProps) {
                     <td className="py-2 pr-4 text-foreground-muted">
                       {row.billableUnits ?? "—"}
                       {row.billableStatus ? ` (${row.billableStatus.toLowerCase()})` : ""}
+                      {row.inputTokens != null && row.outputTokens != null
+                        ? ` · ${row.inputTokens + row.outputTokens} tokens`
+                        : ""}
                     </td>
                     <td className="py-2 text-foreground-muted">
                       {new Date(row.createdAt).toLocaleString()}

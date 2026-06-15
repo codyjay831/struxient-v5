@@ -4,7 +4,10 @@ import { QuoteStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { AIService } from "@/lib/ai/ai-service";
 import {
   assessQuotePaymentSchedulePreflight,
@@ -139,19 +142,36 @@ export async function generateQuotePaymentScheduleAIProposalAction(
 
     const contextText = buildQuotePaymentScheduleContextText(contextInput);
 
-    const billingPreflight = await preflightAiUsage(ctx.organizationId, "quote_payment_schedule");
-    if (billingPreflight) {
-      return { error: billingPreflight.error, preflight };
-    }
-
-    const generated = await AIService.generatePaymentScheduleProposal({
-      quoteId: qid,
-      quoteTotalCents: quote.totalCents,
-      contextText,
-      allowedStages: stages,
-      organizationName: ctx.organizationName,
-      userInstructions: options?.userInstructions ?? null,
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "quote_payment_schedule",
+        requestKind: "generate",
+        promptChars: contextText.length,
+      }),
+      run: async () => {
+        const generated = await AIService.generatePaymentScheduleProposal({
+          quoteId: qid,
+          quoteTotalCents: quote.totalCents,
+          contextText,
+          allowedStages: stages,
+          organizationName: ctx.organizationName,
+          userInstructions: options?.userInstructions ?? null,
+        });
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from payment schedule.");
+        }
+        return {
+          result: generated,
+          metering: generated.metering,
+          responseChars: JSON.stringify(generated.proposal).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      return { error: metered.error, preflight };
+    }
+    const generated = metered.data;
 
     console.info("[quote-payment-schedule-ai] generate ok", {
       quoteId: qid,

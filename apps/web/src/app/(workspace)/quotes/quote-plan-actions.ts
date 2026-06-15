@@ -5,7 +5,10 @@ import { revalidatePath } from "next/cache";
 import { AIService, type AIQuoteExecutionPlanProposal } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import {
   QUOTE_PLAN_INPUT_SCHEMA_VERSION,
@@ -510,25 +513,41 @@ export async function generateQuoteExecutionPlanProposalAction(
   );
   const basePlanVersion = quote.executionPlan?.planVersion ?? 1;
   try {
-    const billingPreflight = await preflightAiUsage(ctx.organizationId, "execution_plan_quote");
-    if (billingPreflight) {
-      return { ok: false, error: billingPreflight.error };
-    }
-
-    const generated = await AIService.generateQuoteExecutionPlan({
-      quoteId: qid,
-      quoteTitle: quote.title,
-      organizationId: ctx.organizationId,
-      organizationName: ctx.organizationName,
-      lines: planContext.critical.lines.map((line) => ({
-        id: line.id,
-        description: line.description,
-        executionRelevant: line.executionRelevant,
-        clarifications: line.clarifications,
-      })),
-      existingStages: stages,
-      userInstructions: options?.userInstructions ?? undefined,
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "execution_plan_quote",
+        requestKind: "generate",
+      }),
+      run: async () => {
+        const generated = await AIService.generateQuoteExecutionPlan({
+          quoteId: qid,
+          quoteTitle: quote.title,
+          organizationId: ctx.organizationId,
+          organizationName: ctx.organizationName,
+          lines: planContext.critical.lines.map((line) => ({
+            id: line.id,
+            description: line.description,
+            executionRelevant: line.executionRelevant,
+            clarifications: line.clarifications,
+          })),
+          existingStages: stages,
+          userInstructions: options?.userInstructions ?? undefined,
+        });
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from quote execution plan.");
+        }
+        return {
+          result: generated,
+          metering: generated.metering,
+          responseChars: JSON.stringify(generated.proposal).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      return { ok: false, error: metered.error };
+    }
+    const generated = metered.data;
     return {
       ok: true,
       proposal: toQuotePlanProposalFromAi({

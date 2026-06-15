@@ -1,6 +1,8 @@
 import type { AiUsageBillableStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordBetaGrantAiUsage } from "@/lib/beta/beta-grant";
+import { estimateGeminiCostCents } from "./billing-ai-cost-config";
+import { isAiMeteringShadowMode } from "./ai-metering-config";
 import { assertCanUseAi, getOrganizationEntitlement } from "./billing-entitlement";
 import {
   computeBillableUnits,
@@ -25,20 +27,27 @@ export type AiMeteringResult<T> = {
   billableStatus: AiUsageBillableStatus | null;
   billableUnits: number;
   isOverage: boolean;
+  shadowMode: boolean;
+};
+
+export type AiMeteringExecuteResult<T> = {
+  result: T;
+  responseChars?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  estimatedCostCents?: number;
+  responsePayload?: Prisma.InputJsonValue;
+  /** Legacy billing path units (char proxy / min-1) for shadow comparison. */
+  legacyBillableUnits?: number;
 };
 
 export async function runMeteredAiCall<T>(params: {
   ctx: AiMeteringContext;
-  execute: (usageLogId: string) => Promise<{
-    result: T;
-    responseChars?: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    responsePayload?: Prisma.InputJsonValue;
-  }>;
+  execute: (usageLogId: string) => Promise<AiMeteringExecuteResult<T>>;
 }): Promise<AiMeteringResult<T>> {
   await assertCanUseAi(params.ctx.organizationId, params.ctx.feature);
 
+  const shadowMode = isAiMeteringShadowMode();
   const entitlement = await getOrganizationEntitlement(params.ctx.organizationId);
   const period =
     entitlement.accessSource === "stripe"
@@ -67,20 +76,45 @@ export async function runMeteredAiCall<T>(params: {
     const inputTokens = executed.inputTokens ?? 0;
     const outputTokens = executed.outputTokens ?? 0;
     const billableUnits = computeBillableUnits(inputTokens, outputTokens);
+    const estimatedCostCents =
+      executed.estimatedCostCents ??
+      estimateGeminiCostCents({
+        usage: {
+          promptTokenCount: inputTokens,
+          candidatesTokenCount: outputTokens,
+          totalTokenCount: inputTokens + outputTokens,
+        },
+        model: params.ctx.model,
+      });
 
-    let billableStatus: AiUsageBillableStatus = "UNBILLABLE";
-    if (entitlement.accessSource === "beta" && billableUnits > 0) {
-      const recorded = await recordBetaGrantAiUsage({
-        organizationId: params.ctx.organizationId,
-        billableUnits,
-      });
-      billableStatus = recorded.billableStatus === "INCLUDED" ? "INCLUDED" : "UNBILLABLE";
-    } else if (period && billableUnits > 0) {
-      const recorded = await recordAiUsageAgainstPeriod({
-        aiBillingPeriodId: period.id,
-        billableUnits,
-      });
-      billableStatus = recorded.billableStatus;
+    const shadowPayload: Prisma.InputJsonValue = {
+      shadowMode,
+      shadowBillableUnits: billableUnits,
+      legacyBillableUnits: executed.legacyBillableUnits ?? null,
+      estimatedCostCents,
+      ...(executed.responsePayload && typeof executed.responsePayload === "object"
+        ? (executed.responsePayload as Record<string, unknown>)
+        : {}),
+    };
+
+    let billableStatus: AiUsageBillableStatus = shadowMode ? "UNBILLABLE" : "UNBILLABLE";
+
+    if (!shadowMode && billableUnits > 0) {
+      if (entitlement.accessSource === "beta") {
+        const recorded = await recordBetaGrantAiUsage({
+          organizationId: params.ctx.organizationId,
+          billableUnits,
+        });
+        billableStatus = recorded.billableStatus === "INCLUDED" ? "INCLUDED" : "UNBILLABLE";
+      } else if (period) {
+        const recorded = await recordAiUsageAgainstPeriod({
+          aiBillingPeriodId: period.id,
+          billableUnits,
+        });
+        billableStatus = recorded.billableStatus;
+      }
+    } else if (shadowMode && billableUnits > 0) {
+      billableStatus = "UNBILLABLE";
     }
 
     await db.aiUsageLog.update({
@@ -92,7 +126,8 @@ export async function runMeteredAiCall<T>(params: {
         outputTokens: outputTokens || null,
         billableUnits,
         billableStatus,
-        responsePayload: executed.responsePayload,
+        estimatedCostCents,
+        responsePayload: shadowPayload,
         finishedAt: new Date(),
       },
     });
@@ -103,6 +138,7 @@ export async function runMeteredAiCall<T>(params: {
       billableStatus,
       billableUnits,
       isOverage: billableStatus === "OVERAGE",
+      shadowMode,
     };
   } catch (error) {
     await db.aiUsageLog.update({

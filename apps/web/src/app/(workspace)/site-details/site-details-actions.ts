@@ -11,7 +11,10 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import {
   materialAddressChanged,
   pickHigherPriorityStatus,
@@ -658,18 +661,35 @@ export async function requestSiteDetailsResearchAction(
     });
     if (!location) return before;
 
-    const billingPreflight = await preflightAiUsage(ctx.organizationId, "site_details_research");
-    if (billingPreflight) {
-      throw new Error(billingPreflight.error);
-    }
-
-    const research = await AIService.researchSiteDetails({
-      organizationId: ctx.organizationId,
-      serviceLocationId: id,
-      addressLine: before.addressLine ?? "",
-      missingScopes: requested,
-      existingOfficialVerificationUrl: before.assessorResource?.assessorSearchUrl ?? null,
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "site_details_research",
+        requestKind: "missing_scope_grounded_research",
+        serviceLocationId: id,
+        promptChars: (before.addressLine ?? "").length,
+      }),
+      run: async () => {
+        const research = await AIService.researchSiteDetails({
+          addressLine: before.addressLine ?? "",
+          missingScopes: requested,
+          existingOfficialVerificationUrl: before.assessorResource?.assessorSearchUrl ?? null,
+        });
+        if (!research.metering) {
+          throw new Error("AI metering metadata missing from site details research.");
+        }
+        return {
+          result: research,
+          metering: research.metering,
+          legacyBillableUnits: research.legacyBillableUnits,
+          responseChars: JSON.stringify(research).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      throw new Error(metered.error);
+    }
+    const research = metered.data;
     const requestedSet = new Set(requested);
     const coverageCounty = research.countyAssessorCounty ?? null;
 

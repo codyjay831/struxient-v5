@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { QuoteStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage, runOrganizationAiAction } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { AIService } from "@/lib/ai/ai-service";
 import { buildQuoteScopeCaptureContext } from "@/lib/ai/quote-scope-capture-context";
 import {
@@ -128,17 +131,14 @@ export async function generateQuoteScopeSuggestionsAction(
     const selectedProfileContext = selectBusinessProfileAiContext("QUOTE_SCOPE_SUGGESTIONS", profile);
     const aiContextText = appendBusinessProfileContext(contextText, selectedProfileContext);
 
-    const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-    const metered = await runOrganizationAiAction({
-      ctx: {
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
         organizationId: ctx.organizationId,
         feature: "quote_scope_suggestions",
-        provider: "gemini",
-        model: modelName,
         requestKind: "generate",
         promptChars: (aiContextText ?? contextText).length,
-      },
-      execute: async () => {
+      }),
+      run: async () => {
         const generated = await AIService.generateScopeSuggestions({
           quoteId: qid,
           contextText: aiContextText ?? contextText,
@@ -146,8 +146,12 @@ export async function generateQuoteScopeSuggestionsAction(
           recommendedTemplates: recommendedMatches,
           existingLineDescriptions: quote.lineItems.map((line) => line.description),
         });
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from scope suggestions.");
+        }
         return {
           result: generated,
+          metering: generated.metering,
           responseChars: JSON.stringify(generated).length,
         };
       },

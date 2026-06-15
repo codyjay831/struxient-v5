@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import {
   buildValidGenerationMeta,
   type AILibraryProposalGenerationMeta,
@@ -427,12 +430,28 @@ export async function generateQuoteExecutionReviewAIProposalAction(
   };
 
   try {
-    const billingPreflight = await preflightAiUsage(ctx.organizationId, "quote_execution_review");
-    if (billingPreflight) {
-      return { ok: false, error: billingPreflight.error };
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "quote_execution_review",
+        requestKind: "generate",
+      }),
+      run: async () => {
+        const generated = await AIService.generateQuoteExecutionReviewProposal(aiContext, mode);
+        if (!generated.metering) {
+          throw new Error("AI metering metadata missing from execution review.");
+        }
+        return {
+          result: generated,
+          metering: generated.metering,
+          responseChars: JSON.stringify(generated.proposal).length,
+        };
+      },
+    });
+    if (!metered.ok) {
+      return { ok: false, error: metered.error };
     }
-
-    const generated = await AIService.generateQuoteExecutionReviewProposal(aiContext, mode);
+    const generated = metered.data;
     const proposal = QuoteExecutionReviewProposalSchema.parse({
       ...generated.proposal,
       quoteId: quote.id,

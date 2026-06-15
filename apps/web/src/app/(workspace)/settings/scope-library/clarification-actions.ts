@@ -5,7 +5,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 import { AIService } from "@/lib/ai/ai-service";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
@@ -277,19 +280,33 @@ export async function generateClarificationQuestionSetProposalAction(input: {
     );
     const lineTextWithProfile = appendBusinessProfileContext(input.lineText, selectedProfileContext);
 
-    const billingPreflight = await preflightAiUsage(
-      ctx.organizationId,
-      "clarification_question_set",
-    );
-    if (billingPreflight) {
-      return { error: billingPreflight.error };
-    }
-
-    const result = await AIService.generateClarificationQuestionSet({
-      lineText: lineTextWithProfile ?? input.lineText,
-      organizationName: ctx.organizationName,
-      missingContext: input.missingContext ?? [],
+    const metered = await runMeteredAiFeature({
+      ctx: buildAiMeteringContext({
+        organizationId: ctx.organizationId,
+        feature: "clarification_question_set",
+        requestKind: "generate",
+        promptChars: (lineTextWithProfile ?? input.lineText).length,
+      }),
+      run: async () => {
+        const result = await AIService.generateClarificationQuestionSet({
+          lineText: lineTextWithProfile ?? input.lineText,
+          organizationName: ctx.organizationName,
+          missingContext: input.missingContext ?? [],
+        });
+        if (!result.metering) {
+          throw new Error("AI metering metadata missing from clarification question set.");
+        }
+        return {
+          result,
+          metering: result.metering,
+          responseChars: JSON.stringify(result.proposal).length,
+        };
+      },
     });
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
+    const result = metered.data;
     return { proposal: result.proposal, generation: result.generation };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to generate set proposal." };

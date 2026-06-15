@@ -34,39 +34,77 @@ export async function recordBetaGrantAiUsage(params: {
   organizationId: string;
   billableUnits: number;
   tx?: ExtendedTransactionClient;
-}): Promise<{ billableStatus: "INCLUDED" | "BLOCKED"; remainingUnits: number }> {
+}): Promise<{ billableStatus: "INCLUDED" | "BLOCKED"; remainingUnits: number; appliedUnits: number }> {
   const client = params.tx ?? db;
-  const grant = await client.organizationBetaGrant.findUniqueOrThrow({
+
+  if (params.billableUnits <= 0) {
+    return { billableStatus: "BLOCKED", remainingUnits: 0, appliedUnits: 0 };
+  }
+
+  const grant = await client.organizationBetaGrant.findUnique({
     where: { organizationId: params.organizationId },
   });
 
-  if (!isBetaGrantActive(grant)) {
-    return { billableStatus: "BLOCKED", remainingUnits: 0 };
-  }
-
-  if (!grant.aiEnabled) {
-    return { billableStatus: "BLOCKED", remainingUnits: 0 };
+  if (!grant || !isBetaGrantActive(grant) || !grant.aiEnabled) {
+    return { billableStatus: "BLOCKED", remainingUnits: 0, appliedUnits: 0 };
   }
 
   const remainingBefore = getBetaGrantRemainingAiUnits(grant);
   if (remainingBefore <= 0) {
-    return { billableStatus: "BLOCKED", remainingUnits: 0 };
+    return { billableStatus: "BLOCKED", remainingUnits: 0, appliedUnits: 0 };
   }
 
   const appliedUnits = Math.min(params.billableUnits, remainingBefore);
-  const updated = await client.organizationBetaGrant.update({
-    where: { id: grant.id },
+
+  const updated = await client.organizationBetaGrant.updateMany({
+    where: {
+      id: grant.id,
+      usedAiUnits: grant.usedAiUnits,
+      aiEnabled: true,
+    },
     data: {
       usedAiUnits: grant.usedAiUnits + appliedUnits,
     },
   });
 
-  const remainingAfter = getBetaGrantRemainingAiUnits(updated);
-  const blocked = appliedUnits < params.billableUnits || remainingAfter <= 0;
+  if (updated.count !== 1) {
+    const refreshed = await client.organizationBetaGrant.findUniqueOrThrow({
+      where: { id: grant.id },
+    });
+    const refreshedRemaining = getBetaGrantRemainingAiUnits(refreshed);
+    if (refreshedRemaining <= 0) {
+      return { billableStatus: "BLOCKED", remainingUnits: 0, appliedUnits: 0 };
+    }
+    const retryApplied = Math.min(params.billableUnits, refreshedRemaining);
+    const retry = await client.organizationBetaGrant.updateMany({
+      where: {
+        id: grant.id,
+        usedAiUnits: refreshed.usedAiUnits,
+        aiEnabled: true,
+      },
+      data: {
+        usedAiUnits: refreshed.usedAiUnits + retryApplied,
+      },
+    });
+    if (retry.count !== 1) {
+      return { billableStatus: "BLOCKED", remainingUnits: refreshedRemaining, appliedUnits: 0 };
+    }
+    const remainingAfterRetry = Math.max(0, refreshed.aiIncludedUnits - (refreshed.usedAiUnits + retryApplied));
+    const blocked = retryApplied < params.billableUnits;
+    return {
+      billableStatus: blocked ? "BLOCKED" : "INCLUDED",
+      remainingUnits: remainingAfterRetry,
+      appliedUnits: retryApplied,
+    };
+  }
+
+  const remainingAfter = Math.max(0, grant.aiIncludedUnits - (grant.usedAiUnits + appliedUnits));
+  const blocked = appliedUnits < params.billableUnits;
 
   return {
     billableStatus: blocked ? "BLOCKED" : "INCLUDED",
     remainingUnits: remainingAfter,
+    appliedUnits,
   };
 }
 

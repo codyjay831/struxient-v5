@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import type { AiMeteringMetadata } from "./ai-metering-types";
 
 export const ClarificationSuggestionConfidenceSchema = z.enum(["high", "medium", "low"]);
 
@@ -58,4 +59,5 @@ export type ClarificationAnswerGenerationMeta = {
 export type ClarificationAnswerGenerationResult = {
   proposal: ClarificationAnswerProposal;
   generation: ClarificationAnswerGenerationMeta;
+  metering?: AiMeteringMetadata;
 };

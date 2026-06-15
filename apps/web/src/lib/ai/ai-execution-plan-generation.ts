@@ -1,4 +1,5 @@
 import type { AILibraryProposal } from "./library-proposal-schema";
+import type { AiMeteringMetadata } from "./ai-metering-types";
 
 /** User-facing copy when structured AI output fails validation. */
 export const AI_INVALID_EXECUTION_PLAN_MESSAGE =
@@ -13,6 +14,7 @@ export type AILibraryProposalGenerationMeta = {
 export type AILibraryProposalGenerationResult = {
   proposal: AILibraryProposal;
   generation: AILibraryProposalGenerationMeta;
+  metering?: AiMeteringMetadata;
 };
 
 /**

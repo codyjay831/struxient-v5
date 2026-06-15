@@ -36,6 +36,9 @@ export async function runOrganizationAiAction<T>(params: {
     responseChars?: number;
     inputTokens?: number;
     outputTokens?: number;
+    estimatedCostCents?: number;
+    responsePayload?: import("@prisma/client").Prisma.InputJsonValue;
+    legacyBillableUnits?: number;
   }>;
 }): Promise<AiActionResult<T>> {
   try {

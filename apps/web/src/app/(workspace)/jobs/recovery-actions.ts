@@ -20,6 +20,10 @@ import {
 } from "@/lib/recovery-flow-materialize";
 import type { RecoveryFlowTaskInput } from "@/lib/recovery-flow-materialize";
 import { AIService } from "@/lib/ai/ai-service";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
 
@@ -390,22 +394,39 @@ export async function suggestRecoveryPathAction(jobIssueId: string) {
     throw new Error("Job issue not found or access denied.");
   }
 
-  const ai = new AIService();
-  const proposal = await ai.suggestRecoveryPath({
-    issue: {
-      id: issue.id,
-      title: issue.title,
-      type: issue.type,
-      severity: issue.severity,
-      description: issue.description,
-    },
-    blockedTask: issue.jobTask,
-    jobContext: {
-      title: issue.job.title,
-      organizationName: issue.job.organization.name,
-      stages: issue.job.stages,
+  const metered = await runMeteredAiFeature({
+    ctx: buildAiMeteringContext({
+      organizationId,
+      feature: "recovery_path_suggest",
+      requestKind: "generate",
+    }),
+    run: async () => {
+      const ai = new AIService();
+      const result = await ai.suggestRecoveryPath({
+        issue: {
+          id: issue.id,
+          title: issue.title,
+          type: issue.type,
+          severity: issue.severity,
+          description: issue.description,
+        },
+        blockedTask: issue.jobTask,
+        jobContext: {
+          title: issue.job.title,
+          organizationName: issue.job.organization.name,
+          stages: issue.job.stages,
+        },
+      });
+      return {
+        result: result.proposal,
+        metering: result.metering,
+        responseChars: JSON.stringify(result.proposal).length,
+      };
     },
   });
+  if (!metered.ok) {
+    throw new Error(metered.error);
+  }
 
-  return { proposal };
+  return { proposal: metered.data };
 }

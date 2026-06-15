@@ -4,6 +4,11 @@ type GroundedSourceLink = {
 };
 
 import {
+  extractGeminiTextFromRestPayload,
+  extractGeminiUsageFromRestPayload,
+  type GeminiTokenUsage,
+} from "@/lib/ai/gemini-generate-content";
+import {
   buildGeminiGenerateContentEndpoint,
   sanitizeProviderErrorBody,
   SiteDetailsProviderError,
@@ -25,6 +30,7 @@ export type SiteDetailsGroundedResearchResult = {
   approvedSources: ApprovedGroundedSource[];
   groundingSourceLinks: GroundedSourceLink[];
   groundedSummary: string;
+  usage: GeminiTokenUsage | null;
 };
 
 type GeminiGroundingChunk = {
@@ -53,6 +59,11 @@ type GeminiGenerateContentResponse = {
     };
     groundingMetadata?: GeminiGroundingMetadata;
   }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
 };
 
 export async function researchGroundedSiteDetailsSources(params: {
@@ -166,7 +177,8 @@ export async function researchGroundedSiteDetailsSources(params: {
     }
 
     const candidate = payload.candidates?.[0];
-    const rawSummary = candidate?.content?.parts?.map((part) => part.text ?? "").join("\n").trim() ?? "";
+    const rawSummary = extractGeminiTextFromRestPayload(payload);
+    const usage = extractGeminiUsageFromRestPayload(payload);
     const metadata = candidate?.groundingMetadata;
     const searchQueries = (metadata?.webSearchQueries ?? [])
       .map((query) => query.trim())
@@ -246,6 +258,7 @@ export async function researchGroundedSiteDetailsSources(params: {
       approvedSources,
       groundingSourceLinks,
       groundedSummary,
+      usage,
     };
   } finally {
     clearTimeout(timeout);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AiMeteringMetadata } from "./ai-metering-types";
 
 const ClarificationOptionProposalSchema = z.object({
   key: z.string().min(1).max(120),
@@ -47,4 +48,5 @@ export type ClarificationQuestionSetGenerationResult = {
     canApply: boolean;
     applyBlockedReason?: string;
   };
+  metering?: AiMeteringMetadata;
 };

@@ -8,6 +8,10 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { AIService } from "@/lib/ai/ai-service";
+import {
+  buildAiMeteringContext,
+  runMeteredAiFeature,
+} from "@/lib/billing/run-metered-ai-feature";
 
 export type TagActionState = {
   error?: string;
@@ -195,8 +199,25 @@ export async function suggestTagMergesAction() {
 
   if (tags.length < 2) return { suggestions: [] };
 
-  const ai = new AIService();
-  const suggestions = await ai.suggestTagMerges({ existingTags: tags });
+  const metered = await runMeteredAiFeature({
+    ctx: buildAiMeteringContext({
+      organizationId: ctx.organizationId,
+      feature: "tag_merge_suggestions",
+      requestKind: "generate",
+    }),
+    run: async () => {
+      const ai = new AIService();
+      const result = await ai.suggestTagMerges({ existingTags: tags });
+      return {
+        result: result.merges,
+        metering: result.metering,
+        responseChars: JSON.stringify(result.merges).length,
+      };
+    },
+  });
+  if (!metered.ok) {
+    return { error: metered.error, suggestions: [] };
+  }
 
-  return { suggestions };
+  return { suggestions: metered.data };
 }

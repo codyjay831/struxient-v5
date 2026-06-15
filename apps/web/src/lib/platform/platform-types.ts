@@ -108,6 +108,7 @@ export type PlatformOrganizationSummary = {
   recentPlatformAuditEvents: PlatformAuditEventDto[];
   subscription: PlatformOrganizationSubscriptionDto | null;
   aiBillingPeriod: PlatformAiBillingPeriodDto | null;
+  aiEstimatedCostCentsLast30Days: number;
   betaGrant: PlatformOrganizationBetaGrantDto | null;
 };
 

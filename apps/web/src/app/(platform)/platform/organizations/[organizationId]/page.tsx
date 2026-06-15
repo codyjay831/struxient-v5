@@ -133,6 +133,15 @@ export default async function PlatformOrganizationDetailPage({
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">Est. API cost (30d)</dt>
+                  <dd>
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    }).format(summary.aiEstimatedCostCentsLast30Days / 100)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
                   <dt className="text-foreground-muted">Overage</dt>
                   <dd>
                     {summary.aiBillingPeriod.overageUnits} units · invoice{" "}

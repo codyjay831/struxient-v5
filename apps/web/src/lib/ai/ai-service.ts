@@ -4,7 +4,6 @@ import {
   JobIssueSeverity,
   StaffRole,
   PaymentScheduleAnchorType,
-  Prisma,
 } from "@prisma/client";
 import {
   AILibraryProposal,
@@ -72,13 +71,10 @@ import {
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertCanUseAi, getOrganizationEntitlement } from "@/lib/billing/billing-entitlement";
-import { recordBetaGrantAiUsage } from "@/lib/beta/beta-grant";
-import {
-  computeBillableUnits,
-  getCurrentAiBillingPeriod,
-  recordAiUsageAgainstPeriod,
-} from "@/lib/billing/billing-periods";
+import { callGeminiSdkGenerateContent, getGeminiGenerativeModel } from "@/lib/ai/ai-gemini-caller";
+import { AiTokenAccumulator, type AiMeteringMetadata } from "@/lib/ai/ai-metering-types";
+import { type GeminiTokenUsage } from "@/lib/ai/gemini-generate-content";
+import { computeBillableUnits } from "@/lib/billing/billing-periods";
 import { decideGroundedApnCandidate } from "@/lib/site-details/apn-candidate";
 import {
   decideGroundedElectricUtilityCandidate,
@@ -318,11 +314,18 @@ export type AIQuoteExecutionPlanProposal = z.infer<typeof AIQuoteExecutionPlanPr
 export type AIQuoteExecutionPlanGenerationResult = {
   proposal: AIQuoteExecutionPlanProposal;
   generation: AILibraryProposalGenerationResult["generation"];
+  metering?: AiMeteringMetadata;
 };
 
 export type AIQuoteExecutionReviewProposalGenerationResult = {
   proposal: QuoteExecutionReviewProposal;
   generation: AILibraryProposalGenerationResult["generation"];
+  metering?: AiMeteringMetadata;
+};
+
+export type ExecutionContextAssessmentResult = {
+  assessment: ExecutionContextAssessment;
+  metering?: AiMeteringMetadata;
 };
 
 export type AISiteDetailsResearchResult = {
@@ -388,6 +391,8 @@ export type AISiteDetailsResearchResult = {
     overallOutcome: "FULL_SUCCESS" | "PARTIAL_RESEARCH_SUCCESS" | "NO_ACCEPTED_RESULTS";
   };
   usageLogId?: string;
+  metering?: AiMeteringMetadata;
+  legacyBillableUnits?: number;
 };
 
 type SiteDetailsScopeDecision = {
@@ -465,6 +470,35 @@ export class AIService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return null;
     return new GoogleGenerativeAI(apiKey);
+  }
+
+  private static async callGeminiContent(params: {
+    gemini: GoogleGenerativeAI;
+    modelName: string;
+    prompt: string;
+    jsonMode?: boolean;
+  }): Promise<{ text: string; usage: GeminiTokenUsage | null }> {
+    const model = getGeminiGenerativeModel(
+      params.gemini,
+      params.modelName,
+      params.jsonMode ? { responseMimeType: "application/json" } : undefined,
+    );
+    return this.retryWithBackoff(() =>
+      this.withTimeout(
+        callGeminiSdkGenerateContent({ model, prompt: params.prompt }),
+        this.GEMINI_REQUEST_TIMEOUT_MS,
+      ),
+    );
+  }
+
+  private static emptyMetering(modelName: string): AiMeteringMetadata {
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostCents: 0,
+      model: modelName,
+      tokenSource: "estimated",
+    };
   }
 
   /** Parse Gemini JSON output, repairing intermittent trailing commas before `}`/`]`. */
@@ -729,18 +763,16 @@ export class AIService {
       // JSON mode: ask the model to return raw application/json so we are not
       // dependent on stripping ```json fences. We keep the regex extraction
       // below as a belt-and-braces fallback for models/SDKs that ignore this.
-      const model = gemini.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-
       const prompt = this.buildContractorRealismPrompt(context, planningStages, reusableTasks);
 
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+        jsonMode: true,
+      });
+      tokenUsage.add("generate", usage);
       
       // Extract JSON from response (Gemini sometimes wraps in markdown blocks)
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -863,7 +895,11 @@ export class AIService {
       );
 
       const parsedProposal = AILibraryProposalSchema.parse(filteredProposal);
-      return { proposal: parsedProposal, generation: buildValidGenerationMeta() };
+      return {
+        proposal: parsedProposal,
+        generation: buildValidGenerationMeta(),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -893,40 +929,48 @@ export class AIService {
 
   static async assessExecutionPlanningContext(
     context: AIExecutionPlanContext,
-  ): Promise<ExecutionContextAssessment> {
+  ): Promise<ExecutionContextAssessmentResult> {
     const gemini = this.getGeminiClient();
     const planningStages = getStagesForAiExecutionPlanning(context.existingStages);
 
     if (!gemini) {
       if (isAiSimulatedExecutionPlansEnabled()) {
-        return this.simulateExecutionContextAssessment(context, {
-          reason: "GEMINI_API_KEY is missing.",
-        });
+        return {
+          assessment: this.simulateExecutionContextAssessment(context, {
+            reason: "GEMINI_API_KEY is missing.",
+          }),
+        };
       }
       throw new AiProviderTemporarilyUnavailableError();
     }
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({ model: modelName });
       const prompt = this.buildExecutionContextAssessmentPrompt(context, planningStages);
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+      });
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
       const raw = JSON.parse(jsonStr);
-      return ExecutionContextAssessmentSchema.parse(raw);
+      return {
+        assessment: ExecutionContextAssessmentSchema.parse(raw),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
       }
       if (isAiSimulatedExecutionPlansEnabled()) {
-        return this.simulateExecutionContextAssessment(context, {
-          reason: e instanceof Error ? e.message : "Unknown AI provider error.",
-        });
+        return {
+          assessment: this.simulateExecutionContextAssessment(context, {
+            reason: e instanceof Error ? e.message : "Unknown AI provider error.",
+          }),
+        };
       }
       throw new AiProviderTemporarilyUnavailableError(
         "AI could not assess missing execution context right now. Try again shortly.",
@@ -1467,12 +1511,13 @@ OUTPUT JSON ONLY:
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({ model: modelName });
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+      });
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
       const raw = JSON.parse(jsonStr);
@@ -1568,7 +1613,7 @@ OUTPUT JSON ONLY:
 
       const proposal = normalizeScopeSuggestionGrouping(parsed);
 
-      return { proposal, generation: buildScopeSuggestionsGenerationMeta(false) };
+      return { proposal, generation: buildScopeSuggestionsGenerationMeta(false), metering: tokenUsage.build({ model: modelName }) };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -1842,12 +1887,13 @@ OUTPUT JSON ONLY:
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({ model: modelName });
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+      });
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const raw = JSON.parse(jsonMatch ? jsonMatch[0] : text);
 
@@ -1900,7 +1946,7 @@ OUTPUT JSON ONLY:
           : [],
       });
 
-      return { proposal, generation: this.buildClarificationGenerationMeta(false) };
+      return { proposal, generation: this.buildClarificationGenerationMeta(false), metering: tokenUsage.build({ model: modelName }) };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -1995,18 +2041,20 @@ OUTPUT JSON ONLY:
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({ model: modelName });
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+      });
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const raw = JSON.parse(jsonMatch ? jsonMatch[0] : text);
       const proposal = ClarificationQuestionSetProposalSchema.parse(raw);
       return {
         proposal,
         generation: this.buildClarificationGenerationMeta(false),
+        metering: tokenUsage.build({ model: modelName }),
       };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
@@ -2198,10 +2246,7 @@ OUTPUT JSON ONLY:
       throw new AiProviderTemporarilyUnavailableError();
     }
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-    const model = gemini.getGenerativeModel({
-      model: modelName,
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const tokenUsage = new AiTokenAccumulator();
     const stageList = context.existingStages.map((stage) => `- ${stage.name} (${stage.id})`).join("\n");
     const lineList = context.lines
       .map((line) => {
@@ -2258,13 +2303,20 @@ Optional planning instructions:
 ${context.userInstructions?.trim() || "- none"}
 `;
     try {
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const parsed = this.parseGeminiJsonResponse(response.text());
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+        jsonMode: true,
+      });
+      tokenUsage.add("generate", usage);
+      const parsed = this.parseGeminiJsonResponse(text);
       const proposal = AIQuoteExecutionPlanProposalSchema.parse(parsed);
-      return { proposal, generation: buildValidGenerationMeta() };
+      return {
+        proposal,
+        generation: buildValidGenerationMeta(),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -2319,10 +2371,7 @@ ${context.userInstructions?.trim() || "- none"}
     }
 
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-    const model = gemini.getGenerativeModel({
-      model: modelName,
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const tokenUsage = new AiTokenAccumulator();
 
     const stageList = context.existingStages
       .map((stage) => `- ${stage.name} (id: ${stage.id})`)
@@ -2415,16 +2464,22 @@ ${deterministicHints || "- none"}
 `;
 
     try {
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+        jsonMode: true,
+      });
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
       const parsed = JSON.parse(jsonStr);
       const proposal = QuoteExecutionReviewProposalSchema.parse(parsed);
-      return { proposal, generation: buildValidGenerationMeta() };
+      return {
+        proposal,
+        generation: buildValidGenerationMeta(),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -2442,13 +2497,15 @@ ${deterministicHints || "- none"}
     description?: string;
     context?: string;
     existingTags: { name: string; aliases: string[] }[];
-  }): Promise<string[]> {
+  }): Promise<{ tags: string[]; metering: AiMeteringMetadata }> {
     const gemini = AIService.getGeminiClient();
-    if (!gemini) return [];
+    if (!gemini) {
+      return { tags: [], metering: AIService.emptyMetering(process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL) };
+    }
 
     const { title, description, context, existingTags } = params;
     const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
-    const model = gemini.getGenerativeModel({ model: modelName });
+    const tokenUsage = new AiTokenAccumulator();
 
     const tagList = existingTags.map(t => t.name).join(", ");
     const aliasMap = existingTags.flatMap(t => t.aliases.map(a => `${a} -> ${t.name}`)).join("\n");
@@ -2478,13 +2535,17 @@ Return ONLY a comma-separated list of tag names.
 `;
 
     try {
-      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
-      const response = await result.response;
-      const text = response.text();
-      return text.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+      const { text, usage } = await AIService.retryWithBackoff(() =>
+        AIService.callGeminiContent({ gemini, modelName, prompt }),
+      );
+      tokenUsage.add("generate", usage);
+      return {
+        tags: text.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       console.error("AI Tag Suggestion failed", e);
-      return [];
+      return { tags: [], metering: AIService.emptyMetering(modelName) };
     }
   }
 
@@ -2493,12 +2554,14 @@ Return ONLY a comma-separated list of tag names.
    */
   async suggestTagMerges(params: {
     existingTags: { id: string; name: string; aliases: string[] }[];
-  }): Promise<{ sourceTagId: string; targetTagId: string; reason: string }[]> {
+  }): Promise<{ merges: { sourceTagId: string; targetTagId: string; reason: string }[]; metering: AiMeteringMetadata }> {
     const gemini = AIService.getGeminiClient();
-    if (!gemini || params.existingTags.length < 2) return [];
-
     const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
-    const model = gemini.getGenerativeModel({ model: modelName });
+    if (!gemini || params.existingTags.length < 2) {
+      return { merges: [], metering: AIService.emptyMetering(modelName) };
+    }
+
+    const tokenUsage = new AiTokenAccumulator();
 
     const tagList = params.existingTags.map(t => 
       `- [ID: ${t.id}] "${t.name}" (Aliases: ${t.aliases.join(", ") || 'None'})`
@@ -2525,15 +2588,19 @@ Return ONLY a valid JSON array of objects:
 `;
 
     try {
-      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
-      const response = await result.response;
-      const text = response.text();
+      const { text, usage } = await AIService.retryWithBackoff(() =>
+        AIService.callGeminiContent({ gemini, modelName, prompt }),
+      );
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
-      return JSON.parse(jsonStr);
+      return {
+        merges: JSON.parse(jsonStr),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       console.error("AI Tag Merge Suggestion failed", e);
-      return [];
+      return { merges: [], metering: AIService.emptyMetering(modelName) };
     }
   }
 
@@ -2555,7 +2622,7 @@ Return ONLY a valid JSON array of objects:
       organizationName?: string;
       stages: { title: string; tasks: { title: string; status: string }[] }[];
     };
-  }): Promise<AIRecoveryProposal> {
+  }): Promise<{ proposal: AIRecoveryProposal; metering: AiMeteringMetadata }> {
     const gemini = AIService.getGeminiClient();
 
     if (!gemini) {
@@ -2563,7 +2630,7 @@ Return ONLY a valid JSON array of objects:
     }
 
     const modelName = process.env.GEMINI_MODEL?.trim() || AIService.DEFAULT_GEMINI_MODEL;
-    const model = gemini.getGenerativeModel({ model: modelName });
+    const tokenUsage = new AiTokenAccumulator();
 
     const jobStagesContext = params.jobContext.stages
       .map(
@@ -2637,9 +2704,10 @@ Return ONLY a valid JSON object:
 `;
 
     try {
-      const result = await AIService.retryWithBackoff(() => model.generateContent(prompt));
-      const response = await result.response;
-      const text = response.text();
+      const { text, usage } = await AIService.retryWithBackoff(() =>
+        AIService.callGeminiContent({ gemini, modelName, prompt }),
+      );
+      tokenUsage.add("generate", usage);
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
@@ -2663,7 +2731,10 @@ Return ONLY a valid JSON object:
         tasks: normalizedTasks,
       };
 
-      return AIRecoveryProposalSchema.parse(proposal);
+      return {
+        proposal: AIRecoveryProposalSchema.parse(proposal),
+        metering: tokenUsage.build({ model: modelName }),
+      };
     } catch (e) {
       console.error("AI Recovery Path Suggestion failed", e);
       if (isAiProviderTemporarilyUnavailable(e)) {
@@ -2914,15 +2985,14 @@ OUTPUT JSON ONLY:
 
     try {
       const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-      const model = gemini.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
+      const tokenUsage = new AiTokenAccumulator();
+      const { text, usage } = await this.callGeminiContent({
+        gemini,
+        modelName,
+        prompt,
+        jsonMode: true,
       });
-      const result = await this.retryWithBackoff(() =>
-        this.withTimeout(model.generateContent(prompt), this.GEMINI_REQUEST_TIMEOUT_MS),
-      );
-      const response = await result.response;
-      const text = response.text();
+      tokenUsage.add("generate", usage);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : text;
       const raw = JSON.parse(jsonStr);
@@ -2979,7 +3049,7 @@ OUTPUT JSON ONLY:
         milestones,
       });
 
-      return { proposal, generation: buildPaymentScheduleGenerationMeta(false) };
+      return { proposal, generation: buildPaymentScheduleGenerationMeta(false), metering: tokenUsage.build({ model: modelName }) };
     } catch (e) {
       if (isAiProviderTemporarilyUnavailable(e)) {
         throw new AiProviderTemporarilyUnavailableError();
@@ -3076,20 +3146,13 @@ OUTPUT JSON ONLY:
   }
 
   static async researchSiteDetails(params: {
-    organizationId: string;
-    serviceLocationId: string;
     addressLine: string;
     missingScopes: string[];
     existingOfficialVerificationUrl?: string | null;
   }): Promise<AISiteDetailsResearchResult> {
-    const startedAt = new Date();
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
-    await assertCanUseAi(params.organizationId, "site_details_research");
-    const entitlement = await getOrganizationEntitlement(params.organizationId);
-    const billingPeriod =
-      entitlement.accessSource === "stripe"
-        ? await getCurrentAiBillingPeriod(params.organizationId)
-        : null;
+    const tokenUsage = new AiTokenAccumulator();
+    let groundedSearchCallCount = 0;
     const groundedResearchPrompt = `Research contractor site details for:
 Address: ${params.addressLine}
 Requested scopes: ${params.missingScopes.join(", ")}
@@ -3108,27 +3171,6 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
 - Also provide the official county assessor parcel-search URL as the verification link, even when the actual APN value came from a listing site.
 - Only if no source anywhere shows an APN for this exact address should you say the APN was not found; do not decline merely because the value lives on a listing site rather than a government page.`;
 
-    const usage = await db.aiUsageLog.create({
-      data: {
-        organizationId: params.organizationId,
-        serviceLocationId: params.serviceLocationId,
-        feature: "site_details_research",
-        provider: "gemini",
-        model: modelName,
-        requestKind: "missing_scope_grounded_research",
-        status: "started",
-        promptChars: groundedResearchPrompt.length,
-        requestPayload: {
-          addressLine: params.addressLine,
-          missingScopes: params.missingScopes,
-          configuredModel: modelName,
-        } as unknown as Prisma.InputJsonValue,
-        startedAt,
-        aiBillingPeriodId: billingPeriod?.id ?? null,
-      },
-      select: { id: true },
-    });
-
     try {
       const apiKey = process.env.GEMINI_API_KEY?.trim();
       if (!apiKey) {
@@ -3145,6 +3187,8 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
           this.GEMINI_REQUEST_TIMEOUT_MS,
         ),
       );
+      groundedSearchCallCount += 1;
+      tokenUsage.add("GROUNDED_RESEARCH", groundedResearch.usage);
 
       const approvedSources = [...groundedResearch.approvedSources];
       let schemaParsed = SiteDetailsResearchSchema.parse({
@@ -3160,7 +3204,7 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
       });
 
       if (groundedResearch.groundingMetadataPresent && approvedSources.length > 0) {
-        const extractionRaw = await this.retryWithBackoff(() =>
+        const extractionResult = await this.retryWithBackoff(() =>
           this.withTimeout(
             extractSiteDetailsFromGroundedResearch({
               apiKey,
@@ -3174,7 +3218,8 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
             this.GEMINI_REQUEST_TIMEOUT_MS,
           ),
         );
-        schemaParsed = SiteDetailsResearchSchema.parse(extractionRaw);
+        tokenUsage.add("EXTRACTION", extractionResult.usage);
+        schemaParsed = SiteDetailsResearchSchema.parse(extractionResult.parsed);
       }
 
       const assessorSource = getApprovedGroundedSourceById(
@@ -3237,6 +3282,8 @@ Instructions:
               }),
               this.GEMINI_REQUEST_TIMEOUT_MS,
             );
+            groundedSearchCallCount += 1;
+            tokenUsage.add(`APN_GROUNDED_${attempt}`, apnFocused.usage);
             for (const focusedSource of apnFocused.approvedSources) {
               if (!approvedSources.some((existing) => existing.id === focusedSource.id)) {
                 approvedSources.push(focusedSource);
@@ -3463,57 +3510,16 @@ Instructions:
           overallOutcome,
         },
       };
-      const responsePayload = {
-        ...parsed,
-        groundedSummary: groundedResearch.groundedSummary.slice(0, 2_000),
-      };
-      const responseChars = JSON.stringify(responsePayload).length;
-      const billableUnits = computeBillableUnits(groundedResearchPrompt.length, responseChars);
-      let billableStatus: "INCLUDED" | "OVERAGE" | "UNBILLABLE" = "UNBILLABLE";
-      if (entitlement.accessSource === "beta" && billableUnits > 0) {
-        const recorded = await recordBetaGrantAiUsage({
-          organizationId: params.organizationId,
-          billableUnits,
-        });
-        billableStatus = recorded.billableStatus === "INCLUDED" ? "INCLUDED" : "UNBILLABLE";
-      } else if (billingPeriod && billableUnits > 0) {
-        const recorded = await recordAiUsageAgainstPeriod({
-          aiBillingPeriodId: billingPeriod.id,
-          billableUnits,
-        });
-        billableStatus = recorded.billableStatus;
-      }
-
-      await db.aiUsageLog.update({
-        where: { id: usage.id },
-        data: {
-          status: "success",
-          responseChars,
-          inputTokens: groundedResearchPrompt.length,
-          outputTokens: responseChars,
-          billableUnits,
-          billableStatus,
-          responsePayload: responsePayload as unknown as Prisma.InputJsonValue,
-          finishedAt: new Date(),
-        },
+      const legacyBillableUnits = computeBillableUnits(
+        groundedResearchPrompt.length,
+        JSON.stringify(parsed).length,
+      );
+      const metering = tokenUsage.build({
+        model: modelName,
+        groundedSearchCallCount,
       });
-      return { ...parsed, usageLogId: usage.id };
+      return { ...parsed, metering, legacyBillableUnits };
     } catch (error) {
-      const providerDetails = isSiteDetailsProviderError(error) ? error.details : null;
-      await db.aiUsageLog.update({
-        where: { id: usage.id },
-        data: {
-          status: "error",
-          billableStatus: "ERROR",
-          errorMessage: providerDetails
-            ? JSON.stringify(providerDetails)
-            : error instanceof Error
-              ? error.message
-              : "Unknown AI error",
-          responsePayload: providerDetails ? (providerDetails as unknown as Prisma.InputJsonValue) : undefined,
-          finishedAt: new Date(),
-        },
-      });
       if (isAiProviderTemporarilyUnavailable(error)) {
         throw new AiProviderTemporarilyUnavailableError();
       }

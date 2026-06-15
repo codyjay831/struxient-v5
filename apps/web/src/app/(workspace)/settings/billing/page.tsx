@@ -67,6 +67,8 @@ export default async function BillingSettingsPage({
         status: row.status,
         billableUnits: row.billableUnits,
         billableStatus: row.billableStatus,
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
         createdAt: row.createdAt.toISOString(),
       }))}
       portalError={params.error ? decodeURIComponent(params.error) : null}
