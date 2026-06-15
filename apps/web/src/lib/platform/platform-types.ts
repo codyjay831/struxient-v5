@@ -106,6 +106,23 @@ export type PlatformOrganizationSummary = {
   aiCountsByFeature: Array<{ feature: string; status: string; count: number }>;
   recentNotificationFailures: PlatformNotificationFailureDto[];
   recentPlatformAuditEvents: PlatformAuditEventDto[];
+  subscription: PlatformOrganizationSubscriptionDto | null;
+  aiBillingPeriod: PlatformAiBillingPeriodDto | null;
+};
+
+export type PlatformOrganizationSubscriptionDto = {
+  status: string;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date;
+  cancelAtPeriodEnd: boolean;
+};
+
+export type PlatformAiBillingPeriodDto = {
+  includedAllowanceUnits: number;
+  usedUnits: number;
+  overageUnits: number;
+  overageAmountCents: number;
+  invoiceStatus: string;
 };
 
 export type PlatformAiFailureDto = {

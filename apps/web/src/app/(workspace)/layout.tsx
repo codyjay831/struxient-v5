@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/shell/app-shell";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { requireProductEntitlementOrRedirect } from "@/lib/billing/billing-gate";
 import { db } from "@/lib/db";
 
 export default async function WorkspaceLayout({
@@ -8,6 +9,8 @@ export default async function WorkspaceLayout({
   children: React.ReactNode;
 }) {
   const ctx = await getRequestContextOrThrow();
+  await requireProductEntitlementOrRedirect(ctx.organizationId);
+
   const memberships = await db.membership.findMany({
     where: { userId: ctx.userId },
     orderBy: { createdAt: "asc" },

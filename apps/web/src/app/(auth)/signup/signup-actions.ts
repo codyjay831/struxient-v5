@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { isBetaSignupEnabled } from "@/lib/env-validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { hashOrganizationInviteToken } from "@/lib/invite-token";
+import { BILLING_TERMS_VERSION } from "@/lib/billing/billing-config";
 import { z } from "zod";
 
 const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -17,6 +18,9 @@ const signupSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email(),
   password: z.string().min(8).max(120),
+  acceptTerms: z
+    .boolean()
+    .refine((value) => value === true, "You must accept the terms to create an account."),
 });
 
 function slugifyCompanyName(input: string) {
@@ -99,11 +103,31 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
     typeof inviteTokenRaw === "string" ? inviteTokenRaw.trim() : "";
 
   await db.$transaction(async (tx) => {
+    // #region agent log
+    fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "2d4ee2" },
+      body: JSON.stringify({
+        sessionId: "2d4ee2",
+        runId: "post-fix",
+        hypothesisId: "A",
+        location: "signup-actions.ts:user.create:before",
+        message: "Creating user with terms fields",
+        data: {
+          hasTermsAcceptedAtField: "termsAcceptedAt" in (tx.user as object),
+          termsVersion: BILLING_TERMS_VERSION,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     const user = await tx.user.create({
       data: {
         name: parsed.data.name,
         email,
         passwordHash,
+        termsAcceptedAt: new Date(),
+        termsVersion: BILLING_TERMS_VERSION,
       },
       select: { id: true },
     });
@@ -155,6 +179,22 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
       },
     });
   });
+
+  // #region agent log
+  fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "2d4ee2" },
+    body: JSON.stringify({
+      sessionId: "2d4ee2",
+      runId: "post-fix",
+      hypothesisId: "A",
+      location: "signup-actions.ts:transaction:success",
+      message: "Signup transaction completed",
+      data: { ok: true },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   return {
     ok: true,

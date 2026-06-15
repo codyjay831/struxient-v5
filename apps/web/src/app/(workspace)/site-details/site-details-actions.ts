@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import {
   materialAddressChanged,
   pickHigherPriorityStatus,
@@ -656,6 +657,11 @@ export async function requestSiteDetailsResearchAction(
       },
     });
     if (!location) return before;
+
+    const billingPreflight = await preflightAiUsage(ctx.organizationId, "site_details_research");
+    if (billingPreflight) {
+      throw new Error(billingPreflight.error);
+    }
 
     const research = await AIService.researchSiteDetails({
       organizationId: ctx.organizationId,

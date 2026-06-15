@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { QuoteStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage, runOrganizationAiAction } from "@/lib/billing/ai-action-guard";
 import { AIService } from "@/lib/ai/ai-service";
 import { buildQuoteScopeCaptureContext } from "@/lib/ai/quote-scope-capture-context";
 import {
@@ -127,13 +128,36 @@ export async function generateQuoteScopeSuggestionsAction(
     const selectedProfileContext = selectBusinessProfileAiContext("QUOTE_SCOPE_SUGGESTIONS", profile);
     const aiContextText = appendBusinessProfileContext(contextText, selectedProfileContext);
 
-    const generated = await AIService.generateScopeSuggestions({
-      quoteId: qid,
-      contextText: aiContextText ?? contextText,
-      organizationName: ctx.organizationName,
-      recommendedTemplates: recommendedMatches,
-      existingLineDescriptions: quote.lineItems.map((line) => line.description),
+    const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+    const metered = await runOrganizationAiAction({
+      ctx: {
+        organizationId: ctx.organizationId,
+        feature: "quote_scope_suggestions",
+        provider: "gemini",
+        model: modelName,
+        requestKind: "generate",
+        promptChars: (aiContextText ?? contextText).length,
+      },
+      execute: async () => {
+        const generated = await AIService.generateScopeSuggestions({
+          quoteId: qid,
+          contextText: aiContextText ?? contextText,
+          organizationName: ctx.organizationName,
+          recommendedTemplates: recommendedMatches,
+          existingLineDescriptions: quote.lineItems.map((line) => line.description),
+        });
+        return {
+          result: generated,
+          responseChars: JSON.stringify(generated).length,
+        };
+      },
     });
+
+    if (!metered.ok) {
+      return { error: metered.error };
+    }
+
+    const generated = metered.data;
 
     console.info("[quote-scope-ai] generate ok", {
       quoteId: qid,

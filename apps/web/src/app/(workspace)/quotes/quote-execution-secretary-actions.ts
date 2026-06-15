@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import {
   buildValidGenerationMeta,
   type AILibraryProposalGenerationMeta,
@@ -426,6 +427,11 @@ export async function generateQuoteExecutionReviewAIProposalAction(
   };
 
   try {
+    const billingPreflight = await preflightAiUsage(ctx.organizationId, "quote_execution_review");
+    if (billingPreflight) {
+      return { ok: false, error: billingPreflight.error };
+    }
+
     const generated = await AIService.generateQuoteExecutionReviewProposal(aiContext, mode);
     const proposal = QuoteExecutionReviewProposalSchema.parse({
       ...generated.proposal,

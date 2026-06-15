@@ -13,6 +13,7 @@ import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
@@ -919,6 +920,15 @@ export async function generateQuoteLineExecutionAIProposalAction(
       sourceFlags: options?.sourceFlags,
       itemOverrides: options?.itemOverrides,
     });
+
+    const billingPreflight = await preflightAiUsage(
+      ctx.organizationId,
+      "execution_plan_quote_line",
+    );
+    if (billingPreflight) {
+      return { error: billingPreflight.error };
+    }
+
     const generated = await AIService.generateExecutionPlan(
       line.description,
       line.quote.organizationId,

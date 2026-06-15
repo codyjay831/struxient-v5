@@ -4,6 +4,7 @@ import { QuoteStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import { AIService } from "@/lib/ai/ai-service";
 import {
   assessQuotePaymentSchedulePreflight,
@@ -137,6 +138,12 @@ export async function generateQuotePaymentScheduleAIProposalAction(
     }
 
     const contextText = buildQuotePaymentScheduleContextText(contextInput);
+
+    const billingPreflight = await preflightAiUsage(ctx.organizationId, "quote_payment_schedule");
+    if (billingPreflight) {
+      return { error: billingPreflight.error, preflight };
+    }
+
     const generated = await AIService.generatePaymentScheduleProposal({
       quoteId: qid,
       quoteTotalCents: quote.totalCents,

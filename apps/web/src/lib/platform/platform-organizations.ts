@@ -120,6 +120,14 @@ export async function getPlatformOrganizationSummary(
           expiresAt: true,
         },
       },
+      subscription: {
+        select: {
+          status: true,
+          trialEndsAt: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
+        },
+      },
     },
   });
 
@@ -136,6 +144,7 @@ export async function getPlatformOrganizationSummary(
     aiFeatureGroups,
     recentNotificationFailures,
     recentPlatformAuditEvents,
+    currentAiBillingPeriod,
   ] = await Promise.all([
     db.job.groupBy({
       by: ["status"],
@@ -208,6 +217,17 @@ export async function getPlatformOrganizationSummary(
         metadataJson: true,
       },
     }),
+    db.aiBillingPeriod.findFirst({
+      where: { organizationId },
+      orderBy: { periodStart: "desc" },
+      select: {
+        includedAllowanceUnits: true,
+        usedUnits: true,
+        overageUnits: true,
+        overageAmountCents: true,
+        invoiceStatus: true,
+      },
+    }),
   ]);
 
   return {
@@ -253,5 +273,22 @@ export async function getPlatformOrganizationSummary(
           ? (event.metadataJson as Record<string, unknown>)
           : null,
     })),
+    subscription: organization.subscription
+      ? {
+          status: organization.subscription.status,
+          trialEndsAt: organization.subscription.trialEndsAt,
+          currentPeriodEnd: organization.subscription.currentPeriodEnd,
+          cancelAtPeriodEnd: organization.subscription.cancelAtPeriodEnd,
+        }
+      : null,
+    aiBillingPeriod: currentAiBillingPeriod
+      ? {
+          includedAllowanceUnits: currentAiBillingPeriod.includedAllowanceUnits,
+          usedUnits: currentAiBillingPeriod.usedUnits,
+          overageUnits: currentAiBillingPeriod.overageUnits,
+          overageAmountCents: currentAiBillingPeriod.overageAmountCents,
+          invoiceStatus: currentAiBillingPeriod.invoiceStatus,
+        }
+      : null,
   };
 }

@@ -72,6 +72,12 @@ import {
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { assertCanUseAi } from "@/lib/billing/billing-entitlement";
+import {
+  computeBillableUnits,
+  getCurrentAiBillingPeriod,
+  recordAiUsageAgainstPeriod,
+} from "@/lib/billing/billing-periods";
 import { decideGroundedApnCandidate } from "@/lib/site-details/apn-candidate";
 import {
   decideGroundedElectricUtilityCandidate,
@@ -3077,6 +3083,8 @@ OUTPUT JSON ONLY:
   }): Promise<AISiteDetailsResearchResult> {
     const startedAt = new Date();
     const modelName = process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL;
+    await assertCanUseAi(params.organizationId, "site_details_research");
+    const billingPeriod = await getCurrentAiBillingPeriod(params.organizationId);
     const groundedResearchPrompt = `Research contractor site details for:
 Address: ${params.addressLine}
 Requested scopes: ${params.missingScopes.join(", ")}
@@ -3111,6 +3119,7 @@ APN (Assessor's Parcel Number) instructions — follow exactly:
           configuredModel: modelName,
         } as unknown as Prisma.InputJsonValue,
         startedAt,
+        aiBillingPeriodId: billingPeriod?.id ?? null,
       },
       select: { id: true },
     });
@@ -3453,12 +3462,26 @@ Instructions:
         ...parsed,
         groundedSummary: groundedResearch.groundedSummary.slice(0, 2_000),
       };
+      const responseChars = JSON.stringify(responsePayload).length;
+      const billableUnits = computeBillableUnits(groundedResearchPrompt.length, responseChars);
+      let billableStatus: "INCLUDED" | "OVERAGE" | "UNBILLABLE" = "UNBILLABLE";
+      if (billingPeriod && billableUnits > 0) {
+        const recorded = await recordAiUsageAgainstPeriod({
+          aiBillingPeriodId: billingPeriod.id,
+          billableUnits,
+        });
+        billableStatus = recorded.billableStatus;
+      }
 
       await db.aiUsageLog.update({
         where: { id: usage.id },
         data: {
           status: "success",
-          responseChars: JSON.stringify(responsePayload).length,
+          responseChars,
+          inputTokens: groundedResearchPrompt.length,
+          outputTokens: responseChars,
+          billableUnits,
+          billableStatus,
           responsePayload: responsePayload as unknown as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
@@ -3470,6 +3493,7 @@ Instructions:
         where: { id: usage.id },
         data: {
           status: "error",
+          billableStatus: "ERROR",
           errorMessage: providerDetails
             ? JSON.stringify(providerDetails)
             : error instanceof Error

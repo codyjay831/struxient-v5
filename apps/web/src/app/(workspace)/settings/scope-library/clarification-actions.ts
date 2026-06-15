@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import { AIService } from "@/lib/ai/ai-service";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
@@ -275,6 +276,15 @@ export async function generateClarificationQuestionSetProposalAction(input: {
       profile,
     );
     const lineTextWithProfile = appendBusinessProfileContext(input.lineText, selectedProfileContext);
+
+    const billingPreflight = await preflightAiUsage(
+      ctx.organizationId,
+      "clarification_question_set",
+    );
+    if (billingPreflight) {
+      return { error: billingPreflight.error };
+    }
+
     const result = await AIService.generateClarificationQuestionSet({
       lineText: lineTextWithProfile ?? input.lineText,
       organizationName: ctx.organizationName,

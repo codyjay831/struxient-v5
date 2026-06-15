@@ -211,6 +211,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
 ];
 
 export const SETTINGS_MANAGEMENT_LINKS = [
+  { id: "billing", title: "Billing", href: "/settings/billing" },
   { id: "business-profile", title: "Business profile", href: "/settings/organization" },
   { id: "team", title: "Team", href: "/settings/team" },
   { id: "field-access", title: "Field access", href: "/settings/field-access" },

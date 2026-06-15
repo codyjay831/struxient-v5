@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { createAccountAction } from "./signup-actions";
+import { BASE_PLAN_NAME, formatUsdFromCents, getBasePlanDisplayAmountCents, getIncludedAiUnits, getTrialDays } from "@/lib/billing/billing-config";
 
 const signupSchema = z
   .object({
@@ -14,10 +15,15 @@ const signupSchema = z
     email: z.string().trim().email("Enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string().min(8, "Confirm your password."),
+    acceptTerms: z.boolean(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
     message: "Passwords do not match.",
+  })
+  .refine((value) => value.acceptTerms === true, {
+    path: ["acceptTerms"],
+    message: "You must accept the terms to create an account.",
   });
 
 export default function SignupPage() {
@@ -35,6 +41,7 @@ export default function SignupPage() {
       email: String(formData.get("email") ?? ""),
       password: String(formData.get("password") ?? ""),
       confirmPassword: String(formData.get("confirmPassword") ?? ""),
+      acceptTerms: formData.get("acceptTerms") === "on",
     };
 
     const parsed = signupSchema.safeParse(payload);
@@ -49,6 +56,7 @@ export default function SignupPage() {
         name: parsed.data.name,
         email: parsed.data.email,
         password: parsed.data.password,
+        acceptTerms: true,
       });
 
       if (!result.ok) {
@@ -77,6 +85,11 @@ export default function SignupPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Create your company</h1>
       <p className="mt-2 text-sm text-foreground-muted">
         Set up your owner account and start running jobs from one Workstation.
+      </p>
+      <p className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground-muted">
+        {BASE_PLAN_NAME}: {getTrialDays()}-day free trial, then{" "}
+        {formatUsdFromCents(getBasePlanDisplayAmountCents())}/mo. Includes{" "}
+        {getIncludedAiUnits().toLocaleString()} AI units/month.
       </p>
 
       <form className="mt-8 space-y-4" onSubmit={onSubmit}>
@@ -129,6 +142,18 @@ export default function SignupPage() {
             required
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-border-strong"
           />
+        </label>
+
+        <label className="flex items-start gap-2 text-sm text-foreground-muted">
+          <input
+            type="checkbox"
+            name="acceptTerms"
+            required
+            className="mt-1"
+          />
+          <span>
+            I agree to the Terms of Service and Privacy Policy.
+          </span>
         </label>
 
         {error ? (

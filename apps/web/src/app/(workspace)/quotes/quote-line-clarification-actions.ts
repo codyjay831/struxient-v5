@@ -5,6 +5,7 @@ import { Prisma, QuoteStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import {
   getClarificationQuestionSetByKey,
   listActiveClarificationQuestionSetSummaries,
@@ -353,6 +354,11 @@ export async function suggestLineClarificationAnswersAction(
       .filter(Boolean)
       .join("\n");
 
+    const billingPreflight = await preflightAiUsage(ctx.organizationId, "clarification_answers");
+    if (billingPreflight) {
+      return { error: billingPreflight.error };
+    }
+
     const result = await AIService.generateClarificationAnswerSuggestions({
       set: {
         key: set.key,
@@ -439,6 +445,14 @@ export async function generateClarificationQuestionSetForLineAction(
       profile,
     );
     const lineTextWithProfile = appendBusinessProfileContext(lineText, selectedProfileContext);
+
+    const billingPreflight = await preflightAiUsage(
+      ctx.organizationId,
+      "clarification_question_set",
+    );
+    if (billingPreflight) {
+      return { error: billingPreflight.error };
+    }
 
     const result = await AIService.generateClarificationQuestionSet({
       lineText: lineTextWithProfile ?? lineText,

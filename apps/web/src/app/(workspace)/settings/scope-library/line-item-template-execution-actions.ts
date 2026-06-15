@@ -13,6 +13,7 @@ import { buildTaskCompletionRequirementsFromAiTask } from "@/lib/ai/ai-proposal-
 import { validateExecutionTaskStage } from "@/lib/ai/map-ai-stage";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import { parseTaskTemplateCategory } from "@/lib/task-template-category";
 import type { TaskCompletionRequirements } from "@/lib/task-readiness";
 import type { TaskResourceRequirement } from "@/lib/task-resource";
@@ -597,6 +598,14 @@ export async function generateLineItemTemplateAIProposalAction(
       userInstructions,
       selectedProfileContext,
     );
+
+    const billingPreflight = await preflightAiUsage(
+      ctx.organizationId,
+      "execution_plan_scope_library",
+    );
+    if (billingPreflight) {
+      return { error: billingPreflight.error };
+    }
 
     const generated = await AIService.generateLibraryExecutionPlan({
       organizationId: ctx.organizationId,

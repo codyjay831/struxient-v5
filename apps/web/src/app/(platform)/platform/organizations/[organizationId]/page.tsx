@@ -89,6 +89,42 @@ export default async function PlatformOrganizationDetailPage({
             </div>
           </dl>
         </WorkspacePanel>
+
+        <WorkspacePanel>
+          <SectionHeading title="Billing & AI usage" />
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-foreground-muted">Subscription</dt>
+              <dd>{summary.subscription?.status ?? "None"}</dd>
+            </div>
+            {summary.subscription?.trialEndsAt ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-foreground-muted">Trial ends</dt>
+                <dd>{format(summary.subscription.trialEndsAt, "MMM d, yyyy")}</dd>
+              </div>
+            ) : null}
+            {summary.aiBillingPeriod ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">AI usage</dt>
+                  <dd>
+                    {summary.aiBillingPeriod.usedUnits} /{" "}
+                    {summary.aiBillingPeriod.includedAllowanceUnits} units
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-foreground-muted">Overage</dt>
+                  <dd>
+                    {summary.aiBillingPeriod.overageUnits} units · invoice{" "}
+                    {summary.aiBillingPeriod.invoiceStatus}
+                  </dd>
+                </div>
+              </>
+            ) : (
+              <div className="text-foreground-muted">No AI billing period recorded.</div>
+            )}
+          </dl>
+        </WorkspacePanel>
       </section>
 
       <section className="mb-10">

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { AIService, type AIQuoteExecutionPlanProposal } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
+import { preflightAiUsage } from "@/lib/billing/ai-action-guard";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
 import {
   QUOTE_PLAN_INPUT_SCHEMA_VERSION,
@@ -509,6 +510,11 @@ export async function generateQuoteExecutionPlanProposalAction(
   );
   const basePlanVersion = quote.executionPlan?.planVersion ?? 1;
   try {
+    const billingPreflight = await preflightAiUsage(ctx.organizationId, "execution_plan_quote");
+    if (billingPreflight) {
+      return { ok: false, error: billingPreflight.error };
+    }
+
     const generated = await AIService.generateQuoteExecutionPlan({
       quoteId: qid,
       quoteTitle: quote.title,

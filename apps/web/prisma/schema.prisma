@@ -70,6 +70,9 @@ model Organization {
   crewMembers               CrewMember[]
   jobCollaborators          JobCollaborator[]
   platformAuditEvents     PlatformAuditEvent[]
+  billingAccount          OrganizationBillingAccount?
+  subscription            OrganizationSubscription?
+  aiBillingPeriods        AiBillingPeriod[]
 }
 
 model Stage {
@@ -219,6 +222,8 @@ model User {
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
   emailVerified              DateTime?
+  termsAcceptedAt            DateTime?
+  termsVersion               String?
   image                      String?
   accounts                   Account[]
   uploadedAttachments        Attachment[]                @relation("UploadedAttachments")
@@ -1798,6 +1803,69 @@ model ServiceLocationAuditEvent {
   @@index([serviceLocationId, createdAt])
 }
 
+model OrganizationBillingAccount {
+  id               String       @id @default(cuid())
+  organizationId   String       @unique
+  stripeCustomerId String       @unique
+  billingEmail     String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+}
+
+model OrganizationSubscription {
+  id                   String                         @id @default(cuid())
+  organizationId       String                         @unique
+  stripeSubscriptionId String                         @unique
+  stripePriceId        String
+  status               OrganizationSubscriptionStatus
+  trialEndsAt          DateTime?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean                        @default(false)
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  organization         Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([stripeSubscriptionId])
+  @@index([status])
+}
+
+model AiBillingPeriod {
+  id                     String                       @id @default(cuid())
+  organizationId         String
+  periodStart            DateTime
+  periodEnd              DateTime
+  includedAllowanceUnits Int
+  usedUnits              Int                          @default(0)
+  overageUnits           Int                          @default(0)
+  overageAmountCents     Int                          @default(0)
+  invoiceStatus          AiBillingPeriodInvoiceStatus @default(OPEN)
+  stripeInvoiceItemId    String?
+  stripeInvoiceId        String?
+  invoiceError           String?
+  closedAt               DateTime?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  organization           Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aiUsageLogs            AiUsageLog[]
+
+  @@unique([organizationId, periodStart])
+  @@index([organizationId, periodEnd])
+  @@index([invoiceStatus, periodEnd])
+}
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+  payloadHash String?
+
+  @@index([type, processedAt])
+}
+
 model AiUsageLog {
   id                String                   @id @default(cuid())
   organizationId    String
@@ -1809,6 +1877,12 @@ model AiUsageLog {
   status            String
   promptChars       Int                      @default(0)
   responseChars     Int                      @default(0)
+  inputTokens       Int?
+  outputTokens      Int?
+  estimatedCostCents Int?
+  billableUnits     Int?
+  billableStatus    AiUsageBillableStatus?
+  aiBillingPeriodId String?
   requestPayload    Json?
   responsePayload   Json?
   errorMessage      String?
@@ -1817,10 +1891,38 @@ model AiUsageLog {
   createdAt         DateTime                 @default(now())
   organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   serviceLocation   CustomerServiceLocation? @relation(fields: [serviceLocationId], references: [id], onDelete: SetNull)
+  aiBillingPeriod   AiBillingPeriod?         @relation(fields: [aiBillingPeriodId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([serviceLocationId, createdAt])
   @@index([feature, createdAt])
+  @@index([aiBillingPeriodId])
+}
+
+enum OrganizationSubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+enum AiBillingPeriodInvoiceStatus {
+  OPEN
+  NO_OVERAGE
+  INVOICE_ITEM_CREATED
+  INVOICED
+  FAILED
+}
+
+enum AiUsageBillableStatus {
+  INCLUDED
+  OVERAGE
+  UNBILLABLE
+  ERROR
 }
 
 enum LeadStatus {

@@ -43,10 +43,10 @@ export async function saveBusinessProfileOnboardingAction(
 
   revalidatePath("/settings/organization");
   revalidatePath("/onboarding/business-profile");
-  redirect("/workstation");
+  redirect("/onboarding/billing");
 }
 
 export async function skipBusinessProfileOnboardingAction() {
-  redirect("/workstation");
+  redirect("/onboarding/billing");
 }
 
