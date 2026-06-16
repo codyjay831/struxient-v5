@@ -247,7 +247,12 @@ export function buildLeadReviewViewModel(input: BuildLeadReviewViewModelInput): 
     key: def.key,
     label: def.label,
     satisfied: def.check(readiness),
-    fixHref: editHref,
+    fixHref:
+      def.key === "location" &&
+      (input.jobsiteAddressLine?.trim() ?? "").length > 0 &&
+      !readiness.hasAddress
+        ? "#address-verify"
+        : editHref,
   }));
 
   let requestFields = buildRequestFields(input);

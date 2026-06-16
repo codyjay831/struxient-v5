@@ -55,8 +55,9 @@ export function evaluateLeadReadiness(params: {
   const hasIdentity = isSmartIdentity(params.contactName, params.companyName);
   const hasEmail = isSmartEmail(params.email);
   const hasPhone = isSmartPhone(params.phone);
-  // Address is met if it's verified (Google Place ID) OR passes heuristics
-  const hasAddress = params.isAddressVerified || isSmartAddress(params.address);
+  // Quote readiness requires a Google-resolved address (place ID), not free-text heuristics.
+  void params.address;
+  const hasAddress = Boolean(params.isAddressVerified);
 
   return {
     hasIdentity,

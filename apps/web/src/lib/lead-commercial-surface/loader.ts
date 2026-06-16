@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { projectLead, deriveLeadTitle } from "@/lib/lead/lead-projection";
-import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
+import { jobsiteLineFromLead, isLeadAddressQuoteReady, isLeadAddressVerified } from "@/lib/jobsite-address";
 import { findCustomerMatchHints, LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import { getLeadCommercialProgress, LeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
@@ -45,6 +45,7 @@ export interface LeadCommercialSurfacePayload {
     signals: unknown;
     jobsiteAddressLine: string;
     isAddressVerified: boolean;
+    isAddressQuoteReady: boolean;
     requestType: string | null;
     scopeSummary: string | null;
     neededByBucket: NeededByBucket | null;
@@ -161,6 +162,20 @@ export async function loadLeadCommercialSurface(
     address: lead.address,
     signals: lead.signals,
   });
+
+  let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+  if (lead.customerId) {
+    customerPrimaryLocation = await db.customerServiceLocation.findFirst({
+      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      select: { googlePlaceId: true },
+    });
+  }
+
+  const isAddressQuoteReady = isLeadAddressQuoteReady(
+    { address: lead.address, signals: lead.signals },
+    customerPrimaryLocation,
+  );
   const safeServiceLocation =
     lead.serviceLocation && lead.serviceLocation.organizationId === ctx.organizationId
       ? lead.serviceLocation
@@ -285,7 +300,7 @@ export async function loadLeadCommercialSurface(
       email: projected.email,
       phone: projected.phone,
       jobsiteAddressLine,
-      isAddressVerified: isLeadAddressVerified(lead),
+      isAddressVerified: isAddressQuoteReady,
     },
     quotes: progressQuoteInputs,
     hasExistingCustomerMatch: matchHints?.kind === "checked" && matchHints.matches.length > 0,
@@ -323,7 +338,7 @@ export async function loadLeadCommercialSurface(
     email: projected.email,
     phone: projected.phone,
     jobsiteAddressLine,
-    isAddressVerified: isLeadAddressVerified(lead),
+    isAddressVerified: isAddressQuoteReady,
     attachments,
     events: leadEvents,
     visitRequests: lead.visitRequests,
@@ -391,7 +406,7 @@ export async function loadLeadCommercialSurface(
       signals: lead.signals,
     },
     jobsiteAddressLine,
-    isAddressVerified: isLeadAddressVerified(lead),
+    isAddressVerified: isAddressQuoteReady,
     quotes: progressQuoteInputs,
     hasExistingCustomerMatch:
       matchHints?.kind === "checked" && matchHints.matches.length > 0,
@@ -419,6 +434,7 @@ export async function loadLeadCommercialSurface(
       signals: lead.signals,
       jobsiteAddressLine: jobsiteAddressLine || "",
       isAddressVerified: isLeadAddressVerified(lead),
+      isAddressQuoteReady,
       requestType: requestJson.type ?? projected.requestType,
       scopeSummary: requestJson.scope,
       neededByBucket: requestJson.neededByBucket,

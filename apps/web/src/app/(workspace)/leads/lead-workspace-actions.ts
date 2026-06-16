@@ -46,13 +46,22 @@ import {
   readRequest,
   readSignals,
 } from "@/lib/lead/lead-projection";
-import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
+import {
+  jobsiteLineFromLead,
+  isLeadAddressQuoteReady,
+  isLeadAddressVerified,
+} from "@/lib/jobsite-address";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import {
   parseStoredPublicIntakeServiceLocation,
   type PublicIntakeServiceLocationV1,
 } from "@/lib/public-lead-service-location";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
+import {
+  fetchSnapshotByPlaceId,
+  resolveAddressViaGeocode,
+  type GeocodeResolveResult,
+} from "@/lib/google-maps-geocode";
 
 const LEAD_STATUS_SET = new Set<string>(Object.values(LeadStatus));
 const LEAD_CLOSE_REASON_SET = new Set<string>(Object.values(LeadCloseReason));
@@ -742,6 +751,15 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
         : null,
   }));
 
+  let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+  if (lead.customerId) {
+    customerPrimaryLocation = await db.customerServiceLocation.findFirst({
+      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      select: { googlePlaceId: true },
+    });
+  }
+
   const progress = getLeadCommercialProgress({
     lead: {
       status: lead.status,
@@ -752,7 +770,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       email: contact.email,
       phone: contact.phone,
       jobsiteAddressLine: jobsiteLineFromLead(lead),
-      isAddressVerified: isLeadAddressVerified(lead),
+      isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
     },
     quotes: progressQuoteInputs,
   });
@@ -1193,4 +1211,223 @@ export async function updateLeadServiceAddressWorkspaceAction(
   revalidatePath("/workstation");
 
   return { success: true };
+}
+
+export type ResolveLeadServiceAddressResult =
+  | { ok: true; status: "already_verified" }
+  | { ok: true; status: "resolved"; formattedAddress: string }
+  | {
+      ok: true;
+      status: "suggest";
+      candidates: Array<{ placeId: string; formattedAddress: string }>;
+    }
+  | { ok: true; status: "failed"; reason?: string }
+  | { ok: false; error: string };
+
+async function persistLeadServiceAddressSnapshot(params: {
+  leadId: string;
+  organizationId: string;
+  userId: string;
+  snapshot: PublicIntakeServiceLocationV1;
+  eventDetail: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { leadId, organizationId, userId, snapshot, eventDetail } = params;
+  const address = snapshot as unknown as Prisma.InputJsonValue;
+
+  const writeResult = await db.$transaction(async (tx) => {
+    const existingLead = await tx.lead.findFirst({
+      where: { id: leadId, organizationId },
+      select: { customerId: true, channel: true, serviceLocationId: true },
+    });
+    if (!existingLead) {
+      return { updated: false as const, customerId: null as string | null, channel: null as LeadChannel | null };
+    }
+
+    const resolvedLocationId = await ensureServiceLocationForLeadFromSnapshot(tx, {
+      organizationId,
+      leadId,
+      leadChannel: existingLead.channel,
+      customerId: existingLead.customerId,
+      snapshot,
+    });
+
+    const writeCount = await tx.lead.updateMany({
+      where: { id: leadId, organizationId },
+      data: { address },
+    });
+    if (writeCount.count === 0) {
+      return { updated: false as const, customerId: null as string | null, channel: null as LeadChannel | null };
+    }
+
+    await tx.lead.update({
+      where: { id: leadId },
+      data: { serviceLocationId: resolvedLocationId },
+    });
+
+    await tx.leadEvent.create({
+      data: {
+        leadId,
+        type: "UPDATED",
+        payload: {
+          field: "serviceAddress",
+          detail: eventDetail,
+          googlePlaceId: snapshot.googlePlaceId,
+        } as Prisma.InputJsonValue,
+        actorUserId: userId,
+      },
+    });
+
+    return {
+      updated: true as const,
+      customerId: existingLead.customerId,
+      channel: existingLead.channel,
+    };
+  });
+
+  if (!writeResult.updated) {
+    return { ok: false, error: "Opportunity not found or could not be updated." };
+  }
+
+  if (writeResult.customerId && writeResult.channel) {
+    try {
+      await db.$transaction(async (tx) => {
+        const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
+          organizationId,
+          customerId: writeResult.customerId as string,
+          leadId,
+          leadChannel: writeResult.channel as LeadChannel,
+          snapshot,
+        });
+        if (attached.locationId) {
+          await tx.lead.update({
+            where: { id: leadId },
+            data: { serviceLocationId: attached.locationId },
+          });
+        }
+      });
+    } catch {
+      /* Soft-fail customer propagation. */
+    }
+  }
+
+  revalidateLeadAndQuoteSurfaces(leadId, null);
+  return { ok: true };
+}
+
+function mapResolveResult(
+  result: GeocodeResolveResult,
+): Exclude<ResolveLeadServiceAddressResult, { ok: false; error: string }> {
+  if (result.status === "resolved") {
+    return {
+      ok: true,
+      status: "resolved",
+      formattedAddress:
+        result.snapshot.formattedAddress.trim() || result.snapshot.addressLine1,
+    };
+  }
+  if (result.status === "suggest") {
+    return {
+      ok: true,
+      status: "suggest",
+      candidates: result.candidates.map((c) => ({
+        placeId: c.placeId,
+        formattedAddress: c.formattedAddress,
+      })),
+    };
+  }
+  return { ok: true, status: "failed", reason: result.reason };
+}
+
+/**
+ * Attempts to auto-clean a partial lead service address via Google Geocoding.
+ * When Google returns one confident match, persists the enriched snapshot automatically.
+ */
+export async function resolveLeadServiceAddressAction(
+  leadId: string,
+): Promise<ResolveLeadServiceAddressResult> {
+  const id = leadId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+
+  const ctx = await getCommercialRequestContextOrThrow();
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, address: true, signals: true, customerId: true },
+  });
+  if (!lead) return { ok: false, error: "Opportunity not found in your organization." };
+  if (lead.customerId) {
+    return { ok: true, status: "already_verified" };
+  }
+  if (isLeadAddressVerified(lead)) {
+    return { ok: true, status: "already_verified" };
+  }
+
+  const addressLine = jobsiteLineFromLead(lead);
+  if (!addressLine?.trim()) {
+    return { ok: true, status: "failed", reason: "empty_address" };
+  }
+
+  const snapshot = intakeSnapshotForCustomerFromLead(lead);
+  const geocodeResult = await resolveAddressViaGeocode({
+    addressLine,
+    snapshot,
+  });
+
+  if (geocodeResult.status === "resolved") {
+    const persisted = await persistLeadServiceAddressSnapshot({
+      leadId: id,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      snapshot: geocodeResult.snapshot,
+      eventDetail: "Service address auto-verified via Google Geocoding.",
+    });
+    if (!persisted.ok) return { ok: false, error: persisted.error };
+    return mapResolveResult(geocodeResult);
+  }
+
+  return mapResolveResult(geocodeResult);
+}
+
+/**
+ * Applies a staff-selected Google place candidate to the lead service address.
+ */
+export async function applyLeadServiceAddressCandidateAction(
+  leadId: string,
+  placeId: string,
+): Promise<{ ok: true; formattedAddress: string } | { ok: false; error: string }> {
+  const id = leadId.trim();
+  const pid = placeId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+  if (!pid) return { ok: false, error: "Missing place id." };
+
+  const ctx = await getCommercialRequestContextOrThrow();
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, customerId: true },
+  });
+  if (!lead) return { ok: false, error: "Opportunity not found in your organization." };
+  if (lead.customerId) {
+    return {
+      ok: false,
+      error: "This request is linked to a customer. Manage the address on the customer record.",
+    };
+  }
+
+  const snapshot = await fetchSnapshotByPlaceId(pid);
+  if (!snapshot) {
+    return { ok: false, error: "That address could not be loaded from Google. Try another option." };
+  }
+
+  const persisted = await persistLeadServiceAddressSnapshot({
+    leadId: id,
+    organizationId: ctx.organizationId,
+    userId: ctx.userId,
+    snapshot,
+    eventDetail: "Service address verified from Google candidate selection.",
+  });
+  if (!persisted.ok) return { ok: false, error: persisted.error };
+
+  return {
+    ok: true,
+    formattedAddress: snapshot.formattedAddress.trim() || snapshot.addressLine1,
+  };
 }

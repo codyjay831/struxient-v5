@@ -73,3 +73,23 @@ test("buildLeadIntakeProjection lists missing requirements when not ready", () =
   assert.ok(p.readiness.missingRequirementLabels.includes("Identity"));
   assert.equal(p.commercial.state, "ADD_CONTACT_INFO");
 });
+
+test("buildLeadIntakeProjection treats partial unverified address as not ready", () => {
+  const p = buildLeadIntakeProjection({
+    organizationId: "org-1",
+    lead: {
+      ...baseLead,
+      address: {
+        formattedAddress: "401 Royal Tern Drive",
+        addressLine1: "401 Royal Tern Drive",
+        googlePlaceId: "",
+        source: "manual",
+      },
+    },
+    jobsiteAddressLine: "401 Royal Tern Drive",
+    isAddressVerified: false,
+  });
+
+  assert.equal(p.readiness.isReadyForPromotion, false);
+  assert.ok(p.readiness.missingRequirementLabels.includes("Location"));
+});

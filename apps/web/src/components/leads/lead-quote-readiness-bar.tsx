@@ -35,9 +35,15 @@ export function LeadQuoteReadinessBar({
               {req.label}
             </span>
             {!req.satisfied ? (
-              <Link href={req.fixHref} className="text-[10px] font-medium text-accent hover:underline">
-                Fix
-              </Link>
+              req.fixHref.startsWith("#") ? (
+                <a href={req.fixHref} className="text-[10px] font-medium text-accent hover:underline">
+                  Fix
+                </a>
+              ) : (
+                <Link href={req.fixHref} className="text-[10px] font-medium text-accent hover:underline">
+                  Fix
+                </Link>
+              )
             ) : null}
           </span>
         ))}

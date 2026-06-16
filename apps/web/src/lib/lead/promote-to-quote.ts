@@ -12,7 +12,7 @@ import {
   intakeSnapshotForCustomerFromLead,
 } from "../customer-service-location-from-lead";
 import { readContact, readRequest, readSignals } from "./lead-projection";
-import { jobsiteLineFromLead, isLeadAddressVerified } from "../jobsite-address";
+import { jobsiteLineFromLead, isLeadAddressQuoteReady } from "../jobsite-address";
 import {
   performApplyLineItemTemplateToQuoteTx,
 } from "../quote-line-item-template-apply-tx";
@@ -88,6 +88,15 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
               : null,
         }));
 
+        let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+        if (lead.customerId) {
+          customerPrimaryLocation = await tx.customerServiceLocation.findFirst({
+            where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+            select: { googlePlaceId: true },
+          });
+        }
+
         const progress = getLeadCommercialProgress({
           lead: {
             status: lead.status,
@@ -97,7 +106,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             email: contact.email,
             phone: contact.phone,
             jobsiteAddressLine: jobsiteLineFromLead(lead),
-            isAddressVerified: isLeadAddressVerified(lead),
+            isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
           },
           quotes: progressQuoteInputs,
         });

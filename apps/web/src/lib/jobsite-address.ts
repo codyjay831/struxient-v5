@@ -50,7 +50,32 @@ export function isLeadAddressVerified(row: {
   signals: Prisma.JsonValue | null;
 }): boolean {
   const snap = intakeSnapshotForCustomerFromLead(row);
-  return Boolean(snap?.googlePlaceId);
+  return Boolean(snap?.googlePlaceId?.trim());
+}
+
+/**
+ * Returns true when a linked customer's primary service location has a Google Place ID.
+ */
+export function isCustomerPrimaryLocationQuoteReady(
+  location: { googlePlaceId: string } | null | undefined,
+): boolean {
+  return Boolean(location?.googlePlaceId?.trim());
+}
+
+/**
+ * Quote readiness: lead intake snapshot or linked customer primary location is Google-verified.
+ */
+export function isLeadAddressQuoteReady(
+  row: {
+    address: Prisma.JsonValue | null;
+    signals: Prisma.JsonValue | null;
+  },
+  customerPrimaryLocation?: { googlePlaceId: string } | null,
+): boolean {
+  if (isCustomerPrimaryLocationQuoteReady(customerPrimaryLocation)) {
+    return true;
+  }
+  return isLeadAddressVerified(row);
 }
 
 /**

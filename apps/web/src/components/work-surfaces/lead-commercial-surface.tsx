@@ -33,6 +33,7 @@ import { useRouter } from "next/navigation";
 import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-progress-panel";
 import { LeadQuoteReadinessBar } from "@/components/leads/lead-quote-readiness-bar";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
+import { LeadAddressResolvePanel } from "@/components/leads/lead-address-resolve-panel";
 import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
 import { SiteDetailsRow } from "@/components/site-details/site-details-row";
 import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
@@ -55,7 +56,8 @@ export function LeadCommercialSurface({
   onMutationSuccess,
   onClose,
 }: LeadCommercialSurfaceProps) {
-  const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel } = payload;
+  const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel, serviceAddressContext } =
+    payload;
   const router = useRouter();
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
@@ -63,6 +65,7 @@ export function LeadCommercialSurface({
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [siteDrawerOpen, setSiteDrawerOpen] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
+  const addressVerifyRef = useRef<HTMLDivElement>(null);
   const siteData = {
     serviceLocationId: lead.serviceLocationId,
     line: lead.jobsiteAddressLine || null,
@@ -108,6 +111,9 @@ export function LeadCommercialSurface({
         customerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         customerSectionRef.current?.focus();
       }
+      if (window.location.hash === "#address-verify") {
+        addressVerifyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     };
 
     handleHash();
@@ -117,6 +123,11 @@ export function LeadCommercialSurface({
 
   const matches = matchHints?.kind === "checked" ? matchHints.matches : [];
   const closeOrPauseAction = closeOrPauseLeadWorkspaceAction.bind(null, lead.id);
+  const showAddressResolvePanel =
+    !customer &&
+    !lead.isAddressQuoteReady &&
+    lead.jobsiteAddressLine.trim().length > 0 &&
+    serviceAddressContext?.customer == null;
 
   return (
     <div className="@container flex min-h-full flex-col">
@@ -194,6 +205,18 @@ export function LeadCommercialSurface({
               allRequirementsMet={reviewViewModel.allRequirementsMet}
               editHref={editHref}
             />
+
+            {showAddressResolvePanel ? (
+              <div ref={addressVerifyRef}>
+                <LeadAddressResolvePanel
+                  leadId={lead.id}
+                  leadEditHref={editHref}
+                  jobsiteAddressLine={lead.jobsiteAddressLine}
+                  serviceAddressContext={serviceAddressContext}
+                  onResolved={notifyMutationSuccess}
+                />
+              </div>
+            ) : null}
 
             {!customer ? (
               <LeadCustomerActionPanel
@@ -338,6 +361,10 @@ export function LeadCommercialSurface({
                     {lead.isAddressVerified ? (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-success">
                         Verified
+                      </span>
+                    ) : lead.jobsiteAddressLine.trim() ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-warning">
+                        Address needs review
                       </span>
                     ) : null}
                   </div>
