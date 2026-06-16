@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { StruxientLogo } from "@/components/brand/struxient-logo";
 import { AppearanceControl } from "./appearance-control";
 import { SidebarNav } from "./sidebar-nav";
 import { OrganizationSwitcher } from "./organization-switcher";
@@ -27,11 +28,9 @@ export function AppShell({
       <aside className="sticky top-0 flex h-screen w-[260px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6">
         <Link
           href="/workstation"
-          className="mb-10 flex items-baseline gap-1.5 px-3 transition-opacity hover:opacity-80"
+          className="mb-8 flex h-12 items-center px-3 transition-opacity hover:opacity-80"
         >
-          <span className="text-lg font-semibold tracking-tight text-foreground">
-            Struxient
-          </span>
+          <StruxientLogo size="md" />
         </Link>
         <SidebarNav role={role} />
       </aside>

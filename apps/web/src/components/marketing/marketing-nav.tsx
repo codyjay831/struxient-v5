@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { StruxientLogo } from "@/components/brand/struxient-logo";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "./container";
 import { AppearanceControl } from "@/components/shell/appearance-control";
@@ -13,8 +14,8 @@ export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--mkt-glass-border)] backdrop-blur-xl">
       <Container className="flex h-16 items-center justify-between gap-4">
-        <Link href="/" className="text-base font-semibold tracking-tight text-foreground">
-          Struxient
+        <Link href="/" className="flex h-12 items-center transition-opacity hover:opacity-80">
+          <StruxientLogo size="sm" />
         </Link>
         <nav className="hidden items-center gap-6 md:flex">
           {navLinks.map((link) => (

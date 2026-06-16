@@ -1,32 +1,52 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="ogBg" x1="40" y1="20" x2="1120" y2="610" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#B45309"/>
-      <stop offset="0.56" stop-color="#EA7A16"/>
-      <stop offset="1" stop-color="#0B0B0D"/>
+    <linearGradient id="ogBg" x1="84" y1="48" x2="1058" y2="616" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020817"/>
+      <stop offset="0.48" stop-color="#07111F"/>
+      <stop offset="1" stop-color="#001A3D"/>
     </linearGradient>
+    <linearGradient id="markBlue" x1="731" y1="166" x2="970" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1397FF"/>
+      <stop offset="1" stop-color="#0068F6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(915 244) rotate(137) scale(348 278)">
+      <stop stop-color="#0078FF" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#0078FF" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#ogBg)"/>
-  <rect x="52" y="52" width="1096" height="526" rx="28" fill="#0B0B0D" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.16"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <rect x="52" y="52" width="1096" height="526" rx="34" fill="#05080F" fill-opacity="0.62" stroke="#1D74FF" stroke-opacity="0.26"/>
 
-  <text x="96" y="214" fill="white" font-family="Inter, Arial, sans-serif" font-weight="700" font-size="80">
-    Struxient
+  <text x="96" y="208" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="76" letter-spacing="14">
+    STRUXIENT
   </text>
-  <text x="96" y="286" fill="#E4E4E7" font-family="Inter, Arial, sans-serif" font-size="36">
+  <text x="100" y="283" fill="#B9C6D8" font-family="Inter, Arial, sans-serif" font-size="34">
     Know what is happening on every job.
   </text>
-  <text x="96" y="336" fill="#E4E4E7" font-family="Inter, Arial, sans-serif" font-size="36">
+  <text x="100" y="331" fill="#B9C6D8" font-family="Inter, Arial, sans-serif" font-size="34">
     Tell the right person what should happen next.
   </text>
 
-  <rect x="96" y="392" width="260" height="58" rx="16" fill="#F59E0B"/>
-  <text x="138" y="430" fill="#0A0A0A" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="600">
+  <rect x="100" y="404" width="284" height="62" rx="18" fill="#0B84FF"/>
+  <text x="140" y="444" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">
     Get started
   </text>
 
-  <rect x="704" y="124" width="404" height="374" rx="24" fill="#121215" stroke="#FFFFFF" stroke-opacity="0.14"/>
-  <rect x="734" y="164" width="240" height="16" rx="8" fill="#FFFFFF" fill-opacity="0.24"/>
-  <rect x="734" y="206" width="338" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.18"/>
-  <rect x="734" y="234" width="314" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.18"/>
-  <rect x="734" y="272" width="172" height="34" rx="10" fill="#F59E0B"/>
+  <g transform="translate(698 116)">
+    <path d="M181 0L338 90V272L181 362L24 272V90L181 0Z" stroke="#0B84FF" stroke-width="5" stroke-opacity="0.7"/>
+    <path d="M181 33L309 107V255L181 329L53 255V107L181 33Z" stroke="#1D74FF" stroke-width="2" stroke-opacity="0.28"/>
+    <circle cx="181" cy="0" r="13" fill="#0B84FF"/>
+    <circle cx="338" cy="90" r="13" fill="#0B84FF"/>
+    <circle cx="338" cy="272" r="13" fill="#0B84FF"/>
+    <circle cx="181" cy="362" r="13" fill="#0B84FF"/>
+    <circle cx="24" cy="272" r="13" fill="#0B84FF"/>
+    <circle cx="24" cy="90" r="13" fill="#0B84FF"/>
+    <path d="M121 84L244 84L311 122L258 154L155 154L122 174L244 244L311 283L244 322L121 322L54 283L108 251L210 251L244 232L121 162L54 123L121 84Z" fill="url(#markBlue)"/>
+    <path d="M54 123L121 162V213L54 174V123Z" fill="#006BEF"/>
+    <path d="M311 122L258 154V205L311 174V122Z" fill="#005ED9"/>
+    <path d="M311 283L244 244V193L311 232V283Z" fill="#006BEF"/>
+    <path d="M54 283L108 251V200L54 232V283Z" fill="#005ED9"/>
+    <path d="M181 -26V32M181 330V388M-2 90H52M310 90H364M-2 272H52M310 272H364M90 52V114M90 248V310M272 52V114M272 248V310" stroke="#0B84FF" stroke-width="3" stroke-linecap="round" stroke-opacity="0.55"/>
+  </g>
 </svg>

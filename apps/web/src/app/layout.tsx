@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: "Struxient",
   description:
     "Construction management for trades—quotes, execution, and the Workstation.",
+  icons: {
+    icon: "/brand/struxient-mark.png",
+    apple: "/brand/struxient-mark.png",
+  },
 };
 
 export default function RootLayout({
