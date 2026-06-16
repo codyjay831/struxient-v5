@@ -26,3 +26,5 @@ Thumbs.db
 # Local command output / debug artifacts
 apps/web/.lint-out.txt
 debug-*.log
+
+.vercel
