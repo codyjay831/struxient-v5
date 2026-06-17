@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { queryOrganizationSchedule } from "@/lib/schedule-query";
@@ -61,11 +60,7 @@ export default async function ScheduleRecordPage({
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-4">
-      <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Schedule" }]} />
-      <PageHeader
-        title="Schedule"
-        description="Plan estimates, field visits, task timing, and availability in one place."
-      />
+      <PageHeader variant="compact" title="Schedule" />
 
       <ScheduleBoard
         events={schedule.events}

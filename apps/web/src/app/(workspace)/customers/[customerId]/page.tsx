@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
@@ -48,14 +47,14 @@ export default async function CustomerDetailPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Relationships" },
-            { label: "Customers", href: "/customers" },
-            { label: "Access denied" },
-          ]}
+        <PageHeader
+          title="Customer profile"
+          actions={
+            <Link href="/customers" className={listLinkClass}>
+              ← Customers
+            </Link>
+          }
         />
-        <PageHeader title="Customer profile" description="View customer relationship records." />
         <AccessDeniedPanel description="This role cannot access customer profiles." />
       </div>
     );
@@ -99,16 +98,8 @@ export default async function CustomerDetailPage({
   if (!customer) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Relationships" },
-            { label: "Customers", href: "/customers" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
-          title="Customer"
-          description="This customer record could not be found."
+          title="Customer not found"
           actions={
             <>
               {returnHref ? (
@@ -117,7 +108,7 @@ export default async function CustomerDetailPage({
                 </Link>
               ) : null}
               <Link href="/customers" className={listLinkClass}>
-                ← Customers list
+                ← Customers
               </Link>
             </>
           }
@@ -215,14 +206,6 @@ export default async function CustomerDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Relationships" },
-          { label: "Customers", href: "/customers" },
-          { label: customer.displayName },
-        ]}
-      />
-
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import { formatMoneyCents } from "@/lib/quote-display";
@@ -31,13 +30,6 @@ export function QuoteWorkspaceShell({
 }: QuoteWorkspaceShellProps) {
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: quote.primaryTitle },
-        ]}
-      />
-
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">

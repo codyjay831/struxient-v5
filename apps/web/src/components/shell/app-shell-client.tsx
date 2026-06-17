@@ -92,9 +92,6 @@ export function AppShellClient({
             >
               <StruxientLogo size="sm" />
             </Link>
-            <span className="hidden min-w-0 truncate text-sm text-foreground-muted sm:inline">
-              Workspace
-            </span>
           </div>
           <div className="flex min-w-0 items-center gap-1 sm:gap-2">
             <OrganizationSwitcher

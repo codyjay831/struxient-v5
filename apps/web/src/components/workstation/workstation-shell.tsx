@@ -58,20 +58,17 @@ export function WorkstationShell({
   const showDate = isMainWorkstation && lens === "attention";
 
   return (
-    <div className="mb-8">
-      <header className="border-b border-border pb-6">
-        <div className="flex items-end justify-between gap-4">
+    <div className="mb-6">
+      <header className="border-b border-border pb-5">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-foreground-subtle">
-              Workstation
-            </p>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {isMainWorkstation
                 ? landingTitle
                 : (activeSubrouteLabel ?? "Workstation")}
             </h1>
             {showDate && (
-              <p className="mt-1 text-sm text-foreground-muted">{todayLabel}</p>
+              <p className="mt-0.5 text-sm text-foreground-muted">{todayLabel}</p>
             )}
           </div>
 

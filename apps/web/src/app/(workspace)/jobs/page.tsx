@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ButtonLink } from "@/components/ui/button";
 import { Briefcase } from "lucide-react";
@@ -47,18 +46,10 @@ export default async function JobsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Jobs" }]} />
-      <PageHeader
-        title="Jobs"
-        description="Track active work created from approved quotes, including linked customer context and execution status."
-      />
+      <PageHeader variant="compact" title="Jobs" />
 
       <section className="mb-8">
-        <SectionHeading
-          title="Overview"
-          description={`Current job counts for ${ctx.organizationName}.`}
-
-        />
+        <SectionHeading title="Overview" />
         <ul className="grid gap-3 sm:grid-cols-3">
           <li>
             <SignalCard label="Jobs (all)" value={String(totalCount)} hint="Rows in this org." />

@@ -54,11 +54,11 @@ export default async function EditLeadPage({
           ]}
         />
         <PageHeader
-          title="Edit opportunity"
-          description="No record exists for this id in your organization. Links only resolve within your tenant scope—not across organizations."
+          title="Opportunity not found"
+          description="No record exists for this id in your organization. Links only resolve within your tenant scope."
           actions={
             <Link href="/leads" className={listLinkClass}>
-              ← Sales pipeline
+              ← Sales
             </Link>
           }
         />
@@ -103,14 +103,14 @@ export default async function EditLeadPage({
       />
       <PageHeader
         title={`Edit ${lead.title}`}
-        description="Update intake fields for your organization. Status and customer link are not editable here yet."
+        description="Status and customer link are not editable here."
         actions={
           <>
             <Link href={`/leads/${lead.id}`} className={listLinkClass}>
-              ← Opportunity detail
+              ← Opportunity
             </Link>
             <Link href="/leads" className={listLinkClass}>
-              Sales pipeline
+              Sales
             </Link>
           </>
         }

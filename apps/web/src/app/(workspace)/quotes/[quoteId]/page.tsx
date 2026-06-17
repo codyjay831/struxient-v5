@@ -1,6 +1,5 @@
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { ButtonLink } from "@/components/ui/button";
 import { QuoteWorkspaceShell } from "@/components/shells/quote-workspace-shell";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
@@ -41,16 +40,14 @@ export default async function QuoteDetailPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Access denied" },
-          ]}
-        />
         <PageHeader
           eyebrow="Sales"
           title="Quote"
-          description="Review and update commercial proposal details."
+          actions={
+            <ButtonLink href="/leads" variant="muted" size="sm">
+              ← Sales
+            </ButtonLink>
+          }
         />
         <AccessDeniedPanel description="This role cannot access quote records." />
       </div>
@@ -61,19 +58,12 @@ export default async function QuoteDetailPage({
   if (!result) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           eyebrow="Sales"
-          title="Quote"
-          description="This quote could not be found."
+          title="Quote not found"
           actions={
             <ButtonLink href="/leads" variant="muted" size="sm">
-              ← Sales pipeline
+              ← Sales
             </ButtonLink>
           }
         />

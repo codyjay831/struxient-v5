@@ -1,5 +1,4 @@
 import { ButtonLink } from "@/components/ui/button";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -8,11 +7,7 @@ import { FileText, Users, Wallet } from "lucide-react";
 export default function PaymentsPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Finance" }, { label: "Payments" }]} />
-      <PageHeader
-        title="Payments"
-        description="Track deposits, milestones, and balances tied to your jobs and quotes."
-      />
+      <PageHeader variant="compact" title="Payments" />
 
       <WorkspacePanel className="border-brand/20 bg-brand-muted/30">
         <EmptyState

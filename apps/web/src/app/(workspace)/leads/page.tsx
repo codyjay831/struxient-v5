@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -69,8 +68,7 @@ export default async function LeadsPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb items={[{ label: "Sales" }]} />
-        <PageHeader title="Sales" description="Track open opportunities and outcomes." />
+        <PageHeader variant="compact" title="Sales" />
         <AccessDeniedPanel description="This role cannot access sales records." />
       </div>
     );
@@ -134,10 +132,9 @@ export default async function LeadsPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Sales" }]} />
       <PageHeader
+        variant="compact"
         title="Sales"
-        description="Track open opportunities, awarded work, and closed outcomes."
         actions={
           <>
             {fromWorkstation ? (

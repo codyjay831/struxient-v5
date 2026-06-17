@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
@@ -24,11 +23,14 @@ export default async function LeadDetailPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb items={[{ label: "Sales", href: "/leads" }, { label: "Access denied" }]} />
         <PageHeader
           eyebrow="Sales"
           title="Lead review"
-          description="Triage request and commercial details."
+          actions={
+            <Link href="/leads" className={listLinkClass}>
+              ← Sales
+            </Link>
+          }
         />
         <AccessDeniedPanel description="This role cannot access lead records." />
       </div>
@@ -39,19 +41,13 @@ export default async function LeadDetailPage({
   if (!payload) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           eyebrow="Sales"
-          title="Lead review"
-          description="No record exists for this id in the current organization. Links only resolve within your tenant scope—not across organizations."
+          title="Lead not found"
+          description="No record exists for this id in your organization. Links only resolve within your tenant scope."
           actions={
             <Link href="/leads" className={listLinkClass}>
-              ← Sales pipeline
+              ← Sales
             </Link>
           }
         />
@@ -76,16 +72,14 @@ export default async function LeadDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: payload.lead.title },
-        ]}
-      />
       <PageHeader
         eyebrow="Lead review"
         title={payload.lead.title}
-        description="Triage this request, complete missing details, and take the next commercial step."
+        actions={
+          <Link href="/leads" className={listLinkClass}>
+            ← Sales
+          </Link>
+        }
       />
       <LeadCommercialSurface payload={payload} entryPoint="record" />
     </div>

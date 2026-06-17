@@ -25,16 +25,11 @@ export default async function EditCustomerPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Relationships" },
             { label: "Customers", href: "/customers" },
             { label: "Edit" },
           ]}
         />
-        <PageHeader
-          eyebrow="Relationships"
-          title="Edit customer"
-          description="Update customer profile details."
-        />
+        <PageHeader title="Edit customer" />
         <AccessDeniedPanel description="This role cannot edit customer records." />
       </div>
     );
@@ -51,18 +46,15 @@ export default async function EditCustomerPage({
       <div className="mx-auto max-w-5xl">
         <WorkspaceBreadcrumb
           items={[
-            { label: "Relationships" },
             { label: "Customers", href: "/customers" },
             { label: "Not found" },
           ]}
         />
         <PageHeader
-          eyebrow="Relationships"
-          title="Edit customer"
-          description="This customer record could not be found."
+          title="Customer not found"
           actions={
             <ButtonLink href="/customers" variant="muted" size="sm">
-              ← Customers list
+              ← Customers
             </ButtonLink>
           }
         />
@@ -83,20 +75,17 @@ export default async function EditCustomerPage({
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
-          { label: "Relationships" },
           { label: "Customers", href: "/customers" },
           { label: customer.displayName, href: `/customers/${customer.id}` },
           { label: "Edit" },
         ]}
       />
       <PageHeader
-        eyebrow="Relationships"
         title={`Edit ${customer.displayName}`}
-        description="Update this customer's profile and contact details."
         actions={
           <>
             <ButtonLink href={`/customers/${customer.id}`} variant="muted" size="sm">
-              ← Customer detail
+              ← Customer
             </ButtonLink>
             <ButtonLink href="/customers" variant="muted" size="sm">
               All customers

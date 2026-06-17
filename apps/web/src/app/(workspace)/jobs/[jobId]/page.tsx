@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { Info, Zap } from "lucide-react";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
@@ -491,13 +490,6 @@ export default async function JobDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Work" },
-          { label: "Jobs", href: "/jobs" },
-          { label: primaryIdentity },
-        ]}
-      />
       {showExecutionHealthBanner && (
         <JobExecutionHealthBanner health={executionHealth} />
       )}
@@ -508,7 +500,7 @@ export default async function JobDetailPage({
             <span className="flex items-center gap-2">
               <span>{job.status === JobStatus.ARCHIVED ? "Archived job" : "Active job"}</span>
               <span className="text-foreground-subtle/50">·</span>
-              <span className="text-foreground-subtle">Job title: {secondaryIdentity}</span>
+              <span className="text-foreground-subtle">{secondaryIdentity}</span>
             </span>
           ) : job.status === JobStatus.ARCHIVED ? (
             "Archived job"
@@ -516,7 +508,6 @@ export default async function JobDetailPage({
             "Active job"
           )
         }
-        description="This job was created from the approved quote. Manage the work plan, blockers, payments, schedule, and job activity from here."
         actions={
           <div className="flex flex-wrap items-end justify-end gap-2">
             {job.status === JobStatus.ACTIVE ? <JobArchiveButton jobId={job.id} /> : null}
@@ -526,11 +517,11 @@ export default async function JobDetailPage({
             />
             {safeQuote ? (
               <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
-                Open source quote
+                Source quote
               </Link>
             ) : null}
             <Link href="/jobs" className={listLinkClass}>
-              ← Jobs list
+              ← Jobs
             </Link>
           </div>
         }

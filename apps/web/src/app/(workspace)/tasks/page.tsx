@@ -4,7 +4,6 @@ import {
   handoffMutedLinkClass,
   handoffPrimaryLinkClass,
 } from "@/components/ui/handoff-panel";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -21,11 +20,9 @@ import { ClipboardList } from "lucide-react";
 export default function TasksDeferredPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Work" }, { label: "Tasks" }]} />
       <PageHeader
-        eyebrow="Work"
+        variant="compact"
         title="Tasks"
-        description="Runtime tasks and a task graph are intentionally deferred. This route is an honest stub—not a database, board, or engine. Quotes, customers, and reserved Work shells stay authoritative until execution persistence exists."
         actions={
           <PlaceholderButton title="No task system in this build">
             New task (not available)

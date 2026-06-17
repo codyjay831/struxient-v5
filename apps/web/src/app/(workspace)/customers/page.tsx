@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
@@ -28,11 +27,7 @@ export default async function CustomersPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb items={[{ label: "Relationships" }, { label: "Customers" }]} />
-        <PageHeader
-          title="Customers"
-          description="People and companies you work with."
-        />
+        <PageHeader variant="compact" title="Customers" />
         <AccessDeniedPanel description="This role cannot access customer and sales records." />
       </div>
     );
@@ -61,12 +56,9 @@ export default async function CustomersPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[{ label: "Relationships" }, { label: "Customers" }]}
-      />
       <PageHeader
+        variant="compact"
         title="Customers"
-        description="People and companies you work with — contact info, linked opportunities, and job history in one place."
         actions={
           <>
             {fromWorkstation ? (
@@ -83,10 +75,7 @@ export default async function CustomersPage({
       />
 
       <section className="mb-10">
-        <SectionHeading
-          title="At a glance"
-          description="Live counts for your organization."
-        />
+        <SectionHeading title="At a glance" />
         <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li>
             <SignalCard label="Customers" value={String(customers.length)} hint="Total customer records" />
@@ -115,10 +104,7 @@ export default async function CustomersPage({
         </p>
       </section>
 
-      <SectionHeading
-        title="All customers"
-        description="Click a row to open details, contact info, and linked opportunities."
-      />
+      <SectionHeading title="All customers" />
 
       <WorkspacePanel padding="compact" className="mb-6">
         <ul className="divide-y divide-border md:hidden">

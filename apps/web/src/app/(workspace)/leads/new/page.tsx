@@ -35,7 +35,7 @@ export default async function NewLeadPage() {
       />
       <PageHeader
         title="New request"
-        description="Create a new opportunity in your organization. After saving, open the opportunity detail page to link a customer and start a quote."
+        description="After saving, open the opportunity to link a customer and start a quote."
         actions={
           <Link href="/leads" className={listLinkClass}>
             ← Sales
