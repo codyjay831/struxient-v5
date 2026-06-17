@@ -159,10 +159,7 @@ export function buildQuoteRecordActionState(input: {
     priority = "watching";
   } else if (!customerId && !leadId) {
     priority = "blocking";
-  } else if (
-    readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW" ||
-    readiness.state === "EMPTY_DRAFT"
-  ) {
+  } else if (readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW") {
     priority = "blocking";
   } else if (readiness.state === "APPROVED_READY_TO_ACTIVATE") {
     priority = "critical";

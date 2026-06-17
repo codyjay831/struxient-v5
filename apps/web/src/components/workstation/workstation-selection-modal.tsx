@@ -11,7 +11,30 @@ import {
 } from "@/components/work-surfaces/quote-workspace-dialog-body";
 import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
+import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
+
+const QUOTE_READINESS_ACTIONS: readonly QuoteReadinessActionKind[] = [
+  "ADD_LINE_ITEM",
+  "ADD_FROM_SCOPE_LIBRARY",
+  "CONTINUE_EDITING",
+  "SEND_QUOTE",
+  "MARK_APPROVED",
+  "OPEN_PROPOSAL_PREVIEW",
+  "OPEN_EXECUTION_REVIEW",
+  "ACTIVATE_JOB",
+  "OPEN_JOB",
+  "RESTORE_TO_DRAFT",
+];
+
+function isQuoteReadinessActionKind(
+  action: string | undefined,
+): action is QuoteReadinessActionKind {
+  return Boolean(
+    action &&
+      QUOTE_READINESS_ACTIONS.includes(action as QuoteReadinessActionKind),
+  );
+}
 
 function quoteDisplayFromWorkstationItem(
   item: WorkstationWorkItem,
@@ -34,6 +57,9 @@ function quoteDisplayFromWorkstationItem(
     createdLabel: new Date(item.updatedAt).toLocaleDateString(),
     totalLabel: "—",
     href: item.href ?? `/quotes/${item.recordId}`,
+    initialAction: isQuoteReadinessActionKind(item.workflow?.nextAction?.type)
+      ? item.workflow.nextAction.type
+      : undefined,
   };
 }
 

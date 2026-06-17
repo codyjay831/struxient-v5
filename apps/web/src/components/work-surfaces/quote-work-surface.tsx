@@ -145,6 +145,11 @@ export type QuoteWorkSurfaceProps = {
   /** Initial active tab. Defaults to "overview". */
   initialTab?: QuoteWorkSurfaceTab;
   /**
+   * Initial readiness action to satisfy when a parent surface opens this
+   * workspace from a next-step CTA.
+   */
+  initialAction?: QuoteReadinessActionKind;
+  /**
    * Called after a workspace-safe mutation (line item add/edit/delete,
    * inline send/approve) so the container can re-fetch its lazy-loaded
    * QuoteWorkSurfaceData payload. Required for popup/drawer/lead-tab
@@ -2244,12 +2249,17 @@ export function QuoteWorkSurface({
   workspaceTabs,
   suppressIdentityRow = false,
   initialTab = "overview",
+  initialAction,
   onWorkSurfaceMutated,
   embeddedInLead = false,
   onRequestServiceAddress,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
+    const actionTab = initialAction ? TAB_BOUND_ACTIONS[initialAction] : null;
+    if (actionTab) {
+      return actionTab;
+    }
     if (
       initialTab === "overview" &&
       embeddedInLead &&
@@ -2279,8 +2289,12 @@ export function QuoteWorkSurface({
 
   /* Set by `ADD_LINE_ITEM` action to ask the Scope tab editor to mount with
    * its add-line form open + focused. Cleared after the editor consumes it. */
-  const [shouldFocusAddForm, setShouldFocusAddForm] = useState(false);
-  const [shouldOpenScopeLibraryPicker, setShouldOpenScopeLibraryPicker] = useState(false);
+  const [shouldFocusAddForm, setShouldFocusAddForm] = useState(
+    initialAction === "ADD_LINE_ITEM",
+  );
+  const [shouldOpenScopeLibraryPicker, setShouldOpenScopeLibraryPicker] = useState(
+    initialAction === "ADD_FROM_SCOPE_LIBRARY",
+  );
   const handleRequestAddLineItem = () => {
     setShouldOpenScopeLibraryPicker(false);
     setShouldFocusAddForm(true);

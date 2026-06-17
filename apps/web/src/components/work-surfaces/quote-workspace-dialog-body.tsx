@@ -10,6 +10,7 @@ import {
   type LoadQuoteWorkSurfaceResult,
 } from "@/app/(workspace)/quotes/quote-loader-actions";
 import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader";
+import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { QuoteStatus } from "@prisma/client";
 
 export type SerializedQuoteListRow = {
@@ -42,6 +43,7 @@ export type QuoteDialogDisplay = {
   createdLabel: string;
   totalLabel: string;
   href: string;
+  initialAction?: QuoteReadinessActionKind;
 };
 
 type QuoteSurfaceLazyState =
@@ -210,6 +212,7 @@ export function QuoteWorkspaceDialogBody({
             readiness={state.payload.readiness}
             workspaceTabs={state.payload.workspaceTabs}
             suppressIdentityRow
+            initialAction={display.initialAction}
             onWorkSurfaceMutated={handleWorkSurfaceMutated}
           />
         ) : null}
