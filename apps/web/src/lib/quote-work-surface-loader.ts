@@ -10,7 +10,6 @@ import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
   type QuoteLineItemPayload,
-  type PaymentScheduleItemPayload,
 } from "@/lib/quote-display";
 import {
   quoteStatusAllowsCommercialEdits,
@@ -173,6 +172,18 @@ export async function loadQuoteWorkSurface(
               scopes: { select: { quoteLineItemId: true } },
             },
           },
+        },
+      },
+      changeRequests: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          message: true,
+          createdAt: true,
+          resolvedAt: true,
+          requiresVisit: true,
+          resultingQuoteId: true,
         },
       },
     },
@@ -436,6 +447,14 @@ export async function loadQuoteWorkSurface(
       ? row.lastSentEmailAt.toLocaleDateString("en-US", dateOpts)
       : null,
     organizationDisplayName: organization?.name ?? "Struxient",
+    openChangeRequests: row.changeRequests.map((request) => ({
+      id: request.id,
+      message: request.message,
+      createdAt: request.createdAt.toISOString(),
+      resolvedAt: request.resolvedAt?.toISOString() ?? null,
+      requiresVisit: request.requiresVisit,
+      resultingQuoteId: request.resultingQuoteId,
+    })),
   };
 
   const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};

@@ -1507,6 +1507,14 @@ export async function performReviseQuoteByClone(
       quoteId: clonedQuote.id,
       organizationId: ctx.organizationId,
     });
+    await tx.quoteChangeRequest.updateMany({
+      where: {
+        organizationId: ctx.organizationId,
+        quoteId: quote.id,
+        resolvedAt: null,
+      },
+      data: { resultingQuoteId: clonedQuote.id },
+    });
     return { ok: true as const, revisedQuoteId: clonedQuote.id };
   });
   return result;

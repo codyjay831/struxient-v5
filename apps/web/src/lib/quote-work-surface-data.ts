@@ -1,6 +1,15 @@
 import type { QuoteStatus, JobStatus, SiteDetailsStatus } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 
+export type QuoteChangeRequestSummary = {
+  id: string;
+  message: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  requiresVisit: boolean;
+  resultingQuoteId: string | null;
+};
+
 /**
  * Serializable payload consumed by `QuoteWorkSurface`.
  *
@@ -86,4 +95,5 @@ export type QuoteWorkSurfaceData = {
   /** Token revocation date */
   shareTokenRevokedAt?: Date | null;
   organizationDisplayName: string;
+  openChangeRequests: QuoteChangeRequestSummary[];
 };

@@ -71,7 +71,8 @@ test("buildLeadIntakeProjection lists missing requirements when not ready", () =
 
   assert.equal(p.readiness.isReadyForPromotion, false);
   assert.ok(p.readiness.missingRequirementLabels.includes("Identity"));
-  assert.equal(p.commercial.state, "ADD_CONTACT_INFO");
+  assert.equal(p.commercial.phase, "INTAKE");
+  assert.equal(p.commercial.conditionCode, "NEEDS_INTAKE_DETAILS");
 });
 
 test("buildLeadIntakeProjection treats partial unverified address as not ready", () => {

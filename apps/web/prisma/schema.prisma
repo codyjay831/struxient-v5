@@ -241,6 +241,7 @@ model User {
   leadEvents                 LeadEvent[]
   memberships                Membership[]
   resolvedChangeRequests     QuoteChangeRequest[]
+  completedLeadVisits        LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
   sessions                   Session[]
   siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
   serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
@@ -531,7 +532,8 @@ model Quote {
   lead                  Lead?                    @relation(fields: [leadId], references: [id])
   serviceLocation       CustomerServiceLocation? @relation("QuoteServiceLocation", fields: [serviceLocationId], references: [id], onDelete: SetNull)
   organization          Organization             @relation(fields: [organizationId], references: [id])
-  changeRequests        QuoteChangeRequest[]
+  changeRequests        QuoteChangeRequest[]       @relation("QuoteChangeRequestIssuedQuote")
+  resultingForChangeRequests QuoteChangeRequest[]  @relation("QuoteChangeRequestResultingRevision")
   checkpoints           QuoteCheckpoint[]
   lineItems             QuoteLineItem[]
   paymentSchedule       PaymentScheduleItem[]
@@ -624,6 +626,8 @@ model QuoteChangeRequest {
   id               String       @id @default(cuid())
   organizationId   String
   quoteId          String
+  resultingQuoteId String?
+  requiresVisit    Boolean      @default(false)
   token            String
   message          String
   submittedFromIp  String?
@@ -632,7 +636,8 @@ model QuoteChangeRequest {
   resolvedAt       DateTime?
   resolvedByUserId String?
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote            Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quote            Quote        @relation("QuoteChangeRequestIssuedQuote", fields: [quoteId], references: [id], onDelete: Cascade)
+  resultingQuote   Quote?       @relation("QuoteChangeRequestResultingRevision", fields: [resultingQuoteId], references: [id], onDelete: SetNull)
   resolvedBy       User?        @relation(fields: [resolvedByUserId], references: [id])
 
   @@index([quoteId])
@@ -1606,11 +1611,17 @@ model LeadVisitRequest {
   requestedDate   DateTime?
   requestedWindow String?
   confirmedDate   DateTime?
+  scheduledEndAt  DateTime?
+  completedAt     DateTime?
+  completedByUserId String?
+  completionNotes String?
+  purpose         LeadVisitPurpose?
   status          LeadVisitRequestStatus @default(PENDING)
   notes           String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   lead            Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  completedBy     User?                  @relation("LeadVisitCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
   organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -2202,7 +2213,17 @@ enum JobScheduleEventCompletionOutcome {
 enum LeadVisitRequestStatus {
   PENDING
   CONFIRMED
+  COMPLETED
+  NO_SHOW
   CANCELED
+}
+
+enum LeadVisitPurpose {
+  INITIAL_DISCOVERY
+  MEASUREMENTS
+  SCOPE_VERIFICATION
+  REVISION_VERIFICATION
+  OTHER
 }
 
 enum ScheduleBlockType {

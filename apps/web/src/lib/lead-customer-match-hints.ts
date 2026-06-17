@@ -1,5 +1,8 @@
 import { normalizeEmailForMatch, normalizePhoneDigits } from "./lead-customer-contact-normalize";
 
+/** Bounded org-scoped customer scan used by match hints and promotion gate. */
+export const CUSTOMER_MATCH_FETCH_CAP = 500;
+
 export type CustomerMatchHint = {
   id: string;
   displayName: string;
@@ -74,4 +77,24 @@ export function findCustomerMatchHints(
   );
 
   return { kind: "checked", matches, scannedCustomerCount, fetchCap };
+}
+
+/** True when an unlinked lead has exact normalized email/phone matches to review. */
+export function hasBlockingCustomerMatch(hints: LeadCustomerMatchHints): boolean {
+  return hints.kind === "checked" && hints.matches.length > 0;
+}
+
+export type CustomerMatchRow = CustomerRow;
+
+/**
+ * Derive match hints for a lead contact against a pre-fetched org customer list.
+ * Callers must pass org-scoped customers only.
+ */
+export function customerMatchHintsForLead(
+  customers: CustomerMatchRow[],
+  leadEmail: string | null | undefined,
+  leadPhone: string | null | undefined,
+  fetchCap: number = CUSTOMER_MATCH_FETCH_CAP,
+): LeadCustomerMatchHints {
+  return findCustomerMatchHints(customers, leadEmail, leadPhone, fetchCap);
 }

@@ -39,6 +39,7 @@ import { notifyQuoteSent } from "@/lib/notifications";
 export type QuoteWorkspaceActionState = {
   error?: string;
   success?: boolean;
+  revisedQuoteId?: string;
 };
 
 function revalidateQuoteCommercialSurfaces(quoteId: string) {

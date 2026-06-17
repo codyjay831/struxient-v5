@@ -26,6 +26,7 @@ import {
   type LeadListPipelineParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
+import { loadOrgCustomersForMatchGate } from "@/lib/lead-customer-match-gate";
 import { Users, Search } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
@@ -84,6 +85,18 @@ export default async function LeadsPage({
       orderBy,
       include: {
         customer: { select: { id: true, displayName: true } },
+        visitRequests: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            status: true,
+            requestedDate: true,
+            requestedWindow: true,
+            confirmedDate: true,
+            completedAt: true,
+            createdAt: true,
+          },
+        },
         quotes: {
           orderBy: { updatedAt: "desc" },
           select: {
@@ -91,9 +104,30 @@ export default async function LeadsPage({
             title: true,
             status: true,
             totalCents: true,
+            createdAt: true,
             updatedAt: true,
+            revisionOfQuoteId: true,
+            revisionNumber: true,
             _count: { select: { lineItems: true } },
             job: { select: { id: true, status: true, organizationId: true } },
+            checkpoints: {
+              where: { kind: { in: ["SEND", "APPROVAL"] } },
+              orderBy: { createdAt: "desc" },
+              select: { kind: true, createdAt: true },
+            },
+            changeRequests: {
+              where: { resolvedAt: null },
+              orderBy: { createdAt: "desc" },
+              take: 5,
+              select: {
+                id: true,
+                message: true,
+                createdAt: true,
+                resolvedAt: true,
+                requiresVisit: true,
+                resultingQuoteId: true,
+              },
+            },
           },
         },
       },
@@ -101,8 +135,37 @@ export default async function LeadsPage({
     db.lead.count({ where: { organizationId: ctx.organizationId } }),
   ]);
 
+  const customerIds = [
+    ...new Set(leads.map((lead) => lead.customerId).filter((id): id is string => Boolean(id))),
+  ];
+  const customerPrimaryLocations =
+    customerIds.length > 0
+      ? await db.customerServiceLocation.findMany({
+          where: { organizationId: ctx.organizationId, customerId: { in: customerIds } },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: { customerId: true, googlePlaceId: true },
+        })
+      : [];
+  const customerPrimaryById = new Map<string, { googlePlaceId: string }>();
+  for (const row of customerPrimaryLocations) {
+    if (!customerPrimaryById.has(row.customerId)) {
+      customerPrimaryById.set(row.customerId, { googlePlaceId: row.googlePlaceId });
+    }
+  }
+
+  const hasUnlinkedLeads = leads.some((lead) => lead.customerId == null);
+  const orgCustomersForMatch = hasUnlinkedLeads
+    ? await loadOrgCustomersForMatchGate(ctx.organizationId)
+    : undefined;
+
   const serializedLeads: SerializedLeadRow[] = leads.map((lead) =>
-    serializeLeadListRow(lead, ctx.organizationId, now),
+    serializeLeadListRow(
+      lead,
+      ctx.organizationId,
+      now,
+      customerPrimaryById.get(lead.customerId ?? "") ?? null,
+      orgCustomersForMatch,
+    ),
   );
   const pipelineLeads = serializedLeads.filter((lead) =>
     leadRowMatchesPipeline(pipeline, lead.progressState),

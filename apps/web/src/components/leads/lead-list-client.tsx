@@ -60,9 +60,8 @@ function LeadRow({
       ].join(" ")}
     >
       <div className="flex items-start gap-3">
-        <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} />
-      </div>
-      <div className="flex-1 min-w-0">
+        <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} />
+        <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-0.5">
           <span className="text-sm font-semibold text-foreground leading-snug">
             {lead.title}
@@ -106,10 +105,11 @@ function LeadRow({
             Next: {lead.nextStepLabel}
           </p>
         ) : null}
-      </div>
-      <div className="flex items-center gap-1 shrink-0 mt-0.5 rounded-md border border-border px-2 py-1 text-xs text-foreground-subtle hover:border-border-strong hover:text-foreground transition-colors">
-        Open
-        <ArrowUpRight className="w-3 h-3 ml-0.5" strokeWidth={1.5} />
+        </div>
+        <div className="flex items-center gap-1 shrink-0 mt-0.5 rounded-md border border-border px-2 py-1 text-xs text-foreground-subtle hover:border-border-strong hover:text-foreground transition-colors">
+          Open
+          <ArrowUpRight className="w-3 h-3 ml-0.5" strokeWidth={1.5} />
+        </div>
       </div>
     </div>
   );

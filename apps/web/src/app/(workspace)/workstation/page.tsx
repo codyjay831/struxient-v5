@@ -9,6 +9,7 @@ import { WORKSTATION_COPY } from "@/lib/workstation-copy";
 import { resolveJobActivitySubtitle } from "@/lib/work-item-context";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { db } from "@/lib/db";
+import { leadShouldAppearInBoardAttention } from "@/lib/workstation-lead-attention";
 import {
   queryWorkstationWorkItems,
   type WorkstationWorkItem,
@@ -47,7 +48,7 @@ import {
   type BoardWeekEvent,
 } from "@/components/workstation/the-board";
 import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-settings-drawer";
-import { Plus, ListOrdered } from "lucide-react";
+import { Plus, ListOrdered, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -166,14 +167,22 @@ export default async function WorkstationPage({
     const paymentIds = new Set(paymentItems.map((i) => i.id));
 
     // Needs attention — investigate/issue-blocked items not already in the critical bar
-    // or payments panel (excludes normal prerequisite waits).
+    // or payments panel (excludes normal prerequisite waits). Includes ready-to-quote leads.
     const attentionItems = allItems
       .filter(
         (i) =>
           !criticalIds.has(i.id) &&
           !paymentIds.has(i.id) &&
-          !i.isWaitingOnSignals &&
-          (i.group === "investigate" || i.group === "blocked" || i.isBlocked),
+          (leadShouldAppearInBoardAttention({
+            kind: i.kind as "lead",
+            group: i.group,
+            priority: i.priority,
+            isBlocked: i.isBlocked,
+            isWaitingOnSignals: i.isWaitingOnSignals,
+          }) ||
+            (i.kind !== "lead" &&
+              !i.isWaitingOnSignals &&
+              (i.group === "investigate" || i.group === "blocked" || i.isBlocked))),
       )
       .sort((a, b) => a.withinLaneRank - b.withinLaneRank)
       .slice(0, 8)
@@ -342,16 +351,20 @@ export default async function WorkstationPage({
               <>
                 {quickActions.includes("new-intake") && (
                   <Link href="/leads/new" className={quickActionClass}>
-                    <div className="relative">
-                      <Plus className="size-3.5" />
-                      {unreviewedIntakesCount > 0 && (
-                        <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-                        </span>
-                      )}
-                    </div>
+                    <Plus className="size-3.5" />
                     New lead
+                  </Link>
+                )}
+                {unreviewedIntakesCount > 0 && (
+                  <Link href="/leads?pipeline=active" className={quickActionClass}>
+                    <div className="relative">
+                      <Users className="size-3.5" />
+                      <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+                      </span>
+                    </div>
+                    Review sales ({unreviewedIntakesCount})
                   </Link>
                 )}
                 {quickActions.includes("browse-jobs") && (

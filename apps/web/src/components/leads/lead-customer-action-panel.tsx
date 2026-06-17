@@ -5,7 +5,6 @@ import { ArrowRight, ChevronRight, CircleAlert, Loader2, Search, UserRound } fro
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { CustomerMatchHint } from "@/lib/lead-customer-match-hints";
-import type { LeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import { linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import {
   LeadCustomerPreviewBlock,
@@ -23,7 +22,7 @@ const secondaryBtnClass =
 export function LeadCustomerActionPanel({
   lead,
   editLeadHref,
-  progress,
+  hasBlockingCustomerMatch,
   suggestedMatches,
   onSuccess,
   onError,
@@ -31,7 +30,7 @@ export function LeadCustomerActionPanel({
 }: {
   lead: LeadWorkspaceCustomerCreateLeadInput;
   editLeadHref: string;
-  progress: LeadCommercialProgress;
+  hasBlockingCustomerMatch: boolean;
   suggestedMatches: CustomerMatchHint[];
   onSuccess: () => void;
   onError: (message: string) => void;
@@ -44,7 +43,7 @@ export function LeadCustomerActionPanel({
     onSuccess,
   );
 
-  const hasConflict = progress.state === "CONFLICT_WITH_EXISTING_CUSTOMER";
+  const hasConflict = hasBlockingCustomerMatch;
   const statusLabel = hasConflict || suggestedMatches.length > 0 ? "Match found" : "Needs review";
   const statusTone = hasConflict ? "warning" : suggestedMatches.length > 0 ? "draft" : "neutral";
 

@@ -378,6 +378,7 @@ export async function updateLeadAction(
           data: {
             organizationId: ctx.organizationId,
             leadId: id,
+            purpose: "INITIAL_DISCOVERY",
             requestedDate,
             requestedWindow,
             notes: visitNotes,

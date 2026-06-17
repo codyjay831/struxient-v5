@@ -2,7 +2,12 @@ import { db } from "@/lib/db";
 import { projectLead, deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { jobsiteLineFromLead, isLeadAddressQuoteReady, isLeadAddressVerified } from "@/lib/jobsite-address";
 import { findCustomerMatchHints, LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
-import { getLeadCommercialProgress, LeadCommercialProgress } from "@/lib/lead-commercial-progress";
+import { hasBlockingCustomerMatch } from "@/lib/lead-customer-match-gate";
+import {
+  getOpportunityFlow,
+  type OpportunityFlowChangeRequestInput,
+  type OpportunityFlowView,
+} from "@/lib/opportunity-flow";
 import { intakeSnapshotForCustomerFromLead } from "@/lib/customer-service-location-from-lead";
 import { RequestContext } from "@/lib/auth-context";
 import { LeadServiceAddressContext } from "@/app/(workspace)/leads/lead-workspace-actions";
@@ -103,7 +108,8 @@ export interface LeadCommercialSurfacePayload {
       lineItems: number;
     };
   }[];
-  progress: LeadCommercialProgress;
+  hasBlockingCustomerMatch: boolean;
+  opportunityFlow: OpportunityFlowView;
   serviceAddressContext: LeadServiceAddressContext;
   visitRequests: LeadVisitRequestPayload[];
   reviewViewModel: LeadReviewViewModel;
@@ -130,7 +136,6 @@ export async function loadLeadCommercialSurface(
         },
       },
       visitRequests: {
-        where: { status: "PENDING" },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -228,6 +233,11 @@ export async function loadLeadCommercialSurface(
       include: {
         job: { select: { id: true, status: true, organizationId: true } },
         _count: { select: { lineItems: true } },
+        checkpoints: {
+          where: { kind: { in: ["SEND", "APPROVAL"] } },
+          orderBy: { createdAt: "desc" },
+          select: { kind: true, createdAt: true },
+        },
       },
     }),
     db.attachment.findMany({
@@ -283,15 +293,51 @@ export async function loadLeadCommercialSurface(
     status: q.status,
     totalCents: q.totalCents,
     lineItemCount: q._count.lineItems,
+    createdAt: q.createdAt,
     updatedAt: q.updatedAt,
+    revisionOfQuoteId: q.revisionOfQuoteId,
+    revisionNumber: q.revisionNumber,
+    latestSendAt: q.checkpoints.find((c) => c.kind === "SEND")?.createdAt ?? null,
+    latestApprovalAt: q.checkpoints.find((c) => c.kind === "APPROVAL")?.createdAt ?? null,
     job:
       q.job && q.job.organizationId === ctx.organizationId
         ? { id: q.job.id, status: q.job.status }
         : null,
   }));
 
-  const progress = getLeadCommercialProgress({
+  const quoteIds = linkedQuotes.map((q) => q.id);
+  const changeRequests = quoteIds.length
+    ? await db.quoteChangeRequest.findMany({
+        where: {
+          organizationId: ctx.organizationId,
+          quoteId: { in: quoteIds },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          quoteId: true,
+          message: true,
+          createdAt: true,
+          resolvedAt: true,
+          resultingQuoteId: true,
+          requiresVisit: true,
+        },
+      })
+    : [];
+
+  const changeRequestInputs: OpportunityFlowChangeRequestInput[] = changeRequests.map((row) => ({
+    id: row.id,
+    quoteId: row.quoteId,
+    message: row.message,
+    createdAt: row.createdAt,
+    resolvedAt: row.resolvedAt,
+    resultingQuoteId: row.resultingQuoteId,
+    requiresVisit: row.requiresVisit,
+  }));
+
+  const opportunityFlow = getOpportunityFlow({
     lead: {
+      id: lead.id,
       status: lead.status,
       followUpAt: lead.followUpAt,
       customerId: lead.customerId,
@@ -303,7 +349,18 @@ export async function loadLeadCommercialSurface(
       isAddressVerified: isAddressQuoteReady,
     },
     quotes: progressQuoteInputs,
-    hasExistingCustomerMatch: matchHints?.kind === "checked" && matchHints.matches.length > 0,
+    visits: lead.visitRequests.map((v) => ({
+      id: v.id,
+      status: v.status,
+      requestedDate: v.requestedDate,
+      requestedWindow: v.requestedWindow,
+      confirmedDate: v.confirmedDate,
+      completedAt: v.completedAt,
+      createdAt: v.createdAt,
+    })),
+    changeRequests: changeRequestInputs,
+    hasExistingCustomerMatch:
+      matchHints?.kind === "checked" && matchHints.matches.length > 0,
   });
 
   const neededByDate =
@@ -318,8 +375,10 @@ export async function loadLeadCommercialSurface(
     requestedDate: v.requestedDate,
     requestedWindow: v.requestedWindow,
     confirmedDate: v.confirmedDate,
+    completedAt: v.completedAt,
     status: v.status,
     notes: v.notes,
+    purpose: v.purpose,
     createdAt: v.createdAt,
   }));
 
@@ -342,8 +401,12 @@ export async function loadLeadCommercialSurface(
     attachments,
     events: leadEvents,
     visitRequests: lead.visitRequests,
-    progress,
   });
+
+  const blockingCustomerMatch =
+    !lead.customerId &&
+    matchHints != null &&
+    hasBlockingCustomerMatch(matchHints);
 
   const intakeSnapshot = intakeSnapshotForCustomerFromLead({
     address: lead.address,
@@ -408,6 +471,16 @@ export async function loadLeadCommercialSurface(
     jobsiteAddressLine,
     isAddressVerified: isAddressQuoteReady,
     quotes: progressQuoteInputs,
+    visits: lead.visitRequests.map((v) => ({
+      id: v.id,
+      status: v.status,
+      requestedDate: v.requestedDate,
+      requestedWindow: v.requestedWindow,
+      confirmedDate: v.confirmedDate,
+      completedAt: v.completedAt,
+      createdAt: v.createdAt,
+    })),
+    changeRequests: changeRequestInputs,
     hasExistingCustomerMatch:
       matchHints?.kind === "checked" && matchHints.matches.length > 0,
     attachmentCount: attachments.length,
@@ -451,7 +524,8 @@ export async function loadLeadCommercialSurface(
       : null,
     matchHints,
     linkedQuotes,
-    progress,
+    hasBlockingCustomerMatch: blockingCustomerMatch,
+    opportunityFlow,
     serviceAddressContext,
     visitRequests,
     reviewViewModel,

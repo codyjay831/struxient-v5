@@ -1,10 +1,11 @@
 import { db } from "../db";
 import { Prisma, QuoteStatus } from "@prisma/client";
 import { getRequestContextOrThrow } from "../auth-context";
+import { evaluateLeadReadiness } from "../lead-readiness-heuristics";
 import {
-  getLeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "../lead-commercial-progress";
+  pickMostRecentNonArchivedQuote,
+  type OpportunityFlowQuoteInput,
+} from "../opportunity-flow";
 import { prepareCustomerFromLead } from "../lead-create-customer";
 import {
   attachIntakeServiceLocationToCustomerFromLead,
@@ -13,6 +14,12 @@ import {
 } from "../customer-service-location-from-lead";
 import { readContact, readRequest, readSignals } from "./lead-projection";
 import { jobsiteLineFromLead, isLeadAddressQuoteReady } from "../jobsite-address";
+import {
+  CUSTOMER_MATCH_BLOCK_MESSAGE,
+  evaluateCustomerMatchGate,
+  loadOrgCustomersForMatchGate,
+  shouldBlockQuotePromotionForCustomerMatch,
+} from "../lead-customer-match-gate";
 import {
   performApplyLineItemTemplateToQuoteTx,
 } from "../quote-line-item-template-apply-tx";
@@ -59,6 +66,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
                 title: true,
                 status: true,
                 totalCents: true,
+                createdAt: true,
                 updatedAt: true,
                 _count: { select: { lineItems: true } },
                 job: { select: { id: true, status: true, organizationId: true } },
@@ -75,12 +83,13 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         const request = readRequest(lead.request);
         const signals = readSignals(lead.signals);
 
-        const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+        const quoteInputs: OpportunityFlowQuoteInput[] = lead.quotes.map((q) => ({
           id: q.id,
           title: q.title,
           status: q.status,
           totalCents: q.totalCents,
           lineItemCount: q._count.lineItems,
+          createdAt: q.createdAt,
           updatedAt: q.updatedAt,
           job:
             q.job && q.job.organizationId === ctx.organizationId
@@ -97,21 +106,16 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           });
         }
 
-        const progress = getLeadCommercialProgress({
-          lead: {
-            status: lead.status,
-            customerId: lead.customerId,
-            contactName: contact.name,
-            companyName: contact.companyName,
-            email: contact.email,
-            phone: contact.phone,
-            jobsiteAddressLine: jobsiteLineFromLead(lead),
-            isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
-          },
-          quotes: progressQuoteInputs,
+        const readiness = evaluateLeadReadiness({
+          contactName: contact.name,
+          companyName: contact.companyName,
+          email: contact.email,
+          phone: contact.phone,
+          address: jobsiteLineFromLead(lead),
+          isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
         });
 
-        if (progress.isTerminal) {
+        if (lead.status === "LOST" || lead.status === "ARCHIVED") {
           return {
             ok: false,
             error:
@@ -119,14 +123,28 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           };
         }
 
-        if (progress.state === "ADD_CONTACT_INFO") {
+        if (!readiness.isReady) {
           return {
             ok: false,
             error: "This lead is missing required contact or location info. Complete the intake before starting a quote.",
           };
         }
 
-        if (progress.activeQuote) {
+        if (!lead.customerId) {
+          const orgCustomers = await loadOrgCustomersForMatchGate(ctx.organizationId);
+          const matchHints = evaluateCustomerMatchGate({
+            customerId: lead.customerId,
+            email: contact.email,
+            phone: contact.phone,
+            orgCustomers,
+          });
+          if (shouldBlockQuotePromotionForCustomerMatch({ customerId: lead.customerId, hints: matchHints })) {
+            return { ok: false, error: CUSTOMER_MATCH_BLOCK_MESSAGE };
+          }
+        }
+
+        const reusableQuote = pickMostRecentNonArchivedQuote(quoteInputs);
+        if (reusableQuote) {
           // Ensure lead is graduated even if we reuse an existing quote
           await tx.lead.update({
             where: { id: lead.id },
@@ -138,7 +156,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
 
           return {
             ok: true,
-            quoteId: progress.activeQuote.id,
+            quoteId: reusableQuote.id,
             reusedExisting: true,
           };
         }

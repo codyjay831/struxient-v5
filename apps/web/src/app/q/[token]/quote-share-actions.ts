@@ -83,12 +83,14 @@ export async function requestQuoteChangesAction(
       const quote = shareToken.quote;
 
       // Create change request record
+      const requiresVisit = /\b(site|visit|measure|inspect|onsite)\b/i.test(message);
       await tx.quoteChangeRequest.create({
         data: {
           organizationId: quote.organizationId,
           quoteId: quote.id,
           token: hashPublicAccessToken(token),
           message: message.trim(),
+          requiresVisit,
           submittedFromIp: ip,
           userAgent: headerList.get("user-agent") ?? null,
         },

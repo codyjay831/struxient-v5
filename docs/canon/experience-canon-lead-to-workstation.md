@@ -115,6 +115,33 @@ The system must support:
 - Forcing heavy process on trivial work.  
 - Offering “flexibility” that hides **who owns the next step** when process *is* required.
 
+### Opportunity progress posture (v5)
+
+Pre-sale progress must be shown as a **derived interpretation** of facts, not as a second manually maintained lifecycle:
+
+- Lead lifecycle/disposition facts (`Lead.status`)  
+- Lead visit facts (`LeadVisitRequest`)  
+- Quote facts (`Quote`, `QuoteCheckpoint`)  
+- Customer-requested change facts (`QuoteChangeRequest`)  
+- Job activation fact (`Job`)
+
+The contractor-facing surface should answer: **where it is**, **how long it has been there**, **what blocks it**, and **what action is next**.
+
+Use broad orientation phases:
+
+```text
+Intake -> Discovery -> Estimating -> Customer Review -> Won
+```
+
+Treat this as orientation, not a strict one-pass pipeline. Discovery and estimating may loop after customer feedback.
+
+### Progress anti-patterns
+
+- Persisting UI condition as a database lifecycle enum.
+- Overloading `QuoteStatus` to carry sales-operational conditions.
+- Treating “site visit” as a universal single-completion pipeline stage.
+- Building a visible workflow editor for normal contractor operation.
+
 ---
 
 ## 4. Quote authoring experience

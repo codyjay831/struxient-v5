@@ -1,7 +1,5 @@
-import type { LeadCommercialProgress } from "@/lib/lead-commercial-progress";
-import {
-  resolveLeadCommercialProgressActionHref,
-} from "@/lib/lead-commercial-progress";
+import type { OpportunityFlowView } from "@/lib/opportunity-flow";
+import { resolveOpportunityActionHref } from "@/lib/opportunity-flow";
 import type { QuoteReadiness } from "@/lib/quote-readiness";
 import { resolveQuoteReadinessActionHref } from "@/lib/quote-readiness";
 
@@ -186,7 +184,7 @@ export function buildLeadRecordActionState(input: {
   leadId: string;
   title: string;
   subtitle?: string;
-  progress: LeadCommercialProgress;
+  progress: OpportunityFlowView;
 }): RecordActionState {
   const { leadId, title, subtitle, progress } = input;
 
@@ -194,63 +192,27 @@ export function buildLeadRecordActionState(input: {
   const optionalItems: string[] = [];
   const satisfiedItems: string[] = [];
 
-  if (progress.activeQuote) {
-    satisfiedItems.push(
-      `Active quote: “${progress.activeQuote.title}” (${progress.activeQuote.status.replaceAll("_", " ")}).`,
-    );
+  for (const item of progress.satisfiedItems) {
+    satisfiedItems.push(`${item} — complete.`);
   }
-
-  const missingRequirements = progress.requiredItems.filter(
-    (item) => !progress.satisfiedItems.includes(item),
-  );
-
-  if (missingRequirements.length > 0) {
-    for (const item of progress.satisfiedItems) {
-      satisfiedItems.push(`${item} — complete.`);
-    }
-    for (const item of missingRequirements) {
-      requiredItems.push(`Add ${item.toLowerCase()} before starting a quote.`);
-    }
+  for (const item of progress.requirements) {
+    requiredItems.push(item);
   }
-
-  switch (progress.state) {
-    case "NEEDS_CUSTOMER":
-      requiredItems.push("Link an existing customer or start a quote to auto-create one.");
-      break;
-    case "READY_FOR_QUOTE":
-      if (missingRequirements.length === 0) {
-        satisfiedItems.push("Identity, email, phone, and location are complete.");
-      }
-      requiredItems.push("Start a quote when scope is clear enough to price.");
-      break;
-    case "QUOTE_IN_PROGRESS":
-      satisfiedItems.push("Customer and draft quote created.");
-      requiredItems.push("Finish the draft quote — add lines, totals, and terms.");
-      break;
-    case "SENT_AWAITING_CUSTOMER":
-      satisfiedItems.push("Quote sent — waiting on the customer.");
-      break;
-    case "APPROVED_READY_TO_ACTIVATE":
-      requiredItems.push("Review execution planning and activate the job when ready.");
-      break;
-    case "JOB_ACTIVE":
-      satisfiedItems.push("A job is active from this opportunity.");
-      break;
-    default:
-      break;
+  for (const fact of progress.keyFacts) {
+    optionalItems.push(`${fact.label}: ${fact.value}`);
   }
 
   const primary = progress.primaryAction;
-  const secondary = progress.secondaryAction;
+  const secondary = progress.secondaryActions[0] ?? null;
 
-  const canCompleteInWorkstation = progress.state === "READY_FOR_QUOTE";
+  const canCompleteInWorkstation = progress.conditionCode === "READY_TO_QUOTE";
   const nextAction: NextActionModel | null = primary
     ? {
         type: primary.kind,
         label: primary.label,
-        description: progress.description,
+        description: progress.summary,
         surface: "full-record",
-        href: resolveLeadCommercialProgressActionHref(primary, { leadId }),
+        href: resolveOpportunityActionHref(primary, { leadId }),
       }
     : null;
 
@@ -261,20 +223,22 @@ export function buildLeadRecordActionState(input: {
       label: secondary.label,
       description: "Secondary path — usually opens the full record or a related flow.",
       surface: "full-record",
-      href: resolveLeadCommercialProgressActionHref(secondary, { leadId }),
+      href: resolveOpportunityActionHref(secondary, { leadId }),
     });
   }
 
   let priority: RecordActionPriority = "actionable";
-  if (progress.state === "READY_FOR_QUOTE") {
+  if (progress.conditionCode === "READY_TO_QUOTE") {
     priority = "critical";
-  } else if (progress.state === "ADD_CONTACT_INFO") {
+  } else if (progress.conditionCode === "NEEDS_INTAKE_DETAILS") {
     priority = "blocking";
-  } else if (progress.state === "APPROVED_READY_TO_ACTIVATE") {
+  } else if (progress.conditionCode === "CUSTOMER_MATCH_NEEDS_REVIEW") {
+    priority = "blocking";
+  } else if (progress.conditionCode === "APPROVED_READY_FOR_JOB") {
     priority = "critical";
-  } else if (progress.state === "SENT_AWAITING_CUSTOMER") {
+  } else if (progress.conditionCode === "WAITING_ON_CUSTOMER") {
     priority = "watching";
-  } else if (progress.state === "JOB_ACTIVE") {
+  } else if (progress.conditionCode === "JOB_ACTIVE") {
     priority = "satisfied";
   }
 
@@ -283,7 +247,7 @@ export function buildLeadRecordActionState(input: {
     recordId: leadId,
     title,
     subtitle,
-    statusLabel: progress.label,
+    statusLabel: progress.conditionLabel,
     priority,
     requiredItems,
     optionalItems,
@@ -291,6 +255,6 @@ export function buildLeadRecordActionState(input: {
     nextAction,
     secondaryActions,
     canCompleteInWorkstation,
-    reason: progress.description,
+    reason: progress.summary,
   };
 }

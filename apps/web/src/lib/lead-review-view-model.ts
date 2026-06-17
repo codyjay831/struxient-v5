@@ -1,5 +1,4 @@
 import type { LeadChannel, LeadVisitRequestStatus, NeededByBucket } from "@prisma/client";
-import type { LeadCommercialProgress } from "@/lib/lead-commercial-progress";
 import {
   evaluateLeadReadiness,
   type LeadReadinessReport,
@@ -94,10 +93,12 @@ export type BuildLeadReviewViewModelInput = {
     status: LeadVisitRequestStatus;
     requestedDate: Date | null;
     requestedWindow: string | null;
+    confirmedDate?: Date | null;
+    completedAt?: Date | null;
+    purpose?: string | null;
     notes: string | null;
   }>;
   /** Unused for logic; kept for future embed copy if needed. */
-  progress?: LeadCommercialProgress;
 };
 
 const REQUIREMENT_DEFS: { key: LeadReviewRequirementKey; label: string; check: (r: LeadReadinessReport) => boolean }[] = [
@@ -109,15 +110,17 @@ const REQUIREMENT_DEFS: { key: LeadReviewRequirementKey; label: string; check: (
 
 function formatVisitSummary(v: BuildLeadReviewViewModelInput["visitRequests"][number]): string {
   const parts: string[] = [];
-  if (v.requestedDate) {
+  if (v.status === "COMPLETED" && v.completedAt) {
+    parts.push(`Completed ${v.completedAt.toLocaleDateString()}`);
+  } else if (v.status === "CONFIRMED" && v.confirmedDate) {
+    parts.push(`Scheduled ${v.confirmedDate.toLocaleString()}`);
+  } else if (v.requestedDate) {
     parts.push(`Requested ${v.requestedDate.toLocaleDateString()}`);
+  } else {
+    parts.push("Site visit requested");
   }
-  if (v.requestedWindow?.trim()) {
-    parts.push(v.requestedWindow.trim());
-  }
-  if (parts.length === 0) {
-    return "Site visit requested";
-  }
+  if (v.purpose?.trim()) parts.push(v.purpose.trim().toLowerCase().replaceAll("_", " "));
+  if (v.requestedWindow?.trim()) parts.push(v.requestedWindow.trim());
   return parts.join(" · ");
 }
 
@@ -160,6 +163,18 @@ export function summarizeLeadEvent(type: string, payload: unknown): { label: str
       return { label: "Customer created or linked", detail: "Ready for commercial follow-up." };
     case "QUOTE_CREATED":
       return { label: "Quote started", detail: "A quote draft was created from this lead." };
+    case "LEAD_VISIT_CONFIRMED":
+      return { label: "Sales visit scheduled" };
+    case "LEAD_VISIT_RESCHEDULED":
+      return { label: "Sales visit rescheduled" };
+    case "LEAD_VISIT_CANCELED":
+      return { label: "Sales visit canceled" };
+    case "LEAD_VISIT_COMPLETED":
+      return { label: "Sales visit completed" };
+    case "SITE_VISIT_REQUESTED":
+      return { label: "Site visit requested" };
+    case "LEAD_VISIT_NO_SHOW":
+      return { label: "Sales visit no-show" };
     default:
       return { label: type.replaceAll("_", " ").toLowerCase() };
   }

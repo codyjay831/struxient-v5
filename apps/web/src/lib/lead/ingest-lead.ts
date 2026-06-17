@@ -78,6 +78,7 @@ export async function ingestLead(input: LeadInput, ctx: IngestLeadContext): Prom
         data: {
           organizationId: ctx.organizationId,
           leadId: l.id,
+          purpose: "INITIAL_DISCOVERY",
           requestedDate: validated.visitRequest.requestedDate,
           requestedWindow: validated.visitRequest.requestedWindow,
           notes: validated.visitRequest.notes,

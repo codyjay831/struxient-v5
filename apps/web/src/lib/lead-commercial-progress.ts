@@ -3,6 +3,9 @@ import type { StatusBadgeTone } from "@/components/ui/status-badge";
 import { evaluateLeadReadiness } from "./lead-readiness-heuristics";
 
 /**
+ * @deprecated Prefer `getOpportunityFlow` from `@/lib/opportunity-flow`.
+ * Legacy commercial progress helper — retained for handoff tests only.
+ *
  * Derived commercial progress story for a Lead, computed from existing Lead +
  * related Quote + related Job state. This is intentionally **not** persisted —
  * it is recomputed for display and is independent from the user-set

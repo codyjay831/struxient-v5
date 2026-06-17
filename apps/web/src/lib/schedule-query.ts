@@ -19,6 +19,17 @@ import {
 } from "@/lib/authz/resource-access";
 import { canReadCommercial } from "@/lib/authz/capabilities";
 
+function scopeHrefForLeadQuotes(
+  quotes: Array<{ id: string; status: string }>,
+  leadId: string,
+): string {
+  const draft = quotes.find((quote) => quote.status === "DRAFT");
+  if (draft) return `/quotes/${draft.id}`;
+  const working = quotes[0];
+  if (working) return `/quotes/${working.id}`;
+  return `/leads/${leadId}`;
+}
+
 export type ScheduleView = "month" | "week" | "day" | "agenda";
 
 export type ScheduleEventKind =
@@ -40,6 +51,8 @@ export type ScheduleEvent = {
   assigneeUserId?: string | null;
   assigneeLabel?: string | null;
   recordHref?: string;
+  /** When set, links field staff to quote scope during estimate visits. */
+  scopeHref?: string;
   recordId: string;
   parentId?: string;
 };
@@ -52,6 +65,8 @@ export type UnscheduledScheduleItem = {
   reason: string;
   actionLabel: string;
   recordHref?: string;
+  /** When set, links field staff to quote scope during estimate visits. */
+  scopeHref?: string;
   recordId: string;
   parentId?: string;
 };
@@ -126,6 +141,12 @@ export async function queryOrganizationSchedule(
             id: true,
             title: true,
             contact: true,
+            quotes: {
+              where: { status: { not: "ARCHIVED" } },
+              orderBy: { updatedAt: "desc" },
+              take: 3,
+              select: { id: true, status: true },
+            },
           },
         },
       },
@@ -297,6 +318,7 @@ export async function queryOrganizationSchedule(
       startAt: eventDate,
       endAt: null,
       recordHref: `/leads/${request.lead.id}`,
+      scopeHref: scopeHrefForLeadQuotes(request.lead.quotes, request.lead.id),
       recordId: request.id,
       parentId: request.lead.id,
     });
@@ -396,6 +418,7 @@ export async function queryOrganizationSchedule(
         reason: "Estimate request is pending confirmation.",
         actionLabel: "Confirm estimate",
         recordHref: `/leads/${request.lead.id}`,
+        scopeHref: scopeHrefForLeadQuotes(request.lead.quotes, request.lead.id),
         recordId: request.id,
         parentId: request.lead.id,
       });

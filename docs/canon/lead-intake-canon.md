@@ -130,6 +130,12 @@ Decision surface; must answer in one view:
 | **AI may suggest** | Classification, missing-info candidates, follow-ups, line starters, template filter candidates | Ephemeral until review/apply |
 | **AI must never persist as truth** | Final classification, readiness, quote lines, execution tasks, customer pricing/commitments | — |
 
+### Lead status vs opportunity condition
+
+`Lead.status` is lifecycle/disposition truth (open/paused/lost/archived-style intent), not the contractor-facing “current sales condition” explanation.
+
+The current condition shown in list/workstation/record surfaces must be derived from combined facts (lead readiness + visits + quote/send/approval + customer change requests + activation), not manually set as a second status field.
+
 **Legacy note:** `parseIntakeNotes()` and notes-marker protocols are **display/legacy only** — do not grow them; new fields belong in `Lead.request` / `Lead.address` JSON.
 
 ---

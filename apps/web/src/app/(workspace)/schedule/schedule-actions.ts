@@ -14,6 +14,8 @@ import {
   confirmLeadVisitRequest,
   cancelLeadVisitRequest,
   rescheduleLeadVisitRequest,
+  completeLeadVisitRequest,
+  markLeadVisitNoShow,
 } from "@/lib/scheduling/lead-visit-schedule-service";
 import { upsertScheduleBlock } from "@/lib/scheduling/schedule-block-service";
 import { setTaskScheduleActionCore } from "@/lib/task-timing";
@@ -154,6 +156,72 @@ export async function rescheduleLeadVisitRequestAction(
   } catch (error) {
     console.error("Failed to reschedule lead visit request", error);
     return { error: "Failed to reschedule estimate visit request." };
+  }
+}
+
+export async function completeLeadVisitRequestAction(
+  requestId: string,
+  completionNotes?: string,
+): Promise<ScheduleActionState> {
+  const session = await requireMutableSession();
+  try {
+    const result = await db.$transaction(async (tx) =>
+      completeLeadVisitRequest(
+        {
+          organizationId: session.organizationId,
+          requestId,
+          actorUserId: session.userId,
+          role: session.role,
+          completionNotes,
+        },
+        tx,
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
+    });
+    revalidatePath("/schedule");
+    revalidatePath("/workstation");
+    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to complete lead visit request", error);
+    return { error: "Failed to complete estimate visit request." };
+  }
+}
+
+export async function markLeadVisitNoShowAction(
+  requestId: string,
+  completionNotes?: string,
+): Promise<ScheduleActionState> {
+  const session = await requireMutableSession();
+  try {
+    const result = await db.$transaction(async (tx) =>
+      markLeadVisitNoShow(
+        {
+          organizationId: session.organizationId,
+          requestId,
+          actorUserId: session.userId,
+          role: session.role,
+          completionNotes,
+        },
+        tx,
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
+    });
+    revalidatePath("/schedule");
+    revalidatePath("/workstation");
+    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to mark no-show lead visit request", error);
+    return { error: "Failed to mark estimate visit as no-show." };
   }
 }
 

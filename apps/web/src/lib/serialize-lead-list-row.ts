@@ -1,10 +1,16 @@
 import { formatCompactAge } from "@/lib/compact-age";
-import { jobsiteLineFromLead, isLeadAddressVerified } from "@/lib/jobsite-address";
+import { jobsiteLineFromLead, isLeadAddressQuoteReady } from "@/lib/jobsite-address";
 import {
-  getLeadCommercialProgress,
-  serializeLeadProgressAction,
-  type LeadWorkSurfaceProgressAction,
-} from "@/lib/lead-commercial-progress";
+  evaluateCustomerMatchGate,
+  hasBlockingCustomerMatch,
+  type CustomerMatchRow,
+} from "@/lib/lead-customer-match-gate";
+import {
+  getOpportunityFlow,
+  resolveOpportunityActionHref,
+  type OpportunityAction,
+  type OpportunityFlowView,
+} from "@/lib/opportunity-flow";
 import {
   formatLeadChannel,
   formatLeadStatus,
@@ -53,6 +59,7 @@ export type SerializedLeadRow = {
   progressState: string;
   progressPrimaryAction: SerializedProgressAction | null;
   progressSecondaryAction: SerializedProgressAction | null;
+  opportunityFlow: OpportunityFlowView;
   nextStepLabel: string | null;
   satisfiedItems: string[];
   requiredItems: string[];
@@ -92,24 +99,81 @@ export type LeadWithRelations = {
     title: string;
     status: QuoteStatus;
     totalCents: number;
+    createdAt: Date;
     updatedAt: Date;
+    revisionOfQuoteId: string | null;
+    revisionNumber: number;
+    checkpoints: { kind: "SEND" | "APPROVAL"; createdAt: Date }[];
+    changeRequests: {
+      id: string;
+      message: string;
+      createdAt: Date;
+      resolvedAt: Date | null;
+      requiresVisit: boolean;
+      resultingQuoteId: string | null;
+    }[];
     _count: { lineItems: number };
     job: { id: string; status: JobStatus; organizationId: string } | null;
   }[];
+  visitRequests?: {
+    id: string;
+    status: "PENDING" | "CONFIRMED" | "CANCELED" | "COMPLETED" | "NO_SHOW";
+    requestedDate: Date | null;
+    requestedWindow: string | null;
+    confirmedDate: Date | null;
+    completedAt: Date | null;
+    createdAt: Date;
+  }[];
 };
+
+type LeadWorkSurfaceProgressAction = {
+  href: string;
+  label: string;
+  opensQuoteTab: boolean;
+  opensContactTab: boolean;
+};
+
+function serializeOpportunityAction(
+  action: OpportunityAction | null,
+  ctx: { leadId: string },
+): LeadWorkSurfaceProgressAction | null {
+  if (!action) return null;
+  const opensQuoteTab =
+    action.kind === "START_QUOTE" ||
+    action.kind === "OPEN_DRAFT_QUOTE" ||
+    action.kind === "OPEN_QUOTE" ||
+    action.kind === "SEND_QUOTE" ||
+    action.kind === "FOLLOW_UP_CUSTOMER" ||
+    action.kind === "CREATE_REVISION_DRAFT";
+  const opensContactTab =
+    action.kind === "EDIT_CONTACT_INFO" || action.kind === "REVIEW_CUSTOMER_MATCH";
+  return {
+    href: resolveOpportunityActionHref(action, ctx),
+    label: action.label,
+    opensQuoteTab,
+    opensContactTab,
+  };
+}
 
 export function serializeLeadListRow(
   lead: LeadWithRelations,
   organizationId: string,
   now: Date = new Date(),
+  customerPrimaryLocation?: { googlePlaceId: string } | null,
+  orgCustomersForMatch?: CustomerMatchRow[],
 ): SerializedLeadRow {
-  const progressQuoteInputs = lead.quotes.map((q) => ({
+  const flowQuoteInputs = lead.quotes.map((q) => ({
     id: q.id,
     title: q.title,
     status: q.status,
-    totalCents: q.totalCents,
     lineItemCount: q._count.lineItems,
+    totalCents: q.totalCents,
+    createdAt: q.createdAt,
     updatedAt: q.updatedAt,
+    revisionOfQuoteId: q.revisionOfQuoteId,
+    revisionNumber: q.revisionNumber,
+    latestSendAt: q.checkpoints.find((c) => c.kind === "SEND")?.createdAt ?? null,
+    latestApprovalAt: q.checkpoints.find((c) => c.kind === "APPROVAL")?.createdAt ?? null,
     job:
       q.job && q.job.organizationId === organizationId
         ? { id: q.job.id, status: q.job.status }
@@ -118,8 +182,21 @@ export function serializeLeadListRow(
 
   const jobsiteAddressLine = jobsiteLineFromLead(lead);
 
-  const progress = getLeadCommercialProgress({
+  const matchHints =
+    orgCustomersForMatch != null
+      ? evaluateCustomerMatchGate({
+          customerId: lead.customerId,
+          email: lead.email,
+          phone: lead.phone,
+          orgCustomers: orgCustomersForMatch,
+        })
+      : null;
+  const hasExistingCustomerMatch =
+    matchHints != null && hasBlockingCustomerMatch(matchHints);
+
+  const opportunityFlow = getOpportunityFlow({
     lead: {
+      id: lead.id,
       status: lead.status,
       followUpAt: lead.followUpAt,
       customerId: lead.customerId,
@@ -128,13 +205,35 @@ export function serializeLeadListRow(
       email: lead.email,
       phone: lead.phone,
       jobsiteAddressLine,
-      isAddressVerified: isLeadAddressVerified(lead),
+      isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
     },
-    quotes: progressQuoteInputs,
+    quotes: flowQuoteInputs,
+    visits: (lead.visitRequests ?? []).map((visit) => ({
+      id: visit.id,
+      status: visit.status,
+      requestedDate: visit.requestedDate,
+      requestedWindow: visit.requestedWindow,
+      confirmedDate: visit.confirmedDate,
+      completedAt: visit.completedAt,
+      createdAt: visit.createdAt,
+    })),
+    changeRequests: lead.quotes.flatMap((quote) =>
+      quote.changeRequests.map((request) => ({
+        id: request.id,
+        quoteId: quote.id,
+        message: request.message,
+        createdAt: request.createdAt,
+        resolvedAt: request.resolvedAt,
+        requiresVisit: request.requiresVisit,
+        resultingQuoteId: request.resultingQuoteId,
+      })),
+    ),
+    hasExistingCustomerMatch,
+    now,
   });
 
   const signals = readSignals(lead.signals);
-  const activeQuote = progress.activeQuote;
+  const activeQuote = flowQuoteInputs.find((q) => q.id === opportunityFlow.primaryAction?.targetQuoteId);
   const quoteValueLabel =
     activeQuote && activeQuote.totalCents > 0
       ? new Intl.NumberFormat("en-US", {
@@ -165,21 +264,31 @@ export function serializeLeadListRow(
     }),
     ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
     valueLabel: quoteValueLabel,
-    progressLabel: progress.label,
-    progressDescription: progress.description,
-    progressTone: progress.badgeTone,
-    progressState: progress.state,
-    progressPrimaryAction: serializeLeadProgressAction(progress.primaryAction, {
+    progressLabel: opportunityFlow.conditionLabel,
+    progressDescription: opportunityFlow.summary,
+    progressTone:
+      opportunityFlow.phase === "WON"
+        ? "approved"
+        : opportunityFlow.phase === "CUSTOMER_REVIEW"
+          ? "sent"
+          : opportunityFlow.phase === "LOST"
+            ? "neutral"
+            : opportunityFlow.phase === "PAUSED"
+              ? "warning"
+              : "draft",
+    progressState: opportunityFlow.conditionCode,
+    progressPrimaryAction: serializeOpportunityAction(opportunityFlow.primaryAction, {
       leadId: lead.id,
     }),
-    progressSecondaryAction: serializeLeadProgressAction(progress.secondaryAction, {
+    progressSecondaryAction: serializeOpportunityAction(opportunityFlow.secondaryActions[0] ?? null, {
       leadId: lead.id,
     }),
-    nextStepLabel: progress.primaryAction?.label ?? null,
-    satisfiedItems: progress.satisfiedItems,
-    requiredItems: progress.requiredItems,
-    activeJobId: progress.activeJob?.id ?? null,
-    activeJobStatus: progress.activeJob?.status ?? null,
+    nextStepLabel: opportunityFlow.primaryAction?.label ?? null,
+    satisfiedItems: opportunityFlow.satisfiedItems,
+    requiredItems: opportunityFlow.requirements,
+    activeJobId: opportunityFlow.primaryAction?.targetJobId ?? null,
+    activeJobStatus: opportunityFlow.conditionCode === "JOB_ACTIVE" ? "ACTIVE" : null,
+    opportunityFlow,
     quotes: lead.quotes
       .filter((q) => q.status !== "ARCHIVED")
       .map((q) => ({

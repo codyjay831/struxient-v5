@@ -109,19 +109,19 @@ export function leadListOrderBy(sort: LeadListSortParam): Prisma.LeadOrderByWith
 
 export function leadRowMatchesPipeline(
   pipeline: LeadListPipelineParam,
-  progressState: string,
+  conditionCode: string,
 ): boolean {
   switch (pipeline) {
     case "awarded":
-      return progressState === "JOB_ACTIVE";
+      return conditionCode === "JOB_ACTIVE" || conditionCode === "APPROVED_READY_FOR_JOB";
     case "closed":
-      return progressState === "CLOSED_NOT_A_FIT" || progressState === "ARCHIVED";
+      return conditionCode === "LOST";
     case "active":
     default:
       return (
-        progressState !== "JOB_ACTIVE" &&
-        progressState !== "CLOSED_NOT_A_FIT" &&
-        progressState !== "ARCHIVED"
+        conditionCode !== "JOB_ACTIVE" &&
+        conditionCode !== "APPROVED_READY_FOR_JOB" &&
+        conditionCode !== "LOST"
       );
   }
 }

@@ -110,7 +110,8 @@ export function QuotePlanControlPanel({
     });
   }
 
-  const isPending = phase !== "idle";
+  const isPending =
+    phase === "generating" || phase === "applying" || phase === "accepting";
 
   const statusBadge = executionPlan ? (
     <span

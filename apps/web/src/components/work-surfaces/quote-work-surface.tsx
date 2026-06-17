@@ -82,11 +82,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SignalCard } from "@/components/ui/signal-card";
 import {
   approveQuoteWorkspaceAction,
+  reviseQuoteByCloneWorkspaceAction,
   revokeQuoteShareTokenAction,
   extendQuoteShareTokenAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import { activateQuoteJobWorkspaceAction } from "@/app/(workspace)/quotes/quote-job-activation-actions";
+import {
+  createFollowUpVisitForQuoteChangeRequestAction,
+  createRevisionDraftForQuoteChangeRequestAction,
+  resolveQuoteChangeRequestAction,
+  setQuoteChangeRequestVisitRequirementAction,
+} from "@/app/(workspace)/quotes/quote-change-request-actions";
 import {
   resolveQuoteReadinessActionHref,
   type QuoteReadiness,
@@ -567,6 +574,56 @@ function ApproveQuoteInlineButton({
   );
 }
 
+function ReviseByCloneInlineButton({
+  quoteId,
+  variant,
+  label,
+  onMutated,
+}: {
+  quoteId: string;
+  variant: "primary" | "secondary";
+  label: string;
+  onMutated?: () => void;
+}) {
+  const router = useRouter();
+  const [state, formAction, isPending] = useActionState(
+    reviseQuoteByCloneWorkspaceAction.bind(null, quoteId),
+    workspaceActionInitial,
+  );
+  const handledKeyRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (state.success && handledKeyRef.current !== state) {
+      handledKeyRef.current = state;
+      if (state.revisedQuoteId) {
+        router.push(`/quotes/${state.revisedQuoteId}`);
+        router.refresh();
+      }
+      onMutated?.();
+    }
+  }, [state, onMutated, router]);
+
+  const cls = variant === "primary" ? primaryBtnClass : secondaryBtnClass;
+
+  return (
+    <form action={formAction} className="contents">
+      <button type="submit" disabled={isPending} aria-busy={isPending} className={cls}>
+        <ArrowRight className="size-3.5 opacity-80" strokeWidth={2} />
+        {isPending ? "Creating revision..." : label}
+      </button>
+      {state.error ? (
+        <p
+          className="basis-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger"
+          role="alert"
+          aria-live="polite"
+        >
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 function RevokeTokenButton({
   quoteId,
   onMutated,
@@ -736,6 +793,19 @@ function renderAction({
   if (action.kind === "MARK_APPROVED") {
     return (
       <ApproveQuoteInlineButton
+        quoteId={quote.id}
+        variant={variant}
+        label={action.label}
+        onMutated={onMutated}
+      />
+    );
+  }
+  if (
+    action.kind === "RESTORE_TO_DRAFT" &&
+    (quote.status === "SENT" || quote.status === "APPROVED")
+  ) {
+    return (
+      <ReviseByCloneInlineButton
         quoteId={quote.id}
         variant={variant}
         label={action.label}
@@ -1110,6 +1180,8 @@ function OverviewTab({
         onMutated={onMutated}
       />
 
+      <QuoteChangeRequestsCard quote={quote} onMutated={onMutated} />
+
       {canSendFromOverview ? (
         <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
           <p className={sectionLabelClass}>Ready to send</p>
@@ -1217,6 +1289,104 @@ function OverviewTab({
           <ArrowUpRight className="size-3" strokeWidth={1.5} />
         </Link>
       </div>
+    </div>
+  );
+}
+
+function QuoteChangeRequestsCard({
+  quote,
+  onMutated,
+}: {
+  quote: QuoteWorkSurfaceData;
+  onMutated?: () => void;
+}) {
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const openRequests = quote.openChangeRequests.filter((request) => request.resolvedAt == null);
+  if (openRequests.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className={sectionLabelClass}>Customer change requests</p>
+      <div className="mt-3 space-y-3">
+        {openRequests.map((request) => (
+          <div key={request.id} className="rounded-lg border border-border bg-background p-3">
+            <p className="text-sm text-foreground">{request.message}</p>
+            <p className="mt-1 text-[0.7rem] text-foreground-subtle">
+              Received {new Date(request.createdAt).toLocaleString()}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={pendingId === request.id}
+                className={secondaryBtnClass}
+                onClick={async () => {
+                  setPendingId(request.id);
+                  setError(null);
+                  const result = await setQuoteChangeRequestVisitRequirementAction(request.id, true);
+                  if (!result.ok) setError(result.error);
+                  await onMutated?.();
+                  setPendingId(null);
+                }}
+              >
+                Mark visit needed
+              </button>
+              <button
+                type="button"
+                disabled={pendingId === request.id}
+                className={secondaryBtnClass}
+                onClick={async () => {
+                  setPendingId(request.id);
+                  setError(null);
+                  const result = await createFollowUpVisitForQuoteChangeRequestAction(request.id);
+                  if (!result.ok) setError(result.error);
+                  await onMutated?.();
+                  setPendingId(null);
+                }}
+              >
+                Schedule follow-up visit
+              </button>
+              <button
+                type="button"
+                disabled={pendingId === request.id}
+                className={secondaryBtnClass}
+                onClick={async () => {
+                  setPendingId(request.id);
+                  setError(null);
+                  const result = await createRevisionDraftForQuoteChangeRequestAction(request.id);
+                  if (!result.ok) setError(result.error);
+                  await onMutated?.();
+                  setPendingId(null);
+                }}
+              >
+                Create revision draft
+              </button>
+              <button
+                type="button"
+                disabled={pendingId === request.id}
+                className={primaryBtnClass}
+                onClick={async () => {
+                  setPendingId(request.id);
+                  setError(null);
+                  const result = await resolveQuoteChangeRequestAction(request.id, quote.id);
+                  if (!result.ok) setError(result.error);
+                  await onMutated?.();
+                  setPendingId(null);
+                }}
+              >
+                Resolve request
+              </button>
+            </div>
+            {request.requiresVisit ? (
+              <p className="mt-1 text-[0.7rem] text-foreground-muted">
+                Follow-up visit required before revision.
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
     </div>
   );
 }

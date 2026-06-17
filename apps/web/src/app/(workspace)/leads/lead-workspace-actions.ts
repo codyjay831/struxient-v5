@@ -30,9 +30,9 @@ import {
 } from "@/lib/customer-service-location-from-lead";
 import { findCustomerMatchHints, type LeadCustomerMatchHints } from "@/lib/lead-customer-match-hints";
 import {
-  getLeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "@/lib/lead-commercial-progress";
+  getOpportunityFlow,
+  type OpportunityFlowQuoteInput,
+} from "@/lib/opportunity-flow";
 import {
   loadQuoteWorkSurface,
   type QuoteWorkSurfaceLoaderResult,
@@ -530,6 +530,52 @@ export async function closeOrPauseLeadWorkspaceAction(
   return { error: "Choose a valid close outcome." };
 }
 
+export type ResumeOpportunityWorkspaceResult =
+  | { success: true }
+  | { success: false; error: string };
+
+/**
+ * Clears ON_HOLD and returns the opportunity to the open pipeline (TRIAGING).
+ */
+export async function resumeOpportunityWorkspaceAction(
+  leadId: string,
+): Promise<ResumeOpportunityWorkspaceResult> {
+  const id = leadId.trim();
+  if (!id) return { success: false, error: "Missing lead record id." };
+
+  const ctx = await getCommercialRequestContextOrThrow();
+  const existing = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, status: true },
+  });
+  if (!existing) {
+    return { success: false, error: "Opportunity not found in your organization." };
+  }
+  if (existing.status !== LeadStatus.ON_HOLD) {
+    return { success: false, error: "This opportunity is not paused." };
+  }
+
+  await db.lead.updateMany({
+    where: { id, organizationId: ctx.organizationId },
+    data: {
+      status: LeadStatus.TRIAGING,
+      followUpAt: null,
+      closeReason: null,
+      closedAt: null,
+    },
+  });
+  await db.leadEvent.create({
+    data: {
+      leadId: id,
+      type: "RESUMED",
+      payload: { previousStatus: LeadStatus.ON_HOLD } as Prisma.InputJsonValue,
+      actorUserId: ctx.userId,
+    },
+  });
+  revalidateLeadAndQuoteSurfaces(id, null);
+  return { success: true };
+}
+
 /**
  * Idempotent archive — flips a lead to ARCHIVED status. Used by the inbox
  * "Archive" button so the row leaves the open queue without being deleted.
@@ -693,7 +739,8 @@ export async function searchCustomersForLeadAttachAction(
  *   - org-scoped via `getCommercialRequestContextOrThrow`
  *   - never trusts a client-supplied quote id; the active quote is derived
  *     server-side from the lead's quotes using the same
- *     `getLeadCommercialProgress` logic the other containers use
+ *     server-side from the lead's quotes using the same
+ *     `getOpportunityFlow` logic the other containers use
  *   - read-only — no mutations, no `revalidatePath`, no `redirect`
  *   - `loadQuoteWorkSurface` re-validates the quote's organization scope
  *
@@ -717,6 +764,18 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       contact: true,
       address: true,
       signals: true,
+      visitRequests: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          requestedDate: true,
+          requestedWindow: true,
+          confirmedDate: true,
+          completedAt: true,
+          createdAt: true,
+        },
+      },
       quotes: {
         orderBy: { updatedAt: "desc" },
         select: {
@@ -724,9 +783,28 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
           title: true,
           status: true,
           totalCents: true,
+          createdAt: true,
           updatedAt: true,
+          revisionOfQuoteId: true,
+          revisionNumber: true,
           _count: { select: { lineItems: true } },
           job: { select: { id: true, status: true, organizationId: true } },
+          checkpoints: {
+            where: { kind: { in: ["SEND", "APPROVAL"] } },
+            orderBy: { createdAt: "desc" },
+            select: { kind: true, createdAt: true },
+          },
+          changeRequests: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              message: true,
+              createdAt: true,
+              resolvedAt: true,
+              requiresVisit: true,
+              resultingQuoteId: true,
+            },
+          },
         },
       },
     },
@@ -738,18 +816,35 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
 
   const contact = readContact(lead.contact);
 
-  const progressQuoteInputs: LeadProgressQuoteInput[] = lead.quotes.map((q) => ({
+  const flowQuoteInputs: OpportunityFlowQuoteInput[] = lead.quotes.map((q) => ({
     id: q.id,
     title: q.title,
     status: q.status,
-    totalCents: q.totalCents,
     lineItemCount: q._count.lineItems,
+    totalCents: q.totalCents,
+    createdAt: q.createdAt,
     updatedAt: q.updatedAt,
+    revisionOfQuoteId: q.revisionOfQuoteId,
+    revisionNumber: q.revisionNumber,
+    latestSendAt: q.checkpoints.find((c) => c.kind === "SEND")?.createdAt ?? null,
+    latestApprovalAt: q.checkpoints.find((c) => c.kind === "APPROVAL")?.createdAt ?? null,
     job:
       q.job && q.job.organizationId === ctx.organizationId
         ? { id: q.job.id, status: q.job.status }
         : null,
   }));
+
+  const changeRequestInputs = lead.quotes.flatMap((quote) =>
+    quote.changeRequests.map((request) => ({
+      id: request.id,
+      quoteId: quote.id,
+      message: request.message,
+      createdAt: request.createdAt,
+      resolvedAt: request.resolvedAt,
+      requiresVisit: request.requiresVisit,
+      resultingQuoteId: request.resultingQuoteId,
+    })),
+  );
 
   let customerPrimaryLocation: { googlePlaceId: string } | null = null;
   if (lead.customerId) {
@@ -760,8 +855,9 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
     });
   }
 
-  const progress = getLeadCommercialProgress({
+  const flow = getOpportunityFlow({
     lead: {
+      id,
       status: lead.status,
       followUpAt: lead.followUpAt,
       customerId: lead.customerId,
@@ -772,14 +868,28 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       jobsiteAddressLine: jobsiteLineFromLead(lead),
       isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
     },
-    quotes: progressQuoteInputs,
+    quotes: flowQuoteInputs,
+    visits: lead.visitRequests.map((visit) => ({
+      id: visit.id,
+      status: visit.status,
+      requestedDate: visit.requestedDate,
+      requestedWindow: visit.requestedWindow,
+      confirmedDate: visit.confirmedDate,
+      completedAt: visit.completedAt,
+      createdAt: visit.createdAt,
+    })),
+    changeRequests: changeRequestInputs,
   });
 
-  if (!progress.activeQuote) {
+  const targetQuoteId =
+    flow.primaryAction?.targetQuoteId ??
+    flow.secondaryActions.find((action) => action.targetQuoteId)?.targetQuoteId ??
+    null;
+  if (!targetQuoteId) {
     return { ok: true, payload: null };
   }
 
-  const result = await loadQuoteWorkSurface(progress.activeQuote.id, ctx.organizationId);
+  const result = await loadQuoteWorkSurface(targetQuoteId, ctx.organizationId);
   return { ok: true, payload: result };
 }
 
@@ -801,6 +911,81 @@ export async function loadLeadCommercialSurfaceAction(
   }
 
   return { ok: true, payload };
+}
+
+export type RequestSiteVisitResult =
+  | { ok: true; visitRequestId: string; created: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Creates a pending site visit request when none is open, or returns the existing
+ * open request. Does not block quoting — discovery and estimating can overlap.
+ */
+export async function requestSiteVisitForLeadWorkspaceAction(
+  leadId: string,
+): Promise<RequestSiteVisitResult> {
+  const id = leadId.trim();
+  if (!id) return { ok: false, error: "Missing lead id." };
+
+  const ctx = await getCommercialRequestContextOrThrow();
+
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { id: true, status: true },
+  });
+  if (!lead) {
+    return { ok: false, error: "Opportunity not found in your organization." };
+  }
+  if (lead.status === "LOST" || lead.status === "ARCHIVED") {
+    return { ok: false, error: "Cannot schedule a visit on a closed opportunity." };
+  }
+
+  const existingOpen = await db.leadVisitRequest.findFirst({
+    where: {
+      organizationId: ctx.organizationId,
+      leadId: id,
+      status: { in: ["PENDING", "CONFIRMED"] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (existingOpen) {
+    revalidatePath(`/leads/${id}`);
+    revalidatePath("/leads");
+    revalidatePath("/workstation");
+    revalidatePath("/schedule");
+    return { ok: true, visitRequestId: existingOpen.id, created: false };
+  }
+
+  const visit = await db.$transaction(async (tx) => {
+    const created = await tx.leadVisitRequest.create({
+      data: {
+        organizationId: ctx.organizationId,
+        leadId: id,
+        purpose: "INITIAL_DISCOVERY",
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
+
+    await tx.leadEvent.create({
+      data: {
+        leadId: id,
+        type: "SITE_VISIT_REQUESTED",
+        payload: { visitRequestId: created.id } as Prisma.InputJsonValue,
+        actorUserId: ctx.userId,
+      },
+    });
+
+    return created;
+  });
+
+  revalidatePath(`/leads/${id}`);
+  revalidatePath("/leads");
+  revalidatePath("/workstation");
+  revalidatePath("/schedule");
+
+  return { ok: true, visitRequestId: visit.id, created: true };
 }
 
 /**

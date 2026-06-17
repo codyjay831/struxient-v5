@@ -13,10 +13,12 @@ import {
   type LeadReadinessReport,
 } from "@/lib/lead-readiness-heuristics";
 import {
-  getLeadCommercialProgress,
-  type LeadCommercialProgress,
-  type LeadProgressQuoteInput,
-} from "@/lib/lead-commercial-progress";
+  getOpportunityFlow,
+  pickMostRecentNonArchivedQuote,
+  type OpportunityFlowChangeRequestInput,
+  type OpportunityFlowQuoteInput,
+  type OpportunityFlowVisitInput,
+} from "@/lib/opportunity-flow";
 import {
   projectLead,
   readAddress,
@@ -56,7 +58,8 @@ export type LeadIntakeProjectionReadiness = {
 };
 
 export type LeadIntakeProjectionCommercial = {
-  state: LeadCommercialProgress["state"];
+  phase: string;
+  conditionCode: string;
   label: string;
   description: string;
   primaryActionKind: string | null;
@@ -101,7 +104,9 @@ export type BuildLeadIntakeProjectionInput = {
   lead: ProjectableLeadRow;
   jobsiteAddressLine: string | null;
   isAddressVerified: boolean;
-  quotes?: LeadProgressQuoteInput[];
+  quotes?: OpportunityFlowQuoteInput[];
+  visits?: OpportunityFlowVisitInput[];
+  changeRequests?: OpportunityFlowChangeRequestInput[];
   hasExistingCustomerMatch?: boolean;
   attachmentCount?: number;
   events?: Array<{ type: string; payload: unknown; createdAt: Date }>;
@@ -144,9 +149,11 @@ export function buildLeadIntakeProjection(
     isAddressVerified: input.isAddressVerified,
   });
 
-  const progress = getLeadCommercialProgress({
+  const opportunityFlow = getOpportunityFlow({
     lead: {
+      id: projected.id,
       status: projected.status,
+      followUpAt: null,
       customerId: projected.customerId,
       contactName: contact.name,
       companyName: contact.companyName,
@@ -156,8 +163,12 @@ export function buildLeadIntakeProjection(
       isAddressVerified: input.isAddressVerified,
     },
     quotes: input.quotes ?? [],
+    visits: input.visits ?? [],
+    changeRequests: input.changeRequests ?? [],
     hasExistingCustomerMatch: input.hasExistingCustomerMatch,
   });
+
+  const activeQuote = pickMostRecentNonArchivedQuote(input.quotes ?? []);
 
   const recentActivity = (input.events ?? []).slice(0, 10).map((e) => {
     const summary = summarizeLeadEvent(e.type, e.payload);
@@ -209,11 +220,16 @@ export function buildLeadIntakeProjection(
       isReadyForPromotion: readinessReport.isReady,
     },
     commercial: {
-      state: progress.state,
-      label: progress.label,
-      description: progress.description,
-      primaryActionKind: progress.primaryAction?.kind ?? null,
-      activeQuoteId: progress.activeQuote?.id ?? null,
+      phase: opportunityFlow.phase,
+      conditionCode: opportunityFlow.conditionCode,
+      label: opportunityFlow.conditionLabel,
+      description: opportunityFlow.summary,
+      primaryActionKind: opportunityFlow.primaryAction?.kind ?? null,
+      activeQuoteId:
+        opportunityFlow.primaryAction?.targetQuoteId ??
+        opportunityFlow.secondaryActions.find((action) => action.targetQuoteId)?.targetQuoteId ??
+        activeQuote?.id ??
+        null,
     },
     attachmentCount: input.attachmentCount ?? 0,
     hasExistingCustomerMatch: Boolean(input.hasExistingCustomerMatch),

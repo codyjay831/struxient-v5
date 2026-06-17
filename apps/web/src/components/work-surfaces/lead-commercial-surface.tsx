@@ -5,7 +5,6 @@ import {
   formatAttachmentFileSize,
   formatLeadChannel,
   formatLeadStatus,
-  leadStatusBadgeTone,
 } from "@/lib/lead-display";
 import { LeadStatus, QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
@@ -25,13 +24,19 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  resolveOpportunityActionHref,
+  type OpportunityAction,
+} from "@/lib/opportunity-flow";
+import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect, useRef, useState } from "react";
-import { closeOrPauseLeadWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { closeOrPauseLeadWorkspaceAction, resumeOpportunityWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
+import { createRevisionDraftForQuoteChangeRequestAction } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import { useRouter } from "next/navigation";
-import { LeadCommercialProgressPanel } from "@/components/leads/lead-commercial-progress-panel";
 import { LeadQuoteReadinessBar } from "@/components/leads/lead-quote-readiness-bar";
+import { RequestSiteVisitButton } from "@/components/leads/request-site-visit-button";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
 import { LeadAddressResolvePanel } from "@/components/leads/lead-address-resolve-panel";
 import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
@@ -49,6 +54,183 @@ export interface LeadCommercialSurfaceProps {
 
 const sectionTitleClass =
   "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
+const phaseOrder = ["INTAKE", "DISCOVERY", "ESTIMATING", "CUSTOMER_REVIEW", "WON"] as const;
+
+const primaryActionClass =
+  "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
+
+const secondaryActionClass =
+  "inline-flex items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+
+function OpportunityActionControl({
+  action,
+  leadId,
+  variant,
+  onReviewCustomerMatch,
+  onMutationSuccess,
+}: {
+  action: OpportunityAction;
+  leadId: string;
+  variant: "primary" | "secondary";
+  onReviewCustomerMatch?: () => void;
+  onMutationSuccess?: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (action.kind === "START_QUOTE") {
+    return (
+      <StartQuoteFromLeadButton leadId={leadId} label={action.label} variant={variant} />
+    );
+  }
+
+  if (action.kind === "REVIEW_CUSTOMER_MATCH") {
+    return (
+      <button
+        type="button"
+        onClick={() => onReviewCustomerMatch?.()}
+        title="Review suggested customer matches before building a quote."
+        className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+      >
+        {action.label}
+      </button>
+    );
+  }
+
+  if (action.kind === "CREATE_REVISION_DRAFT" && action.targetChangeRequestId) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => {
+            setError(null);
+            startTransition(async () => {
+              const result = await createRevisionDraftForQuoteChangeRequestAction(
+                action.targetChangeRequestId!,
+              );
+              if (!result.ok || !result.revisedQuoteId) {
+                setError(result.error ?? "Could not create revision draft.");
+                return;
+              }
+              router.push(`/quotes/${result.revisedQuoteId}`);
+              onMutationSuccess?.();
+            });
+          }}
+          title="Create a revision draft from the customer's change request."
+          className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+        >
+          {isPending ? "Creating revision..." : action.label}
+        </button>
+        {error ? (
+          <p className="text-xs text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (action.kind === "RESUME_OPPORTUNITY") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => {
+            setError(null);
+            startTransition(async () => {
+              const result = await resumeOpportunityWorkspaceAction(leadId);
+              if (!result.success) {
+                setError(result.error ?? "Could not resume this opportunity.");
+                return;
+              }
+              onMutationSuccess?.();
+            });
+          }}
+          title="Clear pause and return this opportunity to the open pipeline."
+          className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+        >
+          {isPending ? "Resuming..." : action.label}
+        </button>
+        {error ? (
+          <p className="text-xs text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const href = resolveOpportunityActionHref(action, { leadId });
+
+  let title = action.label;
+  switch (action.kind) {
+    case "EDIT_CONTACT_INFO":
+      title = "Fix contact and jobsite details so this request can be quoted.";
+      break;
+    case "OPEN_DRAFT_QUOTE":
+      title = "Open the current draft quote.";
+      break;
+    case "OPEN_QUOTE":
+      title = "Open the sent quote.";
+      break;
+    case "SEND_QUOTE":
+      title = "Open send and accept to deliver the proposal.";
+      break;
+    case "FOLLOW_UP_CUSTOMER":
+      title = "Open the quote and follow up with the customer.";
+      break;
+    case "CREATE_REVISION_DRAFT":
+      title = "Create a revision draft from the customer's change request.";
+      break;
+    case "OPEN_EXECUTION_REVIEW":
+      title = "Review the execution plan for this quote.";
+      break;
+    case "OPEN_JOB":
+      title = "Open the active job.";
+      break;
+    case "SCHEDULE_SALES_VISIT":
+    case "COMPLETE_SALES_VISIT":
+      title = "Open schedule to plan or complete a sales visit.";
+      break;
+    case "RESUME_OPPORTUNITY":
+      title = "Resume this opportunity.";
+      break;
+  }
+
+  return (
+    <Link
+      href={href}
+      title={title}
+      className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+    >
+      {action.label}
+    </Link>
+  );
+}
+
+function phaseLabel(phase: string): string {
+  switch (phase) {
+    case "INTAKE":
+      return "Intake";
+    case "DISCOVERY":
+      return "Discovery";
+    case "ESTIMATING":
+      return "Estimating";
+    case "CUSTOMER_REVIEW":
+      return "Customer review";
+    case "WON":
+      return "Won";
+    case "LOST":
+      return "Lost";
+    case "PAUSED":
+      return "Paused";
+    default:
+      return phase;
+  }
+}
 
 export function LeadCommercialSurface({
   payload,
@@ -56,7 +238,17 @@ export function LeadCommercialSurface({
   onMutationSuccess,
   onClose,
 }: LeadCommercialSurfaceProps) {
-  const { lead, customer, linkedQuotes, progress, matchHints, reviewViewModel, serviceAddressContext } =
+  const {
+    lead,
+    customer,
+    linkedQuotes,
+    hasBlockingCustomerMatch,
+    opportunityFlow,
+    matchHints,
+    reviewViewModel,
+    serviceAddressContext,
+    visitRequests,
+  } =
     payload;
   const router = useRouter();
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
@@ -96,7 +288,6 @@ export function LeadCommercialSurface({
     missingScopes: lead.siteDetails?.missingScopes ?? ["APN", "UTILITY", "JURISDICTION"],
   } as const;
 
-  const compact = entryPoint === "workstation";
   const editHref = `/leads/${lead.id}/edit`;
   const callablePhone = lead.phone.trim();
   const emailableAddress = lead.email.trim();
@@ -123,6 +314,15 @@ export function LeadCommercialSurface({
 
   const matches = matchHints?.kind === "checked" ? matchHints.matches : [];
   const closeOrPauseAction = closeOrPauseLeadWorkspaceAction.bind(null, lead.id);
+  const scrollToCustomerMatch = () => {
+    customerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    customerSectionRef.current?.focus();
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#customer-link`);
+    }
+  };
+  const isTerminalPhase =
+    opportunityFlow.phase === "PAUSED" || opportunityFlow.phase === "LOST";
   const showAddressResolvePanel =
     !customer &&
     !lead.isAddressQuoteReady &&
@@ -143,48 +343,63 @@ export function LeadCommercialSurface({
                 <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
                   {lead.title}
                 </h2>
-                <p className="text-sm text-foreground-muted">
-                  {formatLeadChannel(lead.channel)} · Received{" "}
-                  {lead.createdAt.toLocaleDateString()}
-                </p>
-                {callablePhone || emailableAddress ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {callablePhone ? (
-                      <a
-                        href={`tel:${callablePhone}`}
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                      >
-                        <Phone className="size-3" />
-                        Call
-                      </a>
-                    ) : null}
-                    {emailableAddress ? (
-                      <a
-                        href={`mailto:${emailableAddress}`}
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                      >
-                        <Mail className="size-3" />
-                        Email
-                      </a>
-                    ) : null}
-                    <Link
-                      href={editHref}
+                <p className="text-sm text-foreground-muted">{formatLeadChannel(lead.channel)} · Received {lead.createdAt.toLocaleDateString()}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {callablePhone ? (
+                    <a
+                      href={`tel:${callablePhone}`}
                       className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
                     >
-                      <Pencil className="size-3" />
-                      Edit request details
-                    </Link>
-                  </div>
-                ) : null}
+                      <Phone className="size-3" />
+                      Call
+                    </a>
+                  ) : null}
+                  {emailableAddress ? (
+                    <a
+                      href={`mailto:${emailableAddress}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                    >
+                      <Mail className="size-3" />
+                      Email
+                    </a>
+                  ) : null}
+                  <Link
+                    href={editHref}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                  >
+                    <Pencil className="size-3" />
+                    Edit request details
+                  </Link>
+                  {!isTerminalPhase ? (
+                    <RequestSiteVisitButton
+                      leadId={lead.id}
+                      visits={visitRequests}
+                      onSuccess={notifyMutationSuccess}
+                    />
+                  ) : null}
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <span className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                  Record status
+                  Phase
                 </span>
                 <StatusBadge
-                  label={formatLeadStatus(lead.status as LeadStatus)}
-                  tone={leadStatusBadgeTone(lead.status as LeadStatus) as StatusBadgeTone}
+                  label={phaseLabel(opportunityFlow.phase)}
+                  tone={
+                    opportunityFlow.phase === "WON"
+                      ? "approved"
+                      : opportunityFlow.phase === "CUSTOMER_REVIEW"
+                        ? "sent"
+                        : opportunityFlow.phase === "LOST"
+                          ? "neutral"
+                          : opportunityFlow.phase === "PAUSED"
+                            ? "warning"
+                            : "draft"
+                  }
                 />
+                <span className="text-[0.65rem] uppercase tracking-wide text-foreground-subtle">
+                  Record: {formatLeadStatus(lead.status as LeadStatus)}
+                </span>
                 {onClose ? (
                   <button
                     type="button"
@@ -198,7 +413,114 @@ export function LeadCommercialSurface({
               </div>
             </div>
 
-            <LeadCommercialProgressPanel progress={progress} leadId={lead.id} compact={compact} />
+            <div className="rounded-xl border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                {isTerminalPhase ? (
+                  <span className="rounded-full border border-border-strong bg-foreground/[0.04] px-2 py-0.5 text-foreground">
+                    {phaseLabel(opportunityFlow.phase)}
+                  </span>
+                ) : (
+                  phaseOrder.map((phase) => (
+                    <span
+                      key={phase}
+                      className={
+                        phase === opportunityFlow.phase
+                          ? "rounded-full border border-border-strong bg-foreground/[0.04] px-2 py-0.5 text-foreground"
+                          : "rounded-full border border-border px-2 py-0.5"
+                      }
+                    >
+                      {phaseLabel(phase)}
+                    </span>
+                  ))
+                )}
+              </div>
+              <div className="mt-3 rounded-lg border border-border bg-surface p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge
+                    label={opportunityFlow.conditionLabel}
+                    tone={
+                      opportunityFlow.phase === "WON"
+                        ? "approved"
+                        : opportunityFlow.phase === "CUSTOMER_REVIEW"
+                          ? "sent"
+                          : opportunityFlow.phase === "LOST"
+                            ? "neutral"
+                            : opportunityFlow.phase === "PAUSED"
+                              ? "warning"
+                              : "draft"
+                    }
+                  />
+                  {opportunityFlow.ageLabel ? (
+                    <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+                  {opportunityFlow.summary}
+                </p>
+                {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {opportunityFlow.primaryAction ? (
+                      <OpportunityActionControl
+                        action={opportunityFlow.primaryAction}
+                        leadId={lead.id}
+                        variant="primary"
+                        onReviewCustomerMatch={scrollToCustomerMatch}
+                        onMutationSuccess={notifyMutationSuccess}
+                      />
+                    ) : null}
+                    {opportunityFlow.secondaryActions.map((action) => (
+                      <OpportunityActionControl
+                        key={`${action.kind}:${action.label}`}
+                        action={action}
+                        leadId={lead.id}
+                        variant="secondary"
+                        onReviewCustomerMatch={scrollToCustomerMatch}
+                        onMutationSuccess={notifyMutationSuccess}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {opportunityFlow.requirements.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {opportunityFlow.requirements.map((req) => (
+                      <span key={req} className="rounded-full border border-border px-2 py-0.5 text-[0.7rem] text-foreground-muted">
+                        {req}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {opportunityFlow.keyFacts.length > 0 ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                      Key facts
+                    </p>
+                    <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                      {opportunityFlow.keyFacts.map((fact) => (
+                        <p key={`${fact.label}:${fact.value}`} className="text-xs text-foreground-muted">
+                          <span className="font-medium text-foreground">{fact.label}:</span> {fact.value}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {opportunityFlow.recentEvents.length > 0 ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+                      Recent history
+                    </p>
+                    <ol className="mt-2 space-y-1.5">
+                      {opportunityFlow.recentEvents.slice(0, 4).map((evt) => (
+                        <li key={`${evt.label}:${evt.at ?? "none"}`} className="text-xs text-foreground-muted">
+                          <span className="font-medium text-foreground">{evt.label}</span>
+                          {evt.at ? ` · ${new Date(evt.at).toLocaleString()}` : ""}
+                          {evt.detail ? ` · ${evt.detail}` : ""}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null}
+              </div>
+            </div>
 
             <LeadQuoteReadinessBar
               requirements={reviewViewModel.requirements}
@@ -233,7 +555,7 @@ export function LeadCommercialSurface({
                   jobsiteAddressLine: lead.jobsiteAddressLine,
                 }}
                 editLeadHref={editHref}
-                progress={progress}
+                hasBlockingCustomerMatch={hasBlockingCustomerMatch}
                 suggestedMatches={matches}
                 onSuccess={notifyMutationSuccess}
                 onError={(message) => setSurfaceError(message)}
@@ -482,12 +804,12 @@ export function LeadCommercialSurface({
                       </div>
                       <p className="mt-2 text-[11px] font-medium text-accent">
                         {quote.status === "DRAFT"
-                          ? "Open full quote page"
+                          ? "Continue building this draft quote"
                           : quote.status === "SENT"
-                            ? "Open full quote page"
+                            ? "Follow up on this sent quote"
                             : quote.status === "APPROVED"
-                              ? "Open full quote page"
-                              : "Open full quote page"}
+                              ? "Review job plan for this approved quote"
+                              : "Open quote"}
                       </p>
                     </Link>
                   ))}
@@ -517,12 +839,14 @@ export function LeadCommercialSurface({
             </div>
           ) : null}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Link
-              href={`/leads/${lead.id}`}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-subtle transition-colors hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto"
-            >
-              Open full record
-            </Link>
+            {entryPoint !== "record" ? (
+              <Link
+                href={`/leads/${lead.id}`}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-subtle transition-colors hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto"
+              >
+                Open full record
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={() => setClosePanelOpen((open) => !open)}

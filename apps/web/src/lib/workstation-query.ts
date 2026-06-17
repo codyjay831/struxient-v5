@@ -17,10 +17,10 @@ import {
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import { getLeadCommercialProgress } from "@/lib/lead-commercial-progress";
+import { getOpportunityFlow } from "@/lib/opportunity-flow";
 import {
   jobsiteLineFromLead,
-  isLeadAddressVerified,
+  isLeadAddressQuoteReady,
   resolveJobsiteLineForQuoteOrJob,
 } from "./jobsite-address";
 import { resolveJobWorkContext } from "./work-item-context";
@@ -70,6 +70,12 @@ import {
   getTaskVisibilityWhere,
 } from "@/lib/authz/resource-access";
 import { canReadCommercial } from "@/lib/authz/capabilities";
+import {
+  evaluateCustomerMatchGate,
+  loadOrgCustomersForMatchGate,
+} from "@/lib/lead-customer-match-gate";
+import { hasBlockingCustomerMatch } from "@/lib/lead-customer-match-hints";
+import { classifyLeadWorkstationAttention } from "@/lib/workstation-lead-attention";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
@@ -200,9 +206,17 @@ export async function queryWorkstationWorkItems(
   const leads = commercialReadable ? await db.lead.findMany({
     where: { organizationId, status: { in: pipelineStatuses } },
     include: {
-      customer: true,
+      customer: {
+        include: {
+          serviceLocations: {
+            where: { organizationId },
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+            take: 1,
+            select: { googlePlaceId: true },
+          },
+        },
+      },
       visitRequests: {
-        where: { status: "PENDING" },
         orderBy: { createdAt: "desc" },
       },
       quotes: {
@@ -215,13 +229,31 @@ export async function queryWorkstationWorkItems(
     },
   }) : [];
 
+  const orgCustomersForMatch =
+    commercialReadable && leads.some((lead) => lead.customerId == null)
+      ? await loadOrgCustomersForMatchGate(organizationId)
+      : [];
+
   for (const lead of leads) {
     const hasActiveQuote = lead.quotes.length > 0;
 
     if (hasActiveQuote) continue;
 
-    const progress = getLeadCommercialProgress({
+    const matchHints =
+      lead.customerId == null
+        ? evaluateCustomerMatchGate({
+            customerId: lead.customerId,
+            email: lead.email,
+            phone: lead.phone,
+            orgCustomers: orgCustomersForMatch,
+          })
+        : null;
+    const hasExistingCustomerMatch =
+      matchHints != null && hasBlockingCustomerMatch(matchHints);
+
+    const progress = getOpportunityFlow({
       lead: {
+        id: lead.id,
         status: lead.status,
         followUpAt: lead.followUpAt,
         customerId: lead.customerId,
@@ -230,17 +262,37 @@ export async function queryWorkstationWorkItems(
         email: lead.email,
         phone: lead.phone,
         jobsiteAddressLine: jobsiteLineFromLead(lead),
-        isAddressVerified: isLeadAddressVerified(lead),
+        isAddressVerified: isLeadAddressQuoteReady(
+          lead,
+          lead.customer?.serviceLocations[0] ?? null,
+        ),
       },
       quotes: lead.quotes.map((q) => ({
         id: q.id,
         title: q.title,
         status: q.status,
-        totalCents: q.totalCents,
         lineItemCount: q._count.lineItems,
+        totalCents: q.totalCents,
+        createdAt: q.updatedAt,
         updatedAt: q.updatedAt,
+        revisionOfQuoteId: null,
+        revisionNumber: null,
+        latestSendAt: null,
+        latestApprovalAt: null,
         job: q.job,
       })),
+      visits: lead.visitRequests.map((v) => ({
+        id: v.id,
+        status: v.status,
+        requestedDate: v.requestedDate,
+        requestedWindow: v.requestedWindow,
+        confirmedDate: v.confirmedDate,
+        completedAt: v.completedAt,
+        createdAt: v.createdAt,
+      })),
+      changeRequests: [],
+      hasExistingCustomerMatch,
+      now,
     });
 
     const recordState = buildLeadRecordActionState({
@@ -251,20 +303,13 @@ export async function queryWorkstationWorkItems(
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
-    // Prioritize opportunities with pending visit requests
-    const pendingVisit = lead.visitRequests[0];
-    
-    let priority: WorkstationWorkItemPriority = "medium";
-    if (workflow.priority === "blocking" || pendingVisit) {
-      priority = "critical";
-    } else if (workflow.priority === "critical" || lead.updatedAt > urgentThreshold) {
-      priority = "high";
-    } else if (workflow.priority === "watching") {
-      priority = "low";
-    }
+    const pendingVisit =
+      lead.visitRequests.find((v) => v.status === "PENDING") ?? null;
 
-    const group: WorkstationWorkItemGroup = pendingVisit ? "investigate" : 
-      (workflow.priority === "blocking" ? "investigate" : "ready");
+    const { group, priority } = classifyLeadWorkstationAttention({
+      conditionCode: progress.conditionCode,
+      hasPendingVisit: pendingVisit != null,
+    });
 
     const { lane, withinLaneRank, reason: rankReason } = rank({
       kind: "lead",
@@ -273,10 +318,10 @@ export async function queryWorkstationWorkItems(
       updatedAt: lead.updatedAt,
     }, role, now);
 
-    const effectiveReason = pendingVisit 
+    const effectiveReason = pendingVisit
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
-      : (rankReason || workflow.reason);
-    const effectiveNextStep = pendingVisit ? "Confirm or schedule visit." : (workflow.nextAction?.label ?? "Review in Sales.");
+      : rankReason || workflow.reason;
+    const effectiveNextStep = workflow.nextAction?.label ?? "Review in Sales.";
 
     items.push({
       id: `lead-${lead.id}`,
@@ -324,6 +369,27 @@ export async function queryWorkstationWorkItems(
           amountCents: true,
           percentage: true,
           anchorType: true,
+        },
+      },
+      changeRequests: {
+        where: { resolvedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          message: true,
+          createdAt: true,
+          requiresVisit: true,
+          resultingQuoteId: true,
+        },
+      },
+      revisedQuotes: {
+        where: { status: QuoteStatus.DRAFT },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          lineItems: { select: { id: true } },
         },
       },
     },
@@ -388,6 +454,9 @@ export async function queryWorkstationWorkItems(
       ? `Quote: ${secondaryIdentity}`
       : quote.customer?.displayName || undefined;
 
+    const openChangeRequest = quote.changeRequests[0] ?? null;
+    const draftRevision = quote.revisedQuotes[0] ?? null;
+
     const recordState = buildQuoteRecordActionState({
       quoteId: quote.id,
       title: primaryIdentity,
@@ -399,7 +468,11 @@ export async function queryWorkstationWorkItems(
     const workflow = toEmbeddedWorkflow(recordState);
 
     let priority: WorkstationWorkItemPriority = "medium";
-    if (workflow.priority === "blocking" || readiness.state === "APPROVED_READY_TO_ACTIVATE") {
+    if (
+      workflow.priority === "blocking" ||
+      readiness.state === "APPROVED_READY_TO_ACTIVATE" ||
+      openChangeRequest
+    ) {
       priority = "critical";
     } else if (workflow.priority === "critical" || quote.updatedAt > urgentThreshold) {
       priority = "high";
@@ -407,8 +480,12 @@ export async function queryWorkstationWorkItems(
       priority = "low";
     }
 
-    const group: WorkstationWorkItemGroup = (workflow.priority === "blocking" || readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW") 
-      ? "investigate" : "ready";
+    const group: WorkstationWorkItemGroup =
+      workflow.priority === "blocking" ||
+      readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW" ||
+      openChangeRequest
+        ? "investigate"
+        : "ready";
 
     const { lane, withinLaneRank, reason: rankReason } = rank({
       kind: "quote",
@@ -422,15 +499,31 @@ export async function queryWorkstationWorkItems(
       kind: "quote",
       title: primaryIdentity,
       subtitle,
-      status: quote.status,
+      status: openChangeRequest
+        ? draftRevision
+          ? draftRevision.lineItems.length > 0
+            ? "Revision ready to send"
+            : "Revision draft in progress"
+          : "Customer requested changes"
+        : quote.status,
       priority,
       group,
       lens: "attention",
       lane,
       withinLaneRank,
       filterCategory: "quotes",
-      reason: isCustomerAccepted ? "Accepted by customer via portal." : (rankReason || workflow.reason),
-      nextStep: workflow.nextAction?.label || "Review quote.",
+      reason: openChangeRequest
+        ? openChangeRequest.requiresVisit
+          ? "Customer requested changes and follow-up visit may be required."
+          : "Customer requested changes on this quote."
+        : isCustomerAccepted
+          ? "Accepted by customer via portal."
+          : rankReason || workflow.reason,
+      nextStep: openChangeRequest
+        ? draftRevision
+          ? "Continue revision draft."
+          : "Create revision draft."
+        : workflow.nextAction?.label || "Review quote.",
       recordId: quote.id,
       parentRecordId: quote.customerId || quote.leadId || undefined,
       parentLabel,

@@ -49,6 +49,20 @@ Calendar commitments for jobs live on a **single canonical entity**: `JobSchedul
 | Commercial payment timing | `PaymentScheduleItem` → `JobPaymentRequirement` | Money milestones — not workforce calendar |
 | Customer/site constraints | Job/customer context (MVP: prominent notes + minimal structured windows) | Access, HOA, pets — **not** auto conflict detection in MVP |
 
+### Pre-job visit lifecycle posture
+
+Lead visits are repeatable discovery records, not a single universal pipeline step. Multiple visits may occur before quote send, and additional visits may occur after customer revision requests.
+
+Lead visit facts should support these operational outcomes:
+
+- requested/pending visit intent
+- scheduled/confirmed visit commitment
+- completed visit outcome
+- no-show outcome
+- canceled visit outcome
+
+Do not encode “second site visit” as a separate workflow status; represent it as another lead-visit record with purpose/context.
+
 ---
 
 ## Task timing states

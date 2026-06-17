@@ -13,7 +13,9 @@ export type LeadVisitRequestPayload = {
   requestedDate: Date | null;
   requestedWindow: string | null;
   confirmedDate: Date | null;
+  completedAt?: Date | null;
   status: LeadVisitRequestStatus;
+  purpose?: string | null;
   notes: string | null;
   createdAt: Date;
 };

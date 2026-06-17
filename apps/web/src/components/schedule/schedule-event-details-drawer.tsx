@@ -16,6 +16,8 @@ import {
   rescheduleJobScheduleEventFromScheduleAction,
   cancelLeadVisitRequestAction,
   confirmLeadVisitRequestAction,
+  completeLeadVisitRequestAction,
+  markLeadVisitNoShowAction,
   rescheduleLeadVisitRequestAction,
   updateTaskScheduleFromCalendarAction,
   upsertScheduleBlockAction,
@@ -345,6 +347,44 @@ function ScheduleEventDetailsForm({
                 >
                   Cancel
                 </Button>
+                {event.status === LeadVisitRequestStatus.CONFIRMED ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="muted"
+                      disabled={isPending}
+                      onClick={() =>
+                        startTransition(async () => {
+                          const result = await completeLeadVisitRequestAction(
+                            event.recordId,
+                            eventReason.trim() || undefined,
+                          );
+                          if (result.error) setError(result.error);
+                          else onClose();
+                        })
+                      }
+                    >
+                      Mark completed
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="muted"
+                      disabled={isPending}
+                      onClick={() =>
+                        startTransition(async () => {
+                          const result = await markLeadVisitNoShowAction(
+                            event.recordId,
+                            eventReason.trim() || undefined,
+                          );
+                          if (result.error) setError(result.error);
+                          else onClose();
+                        })
+                      }
+                    >
+                      Mark no-show
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -509,12 +549,22 @@ function ScheduleEventDetailsForm({
 
         {event.recordHref ? (
           <div className="border-t border-border px-5 py-4">
-            <a
-              href={event.recordHref}
-              className="text-sm font-medium text-accent underline underline-offset-4"
-            >
-              Open record
-            </a>
+            <div className="flex flex-wrap gap-4">
+              <a
+                href={event.recordHref}
+                className="text-sm font-medium text-accent underline underline-offset-4"
+              >
+                Open request
+              </a>
+              {event.kind === "lead-visit-request" && event.scopeHref ? (
+                <a
+                  href={event.scopeHref}
+                  className="text-sm font-medium text-accent underline underline-offset-4"
+                >
+                  Build scope
+                </a>
+              ) : null}
+            </div>
           </div>
         ) : null}
     </div>
