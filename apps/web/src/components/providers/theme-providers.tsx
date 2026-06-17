@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
 
 // React 19 / Next 15+ workaround for next-themes script tag warning
 // https://github.com/pacocoursey/next-themes/issues/387
@@ -27,6 +28,18 @@ export function ThemeProviders({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       {children}
+      <Toaster
+        theme="system"
+        position="bottom-right"
+        closeButton
+        toastOptions={{
+          classNames: {
+            toast: "border border-border bg-surface text-foreground shadow-lg",
+            title: "font-medium",
+            description: "text-foreground-muted",
+          },
+        }}
+      />
     </ThemeProvider>
   );
 }

@@ -7,14 +7,13 @@ import {
   formatJobStatus,
   jobStatusBadgeTone,
 } from "@/lib/job-display";
-import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { Briefcase, Info, Zap } from "lucide-react";
+import { Info, Zap } from "lucide-react";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { JobJobsitePanel } from "@/components/jobs/job-jobsite-panel";
@@ -31,9 +30,7 @@ import {
   loadPendingScheduleCleanupEvents,
 } from "@/lib/scheduling/job-cancel-cleanup";
 import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
-import { JobTaskCard } from "@/components/jobs/job-task-card";
 import { JobEventButton } from "@/components/jobs/job-event-button";
-import { JobTaskAddButton } from "@/components/jobs/job-task-add-button";
 import { JobIssueSeverity, JobIssueStatus, JobStatus } from "@prisma/client";
 import { getLiveSignals } from "@/lib/signal-bus";
 import {
@@ -50,6 +47,14 @@ import {
   isExecutionHealthBannerEnabled,
 } from "@/lib/job-execution-health";
 import { JobExecutionHealthBanner } from "@/components/jobs/job-execution-health-banner";
+import {
+  JobExecutionEmptyState,
+} from "@/components/jobs/job-execution-work-plan-view";
+import { JobExecutionShell } from "@/components/jobs/job-execution-shell";
+import {
+  buildJobExecutionViewModel,
+  parseJobExecutionViewMode,
+} from "@/lib/job-execution-view-model";
 import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { jobChangeOrdersPath } from "@/lib/change-order-flow";
@@ -220,6 +225,7 @@ export default async function JobDetailPage({
                 dueAt: true,
                 scheduledStartAt: true,
                 scheduledEndAt: true,
+                schedulingRequirement: true,
                 assignedUserId: true,
                 workPackageId: true,
                 providesSignals: true,
@@ -230,6 +236,20 @@ export default async function JobDetailPage({
                   select: { jobIssueId: true },
                 },
                 recoveryFlowId: true,
+                scheduleEventLinks: {
+                  orderBy: [{ jobScheduleEvent: { startAt: "desc" } }],
+                  select: {
+                    jobScheduleEvent: {
+                      select: {
+                        id: true,
+                        title: true,
+                        status: true,
+                        startAt: true,
+                        endAt: true,
+                      },
+                    },
+                  },
+                },
                 attachments: {
                   where: { status: "READY" },
                   select: {
@@ -437,6 +457,37 @@ export default async function JobDetailPage({
     ),
   );
   const showExecutionHealthBanner = isExecutionHealthBannerEnabled();
+  const executionView = parseJobExecutionViewMode(parsedSearchParams.executionView);
+
+  const executionViewModel = buildJobExecutionViewModel({
+    job: {
+      id: job.id,
+      status: job.status,
+      stages: job.stages,
+      issues: job.issues.map((i) => ({
+        id: i.id,
+        title: i.title,
+        status: i.status,
+        severity: i.severity,
+        recoveryFlow: i.recoveryFlow,
+      })),
+      paymentRequirements: paymentRequirementsWithAnchors,
+    },
+    workPackages: job.workPackages,
+    scheduleEvents: job.scheduleEvents,
+    liveSignals,
+    paymentRequirements: paymentRequirementsWithAnchors,
+  });
+
+  const paymentHoldByStageId = Object.fromEntries(
+    job.stages.map((stage) => [
+      stage.id,
+      deriveTaskPaymentHold(stage.id, paymentRequirementsWithAnchors, paymentDueContext),
+    ]),
+  );
+
+  const jobContextLabel =
+    secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -694,125 +745,24 @@ export default async function JobDetailPage({
 
       <section id="execution-stages">
       {job.stages.length === 0 ? (
-        <WorkspacePanel>
-          <EmptyState
-            icon={Briefcase}
-            title="No execution stages on this job"
-            description="No stages were copied at activation. Open the source quote to review execution planning before adding work here."
-          >
-            {safeQuote ? (
-              <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
-                Open source quote
-              </Link>
-            ) : null}
-          </EmptyState>
-        </WorkspacePanel>
+        <JobExecutionEmptyState
+          quoteHref={safeQuote ? `/quotes/${safeQuote.id}` : null}
+        />
       ) : (
-        <WorkspacePanel className="mb-6">
-          <SectionHeading
-            title="Execution stages"
-            description="Tasks grouped by stage. Add ordinary work here, use field events for holds, and use Issue / Recovery when something blocks progress."
-          />
-          {totalTasks === 0 ? (
-            <div className="mb-6 rounded-lg border border-dashed border-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-foreground-muted">
-              No tasks yet on this job. Add the first step to the internal work plan below. This
-              does not change the quote or customer-approved scope.
-            </div>
-          ) : null}
-          <div className="space-y-8">
-            {job.stages.map((stage) => (
-              <section key={stage.id}>
-                <div className="mb-3 flex items-center justify-between gap-4 border-b border-border pb-2">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    {stage.title}
-                  </h3>
-                  {stage.title === CORRECTIONS_STAGE_NAME ? (
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">
-                      Recovery tasks only
-                    </p>
-                  ) : (
-                    <JobTaskAddButton
-                      jobId={job.id}
-                      jobStageId={stage.id}
-                      stageTitle={stage.title}
-                      variant={
-                        totalTasks === 0 && stage.id === firstAddableStageId
-                          ? "empty"
-                          : "stage"
-                      }
-                    />
-                  )}
-                </div>
-                {stage.tasks.length === 0 ? (
-                  <p className="text-xs text-foreground-muted">
-                    {stage.title === CORRECTIONS_STAGE_NAME
-                      ? "Correction tasks appear here when a recovery path is active."
-                      : "No tasks on this stage yet."}
-                  </p>
-                ) : (
-                  <ul className="space-y-3">
-                    {stage.tasks.map((task, taskIndex) => {
-                      const paymentHold = deriveTaskPaymentHold(
-                        stage.id,
-                        paymentRequirementsWithAnchors,
-                        paymentDueContext,
-                      );
-                      const issueForRecovery = task.recoveryFlow?.jobIssueId
-                        ? job.issues.find((i) => i.id === task.recoveryFlow?.jobIssueId)
-                        : null;
-                      const showRecoveryFallbackLabels =
-                        stage.title === CORRECTIONS_STAGE_NAME && !!issueForRecovery;
-                      const totalRecoveryTasks =
-                        issueForRecovery?.recoveryFlow?.tasks.length ?? 0;
-                      const stepNumber = showRecoveryFallbackLabels
-                        ? issueForRecovery!.recoveryFlow!.tasks.findIndex((t) => t.id === task.id) + 1
-                        : 0;
-                      return (
-                        <li key={task.id} id={`task-${task.id}`}>
-                          {showRecoveryFallbackLabels && (
-                            <div className="mb-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-[10px] text-foreground-muted">
-                              <p>
-                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Recovery for:</span>{" "}
-                                <span className="font-medium text-foreground">
-                                  {issueForRecovery?.jobTask?.title ?? issueForRecovery?.jobStage?.title ?? "Blocked task"}
-                                </span>
-                              </p>
-                              <p className="mt-0.5">
-                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Issue:</span>{" "}
-                                <span className="font-medium text-foreground">{issueForRecovery?.title}</span>
-                              </p>
-                              <p className="mt-0.5">
-                                <span className="font-bold uppercase tracking-wider text-foreground-subtle">Step:</span>{" "}
-                                <span className="font-medium text-foreground">
-                                  {`Step ${stepNumber > 0 ? stepNumber : taskIndex + 1} of ${totalRecoveryTasks > 0 ? totalRecoveryTasks : stage.tasks.length}`}
-                                </span>
-                              </p>
-                            </div>
-                          )}
-                          <JobTaskCard
-                            jobId={job.id}
-                            jobStageId={stage.id}
-                            stageTitle={stage.title}
-                            jobContextLabel={
-                              secondaryIdentity ? `${primaryIdentity} · ${secondaryIdentity}` : primaryIdentity
-                            }
-                            jobsiteAddressLine={jobsiteAddressLine}
-                            customerId={jobCustomerId}
-                            leadEditHref={jobLeadEditHref}
-                            task={task}
-                            liveSignals={liveSignals}
-                            stageIssues={stage.issues}
-                            paymentHold={paymentHold}
-                          />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            ))}
-          </div>
-        </WorkspacePanel>
+        <JobExecutionShell
+          initialView={executionView}
+          viewModel={executionViewModel}
+          stages={job.stages}
+          jobIssues={job.issues}
+          liveSignals={liveSignals}
+          totalTasks={totalTasks}
+          firstAddableStageId={firstAddableStageId}
+          jobContextLabel={jobContextLabel}
+          jobsiteAddressLine={jobsiteAddressLine}
+          customerId={jobCustomerId}
+          leadEditHref={jobLeadEditHref}
+          getPaymentHoldByStageId={paymentHoldByStageId}
+        />
       )}
       </section>
 

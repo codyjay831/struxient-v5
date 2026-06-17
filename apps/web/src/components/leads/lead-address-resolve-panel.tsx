@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2, MapPin } from "lucide-react";
+import { AlertCircle, Loader2, MapPin } from "lucide-react";
+import { toast } from "sonner";
 import {
   applyLeadServiceAddressCandidateAction,
   resolveLeadServiceAddressAction,
@@ -16,6 +17,37 @@ const primaryBtnClass =
 
 const secondaryBtnClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:border-accent/40 hover:bg-accent/[0.02] disabled:opacity-50";
+
+function normalizeAddressForCompare(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function showServiceAddressUpdatedToast(
+  previousAddress: string,
+  updatedAddress: string,
+  mode: "auto" | "selected",
+) {
+  const previous = previousAddress.trim();
+  const updated = updatedAddress.trim();
+  const changed =
+    previous.length > 0 &&
+    normalizeAddressForCompare(previous) !== normalizeAddressForCompare(updated);
+
+  if (mode === "auto") {
+    toast.success("Service address updated", {
+      description: changed
+        ? `${previous} → ${updated}`
+        : `${updated} · Verified with Google Maps`,
+      duration: 6000,
+    });
+    return;
+  }
+
+  toast.success("Service address confirmed", {
+    description: updated,
+    duration: 5000,
+  });
+}
 
 export function LeadAddressResolvePanel({
   leadId,
@@ -32,13 +64,10 @@ export function LeadAddressResolvePanel({
 }) {
   const router = useRouter();
   const startedRef = useRef(false);
-  const [phase, setPhase] = useState<
-    "loading" | "resolved" | "suggest" | "failed" | "error"
-  >("loading");
+  const [phase, setPhase] = useState<"loading" | "suggest" | "failed" | "error">("loading");
   const [candidates, setCandidates] = useState<
     Array<{ placeId: string; formattedAddress: string }>
   >([]);
-  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -49,11 +78,14 @@ export function LeadAddressResolvePanel({
       return;
     }
 
-    if (result.status === "already_verified" || result.status === "resolved") {
-      if (result.status === "resolved") {
-        setResolvedAddress(result.formattedAddress);
-      }
-      setPhase("resolved");
+    if (result.status === "already_verified") {
+      onResolved();
+      router.refresh();
+      return;
+    }
+
+    if (result.status === "resolved") {
+      showServiceAddressUpdatedToast(jobsiteAddressLine, result.formattedAddress, "auto");
       onResolved();
       router.refresh();
       return;
@@ -85,8 +117,7 @@ export function LeadAddressResolvePanel({
         setErrorMessage(result.error);
         return;
       }
-      setResolvedAddress(result.formattedAddress);
-      setPhase("resolved");
+      showServiceAddressUpdatedToast(jobsiteAddressLine, result.formattedAddress, "selected");
       onResolved();
       router.refresh();
     });
@@ -102,24 +133,6 @@ export function LeadAddressResolvePanel({
         <div className="flex items-center gap-2 text-sm text-foreground-muted">
           <Loader2 className="size-4 animate-spin shrink-0" aria-hidden />
           Checking service address…
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === "resolved") {
-    if (!resolvedAddress) return null;
-    return (
-      <div
-        id="address-verify"
-        className="scroll-mt-24 rounded-xl border border-success/30 bg-success/[0.03] p-4 shadow-sm"
-      >
-        <div className="flex items-start gap-2 text-sm text-foreground-muted">
-          <CheckCircle2 className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
-          <div>
-            <p className="font-medium text-foreground">Service address verified</p>
-            <p className="mt-1">{resolvedAddress}</p>
-          </div>
         </div>
       </div>
     );

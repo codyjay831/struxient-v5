@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Struxient",
+  title: {
+    default: "Struxient",
+    template: "%s | Struxient",
+  },
   description:
     "Construction management for trades—quotes, execution, and the Workstation.",
-  icons: {
-    icon: "/brand/struxient-mark.png",
-    apple: "/brand/struxient-mark.png",
-  },
+  applicationName: "Struxient",
 };
 
 export default function RootLayout({
