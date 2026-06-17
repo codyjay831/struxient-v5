@@ -21,8 +21,8 @@ export async function queryOrganizationScheduleProjection(input: {
     where: {
       organizationId: input.organizationId,
       status: { in: ACTIVE_AND_HISTORY_STATUSES },
-      startAt: { lte: input.range.endAt },
-      endAt: { gte: input.range.startAt },
+      startAt: { lt: input.range.endAt },
+      endAt: { gt: input.range.startAt },
       job: jobVisibilityWhere,
     },
     select: {

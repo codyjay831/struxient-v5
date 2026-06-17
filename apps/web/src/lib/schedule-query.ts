@@ -19,7 +19,7 @@ import {
 } from "@/lib/authz/resource-access";
 import { canReadCommercial } from "@/lib/authz/capabilities";
 
-export type ScheduleView = "month" | "week" | "day" | "agenda" | "dispatch";
+export type ScheduleView = "month" | "week" | "day" | "agenda";
 
 export type ScheduleEventKind =
   | "lead-visit-request"
@@ -105,8 +105,13 @@ export async function queryOrganizationSchedule(
         organizationId,
         status: { in: [LeadVisitRequestStatus.PENDING, LeadVisitRequestStatus.CONFIRMED] },
         OR: [
-          { confirmedDate: { gte: range.startAt, lte: range.endAt } },
-          { requestedDate: { gte: range.startAt, lte: range.endAt } },
+          { confirmedDate: { gte: range.startAt, lt: range.endAt } },
+          {
+            AND: [
+              { confirmedDate: null },
+              { requestedDate: { gte: range.startAt, lt: range.endAt } },
+            ],
+          },
         ],
       },
       select: {
@@ -132,8 +137,8 @@ export async function queryOrganizationSchedule(
       where: {
         organizationId,
         ...(commercialReadable ? {} : { userId }),
-        startAt: { lte: range.endAt },
-        OR: [{ endAt: null }, { endAt: { gte: range.startAt } }],
+        startAt: { lt: range.endAt },
+        OR: [{ endAt: null }, { endAt: { gt: range.startAt } }],
       },
       select: {
         id: true,
@@ -153,7 +158,7 @@ export async function queryOrganizationSchedule(
         status: JobTaskStatus.TODO,
         ...taskVisibilityWhere,
         OR: [
-          { dueAt: { gte: range.startAt, lte: range.endAt } },
+          { dueAt: { gte: range.startAt, lt: range.endAt } },
         ],
       },
       select: {
@@ -399,58 +404,22 @@ export async function queryOrganizationSchedule(
 
   unscheduled.push(...deriveUnscheduledTaskItems(readyTaskStates));
 
-  const conflicts = deriveScheduleConflicts(events).concat(
-    deriveCanonicalScheduleConflicts(
-      scheduleEvents.map((event) => ({
-        eventId: event.id,
-        assigneeUserId: event.leadUserId,
-        assigneeLabel: event.leadUser?.name ?? event.leadUser?.email ?? null,
-        status: event.status,
-        startAt: event.startAt,
-        endAt: event.endAt,
-      })),
-    ).map((conflict) => ({
-      userId: conflict.userId,
-      userLabel: conflict.userLabel,
-      eventIds: conflict.eventIds,
-      reason: conflict.reason,
+  const conflicts = deriveCanonicalScheduleConflicts(
+    scheduleEvents.map((event) => ({
+      eventId: event.id,
+      assigneeUserId: event.leadUserId,
+      assigneeLabel: event.leadUser?.name ?? event.leadUser?.email ?? null,
+      status: event.status,
+      startAt: event.startAt,
+      endAt: event.endAt,
     })),
-  );
+  ).map((conflict) => ({
+    userId: conflict.userId,
+    userLabel: conflict.userLabel,
+    eventIds: conflict.eventIds.map((id) => `schedule-event-${id}`),
+    reason: conflict.reason,
+  }));
 
   return { events, unscheduled, conflicts };
-}
-
-function deriveScheduleConflicts(events: ScheduleEvent[]): ScheduleConflict[] {
-  const byUser = new Map<string, ScheduleEvent[]>();
-  for (const event of events) {
-    if (!event.assigneeUserId) continue;
-    if (!event.startAt) continue;
-    const list = byUser.get(event.assigneeUserId) ?? [];
-    list.push(event);
-    byUser.set(event.assigneeUserId, list);
-  }
-
-  const conflicts: ScheduleConflict[] = [];
-  for (const [userId, userEvents] of byUser.entries()) {
-    const sorted = userEvents
-      .filter((e) => e.endAt)
-      .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-
-    for (let i = 1; i < sorted.length; i += 1) {
-      const prev = sorted[i - 1];
-      const current = sorted[i];
-      if (!prev.endAt || !current.endAt) continue;
-      if (current.startAt < prev.endAt) {
-        conflicts.push({
-          userId,
-          userLabel: current.assigneeLabel || prev.assigneeLabel || "Assigned user",
-          eventIds: [prev.id, current.id],
-          reason: "Overlapping scheduled work for the same assignee.",
-        });
-      }
-    }
-  }
-
-  return conflicts;
 }
 

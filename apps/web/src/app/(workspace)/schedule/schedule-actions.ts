@@ -4,13 +4,18 @@ import {
   JobScheduleEventCompletionOutcome,
   JobScheduleEventKind,
   JobScheduleEventStatus,
-  LeadVisitRequestStatus,
   ScheduleBlockType,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireMutableSession } from "@/lib/session";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
+import {
+  confirmLeadVisitRequest,
+  cancelLeadVisitRequest,
+  rescheduleLeadVisitRequest,
+} from "@/lib/scheduling/lead-visit-schedule-service";
+import { upsertScheduleBlock } from "@/lib/scheduling/schedule-block-service";
 import { setTaskScheduleActionCore } from "@/lib/task-timing";
 import {
   confirmScheduleEvent,
@@ -47,51 +52,30 @@ export async function confirmLeadVisitRequestAction(
   const session = await requireMutableSession();
 
   try {
-    const request = await db.leadVisitRequest.findFirst({
-      where: { id: requestId, organizationId: session.organizationId },
-      select: {
-        id: true,
-        leadId: true,
-        lead: { select: { id: true, title: true } },
-      },
-    });
-
-    if (!request) return { error: "Visit request not found." };
-
-    await db.$transaction(async (tx) => {
-      await tx.leadVisitRequest.update({
-        where: { id: requestId },
-        data: {
-          status: LeadVisitRequestStatus.CONFIRMED,
-          confirmedDate,
-        },
-      });
-
-      await enqueueNotification(
+    const result = await db.$transaction(async (tx) =>
+      confirmLeadVisitRequest(
         {
           organizationId: session.organizationId,
-          kind: "LEAD_VISIT_CONFIRMED",
-          title: `Estimate visit confirmed: ${request.lead.title}`,
-          body: notifyCustomer
-            ? "Customer notification requested."
-            : "Customer notification not requested.",
-          dedupeKey: `lead-visit-confirmed-${requestId}-${confirmedDate.toISOString()}`,
-          payloadJson: {
-            requestId,
-            leadId: request.leadId,
-            confirmedDate: confirmedDate.toISOString(),
-            notifyCustomer,
-            actorUserId: session.userId,
-          },
+          requestId,
+          confirmedDate,
+          notifyCustomer,
+          actorUserId: session.userId,
+          role: session.role,
         },
         tx,
-      );
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
     });
 
     revalidatePath("/schedule");
     revalidatePath("/workstation");
     revalidatePath("/workstation/schedule");
-    revalidatePath(`/leads/${request.leadId}`);
+    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
     return { success: true };
   } catch (error) {
     console.error("Failed to confirm lead visit request", error);
@@ -106,43 +90,28 @@ export async function cancelLeadVisitRequestAction(
   const session = await requireMutableSession();
 
   try {
-    const request = await db.leadVisitRequest.findFirst({
-      where: { id: requestId, organizationId: session.organizationId },
-      select: { id: true, leadId: true, lead: { select: { title: true } } },
-    });
-
-    if (!request) return { error: "Visit request not found." };
-
-    await db.$transaction(async (tx) => {
-      await tx.leadVisitRequest.update({
-        where: { id: requestId },
-        data: {
-          status: LeadVisitRequestStatus.CANCELED,
-          notes: note || undefined,
-        },
-      });
-
-      await enqueueNotification(
+    const result = await db.$transaction(async (tx) =>
+      cancelLeadVisitRequest(
         {
           organizationId: session.organizationId,
-          kind: "LEAD_VISIT_CANCELED",
-          title: `Estimate visit canceled: ${request.lead.title}`,
-          body: note,
-          dedupeKey: `lead-visit-canceled-${requestId}`,
-          payloadJson: {
-            requestId,
-            leadId: request.leadId,
-            note,
-            actorUserId: session.userId,
-          },
+          requestId,
+          note,
+          actorUserId: session.userId,
+          role: session.role,
         },
         tx,
-      );
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
     });
 
     revalidatePath("/schedule");
     revalidatePath("/workstation");
-    revalidatePath(`/leads/${request.leadId}`);
+    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
     return { success: true };
   } catch (error) {
     console.error("Failed to cancel lead visit request", error);
@@ -158,45 +127,29 @@ export async function rescheduleLeadVisitRequestAction(
   const session = await requireMutableSession();
 
   try {
-    const request = await db.leadVisitRequest.findFirst({
-      where: { id: requestId, organizationId: session.organizationId },
-      select: { id: true, leadId: true, lead: { select: { title: true } } },
-    });
-    if (!request) return { error: "Visit request not found." };
-
-    await db.$transaction(async (tx) => {
-      await tx.leadVisitRequest.update({
-        where: { id: requestId },
-        data: {
-          status: LeadVisitRequestStatus.CONFIRMED,
-          confirmedDate,
-        },
-      });
-
-      await enqueueNotification(
+    const result = await db.$transaction(async (tx) =>
+      rescheduleLeadVisitRequest(
         {
           organizationId: session.organizationId,
-          kind: "LEAD_VISIT_RESCHEDULED",
-          title: `Estimate visit rescheduled: ${request.lead.title}`,
-          body: notifyCustomer
-            ? "Customer notification requested."
-            : "Customer notification not requested.",
-          dedupeKey: `lead-visit-rescheduled-${requestId}-${confirmedDate.toISOString()}`,
-          payloadJson: {
-            requestId,
-            leadId: request.leadId,
-            confirmedDate: confirmedDate.toISOString(),
-            notifyCustomer,
-            actorUserId: session.userId,
-          },
+          requestId,
+          confirmedDate,
+          notifyCustomer,
+          actorUserId: session.userId,
+          role: session.role,
         },
         tx,
-      );
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
     });
 
     revalidatePath("/schedule");
     revalidatePath("/workstation");
-    revalidatePath(`/leads/${request.leadId}`);
+    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
     return { success: true };
   } catch (error) {
     console.error("Failed to reschedule lead visit request", error);
@@ -426,38 +379,26 @@ export async function upsertScheduleBlockAction(data: {
 }): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
 
-  if (data.endAt && data.endAt <= data.startAt) {
-    return { error: "Schedule block end must be after start." };
-  }
-
   try {
-    if (data.blockId) {
-      await db.scheduleBlock.updateMany({
-        where: { id: data.blockId, organizationId: session.organizationId },
-        data: {
-          title: data.title,
-          type: data.type,
-          startAt: data.startAt,
-          endAt: data.endAt,
-          allDay: data.allDay ?? false,
-          userId: data.userId ?? null,
-          notes: data.notes,
-        },
-      });
-    } else {
-      await db.scheduleBlock.create({
-        data: {
+    const result = await db.$transaction(async (tx) =>
+      upsertScheduleBlock(
+        {
           organizationId: session.organizationId,
+          actorUserId: session.userId,
+          role: session.role,
+          blockId: data.blockId,
           title: data.title,
           type: data.type,
           startAt: data.startAt,
           endAt: data.endAt,
-          allDay: data.allDay ?? false,
-          userId: data.userId ?? null,
+          allDay: data.allDay,
+          userId: data.userId,
           notes: data.notes,
         },
-      });
-    }
+        tx,
+      ),
+    );
+    if ("error" in result) return { error: result.error };
 
     revalidatePath("/schedule");
     revalidatePath("/workstation/schedule");
