@@ -20,7 +20,16 @@ It is **not**:
 - A replacement for **every** deep editor (quote authoring may remain its own focused surface).  
 - A passive “wall of widgets” with no notion of priority.  
 - A customer portal.  
-- A substitute for **record-based** pages (**Jobs**, **Tasks**, **Schedule**, **Quotes**, **Customers**, **Leads**, etc.) where users **browse and maintain** those objects at length—those routes can remain for larger, list- and detail-oriented work. The Workstation is **different** because it **aggregates actionable work and operational state across** those domains so users are not forced to **hunt module-by-module** just to see what matters.
+- A substitute for **record-based** pages (**Jobs**, **Tasks**, **Schedule**, **Quotes**, **Customers**, **Sales**, etc.) where users **browse and maintain** those objects at length—those routes can remain for larger, list- and detail-oriented work. The Workstation is **different** because it **aggregates actionable work and operational state across** those domains so users are not forced to **hunt module-by-module** just to see what matters.
+
+### Workstation vs Sales
+
+| Surface | Purpose |
+|---------|---------|
+| **Workstation** | Ranked **attention** and **next action** across jobs, tasks, quotes, schedule, payments, and sales follow-ups—what needs you **now**. |
+| **Sales** (`/leads`) | Full **open-opportunity orientation** on a derived condition board (e.g. Needs site survey, Quote draft, Quote sent)—where every active deal sits and what lane it is in. |
+
+Sales shares derivation helpers with Workstation (`getOpportunityFlow`) but must **not** fork a second priority/ranking engine.
 
 ## Role, permissions, and assignment
 

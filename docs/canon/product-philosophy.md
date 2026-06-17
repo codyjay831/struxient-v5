@@ -31,7 +31,7 @@ Shorthand for internal use:
 
 ## 2. Flow keeper thesis
 
-Most software punishes messiness: clean your data, configure your automations, maintain your board.
+Most software punishes messiness: clean your data, configure your automations, maintain your board (drag cards, update stages by hand).
 
 Struxient **accepts mess** at the edge and **refuses chaos** at the core:
 

@@ -7,9 +7,11 @@ export type LeadListSortParam =
   | "title"
   | "age_asc";
 export type LeadListPipelineParam = "active" | "awarded" | "closed";
+export type LeadListViewParam = "board" | "list";
 
 export const LEAD_LIST_DEFAULT_SORT: LeadListSortParam = "created";
 export const LEAD_LIST_DEFAULT_PIPELINE: LeadListPipelineParam = "active";
+export const LEAD_LIST_DEFAULT_VIEW: LeadListViewParam = "board";
 
 const SORT_VALUES: LeadListSortParam[] = [
   "created",
@@ -17,6 +19,7 @@ const SORT_VALUES: LeadListSortParam[] = [
   "age_asc",
 ];
 const PIPELINE_VALUES: LeadListPipelineParam[] = ["active", "awarded", "closed"];
+const VIEW_VALUES: LeadListViewParam[] = ["board", "list"];
 
 function firstSearchParam(value: string | string[] | undefined): string {
   if (typeof value === "string") {
@@ -30,17 +33,21 @@ function firstSearchParam(value: string | string[] | undefined): string {
 
 export function parseLeadListSearchParams(
   record: Record<string, string | string[] | undefined>,
-): { q: string; sort: LeadListSortParam; pipeline: LeadListPipelineParam } {
+): { q: string; sort: LeadListSortParam; pipeline: LeadListPipelineParam; view: LeadListViewParam } {
   const q = firstSearchParam(record.q).slice(0, MAX_QUERY_LEN);
   const rawSort = firstSearchParam(record.sort).toLowerCase();
   const rawPipeline = firstSearchParam(record.pipeline).toLowerCase();
+  const rawView = firstSearchParam(record.view).toLowerCase();
   const sort: LeadListSortParam = SORT_VALUES.includes(rawSort as LeadListSortParam)
     ? (rawSort as LeadListSortParam)
     : LEAD_LIST_DEFAULT_SORT;
   const pipeline: LeadListPipelineParam = PIPELINE_VALUES.includes(rawPipeline as LeadListPipelineParam)
     ? (rawPipeline as LeadListPipelineParam)
     : LEAD_LIST_DEFAULT_PIPELINE;
-  return { q, sort, pipeline };
+  const view: LeadListViewParam = VIEW_VALUES.includes(rawView as LeadListViewParam)
+    ? (rawView as LeadListViewParam)
+    : LEAD_LIST_DEFAULT_VIEW;
+  return { q, sort, pipeline, view };
 }
 
 export function leadListWhere(
@@ -126,11 +133,12 @@ export function leadRowMatchesPipeline(
   }
 }
 
-/** Build relative `/leads` query string; omits default sort and empty q. */
+/** Build relative `/leads` query string; omits default sort, view, and empty q. */
 export function serializeLeadListHref(overrides: {
   q?: string;
   sort?: LeadListSortParam;
   pipeline?: LeadListPipelineParam;
+  view?: LeadListViewParam;
 }): string {
   const params = new URLSearchParams();
   const q = (overrides.q ?? "").trim().slice(0, MAX_QUERY_LEN);
@@ -144,6 +152,10 @@ export function serializeLeadListHref(overrides: {
   const pipeline = overrides.pipeline ?? LEAD_LIST_DEFAULT_PIPELINE;
   if (pipeline !== LEAD_LIST_DEFAULT_PIPELINE) {
     params.set("pipeline", pipeline);
+  }
+  const view = overrides.view ?? LEAD_LIST_DEFAULT_VIEW;
+  if (view !== LEAD_LIST_DEFAULT_VIEW) {
+    params.set("view", view);
   }
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";

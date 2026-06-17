@@ -6,13 +6,19 @@ import { useRouter } from "next/navigation";
 import {
   parseLeadListSearchParams,
   LEAD_LIST_DEFAULT_SORT,
+  LEAD_LIST_DEFAULT_PIPELINE,
+  LEAD_LIST_DEFAULT_VIEW,
   serializeLeadListHref,
   type LeadListSortParam,
+  type LeadListPipelineParam,
+  type LeadListViewParam,
 } from "@/lib/lead-list-query";
 
 export function LeadListSearchForm({
   q,
   sort,
+  pipeline,
+  view,
   matchingCount,
   totalInOrg,
   hasActiveListFilters,
@@ -22,6 +28,8 @@ export function LeadListSearchForm({
 }: {
   q: string;
   sort: LeadListSortParam;
+  pipeline: LeadListPipelineParam;
+  view: LeadListViewParam;
   matchingCount: number;
   totalInOrg: number;
   hasActiveListFilters: boolean;
@@ -35,14 +43,24 @@ export function LeadListSearchForm({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const sortField = fd.get("sort");
-    const { q: nextQ, sort: nextSort } =
+    const pipelineField = fd.get("pipeline");
+    const viewField = fd.get("view");
+    const { q: nextQ, sort: nextSort, pipeline: nextPipeline, view: nextView } =
       parseLeadListSearchParams({
         q: String(fd.get("q") ?? ""),
         sort: typeof sortField === "string" ? sortField : undefined,
+        pipeline: typeof pipelineField === "string" ? pipelineField : undefined,
+        view: typeof viewField === "string" ? viewField : undefined,
       });
-    router.push(serializeLeadListHref({ q: nextQ, sort: nextSort }), {
-      scroll: false,
-    });
+    router.push(
+      serializeLeadListHref({
+        q: nextQ,
+        sort: nextSort,
+        pipeline: nextPipeline,
+        view: nextView,
+      }),
+      { scroll: false },
+    );
   }
 
   return (
@@ -57,7 +75,7 @@ export function LeadListSearchForm({
         <span className="text-foreground-subtle">/{totalInOrg}</span>
       </p>
       <form
-        key={serializeLeadListHref({ q, sort })}
+        key={serializeLeadListHref({ q, sort, pipeline, view })}
         method="get"
         action="/leads"
         onSubmit={handleSubmit}
@@ -80,6 +98,12 @@ export function LeadListSearchForm({
         </div>
         {sort !== LEAD_LIST_DEFAULT_SORT ? (
           <input type="hidden" name="sort" value={sort} />
+        ) : null}
+        {pipeline !== LEAD_LIST_DEFAULT_PIPELINE ? (
+          <input type="hidden" name="pipeline" value={pipeline} />
+        ) : null}
+        {view !== LEAD_LIST_DEFAULT_VIEW ? (
+          <input type="hidden" name="view" value={view} />
         ) : null}
         <button type="submit" className={primaryLinkClass}>
           Search

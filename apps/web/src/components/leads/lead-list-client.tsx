@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CenteredWorkspaceDialog } from "@/components/ui/centered-workspace-dialog";
 import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
 import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
+import { formatOpportunityPhaseLabel } from "@/lib/opportunity-board";
 
 /* ─── Compact lead row ───────────────────────────────────────────────────── */
 
@@ -66,6 +67,9 @@ function LeadRow({
           <span className="text-sm font-semibold text-foreground leading-snug">
             {lead.title}
           </span>
+          <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-foreground-subtle">
+            {formatOpportunityPhaseLabel(lead.opportunityFlow.phase)}
+          </span>
           <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
         </div>
         <p className="text-xs text-foreground-muted truncate mb-1.5">
@@ -74,6 +78,12 @@ function LeadRow({
         <div className="flex flex-wrap gap-x-2 text-xs text-foreground-subtle">
           <span>{lead.sourceLabel}</span>
           <span>·</span>
+          {lead.opportunityFlow.ageLabel ? (
+            <>
+              <span>{lead.opportunityFlow.ageLabel}</span>
+              <span>·</span>
+            </>
+          ) : null}
           <span>{lead.ageLabel}</span>
           <span>·</span>
           {lead.valueLabel && (

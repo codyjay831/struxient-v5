@@ -136,6 +136,11 @@ Decision surface; must answer in one view:
 
 The current condition shown in list/workstation/record surfaces must be derived from combined facts (lead readiness + visits + quote/send/approval + customer change requests + activation), not manually set as a second status field.
 
+### Sales page vs Lead Review
+
+- **Lead Review** (single-record workspace/dialog): decision surface for one opportunity—who/where/what, missing info, next action, quote CTA.
+- **Sales** (`/leads`): browse **all open opportunities** on a derived condition board (actionable lanes such as “Needs site survey”, “Quote sent”) plus list fallback. Board placement comes from `getOpportunityFlow().conditionCode`; `Lead.status` does not drive column placement.
+
 **Legacy note:** `parseIntakeNotes()` and notes-marker protocols are **display/legacy only** — do not grow them; new fields belong in `Lead.request` / `Lead.address` JSON.
 
 ---

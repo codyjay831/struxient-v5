@@ -135,12 +135,33 @@ Intake -> Discovery -> Estimating -> Customer Review -> Won
 
 Treat this as orientation, not a strict one-pass pipeline. Discovery and estimating may loop after customer feedback.
 
+### Sales pipeline board (v5)
+
+The **Sales** page (`/leads`) is the contractor-facing **pipeline orientation** surface for open opportunities. It is a **derived, non-draggable** board—not a manually maintained CRM pipeline.
+
+**Column placement** uses actionable **condition groups** derived from `getOpportunityFlow().conditionCode`, not broad phase names alone. Example lanes:
+
+- Needs info · Customer match review · Needs site survey · Site survey set · Ready to quote · Quote draft · Quote sent · Changes requested · Approved / ready for job · Job active
+
+The five orientation phases (`Intake → Discovery → Estimating → Customer Review → Won`) appear as **card context**, not as the primary column structure, because `Discovery` and `Estimating` are too vague for scan-at-a-glance work.
+
+**Movement rules:**
+
+- Cards move when **stored facts** change (intake completeness, visit schedule/completion, quote draft/send/approval, change requests, job activation)—never when a user drags a card.
+- `Lead.status` remains lifecycle/disposition metadata; it does **not** control board placement.
+
+**Card requirements:** where it is (condition label + phase context), how long it has been there (`ageLabel`), what blocks it (`requirements`), and what action is next (`primaryAction`).
+
+**Workstation vs Sales:** Workstation ranks **attention and next action** across the business; Sales shows **full open-opportunity orientation** by actionable lane. Sales must not become a second priority engine.
+
 ### Progress anti-patterns
 
 - Persisting UI condition as a database lifecycle enum.
 - Overloading `QuoteStatus` to carry sales-operational conditions.
 - Treating “site visit” as a universal single-completion pipeline stage.
 - Building a visible workflow editor for normal contractor operation.
+- **Drag-to-advance** boards where column placement mutates lifecycle state.
+- Using broad phase columns (`Discovery`, `Estimating`) as the primary Sales board structure when actionable condition lanes are available.
 
 ---
 
@@ -251,7 +272,7 @@ Operators **dislike office work**; field capture is often **messy**—and that i
 - Accept **low-friction input** (short descriptions, photos, voice-to-text future, half-filled lead forms).  
 - Convert capture into **engine facts** (tasks, issues, attachments, activity)—not orphan notes.  
 - Keep field interactions **short**; invoices, reminders, and log rollups are **side effects** of execution facts, controlled by **org settings**—not a user-built trigger system. See [product-philosophy.md](./product-philosophy.md) and [locked-decisions-v1.md](./locked-decisions-v1.md) §16.  
-- Surface **next action** on Workstation so nobody maintains a board for the system to work.
+- Surface **next action** on Workstation so nobody **manually maintains** pipeline state for the system to work. A **system-derived** Sales board is allowed; operator drag-and-drop CRM boards are not.
 
 **Anti-pattern:** Requiring clean data entry before the user gets value. **Anti-pattern:** Gallery software where photos never gate work or inform proposals.
 

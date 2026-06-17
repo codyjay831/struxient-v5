@@ -6,6 +6,7 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
   LeadsListClient,
 } from "@/components/leads/lead-list-client";
+import { LeadsBoardClient } from "@/components/leads/lead-board-client";
 import {
   serializeLeadListRow,
   type SerializedLeadRow,
@@ -22,8 +23,10 @@ import {
   serializeLeadListHref,
   LEAD_LIST_DEFAULT_SORT,
   LEAD_LIST_DEFAULT_PIPELINE,
+  LEAD_LIST_DEFAULT_VIEW,
   type LeadListSortParam,
   type LeadListPipelineParam,
+  type LeadListViewParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadOrgCustomersForMatchGate } from "@/lib/lead-customer-match-gate";
@@ -62,7 +65,7 @@ export default async function LeadsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const { q, sort, pipeline } = parseLeadListSearchParams(sp);
+  const { q, sort, pipeline, view } = parseLeadListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getCommercialRequestContextOrNull();
@@ -175,26 +178,36 @@ export default async function LeadsPage({
   const hasActiveListFilters =
     q.length > 0 ||
     sort !== LEAD_LIST_DEFAULT_SORT ||
-    pipeline !== LEAD_LIST_DEFAULT_PIPELINE;
+    pipeline !== LEAD_LIST_DEFAULT_PIPELINE ||
+    view !== LEAD_LIST_DEFAULT_VIEW;
 
   const sortOptions: LeadListSortParam[] = ["created", "title", "age_asc"];
   const pipelineOptions: LeadListPipelineParam[] = ["active", "awarded", "closed"];
+  const viewOptions: LeadListViewParam[] = ["board", "list"];
 
   const sortNavItems = sortOptions.map((s) => ({
     key: s,
-    href: serializeLeadListHref({ q, sort: s, pipeline }),
+    href: serializeLeadListHref({ q, sort: s, pipeline, view }),
     label: sortLabel(s),
     active: sort === s,
   }));
   const pipelineNavItems = pipelineOptions.map((p) => ({
     key: p,
-    href: serializeLeadListHref({ q, sort, pipeline: p }),
+    href: serializeLeadListHref({ q, sort, pipeline: p, view }),
     label: p === "active" ? "Active" : p === "awarded" ? "Awarded" : "Closed",
     active: pipeline === p,
   }));
+  const viewNavItems = viewOptions.map((v) => ({
+    key: v,
+    href: serializeLeadListHref({ q, sort, pipeline, view: v }),
+    label: v === "board" ? "Board" : "List",
+    active: view === v,
+  }));
+
+  const pageWidthClass = view === "board" ? "mx-auto max-w-[100rem] px-4" : "mx-auto max-w-5xl";
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className={pageWidthClass}>
       <PageHeader
         variant="compact"
         title="Sales"
@@ -218,6 +231,8 @@ export default async function LeadsPage({
           <LeadListSearchForm
             q={q}
             sort={sort}
+            pipeline={pipeline}
+            view={view}
             matchingCount={matchingCount}
             totalInOrg={totalInOrg}
             hasActiveListFilters={hasActiveListFilters}
@@ -227,6 +242,9 @@ export default async function LeadsPage({
           />
 
           <LeadListFiltersClient
+            viewItems={viewNavItems}
+            viewActiveClass={pipelineLinkActive}
+            viewIdleClass={pipelineLinkIdle}
             pipelineItems={pipelineNavItems}
             pipelineActiveClass={pipelineLinkActive}
             pipelineIdleClass={pipelineLinkIdle}
@@ -264,6 +282,12 @@ export default async function LeadsPage({
                 </ButtonLink>
               </EmptyState>
             </div>
+          ) : view === "board" ? (
+            <LeadsBoardClient
+              leads={pipelineLeads}
+              pipeline={pipeline}
+              orgHasLeads={totalInOrg > 0}
+            />
           ) : (
             <LeadsListClient leads={pipelineLeads} orgHasLeads={totalInOrg > 0} />
           )}

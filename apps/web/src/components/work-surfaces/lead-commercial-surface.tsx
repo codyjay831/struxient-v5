@@ -28,6 +28,10 @@ import {
   resolveOpportunityActionHref,
   type OpportunityAction,
 } from "@/lib/opportunity-flow";
+import {
+  OPPORTUNITY_PHASE_ORDER,
+  formatOpportunityPhaseLabel,
+} from "@/lib/opportunity-board";
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
@@ -54,7 +58,7 @@ export interface LeadCommercialSurfaceProps {
 
 const sectionTitleClass =
   "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
-const phaseOrder = ["INTAKE", "DISCOVERY", "ESTIMATING", "CUSTOMER_REVIEW", "WON"] as const;
+const phaseOrder = OPPORTUNITY_PHASE_ORDER;
 
 const primaryActionClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
@@ -212,24 +216,7 @@ function OpportunityActionControl({
 }
 
 function phaseLabel(phase: string): string {
-  switch (phase) {
-    case "INTAKE":
-      return "Intake";
-    case "DISCOVERY":
-      return "Discovery";
-    case "ESTIMATING":
-      return "Estimating";
-    case "CUSTOMER_REVIEW":
-      return "Customer review";
-    case "WON":
-      return "Won";
-    case "LOST":
-      return "Lost";
-    case "PAUSED":
-      return "Paused";
-    default:
-      return phase;
-  }
+  return formatOpportunityPhaseLabel(phase);
 }
 
 export function LeadCommercialSurface({
