@@ -316,8 +316,10 @@ export type BoardWeekDay = {
 
 export function WorkstationWeekCalendar({ days }: { days: BoardWeekDay[] }) {
   return (
-    <div className="overflow-x-auto scrollbar-hide">
-      <div className="grid min-w-[640px] grid-cols-7 gap-2">
+    <div className="space-y-2">
+      <p className="text-xs text-foreground-subtle md:hidden">Swipe to see the full week.</p>
+      <div className="-mx-4 overflow-x-auto px-4 scrollbar-hide sm:mx-0 sm:px-0">
+        <div className="grid min-w-[640px] grid-cols-7 gap-2">
         {days.map((day) => (
           <div
             key={day.iso}
@@ -397,6 +399,7 @@ export function WorkstationWeekCalendar({ days }: { days: BoardWeekDay[] }) {
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

@@ -336,8 +336,8 @@ export default async function WorkstationPage({
     return (
       <div className="space-y-8">
         {/* Top bar: quick actions + settings */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2">
             {showQuickActions && (
               <>
                 {quickActions.includes("new-intake") && (

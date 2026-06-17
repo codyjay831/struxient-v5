@@ -24,12 +24,12 @@ export function OrganizationSwitcher({
   }
 
   return (
-    <label className="inline-flex items-center gap-2 text-sm text-foreground-muted">
-      <span>Org</span>
+    <label className="inline-flex min-w-0 max-w-[9rem] items-center gap-1 text-sm text-foreground-muted sm:max-w-none sm:gap-2">
+      <span className="hidden sm:inline">Org</span>
       <select
         disabled={isPending}
         defaultValue={activeOrganizationId}
-        className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+        className="min-w-0 max-w-full truncate rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
         onChange={(event) => {
           const nextOrgId = event.currentTarget.value;
           startTransition(async () => {

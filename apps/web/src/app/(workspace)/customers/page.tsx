@@ -121,7 +121,45 @@ export default async function CustomersPage({
       />
 
       <WorkspacePanel padding="compact" className="mb-6">
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-border md:hidden">
+          {customers.map((customer) => (
+            <li key={customer.id}>
+              <Link
+                href={`/customers/${customer.id}`}
+                className="block px-4 py-4 transition-colors hover:bg-background/60"
+              >
+                <div className="font-medium text-foreground">{customer.displayName}</div>
+                {customer.companyName ? (
+                  <div className="mt-0.5 text-xs text-foreground-muted">{customer.companyName}</div>
+                ) : null}
+                <dl className="mt-3 grid gap-2 text-xs">
+                  <div>
+                    <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Contact</dt>
+                    <dd className="mt-0.5 text-foreground-muted">{customer.email || customer.phone || "—"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <dt className="font-medium uppercase tracking-wide text-foreground-subtle">
+                        Linked opportunities
+                      </dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-foreground">
+                        {customer._count.leads}
+                      </dd>
+                    </div>
+                    <div className="text-right">
+                      <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Created</dt>
+                      <dd className="mt-0.5 text-foreground-subtle">
+                        {new Date(customer.createdAt).toLocaleDateString()}
+                      </dd>
+                    </div>
+                  </div>
+                </dl>
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs font-medium text-foreground-subtle">

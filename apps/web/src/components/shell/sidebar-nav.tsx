@@ -64,10 +64,12 @@ function NavSection({
   title,
   items,
   pathname,
+  onNavigate,
 }: {
   title: string;
   items: NavItem[];
   pathname: string;
+  onNavigate?: () => void;
 }) {
   return (
     <div className="mb-8">
@@ -83,6 +85,7 @@ function NavSection({
             <li key={href}>
               <Link
                 href={href}
+                onClick={onNavigate}
                 className={[
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   active
@@ -110,7 +113,13 @@ function NavSection({
   );
 }
 
-export function SidebarNav({ role }: { role: StaffRole }) {
+export function SidebarNav({
+  role,
+  onNavigate,
+}: {
+  role: StaffRole;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const showCommercial = canReadCommercial(role);
   const salesItems = showCommercial ? salesNav : [];
@@ -119,13 +128,13 @@ export function SidebarNav({ role }: { role: StaffRole }) {
 
   return (
     <nav className="flex flex-1 flex-col" aria-label="Main">
-      <NavSection title="" items={workstationEntry} pathname={pathname} />
-      <NavSection title="Sales" items={salesItems} pathname={pathname} />
-      <NavSection title="Relationships" items={relationshipItems} pathname={pathname} />
-      <NavSection title="Work" items={workNav} pathname={pathname} />
-      <NavSection title="Finance" items={financeItems} pathname={pathname} />
+      <NavSection title="" items={workstationEntry} pathname={pathname} onNavigate={onNavigate} />
+      <NavSection title="Sales" items={salesItems} pathname={pathname} onNavigate={onNavigate} />
+      <NavSection title="Relationships" items={relationshipItems} pathname={pathname} onNavigate={onNavigate} />
+      <NavSection title="Work" items={workNav} pathname={pathname} onNavigate={onNavigate} />
+      <NavSection title="Finance" items={financeItems} pathname={pathname} onNavigate={onNavigate} />
       <div className="mt-auto">
-        <NavSection title="" items={utilityNav} pathname={pathname} />
+        <NavSection title="" items={utilityNav} pathname={pathname} onNavigate={onNavigate} />
       </div>
     </nav>
   );
