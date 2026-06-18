@@ -36,13 +36,102 @@ export type WorkstationWorkPanelProps = {
   item: WorkstationWorkItem;
   children?: ReactNode;
   onClose: () => void;
+  /** When embedded, header/footer chrome is provided by WorkstationModalShell. */
+  chrome?: "full" | "embedded";
 };
+
+function WorkstationWorkPanelBody({
+  item,
+  children,
+}: {
+  item: WorkstationWorkItem;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      {!children ? (
+        <div className="grid gap-8 sm:grid-cols-2">
+          <div className="space-y-2">
+            <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+              Reason for review
+            </h4>
+            <p className="text-base italic leading-relaxed text-foreground-muted">
+              {item.reason}
+            </p>
+            {item.workflow ? (
+              <p className="mt-4 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+                Current Status: {item.workflow.statusLabel}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
+              Recommended action
+            </h4>
+            <p className="text-lg font-bold leading-snug text-foreground">
+              {item.actionLabel ?? item.nextStep}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {children ? (
+        <div className="space-y-6">
+          {isBlockedMainPathRecoveryRedirect(item) ? (
+            <p className="rounded-lg border border-danger/20 bg-danger/[0.03] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
+              {blockedTaskRecoveryNotice(item)}
+            </p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function WorkstationWorkPanelFooter({
+  item,
+  onClose,
+  showClose = true,
+}: {
+  item: WorkstationWorkItem;
+  onClose: () => void;
+  showClose?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-6">
+      {item.href ? (
+        <Link
+          href={item.href}
+          className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
+        >
+          {fullRecordLinkLabel(item)}
+          <ArrowRight className="size-4" />
+        </Link>
+      ) : null}
+      {showClose ? (
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm font-bold text-foreground-subtle transition-colors hover:text-foreground"
+        >
+          Close panel
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 export function WorkstationWorkPanel({
   item,
   children,
   onClose,
+  chrome = "full",
 }: WorkstationWorkPanelProps) {
+  if (chrome === "embedded") {
+    return <WorkstationWorkPanelBody item={item}>{children}</WorkstationWorkPanelBody>;
+  }
+
   return (
     <div className="flex max-h-[88vh] flex-col">
       <div className="flex shrink-0 items-start justify-between border-b border-border px-5 py-4">
@@ -78,65 +167,11 @@ export function WorkstationWorkPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="space-y-6">
-          {!children ? (
-            <div className="grid gap-8 sm:grid-cols-2">
-              <div className="space-y-2">
-                <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-                  Reason for review
-                </h4>
-                <p className="text-base italic leading-relaxed text-foreground-muted">
-                  {item.reason}
-                </p>
-                {item.workflow ? (
-                  <p className="mt-4 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-                    Current Status: {item.workflow.statusLabel}
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                <h4 className="text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle">
-                  Recommended action
-                </h4>
-                <p className="text-lg font-bold leading-snug text-foreground">
-                  {item.actionLabel ?? item.nextStep}
-                </p>
-              </div>
-            </div>
-          ) : null}
-
-          {children ? (
-            <div className="space-y-6">
-              {isBlockedMainPathRecoveryRedirect(item) ? (
-                <p className="rounded-lg border border-danger/20 bg-danger/[0.03] px-4 py-3 text-sm leading-relaxed text-foreground-muted">
-                  {blockedTaskRecoveryNotice(item)}
-                </p>
-              ) : null}
-              {children}
-            </div>
-          ) : null}
-        </div>
+        <WorkstationWorkPanelBody item={item}>{children}</WorkstationWorkPanelBody>
       </div>
 
       <div className="shrink-0 border-t border-border bg-foreground/[0.01] px-5 py-4">
-        <div className="flex flex-wrap items-center justify-end gap-6">
-          {!children && item.href ? (
-            <Link
-              href={item.href}
-              className="inline-flex items-center gap-2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-bold text-background transition-transform hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {fullRecordLinkLabel(item)}
-              <ArrowRight className="size-4" />
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm font-bold text-foreground-subtle transition-colors hover:text-foreground"
-          >
-            Close panel
-          </button>
-        </div>
+        <WorkstationWorkPanelFooter item={item} onClose={onClose} />
       </div>
     </div>
   );

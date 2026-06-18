@@ -25,6 +25,8 @@ export interface WorkstationUrlState {
   tab: WorkstationTab;
   lens: WorkstationLens;
   filter: WorkstationFilterCategory;
+  /** Domain queue sidebar filter; "all" is omitted from the URL. */
+  queueFilter?: string;
   selected?: WorkstationSelection;
 }
 
@@ -76,6 +78,10 @@ export function parseWorkstationUrlState(
   const filter = (get("filter") || "all") as WorkstationFilterCategory;
   const tab = resolveWorkstationTab(get("tab"), lens);
 
+  const queueFilterRaw = get("queueFilter");
+  const queueFilter =
+    queueFilterRaw && queueFilterRaw !== "all" ? queueFilterRaw : undefined;
+
   const selectedId = get("selectedId");
   const selectedKind = get("selectedKind") as WorkstationWorkItemKind | undefined;
   const step = get("step");
@@ -85,7 +91,7 @@ export function parseWorkstationUrlState(
     selected = { id: selectedId, kind: selectedKind, step };
   }
 
-  return { v, tab, lens, filter, selected };
+  return { v, tab, lens, filter, queueFilter, selected };
 }
 
 export function serializeWorkstationUrlState(
@@ -97,6 +103,9 @@ export function serializeWorkstationUrlState(
   if (state.tab && state.tab !== "overview") p.set("tab", state.tab);
   if (state.lens && state.lens !== "attention") p.set("lens", state.lens);
   if (state.filter && state.filter !== "all") p.set("filter", state.filter);
+  if (state.queueFilter && state.queueFilter !== "all") {
+    p.set("queueFilter", state.queueFilter);
+  }
 
   if (state.selected) {
     p.set("selectedId", state.selected.id);

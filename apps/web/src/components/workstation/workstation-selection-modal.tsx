@@ -9,7 +9,11 @@ import {
   QuoteWorkspaceDialogBody,
   type QuoteDialogDisplay,
 } from "@/components/work-surfaces/quote-workspace-dialog-body";
-import { WorkstationWorkPanel } from "@/components/workstation/workstation-work-panel";
+import { WorkstationModalShell } from "@/components/workstation/workstation-modal-shell";
+import {
+  WorkstationWorkPanel,
+  WorkstationWorkPanelFooter,
+} from "@/components/workstation/workstation-work-panel";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
@@ -97,9 +101,25 @@ export function WorkstationSelectionModal({
         onClose={handleClose}
       />
     ) : (
-      <WorkstationWorkPanel key={item.id} item={item} onClose={handleClose}>
-        {genericContent}
-      </WorkstationWorkPanel>
+      <WorkstationModalShell
+        key={item.id}
+        kindLabel={item.kind.replace("-", " ")}
+        title={item.title}
+        subtitle={item.contextLine ?? item.subtitle}
+        statusLabel={item.status}
+        onClose={handleClose}
+        footer={
+          <WorkstationWorkPanelFooter
+            item={item}
+            onClose={handleClose}
+            showClose={false}
+          />
+        }
+      >
+        <WorkstationWorkPanel item={item} onClose={handleClose} chrome="embedded">
+          {genericContent}
+        </WorkstationWorkPanel>
+      </WorkstationModalShell>
     );
 
   return (

@@ -15,6 +15,7 @@ import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
 } from "@/lib/workstation/url-state";
+import { getSpecForRole } from "@/lib/workstation/role-feeds";
 import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
 import {
   resolveWorkstationSelectedItem,
@@ -53,6 +54,23 @@ export default async function WorkstationPage({
 }) {
   const ctx = await getRequestContextOrThrow();
   const sp = await searchParams;
+  const tabParam = typeof sp.tab === "string" ? sp.tab : undefined;
+  const lensParam = typeof sp.lens === "string" ? sp.lens : undefined;
+
+  if (!tabParam && !lensParam) {
+    const roleSpec = getSpecForRole(ctx.role);
+    if (roleSpec.defaultTab !== "overview") {
+      redirect(
+        `/workstation${buildWorkstationUrl({
+          v: 1,
+          tab: roleSpec.defaultTab,
+          lens: roleSpec.defaultLens,
+          filter: roleSpec.defaultFilter,
+        })}`,
+      );
+    }
+  }
+
   const urlState = parseWorkstationUrlState(sp);
   const { tab, selected } = urlState;
   const selectedId = selected?.id;
@@ -87,6 +105,7 @@ export default async function WorkstationPage({
         actorUser: { select: { name: true } },
         job: {
           select: {
+            id: true,
             title: true,
             customer: { select: { displayName: true } },
             lead: { select: { contact: true, request: true, address: true, signals: true } },
@@ -102,12 +121,14 @@ export default async function WorkstationPage({
     }),
   ]);
 
+  const roleSpec = getSpecForRole(ctx.role);
   const presentation = buildWorkstationPresentation({
     items: allItems,
     scheduleEvents: schedule.events,
     recentActivityRaw: recentActivity,
     viewerUserId: ctx.userId,
     now,
+    overviewLimits: roleSpec.overviewLimits,
   });
 
   const selectedItemRaw = resolveWorkstationSelectedItem(
@@ -147,7 +168,7 @@ export default async function WorkstationPage({
       value: presentation.overviewCriticalGroups.reduce((n, g) => n + g.items.length, 0),
       context: `${highRiskCount} high risk`,
       tone: highRiskCount > 0 ? ("danger" as const) : ("neutral" as const),
-      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined, filter: "all" })}&queueFilter=blocked`,
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined, filter: "all", queueFilter: "blocked" })}`,
     },
     {
       id: "today",
@@ -155,7 +176,7 @@ export default async function WorkstationPage({
       value: presentation.signalStrip.todayCount,
       context: "scheduled / due",
       tone: presentation.signalStrip.todayCount > 0 ? ("warning" as const) : ("neutral" as const),
-      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined })}&queueFilter=today`,
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined, queueFilter: "today" })}`,
     },
     {
       id: "schedule-risk",
@@ -166,7 +187,7 @@ export default async function WorkstationPage({
         presentation.signalStrip.scheduleRiskCount > 0
           ? ("warning" as const)
           : ("neutral" as const),
-      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined })}&queueFilter=needs-schedule`,
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined, queueFilter: "needs-schedule" })}`,
     },
     {
       id: "waiting",
@@ -196,16 +217,11 @@ export default async function WorkstationPage({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="min-w-0">
-          {topAction ? (
-            <p className="truncate text-sm text-foreground-muted">
-              Top priority:{" "}
-              <span className="font-medium text-foreground">
-                {topAction.identity} — {topAction.workItem}
-              </span>
-            </p>
-          ) : (
-            <p className="text-sm text-foreground-muted">No urgent work flagged.</p>
-          )}
+          <p className="text-sm text-foreground-muted">
+            {topAction
+              ? `${presentation.overviewNextActions.length} ranked action${presentation.overviewNextActions.length === 1 ? "" : "s"} ready`
+              : "No urgent work flagged."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {topActionHref ? (

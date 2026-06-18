@@ -26,6 +26,10 @@ export function applyWorkstationQueueFilter(
   }
 
   if (tab === "calendar") {
+    if (queueFilter.startsWith("day:")) {
+      const dayKey = queueFilter.slice(4);
+      return items.filter((i) => i.calendarDay === dayKey);
+    }
     if (queueFilter === "today") return items.filter((i) => i.statusLabel === "Due today");
     if (queueFilter === "upcoming")
       return items.filter((i) => i.statusLabel !== "Due today" && i.statusLabel !== "Overdue");

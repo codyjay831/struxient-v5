@@ -271,3 +271,37 @@ test("buildWorkstationPresentation exposes critical groups with categories", () 
   assert.equal(paymentGroup?.items.length, 0);
   assert.equal(result.overviewNextActions.length, 1);
 });
+
+test("buildWorkstationPresentation respects role overview limits", () => {
+  const items = Array.from({ length: 8 }, (_, index) =>
+    makeItem({
+      id: `task-${index}`,
+      title: `Task ${index}`,
+      withinLaneRank: index + 1,
+      priority: index === 0 ? "critical" : "high",
+      reason: `Reason ${index}`,
+    }),
+  );
+
+  const result = buildWorkstationPresentation({
+    items,
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+    overviewLimits: { criticalPerGroup: 1, nextActions: 3, today: 2 },
+  });
+
+  assert.equal(result.overviewNextActions.length, 3);
+});
+
+test("buildDomainQueues includes calendarDay for scheduled items", () => {
+  const scheduled = makeItem({
+    id: "task-scheduled",
+    scheduledStartAt: new Date("2026-06-19T14:00:00.000Z"),
+    lens: "today",
+  });
+
+  const queues = buildDomainQueues([scheduled]);
+  assert.equal(queues.calendar[0]?.calendarDay, "2026-06-19");
+});

@@ -61,6 +61,7 @@ export function WorkstationShell({ tabCounts }: { tabCounts?: WorkstationTabCoun
                     tab: tabKey,
                     selected: undefined,
                     filter: "all",
+                    queueFilter: undefined,
                   })}
                   scroll={false}
                   className={

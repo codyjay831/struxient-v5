@@ -5,7 +5,32 @@ import { resolveJobActivitySubtitle } from "@/lib/work-item-context";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { findOrBuildWorkItemForScheduleEvent } from "@/lib/workstation/resolve-work-item-selection";
 import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
+import type { WorkstationOverviewLimits } from "@/lib/workstation/role-feeds";
 import type { Prisma } from "@prisma/client";
+
+const DEFAULT_OVERVIEW_LIMITS: WorkstationOverviewLimits = {
+  criticalPerGroup: 2,
+  nextActions: 6,
+  today: 5,
+};
+
+export function formatCalendarDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function findJobWorkItemForActivity(
+  sorted: WorkstationWorkItem[],
+  jobId: string,
+): WorkstationWorkItem | undefined {
+  return sorted.find(
+    (item) =>
+      item.recordId === jobId &&
+      (item.kind === "job" || item.kind === "investigate"),
+  );
+}
 
 export type WorkstationPresentationTone = "neutral" | "warning" | "danger";
 
@@ -127,6 +152,9 @@ export type ActivityItem = {
   id: string;
   title: string;
   subtitle: string;
+  selectedId?: string;
+  selectedKind?: string;
+  fallbackHref?: string;
 };
 
 export type ExceptionItem = {
@@ -151,6 +179,8 @@ export type QueueRowItem = {
   tone: WorkstationPresentationTone;
   statusLabel?: string;
   categoryLabel?: string;
+  /** YYYY-MM-DD local day key for calendar queue filtering. */
+  calendarDay?: string;
 };
 
 export type DomainQueues = {
@@ -192,6 +222,7 @@ type RecentActivityRaw = {
   title: string;
   actorUser: { name: string | null } | null;
   job: {
+    id: string;
     title: string;
     customer: { displayName: string | null } | null;
     lead: {
@@ -420,6 +451,12 @@ function toCriticalGroupItem(item: WorkstationWorkItem): CriticalGroupItem {
 
 function toQueueRow(item: WorkstationWorkItem): QueueRowItem {
   const identityInfo = resolveIdentityAndWorkItem(item);
+  const calendarDate = item.scheduledStartAt
+    ? new Date(item.scheduledStartAt)
+    : item.dueAt
+      ? new Date(item.dueAt)
+      : null;
+
   return {
     id: item.id,
     selectedId: item.id,
@@ -431,6 +468,7 @@ function toQueueRow(item: WorkstationWorkItem): QueueRowItem {
     tone: resolveTone(item),
     statusLabel: item.status,
     categoryLabel: resolveCategoryLabel(item),
+    calendarDay: calendarDate ? formatCalendarDayKey(calendarDate) : undefined,
   };
 }
 
@@ -460,6 +498,7 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
 export function buildCriticalGroups(
   sorted: WorkstationWorkItem[],
   nextActionIds: Set<string>,
+  criticalPerGroup = DEFAULT_OVERVIEW_LIMITS.criticalPerGroup,
 ): CriticalGroup[] {
   const criticalRaw = sorted
     .filter((item) => resolveCriticalCategory(item) !== null)
@@ -477,7 +516,7 @@ export function buildCriticalGroups(
     if (nextActionIds.has(item.id)) continue;
 
     const list = grouped.get(category) ?? [];
-    if (list.length >= 2) continue;
+    if (list.length >= criticalPerGroup) continue;
     list.push(toCriticalGroupItem(item));
     grouped.set(category, list);
   }
@@ -578,12 +617,14 @@ export function buildWorkstationPresentation({
   recentActivityRaw,
   viewerUserId,
   now,
+  overviewLimits = DEFAULT_OVERVIEW_LIMITS,
 }: {
   items: WorkstationWorkItem[];
   scheduleEvents: ScheduleEvent[];
   recentActivityRaw: RecentActivityRaw[];
   viewerUserId: string;
   now: Date;
+  overviewLimits?: WorkstationOverviewLimits;
 }): WorkstationPresentation {
   const synthesizedTodayItems: WorkstationWorkItem[] = scheduleEvents
     .filter((event) => isOnDay(event.startAt, now) && event.kind !== "schedule-block")
@@ -603,7 +644,10 @@ export function buildWorkstationPresentation({
       if (priorityDiff !== 0) return priorityDiff;
       return a.withinLaneRank - b.withinLaneRank;
     });
-  const overviewNextActions = dedupeById(needsActionRaw.map(toNeedsAction)).slice(0, 6);
+  const overviewNextActions = dedupeById(needsActionRaw.map(toNeedsAction)).slice(
+    0,
+    overviewLimits.nextActions,
+  );
   const needsActionIds = new Set(overviewNextActions.map((x) => x.id));
 
   const todayRaw = sorted.filter((item) => isTodayItem(item, now));
@@ -632,9 +676,13 @@ export function buildWorkstationPresentation({
         categoryLabel: resolveCategoryLabel(item),
       };
     }),
-  ).slice(0, 5);
+  ).slice(0, overviewLimits.today);
 
-  const overviewCriticalGroups = buildCriticalGroups(sorted, needsActionIds);
+  const overviewCriticalGroups = buildCriticalGroups(
+    sorted,
+    needsActionIds,
+    overviewLimits.criticalPerGroup,
+  );
 
   const jobsMap = new Map<string, WorkstationWorkItem[]>();
   for (const item of sorted) {
@@ -743,6 +791,8 @@ export function buildWorkstationPresentation({
           }
         : null,
     });
+    const jobWorkItem = findJobWorkItemForActivity(sorted, activity.job.id);
+
     return {
       id: activity.id,
       title: activity.title,
@@ -753,6 +803,9 @@ export function buildWorkstationPresentation({
         jobsiteLine: jobsite,
         actorName: activity.actorUser?.name,
       }),
+      selectedId: jobWorkItem?.id,
+      selectedKind: jobWorkItem?.kind,
+      fallbackHref: jobWorkItem ? undefined : `/jobs/${activity.job.id}`,
     };
   });
 

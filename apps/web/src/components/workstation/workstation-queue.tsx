@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import type { WorkstationTab } from "@/lib/workstation/url-state";
 import {
   buildWorkstationUrl,
@@ -71,8 +70,7 @@ export function WorkstationQueueView({
   urlState: ReturnType<typeof parseWorkstationUrlState>;
   selectedId?: string;
 }) {
-  const searchParams = useSearchParams();
-  const queueFilter = searchParams.get("queueFilter") ?? "all";
+  const queueFilter = urlState.queueFilter ?? "all";
   const tabMeta = WORKSTATION_TABS.find((t) => t.tab === tab);
   const filters = TAB_FILTERS[tab] ?? [];
   const filterCounts = countWorkstationQueueFilters(items, tab, filters);
@@ -87,16 +85,32 @@ export function WorkstationQueueView({
     });
   }
 
+  function buildActivityHref(item: ActivityItem): string | undefined {
+    if (!item.selectedId || !item.selectedKind) {
+      return item.fallbackHref;
+    }
+    return buildWorkstationUrl(urlState, {
+      selected: {
+        id: item.selectedId,
+        kind: item.selectedKind as Exclude<WorkstationWorkItem["kind"], "daily-log">,
+      },
+    });
+  }
+
+  function buildFilterHref(filter: string) {
+    return buildWorkstationUrl(urlState, {
+      tab,
+      queueFilter: filter === "all" ? undefined : filter,
+    });
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
       {filters.length > 0 ? (
         <aside className="space-y-1 border-border lg:border-r lg:pr-4">
           <p className="mb-2 text-xs font-medium text-foreground-subtle">Filter</p>
           {filters.map((f) => {
-            const href =
-              f.filter === "all"
-                ? buildWorkstationUrl(urlState, { tab })
-                : `${buildWorkstationUrl(urlState, { tab })}&queueFilter=${f.filter}`;
+            const href = buildFilterHref(f.filter);
             const active = queueFilter === f.filter;
             const count = filterCounts[f.filter] ?? 0;
             return (
@@ -144,10 +158,18 @@ export function WorkstationQueueView({
             {activityItems && activityItems.length > 0 ? (
               <div>
                 <p className="mb-2 text-xs font-medium text-foreground-subtle">Recent changes</p>
-                <ActivityFeedList items={activityItems} />
+                <ActivityFeedList
+                  items={activityItems}
+                  buildHref={buildActivityHref}
+                  selectedId={selectedId}
+                />
               </div>
             ) : filtered.length === 0 ? (
-              <ActivityFeedList items={activityItems ?? []} />
+              <ActivityFeedList
+                items={activityItems ?? []}
+                buildHref={buildActivityHref}
+                selectedId={selectedId}
+              />
             ) : null}
           </div>
         ) : (

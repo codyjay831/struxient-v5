@@ -84,7 +84,6 @@ type WorkstationRowProps = {
   badgeLabel?: string;
   href: string;
   selected?: boolean;
-  variant?: "default" | "hero";
   children?: ReactNode;
 };
 
@@ -96,11 +95,8 @@ export function WorkstationRow({
   badgeLabel,
   href,
   selected = false,
-  variant = "default",
   children,
 }: WorkstationRowProps) {
-  const isHero = variant === "hero";
-
   return (
     <Link
       href={href}
@@ -110,21 +106,12 @@ export function WorkstationRow({
         "before:absolute before:bottom-3 before:left-0 before:top-3 before:w-0.5 before:rounded-full",
         toneBorderClass(tone),
         selected ? "bg-accent/10" : "hover:bg-foreground/[0.03]",
-        isHero ? "py-4" : "",
       ].join(" ")}
       aria-current={selected ? "true" : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p
-            className={
-              isHero
-                ? "truncate text-base font-semibold text-foreground"
-                : "truncate text-sm font-semibold text-foreground"
-            }
-          >
-            {primary}
-          </p>
+          <p className="truncate text-sm font-semibold text-foreground">{primary}</p>
           {secondary ? (
             <p className="truncate text-sm text-foreground-muted">{secondary}</p>
           ) : null}
@@ -153,20 +140,37 @@ export function WorkstationRow({
 export function WorkstationColumn({
   title,
   description,
+  viewAllHref,
+  viewAllLabel = "View all",
   children,
   className = "",
 }: {
   title: string;
   description?: string;
+  viewAllHref?: string;
+  viewAllLabel?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={`min-w-0 ${className}`}>
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {description ? (
-        <p className="mt-0.5 text-xs text-foreground-muted">{description}</p>
-      ) : null}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          {description ? (
+            <p className="mt-0.5 text-xs text-foreground-muted">{description}</p>
+          ) : null}
+        </div>
+        {viewAllHref ? (
+          <Link
+            href={viewAllHref}
+            scroll={false}
+            className="shrink-0 text-xs font-medium text-accent hover:underline"
+          >
+            {viewAllLabel}
+          </Link>
+        ) : null}
+      </div>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -231,24 +235,9 @@ export function NextActionsList({
     );
   }
 
-  const [hero, ...rest] = items;
-
   return (
     <div>
-      {hero ? (
-        <WorkstationRow
-          key={hero.id}
-          primary={hero.identity}
-          secondary={hero.workItem}
-          detail={hero.reason}
-          tone={hero.tone}
-          badgeLabel={hero.categoryLabel}
-          href={buildHref(hero)}
-          selected={selectedId === hero.id}
-          variant="hero"
-        />
-      ) : null}
-      {rest.map((item) => (
+      {items.map((item) => (
         <WorkstationRow
           key={item.id}
           primary={item.identity}
@@ -390,19 +379,61 @@ export function QueueRowList({
   );
 }
 
-export function ActivityFeedList({ items }: { items: ActivityItem[] }) {
+export function ActivityFeedList({
+  items,
+  buildHref,
+  selectedId,
+}: {
+  items: ActivityItem[];
+  buildHref?: (item: ActivityItem) => string | undefined;
+  selectedId?: string;
+}) {
   if (items.length === 0) {
     return <p className="text-sm text-foreground-muted">No recent changes.</p>;
   }
 
   return (
     <div>
-      {items.map((item) => (
-        <div key={item.id} className="border-t border-border py-3 first:border-t-0">
-          <p className="truncate text-sm text-foreground">{item.title}</p>
-          <p className="truncate text-xs text-foreground-muted">{item.subtitle}</p>
-        </div>
-      ))}
+      {items.map((item) => {
+        const href = buildHref?.(item) ?? item.fallbackHref;
+        const content = (
+          <>
+            <p className="truncate text-sm text-foreground">{item.title}</p>
+            <p className="truncate text-xs text-foreground-muted">{item.subtitle}</p>
+          </>
+        );
+        const className = [
+          "group relative block border-t border-border py-3 pl-3 pr-2 transition-colors first:border-t-0",
+          href ? "hover:bg-foreground/[0.03]" : "",
+          selectedId && item.selectedId === selectedId ? "bg-accent/10" : "",
+        ].join(" ");
+
+        if (href) {
+          return (
+            <Link
+              key={item.id}
+              href={href}
+              scroll={false}
+              className={className}
+              aria-current={selectedId === item.selectedId ? "true" : undefined}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">{content}</div>
+                <ChevronRight
+                  className="mt-0.5 size-4 shrink-0 text-foreground-subtle opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-hidden
+                />
+              </div>
+            </Link>
+          );
+        }
+
+        return (
+          <div key={item.id} className={className}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }
