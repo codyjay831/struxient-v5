@@ -8,6 +8,10 @@ import {
   parseWorkstationUrlState,
   WORKSTATION_TABS,
 } from "@/lib/workstation/url-state";
+import {
+  applyWorkstationQueueFilter,
+  countWorkstationQueueFilters,
+} from "@/lib/workstation/queue-filters";
 import type { QueueRowItem } from "@/lib/workstation-presentation";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
 import { QueueRowList, ActivityFeedList } from "./workstation-cockpit";
@@ -51,70 +55,28 @@ const TAB_EMPTY: Record<Exclude<WorkstationTab, "overview">, string> = {
   calendar: "No schedule items flagged.",
   commercial: "No leads or quotes need follow-up.",
   money: "No payment actions due.",
-  activity: "No recent activity to review.",
+  activity: "No recent changes to review.",
 };
-
-function applyQueueFilter(
-  items: QueueRowItem[],
-  tab: WorkstationTab,
-  queueFilter: string,
-): QueueRowItem[] {
-  if (queueFilter === "all") return items;
-
-  if (tab === "tasks") {
-    if (queueFilter === "blocked")
-      return items.filter((i) => i.tone === "danger" || i.statusLabel === "Blocked");
-    if (queueFilter === "due")
-      return items.filter(
-        (i) => i.statusLabel === "Due today" || i.statusLabel === "Overdue",
-      );
-    if (queueFilter === "ready")
-      return items.filter((i) => i.statusLabel === "Ready" || i.statusLabel === "Needs proof");
-  }
-
-  if (tab === "jobs") {
-    if (queueFilter === "risk") return items.filter((i) => i.tone !== "neutral");
-    if (queueFilter === "blocked")
-      return items.filter((i) => i.tone === "danger" || i.statusLabel === "Blocked");
-  }
-
-  if (tab === "calendar") {
-    if (queueFilter === "today") return items.filter((i) => i.statusLabel === "Due today");
-    if (queueFilter === "upcoming")
-      return items.filter((i) => i.statusLabel !== "Due today" && i.statusLabel !== "Overdue");
-    if (queueFilter === "needs-schedule")
-      return items.filter((i) => i.statusLabel === "Needs schedule" || i.statusLabel === "Missed");
-  }
-
-  if (tab === "commercial") {
-    if (queueFilter === "leads") return items.filter((i) => i.categoryLabel === "Leads & Quotes");
-    if (queueFilter === "quotes") return items.filter((i) => i.title.toLowerCase().includes("quote"));
-  }
-
-  if (tab === "money") {
-    if (queueFilter === "due") return items.filter((i) => i.tone === "warning");
-    if (queueFilter === "holds") return items.filter((i) => i.tone === "danger");
-  }
-
-  return items;
-}
 
 export function WorkstationQueueView({
   tab,
   items,
   activityItems,
   urlState,
+  selectedId,
 }: {
   tab: Exclude<WorkstationTab, "overview">;
   items: QueueRowItem[];
   activityItems?: ActivityItem[];
   urlState: ReturnType<typeof parseWorkstationUrlState>;
+  selectedId?: string;
 }) {
   const searchParams = useSearchParams();
   const queueFilter = searchParams.get("queueFilter") ?? "all";
   const tabMeta = WORKSTATION_TABS.find((t) => t.tab === tab);
   const filters = TAB_FILTERS[tab] ?? [];
-  const filtered = applyQueueFilter(items, tab, queueFilter);
+  const filterCounts = countWorkstationQueueFilters(items, tab, filters);
+  const filtered = applyWorkstationQueueFilter(items, tab, queueFilter);
 
   function buildHref(row: { selectedId: string; selectedKind: string }) {
     return buildWorkstationUrl(urlState, {
@@ -129,15 +91,14 @@ export function WorkstationQueueView({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
       {filters.length > 0 ? (
         <aside className="space-y-1 border-border lg:border-r lg:pr-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
-            Filter
-          </p>
+          <p className="mb-2 text-xs font-medium text-foreground-subtle">Filter</p>
           {filters.map((f) => {
             const href =
               f.filter === "all"
                 ? buildWorkstationUrl(urlState, { tab })
                 : `${buildWorkstationUrl(urlState, { tab })}&queueFilter=${f.filter}`;
             const active = queueFilter === f.filter;
+            const count = filterCounts[f.filter] ?? 0;
             return (
               <Link
                 key={f.filter}
@@ -145,11 +106,14 @@ export function WorkstationQueueView({
                 scroll={false}
                 className={
                   active
-                    ? "block rounded-md bg-foreground/[0.04] px-2 py-1.5 text-sm font-medium text-foreground"
-                    : "block rounded-md px-2 py-1.5 text-sm text-foreground-muted transition-colors hover:text-foreground"
+                    ? "flex items-center justify-between rounded-md bg-foreground/[0.04] px-2 py-1.5 text-sm font-medium text-foreground"
+                    : "flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground"
                 }
               >
-                {f.label}
+                <span>{f.label}</span>
+                {count > 0 ? (
+                  <span className="tabular-nums text-xs text-foreground-subtle">{count}</span>
+                ) : null}
               </Link>
             );
           })}
@@ -168,21 +132,18 @@ export function WorkstationQueueView({
           <div className="space-y-6">
             {filtered.length > 0 ? (
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Needs review
-                </p>
+                <p className="mb-2 text-xs font-medium text-foreground-subtle">Needs review</p>
                 <QueueRowList
                   items={filtered}
                   buildHref={buildHref}
                   emptyMessage={TAB_EMPTY.activity}
+                  selectedId={selectedId}
                 />
               </div>
             ) : null}
             {activityItems && activityItems.length > 0 ? (
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Recent changes
-                </p>
+                <p className="mb-2 text-xs font-medium text-foreground-subtle">Recent changes</p>
                 <ActivityFeedList items={activityItems} />
               </div>
             ) : filtered.length === 0 ? (
@@ -194,6 +155,7 @@ export function WorkstationQueueView({
             items={filtered}
             buildHref={buildHref}
             emptyMessage={TAB_EMPTY[tab]}
+            selectedId={selectedId}
           />
         )}
       </section>

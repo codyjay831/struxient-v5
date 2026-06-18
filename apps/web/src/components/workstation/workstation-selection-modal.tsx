@@ -103,7 +103,13 @@ export function WorkstationSelectionModal({
     );
 
   return (
-    <Drawer open={item != null} onClose={handleClose} ariaLabel="Work item details">
+    <Drawer
+      open={item != null}
+      onClose={handleClose}
+      ariaLabel="Work item details"
+      placement="center"
+      widthClass="w-full max-w-2xl lg:max-w-3xl"
+    >
       {body}
     </Drawer>
   );

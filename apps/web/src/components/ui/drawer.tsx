@@ -10,6 +10,7 @@ export function Drawer({
   ariaLabel,
   children,
   returnFocusRef,
+  placement = "end",
   widthClass = "w-full sm:w-[500px] md:w-[600px] lg:w-[700px]",
 }: {
   open: boolean;
@@ -18,6 +19,7 @@ export function Drawer({
   ariaLabel?: string;
   children: ReactNode;
   returnFocusRef?: React.RefObject<HTMLElement | null>;
+  placement?: "end" | "center";
   widthClass?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -102,8 +104,16 @@ export function Drawer({
 
   if (!open) return null;
 
+  const isCentered = placement === "center";
+  const shellClass = isCentered
+    ? "fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+    : "fixed inset-0 z-50 flex justify-end";
+  const panelClass = isCentered
+    ? `relative flex max-h-[90vh] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-2xl focus:outline-none ${widthClass}`
+    : `relative flex h-full flex-col border-l border-border bg-surface shadow-2xl transition-transform ${widthClass} focus:outline-none`;
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className={shellClass}>
       <button
         type="button"
         className="absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity"
@@ -116,7 +126,7 @@ export function Drawer({
         aria-modal="true"
         aria-label={ariaLabel ?? title ?? "Details"}
         tabIndex={-1}
-        className={`relative flex h-full flex-col border-l border-border bg-surface shadow-2xl transition-transform ${widthClass} focus:outline-none`}
+        className={panelClass}
       >
         {title ? (
           <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-6">

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { buttonClassName } from "@/components/ui/button";
+import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import type {
   WorkstationPresentationTone,
   WorkstationSignalItem,
@@ -11,8 +12,6 @@ import type {
   QueueRowItem,
   ActivityItem,
 } from "@/lib/workstation-presentation";
-
-const actionButtonClass = buttonClassName({ variant: "muted", size: "sm" });
 
 type SelectableRow = {
   id: string;
@@ -26,6 +25,12 @@ function toneBorderClass(tone: WorkstationPresentationTone): string {
   return "before:bg-border";
 }
 
+function presentationToneToBadge(tone: WorkstationPresentationTone): StatusBadgeTone {
+  if (tone === "danger") return "danger";
+  if (tone === "warning") return "warning";
+  return "neutral";
+}
+
 export function WorkstationStatusBar({ items }: { items: WorkstationSignalItem[] }) {
   return (
     <section className="flex flex-wrap border-y border-border">
@@ -37,18 +42,33 @@ export function WorkstationStatusBar({ items }: { items: WorkstationSignalItem[]
               ? "text-warning"
               : "text-foreground";
 
-        return (
-          <div
-            key={item.id}
-            className={`min-w-[11rem] flex-1 px-4 py-2.5 ${index === 0 ? "pl-0" : ""} ${index < items.length - 1 ? "border-r border-border" : ""}`}
-          >
+        const content = (
+          <>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
               {item.label}
             </p>
             <p className="mt-0.5 text-sm text-foreground-muted">
-              <span className={`mr-2 text-xl font-bold ${valueClass}`}>{item.value}</span>
+              <span className={`mr-2 text-xl font-bold tabular-nums ${valueClass}`}>
+                {item.value}
+              </span>
               {item.context}
             </p>
+          </>
+        );
+
+        const className = `min-w-[11rem] flex-1 px-4 py-2.5 transition-colors ${index === 0 ? "pl-0" : ""} ${index < items.length - 1 ? "border-r border-border" : ""} ${item.href ? "hover:bg-foreground/[0.02]" : ""}`;
+
+        if (item.href) {
+          return (
+            <Link key={item.id} href={item.href} scroll={false} className={className}>
+              {content}
+            </Link>
+          );
+        }
+
+        return (
+          <div key={item.id} className={className}>
+            {content}
           </div>
         );
       })}
@@ -57,49 +77,76 @@ export function WorkstationStatusBar({ items }: { items: WorkstationSignalItem[]
 }
 
 type WorkstationRowProps = {
-  title: string;
-  meta?: string;
-  reason?: string;
+  primary: string;
+  secondary?: string;
+  detail?: string;
   tone?: WorkstationPresentationTone;
-  categoryLabel?: string;
-  actionLabel?: string;
-  href?: string;
+  badgeLabel?: string;
+  href: string;
+  selected?: boolean;
+  variant?: "default" | "hero";
   children?: ReactNode;
 };
 
 export function WorkstationRow({
-  title,
-  meta,
-  reason,
+  primary,
+  secondary,
+  detail,
   tone = "neutral",
-  categoryLabel,
-  actionLabel,
+  badgeLabel,
   href,
+  selected = false,
+  variant = "default",
   children,
 }: WorkstationRowProps) {
+  const isHero = variant === "hero";
+
   return (
-    <div
-      className={`relative border-t border-border py-3 pl-3 first:border-t-0 before:absolute before:bottom-3 before:left-0 before:top-3 before:w-0.5 before:rounded-full ${toneBorderClass(tone)}`}
+    <Link
+      href={href}
+      scroll={false}
+      className={[
+        "group relative block border-t border-border py-3 pl-3 pr-2 transition-colors first:border-t-0",
+        "before:absolute before:bottom-3 before:left-0 before:top-3 before:w-0.5 before:rounded-full",
+        toneBorderClass(tone),
+        selected ? "bg-accent/10" : "hover:bg-foreground/[0.03]",
+        isHero ? "py-4" : "",
+      ].join(" ")}
+      aria-current={selected ? "true" : undefined}
     >
-      <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-      {meta ? <p className="truncate text-xs text-foreground-muted">{meta}</p> : null}
-      {reason ? <p className="text-xs text-foreground-muted">{reason}</p> : null}
-      {(categoryLabel || actionLabel || children) && (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          {categoryLabel ? (
-            <span className="text-[11px] text-foreground-subtle">{categoryLabel}</span>
-          ) : (
-            <span />
-          )}
-          {children}
-          {actionLabel && href ? (
-            <Link href={href} scroll={false} className={actionButtonClass}>
-              {actionLabel}
-            </Link>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p
+            className={
+              isHero
+                ? "truncate text-base font-semibold text-foreground"
+                : "truncate text-sm font-semibold text-foreground"
+            }
+          >
+            {primary}
+          </p>
+          {secondary ? (
+            <p className="truncate text-sm text-foreground-muted">{secondary}</p>
           ) : null}
+          {detail ? (
+            <p className="mt-0.5 text-xs text-foreground-subtle">{detail}</p>
+          ) : null}
+          {badgeLabel ? (
+            <div className="mt-2">
+              <StatusBadge
+                label={badgeLabel}
+                tone={presentationToneToBadge(tone)}
+              />
+            </div>
+          ) : null}
+          {children}
         </div>
-      )}
-    </div>
+        <ChevronRight
+          className="mt-0.5 size-4 shrink-0 text-foreground-subtle opacity-0 transition-opacity group-hover:opacity-100"
+          aria-hidden
+        />
+      </div>
+    </Link>
   );
 }
 
@@ -128,14 +175,18 @@ export function WorkstationColumn({
 export function CriticalGroupsList({
   groups,
   buildHref,
+  selectedId,
 }: {
   groups: CriticalGroup[];
   buildHref: (item: SelectableRow) => string;
+  selectedId?: string;
 }) {
   const nonEmpty = groups.filter((g) => g.items.length > 0);
   if (nonEmpty.length === 0) {
     return (
-      <p className="text-sm text-foreground-muted">No critical risks blocking today.</p>
+      <p className="text-sm text-foreground-muted">
+        No risks are blocking today&apos;s work.
+      </p>
     );
   }
 
@@ -143,18 +194,18 @@ export function CriticalGroupsList({
     <div className="space-y-4">
       {nonEmpty.map((group) => (
         <div key={group.category}>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">
+          <p className="mb-1 text-xs font-medium text-foreground-subtle">
             {group.label}
           </p>
           {group.items.map((item) => (
             <WorkstationRow
               key={item.id}
-              title={item.title}
-              reason={item.reason}
+              primary={item.title}
+              detail={item.reason}
               tone={item.tone}
-              categoryLabel={item.categoryLabel}
-              actionLabel={item.nextAction}
+              badgeLabel={item.categoryLabel}
               href={buildHref(item)}
+              selected={selectedId === item.id}
             />
           ))}
         </div>
@@ -166,29 +217,47 @@ export function CriticalGroupsList({
 export function NextActionsList({
   items,
   buildHref,
+  selectedId,
 }: {
   items: NeedsActionItem[];
   buildHref: (item: NeedsActionItem) => string;
+  selectedId?: string;
 }) {
   if (items.length === 0) {
     return (
       <p className="text-sm text-foreground-muted">
-        No immediate actions. Check Today or browse a focused tab.
+        Nothing urgent right now. Today&apos;s schedule is clear.
       </p>
     );
   }
 
+  const [hero, ...rest] = items;
+
   return (
     <div>
-      {items.map((item) => (
+      {hero ? (
+        <WorkstationRow
+          key={hero.id}
+          primary={hero.identity}
+          secondary={hero.workItem}
+          detail={hero.reason}
+          tone={hero.tone}
+          badgeLabel={hero.categoryLabel}
+          href={buildHref(hero)}
+          selected={selectedId === hero.id}
+          variant="hero"
+        />
+      ) : null}
+      {rest.map((item) => (
         <WorkstationRow
           key={item.id}
-          title={`${item.workItem} · ${item.identity}`}
-          reason={item.reason}
+          primary={item.identity}
+          secondary={item.workItem}
+          detail={item.reason}
           tone={item.tone}
-          categoryLabel={item.categoryLabel}
-          actionLabel={item.nextAction}
+          badgeLabel={item.categoryLabel}
           href={buildHref(item)}
+          selected={selectedId === item.id}
         />
       ))}
     </div>
@@ -198,34 +267,48 @@ export function NextActionsList({
 export function TodayAgendaList({
   items,
   buildHref,
+  selectedId,
 }: {
   items: TodayAgendaItem[];
   buildHref: (item: TodayAgendaItem) => string;
+  selectedId?: string;
 }) {
   if (items.length === 0) {
     return (
-      <p className="text-sm text-foreground-muted">Nothing scheduled or due today.</p>
+      <p className="text-sm text-foreground-muted">
+        Nothing scheduled or due today.
+      </p>
     );
   }
 
   return (
     <div>
-      {items.map((item) => (
-        <WorkstationRow
-          key={item.id}
-          title={`${item.timeLabel} · ${item.title}`}
-          meta={item.identity}
-          tone={item.tone}
-          categoryLabel={item.categoryLabel ?? item.ownerLabel}
-          actionLabel="Open"
-          href={buildHref(item)}
-        />
-      ))}
+      {items.map((item) => {
+        const ownerDetail = item.ownerLabel ? `${item.timeLabel} · ${item.ownerLabel}` : item.timeLabel;
+        return (
+          <WorkstationRow
+            key={item.id}
+            primary={item.identity}
+            secondary={item.title}
+            detail={ownerDetail}
+            tone={item.tone}
+            badgeLabel={item.categoryLabel}
+            href={buildHref(item)}
+            selected={selectedId === item.id}
+          />
+        );
+      })}
     </div>
   );
 }
 
-export function WeekStrip({ days }: { days: WeekDaySummary[] }) {
+export function WeekStrip({
+  days,
+  buildDayHref,
+}: {
+  days: WeekDaySummary[];
+  buildDayHref?: (day: WeekDaySummary) => string;
+}) {
   if (days.length === 0) {
     return <p className="text-sm text-foreground-muted">No scheduled work this week.</p>;
   }
@@ -234,15 +317,41 @@ export function WeekStrip({ days }: { days: WeekDaySummary[] }) {
     <section className="border-t border-border pt-4">
       <h2 className="mb-3 text-sm font-semibold text-foreground">This week</h2>
       <div className="grid grid-cols-2 gap-0 sm:grid-cols-4 lg:grid-cols-7">
-        {days.map((day) => (
-          <div
-            key={day.dayLabel + day.date.toISOString()}
-            className={`min-h-[4.5rem] border-border px-3 py-2 first:pl-0 lg:border-r lg:last:border-r-0 ${day.isToday ? "bg-foreground/[0.03]" : ""}`}
-          >
-            <p className="text-xs text-foreground-subtle">{day.dayLabel}</p>
-            <p className="mt-1 text-xs leading-relaxed text-foreground-muted">{day.summary}</p>
-          </div>
-        ))}
+        {days.map((day) => {
+          const summary =
+            day.eventCount === 0 && day.riskCount === 0 ? "Clear" : day.summary;
+          const cell = (
+            <>
+              <p
+                className={`text-xs ${day.isToday ? "font-semibold text-foreground" : "text-foreground-subtle"}`}
+              >
+                {day.dayLabel}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">{summary}</p>
+            </>
+          );
+
+          const className = `min-h-[4.5rem] border-border px-3 py-2 transition-colors first:pl-0 lg:border-r lg:last:border-r-0 ${day.isToday ? "bg-foreground/[0.04]" : ""} ${buildDayHref ? "hover:bg-foreground/[0.03]" : ""}`;
+
+          if (buildDayHref) {
+            return (
+              <Link
+                key={day.dayLabel + day.date.toISOString()}
+                href={buildDayHref(day)}
+                scroll={false}
+                className={className}
+              >
+                {cell}
+              </Link>
+            );
+          }
+
+          return (
+            <div key={day.dayLabel + day.date.toISOString()} className={className}>
+              {cell}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -252,10 +361,12 @@ export function QueueRowList({
   items,
   buildHref,
   emptyMessage,
+  selectedId,
 }: {
   items: QueueRowItem[];
   buildHref: (item: QueueRowItem) => string;
   emptyMessage: string;
+  selectedId?: string;
 }) {
   if (items.length === 0) {
     return <p className="text-sm text-foreground-muted">{emptyMessage}</p>;
@@ -266,13 +377,13 @@ export function QueueRowList({
       {items.map((item) => (
         <WorkstationRow
           key={item.id}
-          title={item.title}
-          meta={item.subtitle}
-          reason={item.reason}
+          primary={item.subtitle || item.title}
+          secondary={item.subtitle ? item.title : undefined}
+          detail={item.reason}
           tone={item.tone}
-          categoryLabel={item.statusLabel ?? item.categoryLabel}
-          actionLabel={item.nextAction}
+          badgeLabel={item.statusLabel ?? item.categoryLabel}
           href={buildHref(item)}
+          selected={selectedId === item.id}
         />
       ))}
     </div>
@@ -281,7 +392,7 @@ export function QueueRowList({
 
 export function ActivityFeedList({ items }: { items: ActivityItem[] }) {
   if (items.length === 0) {
-    return <p className="text-sm text-foreground-muted">No recent activity.</p>;
+    return <p className="text-sm text-foreground-muted">No recent changes.</p>;
   }
 
   return (

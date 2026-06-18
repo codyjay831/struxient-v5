@@ -27,10 +27,12 @@ import { WorkstationSettingsDrawer } from "@/components/workstation/workstation-
 import { WorkstationStatusBar } from "@/components/workstation/workstation-cockpit";
 import { WorkstationOverview } from "@/components/workstation/workstation-overview";
 import { WorkstationQueueView } from "@/components/workstation/workstation-queue";
+import { WorkstationShell } from "@/components/workstation/workstation-shell";
 
 export const dynamic = "force-dynamic";
 
-const actionClass = buttonClassName({ variant: "muted", size: "sm" });
+const secondaryActionClass = buttonClassName({ variant: "muted", size: "sm" });
+const primaryActionClass = buttonClassName({ variant: "primary", size: "sm" });
 
 function withSelectionHref(
   row: { selectedId: string; selectedKind: string },
@@ -128,6 +130,16 @@ export default async function WorkstationPage({
     (item) => item.tone === "danger",
   ).length;
 
+  const tabCounts = {
+    tasks: presentation.domainQueues.tasks.length,
+    jobs: presentation.domainQueues.jobs.length,
+    calendar: presentation.domainQueues.calendar.length,
+    commercial: presentation.domainQueues.commercial.length,
+    money: presentation.domainQueues.money.length,
+    activity:
+      presentation.domainQueues.activity.length + presentation.recentActivity.length,
+  };
+
   const signalItems = [
     {
       id: "critical",
@@ -135,6 +147,7 @@ export default async function WorkstationPage({
       value: presentation.overviewCriticalGroups.reduce((n, g) => n + g.items.length, 0),
       context: `${highRiskCount} high risk`,
       tone: highRiskCount > 0 ? ("danger" as const) : ("neutral" as const),
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined, filter: "all" })}&queueFilter=blocked`,
     },
     {
       id: "today",
@@ -142,6 +155,7 @@ export default async function WorkstationPage({
       value: presentation.signalStrip.todayCount,
       context: "scheduled / due",
       tone: presentation.signalStrip.todayCount > 0 ? ("warning" as const) : ("neutral" as const),
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined })}&queueFilter=today`,
     },
     {
       id: "schedule-risk",
@@ -152,6 +166,7 @@ export default async function WorkstationPage({
         presentation.signalStrip.scheduleRiskCount > 0
           ? ("warning" as const)
           : ("neutral" as const),
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "calendar", selected: undefined })}&queueFilter=needs-schedule`,
     },
     {
       id: "waiting",
@@ -162,6 +177,7 @@ export default async function WorkstationPage({
         presentation.signalStrip.waitingCount > 0
           ? ("warning" as const)
           : ("neutral" as const),
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined })}`,
     },
   ];
 
@@ -176,33 +192,53 @@ export default async function WorkstationPage({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap justify-end gap-2">
-        {showQuickActions && quickActions.includes("new-intake") ? (
-          <Link href="/leads/new" className={actionClass}>
-            <Plus className="size-3.5" />
-            New lead
-          </Link>
-        ) : null}
-        {unreviewedIntakesCount > 0 ? (
-          <Link href="/leads?pipeline=active" className={actionClass}>
-            <Users className="size-3.5" />
-            Review sales ({unreviewedIntakesCount})
-          </Link>
-        ) : null}
-        {topActionHref ? (
-          <Link href={topActionHref} className={actionClass} scroll={false}>
-            Review top issue
-          </Link>
-        ) : null}
-        <WorkstationSettingsDrawer
-          initial={{ showQuickActions, quickActions, urgentThresholdHours }}
-        />
+      <WorkstationShell tabCounts={tabCounts} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="min-w-0">
+          {topAction ? (
+            <p className="truncate text-sm text-foreground-muted">
+              Top priority:{" "}
+              <span className="font-medium text-foreground">
+                {topAction.identity} — {topAction.workItem}
+              </span>
+            </p>
+          ) : (
+            <p className="text-sm text-foreground-muted">No urgent work flagged.</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {topActionHref ? (
+            <Link href={topActionHref} scroll={false} className={primaryActionClass}>
+              {topAction?.nextAction ?? "Review top issue"}
+            </Link>
+          ) : null}
+          {showQuickActions && quickActions.includes("new-intake") ? (
+            <Link href="/leads/new" className={secondaryActionClass}>
+              <Plus className="size-3.5" />
+              New lead
+            </Link>
+          ) : null}
+          {unreviewedIntakesCount > 0 ? (
+            <Link href="/leads?pipeline=active" className={secondaryActionClass}>
+              <Users className="size-3.5" />
+              Sales ({unreviewedIntakesCount})
+            </Link>
+          ) : null}
+          <WorkstationSettingsDrawer
+            initial={{ showQuickActions, quickActions, urgentThresholdHours }}
+          />
+        </div>
       </div>
 
       {tab === "overview" ? (
         <>
           <WorkstationStatusBar items={[...signalItems]} />
-          <WorkstationOverview presentation={presentation} urlState={urlState} />
+          <WorkstationOverview
+            presentation={presentation}
+            urlState={urlState}
+            selectedId={selectedId}
+          />
         </>
       ) : (
         <WorkstationQueueView
@@ -212,6 +248,7 @@ export default async function WorkstationPage({
             tab === "activity" ? presentation.recentActivity : undefined
           }
           urlState={urlState}
+          selectedId={selectedId}
         />
       )}
 

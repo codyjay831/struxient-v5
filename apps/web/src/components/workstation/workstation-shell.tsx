@@ -9,11 +9,13 @@ import {
   type WorkstationTab,
 } from "@/lib/workstation/url-state";
 
+export type WorkstationTabCounts = Partial<Record<WorkstationTab, number>>;
+
 /**
  * Workstation page chrome inside the existing app shell.
  * Preserves global sidebar/logo; only owns Workstation domain tabs.
  */
-export function WorkstationShell() {
+export function WorkstationShell({ tabCounts }: { tabCounts?: WorkstationTabCounts }) {
   const searchParams = useSearchParams();
   const urlState = parseWorkstationUrlState(searchParams);
   const { tab } = urlState;
@@ -36,7 +38,7 @@ export function WorkstationShell() {
             </h1>
             {showDate ? (
               <p className="mt-0.5 text-sm text-foreground-muted">
-                {todayLabel} · Morning command center
+                {todayLabel} · Operations cockpit
               </p>
             ) : (
               <p className="mt-0.5 text-sm text-foreground-muted">
@@ -48,27 +50,35 @@ export function WorkstationShell() {
 
           <nav
             aria-label="Workstation navigation"
-            className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-medium"
+            className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium"
           >
-            {WORKSTATION_TABS.map(({ tab: tabKey, label }) => (
-              <Link
-                key={tabKey}
-                href={buildWorkstationUrl(urlState, {
-                  tab: tabKey,
-                  selected: undefined,
-                  filter: "all",
-                })}
-                scroll={false}
-                className={
-                  tab === tabKey
-                    ? "text-foreground underline decoration-accent underline-offset-4"
-                    : "text-foreground-muted transition-colors hover:text-foreground"
-                }
-                aria-current={tab === tabKey ? "page" : undefined}
-              >
-                {label}
-              </Link>
-            ))}
+            {WORKSTATION_TABS.map(({ tab: tabKey, label }) => {
+              const count = tabCounts?.[tabKey];
+              return (
+                <Link
+                  key={tabKey}
+                  href={buildWorkstationUrl(urlState, {
+                    tab: tabKey,
+                    selected: undefined,
+                    filter: "all",
+                  })}
+                  scroll={false}
+                  className={
+                    tab === tabKey
+                      ? "inline-flex items-center gap-1.5 text-foreground underline decoration-accent underline-offset-4"
+                      : "inline-flex items-center gap-1.5 text-foreground-muted transition-colors hover:text-foreground"
+                  }
+                  aria-current={tab === tabKey ? "page" : undefined}
+                >
+                  {label}
+                  {typeof count === "number" && count > 0 && tabKey !== "overview" ? (
+                    <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-foreground-subtle">
+                      {count}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
           </nav>
         </div>
       </header>

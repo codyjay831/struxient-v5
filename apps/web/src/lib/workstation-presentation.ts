@@ -15,6 +15,7 @@ export type WorkstationSignalItem = {
   value: number;
   context: string;
   tone: WorkstationPresentationTone;
+  href?: string;
 };
 
 export type CriticalCategory =
