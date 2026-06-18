@@ -39,7 +39,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { closeOrPauseLeadWorkspaceAction, resumeOpportunityWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { createRevisionDraftForQuoteChangeRequestAction } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import { useRouter } from "next/navigation";
-import { LeadQuoteReadinessBar } from "@/components/leads/lead-quote-readiness-bar";
 import { RequestSiteVisitButton } from "@/components/leads/request-site-visit-button";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
 import { LeadAddressResolvePanel } from "@/components/leads/lead-address-resolve-panel";
@@ -321,57 +320,65 @@ export function LeadCommercialSurface({
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-6 p-4 sm:p-6">
           {/* Decision header */}
-          <header className="space-y-3">
+          <header className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Request review
-                </p>
+              <div className="min-w-0 space-y-1.5">
                 <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
-                  {lead.title}
+                  {lead.customerDisplayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact"}
                 </h2>
-                <p className="text-sm text-foreground-muted">{formatLeadChannel(lead.channel)} · Received {lead.createdAt.toLocaleDateString()}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {callablePhone ? (
-                    <a
-                      href={`tel:${callablePhone}`}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                    >
-                      <Phone className="size-3" />
-                      Call
-                    </a>
-                  ) : null}
-                  {emailableAddress ? (
-                    <a
-                      href={`mailto:${emailableAddress}`}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                    >
-                      <Mail className="size-3" />
-                      Email
-                    </a>
-                  ) : null}
-                  <Link
-                    href={editHref}
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                  >
-                    <Pencil className="size-3" />
-                    Edit request details
-                  </Link>
-                  {!isTerminalPhase ? (
-                    <RequestSiteVisitButton
-                      leadId={lead.id}
-                      visits={visitRequests}
-                      onSuccess={notifyMutationSuccess}
-                    />
-                  ) : null}
+                <p className="text-sm text-foreground-muted">{lead.title}</p>
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
+                  <span>{formatLeadChannel(lead.channel)}</span>
+                  <span>·</span>
+                  <span>{lead.jobsiteAddressLine || "No address provided"}</span>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <span className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                  Phase
-                </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {onClose ? (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close workspace"
+                    className="rounded-md p-2 text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+                  >
+                    <X className="w-5 h-5" strokeWidth={1.5} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {callablePhone ? (
+                <a
+                  href={`tel:${callablePhone}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                >
+                  <Phone className="size-3.5" />
+                  Call
+                </a>
+              ) : null}
+              {emailableAddress ? (
+                <a
+                  href={`mailto:${emailableAddress}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
+                >
+                  <Mail className="size-3.5" />
+                  Email
+                </a>
+              ) : null}
+              {!isTerminalPhase ? (
+                <RequestSiteVisitButton
+                  leadId={lead.id}
+                  visits={visitRequests}
+                  onSuccess={notifyMutationSuccess}
+                />
+              ) : null}
+            </div>
+          </header>
+
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge
-                  label={phaseLabel(opportunityFlow.phase)}
+                  label={opportunityFlow.conditionLabel}
                   tone={
                     opportunityFlow.phase === "WON"
                       ? "approved"
@@ -384,136 +391,46 @@ export function LeadCommercialSurface({
                             : "draft"
                   }
                 />
-                <span className="text-[0.65rem] uppercase tracking-wide text-foreground-subtle">
-                  Record: {formatLeadStatus(lead.status as LeadStatus)}
-                </span>
-                {onClose ? (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Close workspace"
-                    className="rounded-lg border border-border bg-surface p-2 text-foreground-subtle hover:text-foreground hover:bg-background transition-colors"
-                  >
-                    <X className="w-5 h-5" strokeWidth={1.5} />
-                  </button>
+                {opportunityFlow.ageLabel ? (
+                  <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
                 ) : null}
               </div>
-            </div>
-
-            <div className="rounded-xl border border-border bg-background p-4">
-              <div className="flex flex-wrap items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                {isTerminalPhase ? (
-                  <span className="rounded-full border border-border-strong bg-foreground/[0.04] px-2 py-0.5 text-foreground">
-                    {phaseLabel(opportunityFlow.phase)}
-                  </span>
-                ) : (
-                  phaseOrder.map((phase) => (
-                    <span
-                      key={phase}
-                      className={
-                        phase === opportunityFlow.phase
-                          ? "rounded-full border border-border-strong bg-foreground/[0.04] px-2 py-0.5 text-foreground"
-                          : "rounded-full border border-border px-2 py-0.5"
-                      }
-                    >
-                      {phaseLabel(phase)}
-                    </span>
-                  ))
-                )}
-              </div>
-              <div className="mt-3 rounded-lg border border-border bg-surface p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge
-                    label={opportunityFlow.conditionLabel}
-                    tone={
-                      opportunityFlow.phase === "WON"
-                        ? "approved"
-                        : opportunityFlow.phase === "CUSTOMER_REVIEW"
-                          ? "sent"
-                          : opportunityFlow.phase === "LOST"
-                            ? "neutral"
-                            : opportunityFlow.phase === "PAUSED"
-                              ? "warning"
-                              : "draft"
-                    }
-                  />
-                  {opportunityFlow.ageLabel ? (
-                    <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
+              <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+                {opportunityFlow.summary}
+              </p>
+              {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {opportunityFlow.primaryAction ? (
+                    <OpportunityActionControl
+                      action={opportunityFlow.primaryAction}
+                      leadId={lead.id}
+                      variant="primary"
+                      onReviewCustomerMatch={scrollToCustomerMatch}
+                      onMutationSuccess={notifyMutationSuccess}
+                    />
                   ) : null}
+                  {opportunityFlow.secondaryActions.map((action) => (
+                    <OpportunityActionControl
+                      key={`${action.kind}:${action.label}`}
+                      action={action}
+                      leadId={lead.id}
+                      variant="secondary"
+                      onReviewCustomerMatch={scrollToCustomerMatch}
+                      onMutationSuccess={notifyMutationSuccess}
+                    />
+                  ))}
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-                  {opportunityFlow.summary}
-                </p>
-                {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {opportunityFlow.primaryAction ? (
-                      <OpportunityActionControl
-                        action={opportunityFlow.primaryAction}
-                        leadId={lead.id}
-                        variant="primary"
-                        onReviewCustomerMatch={scrollToCustomerMatch}
-                        onMutationSuccess={notifyMutationSuccess}
-                      />
-                    ) : null}
-                    {opportunityFlow.secondaryActions.map((action) => (
-                      <OpportunityActionControl
-                        key={`${action.kind}:${action.label}`}
-                        action={action}
-                        leadId={lead.id}
-                        variant="secondary"
-                        onReviewCustomerMatch={scrollToCustomerMatch}
-                        onMutationSuccess={notifyMutationSuccess}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-                {opportunityFlow.requirements.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {opportunityFlow.requirements.map((req) => (
-                      <span key={req} className="rounded-full border border-border px-2 py-0.5 text-[0.7rem] text-foreground-muted">
-                        {req}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {opportunityFlow.keyFacts.length > 0 ? (
-                  <div className="mt-3 border-t border-border pt-3">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                      Key facts
-                    </p>
-                    <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                      {opportunityFlow.keyFacts.map((fact) => (
-                        <p key={`${fact.label}:${fact.value}`} className="text-xs text-foreground-muted">
-                          <span className="font-medium text-foreground">{fact.label}:</span> {fact.value}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {opportunityFlow.recentEvents.length > 0 ? (
-                  <div className="mt-3 border-t border-border pt-3">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-                      Recent history
-                    </p>
-                    <ol className="mt-2 space-y-1.5">
-                      {opportunityFlow.recentEvents.slice(0, 4).map((evt) => (
-                        <li key={`${evt.label}:${evt.at ?? "none"}`} className="text-xs text-foreground-muted">
-                          <span className="font-medium text-foreground">{evt.label}</span>
-                          {evt.at ? ` · ${new Date(evt.at).toLocaleString()}` : ""}
-                          {evt.detail ? ` · ${evt.detail}` : ""}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
+              {opportunityFlow.requirements.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {opportunityFlow.requirements.map((req) => (
+                    <span key={req} className="rounded-full border border-border px-2 py-0.5 text-[0.7rem] text-foreground-muted">
+                      {req}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
-
-            <LeadQuoteReadinessBar
-              requirements={reviewViewModel.requirements}
-              allRequirementsMet={reviewViewModel.allRequirementsMet}
-              editHref={editHref}
-            />
 
             {showAddressResolvePanel ? (
               <div ref={addressVerifyRef}>
@@ -554,7 +471,6 @@ export function LeadCommercialSurface({
                 {surfaceError}
               </p>
             ) : null}
-          </header>
 
           <div className="space-y-8">
             {/* Request summary */}

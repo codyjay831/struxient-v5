@@ -15,7 +15,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { CenteredWorkspaceDialog } from "@/components/ui/centered-workspace-dialog";
+import { Drawer } from "@/components/ui/drawer";
 import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
 import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 import { formatOpportunityPhaseLabel } from "@/lib/opportunity-board";
@@ -46,6 +46,8 @@ function LeadRow({
           ? "bg-warning"
           : "bg-foreground-subtle";
 
+  const primaryName = lead.customerDisplayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact";
+
   return (
     <div
       role="button"
@@ -54,72 +56,62 @@ function LeadRow({
       onKeyDown={onKeyDown}
       aria-label={`Open opportunity: ${lead.title}`}
       className={[
-        "w-full cursor-pointer border-l-2 px-4 py-3.5 text-left transition-colors",
+        "group relative flex w-full cursor-pointer flex-col gap-2 border-l-2 px-4 py-3.5 text-left transition-colors sm:flex-row sm:items-start sm:gap-4",
         active
           ? "border-accent bg-background"
           : "border-transparent hover:bg-background/60",
       ].join(" ")}
     >
-      <div className="flex items-start gap-3">
-        <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} />
-        <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2 mb-0.5">
-          <span className="text-sm font-semibold text-foreground leading-snug">
-            {lead.title}
-          </span>
-          <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-            {formatOpportunityPhaseLabel(lead.opportunityFlow.phase)}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {/* Primary: customer name; concise commercial state */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className={`h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} aria-hidden />
+          <span className="text-sm font-semibold text-foreground leading-none">
+            {primaryName}
           </span>
           <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
         </div>
-        <p className="text-xs text-foreground-muted truncate mb-1.5">
-          {lead.contactName ?? lead.email ?? "No contact"}
-        </p>
-        <div className="flex flex-wrap gap-x-2 text-xs text-foreground-subtle">
-          <span>{lead.sourceLabel}</span>
-          <span>·</span>
-          {lead.opportunityFlow.ageLabel ? (
+
+        {/* Secondary: requested work; city/location */}
+        <div className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
+          <span className="truncate max-w-[20rem]">{lead.title}</span>
+          {lead.jobsiteAddressLine && (
             <>
-              <span>{lead.opportunityFlow.ageLabel}</span>
-              <span>·</span>
+              <span aria-hidden>·</span>
+              <span className="truncate max-w-[12rem]">{lead.jobsiteAddressLine}</span>
             </>
+          )}
+        </div>
+
+        {/* Operational: next required action or blocked/waiting reason; age */}
+        <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle mt-0.5">
+          {lead.nextStepLabel ? (
+            <span className="font-medium text-foreground-muted">Next: {lead.nextStepLabel}</span>
+          ) : lead.progressDescription ? (
+            <span className="font-medium text-foreground-muted">{lead.progressDescription}</span>
           ) : null}
-          <span>{lead.ageLabel}</span>
-          <span>·</span>
+          <span aria-hidden>·</span>
+          <span>{lead.opportunityFlow.ageLabel || lead.ageLabel}</span>
           {lead.valueLabel && (
             <>
+              <span aria-hidden>·</span>
               <span>{lead.valueLabel}</span>
-              <span>·</span>
-            </>
-          )}
-          <span>{lead.createdAtLabel}</span>
-          {lead.customerDisplayName && (
-            <>
-              <span>·</span>
-              {lead.customerHref ? (
-                <Link
-                  href={lead.customerHref}
-                  onClick={(event) => event.stopPropagation()}
-                  className="underline-offset-2 hover:underline hover:text-foreground"
-                >
-                  {lead.customerDisplayName}
-                </Link>
-              ) : (
-                <span>{lead.customerDisplayName}</span>
-              )}
             </>
           )}
         </div>
-        {lead.nextStepLabel ? (
-          <p className="mt-1 text-xs text-foreground-muted">
-            Next: {lead.nextStepLabel}
-          </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-2 sm:mt-0">
+        {lead.progressPrimaryAction ? (
+          <Link
+            href={lead.progressPrimaryAction.href}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center justify-center rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background transition-colors hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            {lead.progressPrimaryAction.label}
+          </Link>
         ) : null}
-        </div>
-        <div className="flex items-center gap-1 shrink-0 mt-0.5 rounded-md border border-border px-2 py-1 text-xs text-foreground-subtle hover:border-border-strong hover:text-foreground transition-colors">
-          Open
-          <ArrowUpRight className="w-3 h-3 ml-0.5" strokeWidth={1.5} />
-        </div>
       </div>
     </div>
   );
@@ -141,14 +133,14 @@ export function LeadsListClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const leadIds = useMemo(() => new Set(leads.map((lead) => lead.id)), [leads]);
-  const openParam = searchParams.get("open");
+  const openParam = searchParams.get("lead");
   const openLeadId = openParam && leadIds.has(openParam) ? openParam : null;
 
   const writeOpenParam = useCallback(
     (leadId: string | null, mode: "push" | "replace") => {
       const params = new URLSearchParams(searchParams.toString());
-      if (leadId) params.set("open", leadId);
-      else params.delete("open");
+      if (leadId) params.set("lead", leadId);
+      else params.delete("lead");
       const nextHref = params.toString() ? `${pathname}?${params.toString()}` : pathname;
       if (mode === "push") {
         router.push(nextHref, { scroll: false });
@@ -201,7 +193,7 @@ export function LeadsListClient({
         </div>
       )}
 
-      <CenteredWorkspaceDialog open={openLeadId != null} onClose={closeWorkspace}>
+      <Drawer open={openLeadId != null} onClose={closeWorkspace} title="Opportunity Details">
         {openLeadId ? (
           <LeadWorkspaceDialogBody
             key={openLeadId}
@@ -209,7 +201,7 @@ export function LeadsListClient({
             onClose={closeWorkspace}
           />
         ) : null}
-      </CenteredWorkspaceDialog>
+      </Drawer>
     </>
   );
 }

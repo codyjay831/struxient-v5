@@ -38,9 +38,9 @@ const workNav: NavItem[] = [
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
-/** Money tracking — coming soon. */
+/** Money tracking. */
 const financeNav: NavItem[] = [
-  { href: "/payments", label: "Payments", icon: CreditCard, soon: true },
+  { href: "/payments", label: "Payments", icon: CreditCard },
 ];
 
 const utilityNav: NavItem[] = [
@@ -72,9 +72,9 @@ function NavSection({
   onNavigate?: () => void;
 }) {
   return (
-    <div className="mb-8">
+    <div className="mb-6">
       {title ? (
-        <p className="mb-3 px-3 text-xs font-medium text-foreground-subtle">
+        <p className="mb-2 px-3 text-[0.65rem] font-semibold uppercase tracking-wider text-foreground-subtle">
           {title}
         </p>
       ) : null}
@@ -87,15 +87,15 @@ function NavSection({
                 href={href}
                 onClick={onNavigate}
                 className={[
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                   active
-                    ? "bg-brand-muted text-accent ring-1 ring-accent/15"
+                    ? "bg-foreground/[0.06] font-medium text-foreground"
                     : "text-foreground-muted hover:bg-foreground/[0.03] hover:text-foreground",
                 ].join(" ")}
               >
                 <Icon
-                  className="size-[18px] shrink-0 opacity-80"
-                  strokeWidth={1.5}
+                  className="size-4 shrink-0 opacity-70"
+                  strokeWidth={2}
                   aria-hidden
                 />
                 <span>{label}</span>

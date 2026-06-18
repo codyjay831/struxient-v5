@@ -4,22 +4,21 @@ const MAX_QUERY_LEN = 200;
 
 export type LeadListSortParam =
   | "created"
-  | "title"
-  | "age_asc";
-export type LeadListPipelineParam = "active" | "awarded" | "closed";
-export type LeadListViewParam = "board" | "list";
+  | "title_asc"
+  | "age_asc"
+  | "updated";
+export type LeadListPipelineParam = "needs_action" | "waiting" | "scheduled" | "awarded" | "closed" | "all";
 
 export const LEAD_LIST_DEFAULT_SORT: LeadListSortParam = "created";
-export const LEAD_LIST_DEFAULT_PIPELINE: LeadListPipelineParam = "active";
-export const LEAD_LIST_DEFAULT_VIEW: LeadListViewParam = "board";
+export const LEAD_LIST_DEFAULT_PIPELINE: LeadListPipelineParam = "needs_action";
 
 const SORT_VALUES: LeadListSortParam[] = [
   "created",
-  "title",
+  "title_asc",
   "age_asc",
+  "updated",
 ];
-const PIPELINE_VALUES: LeadListPipelineParam[] = ["active", "awarded", "closed"];
-const VIEW_VALUES: LeadListViewParam[] = ["board", "list"];
+const PIPELINE_VALUES: LeadListPipelineParam[] = ["needs_action", "waiting", "scheduled", "awarded", "closed", "all"];
 
 function firstSearchParam(value: string | string[] | undefined): string {
   if (typeof value === "string") {
@@ -33,21 +32,17 @@ function firstSearchParam(value: string | string[] | undefined): string {
 
 export function parseLeadListSearchParams(
   record: Record<string, string | string[] | undefined>,
-): { q: string; sort: LeadListSortParam; pipeline: LeadListPipelineParam; view: LeadListViewParam } {
+): { q: string; sort: LeadListSortParam; pipeline: LeadListPipelineParam } {
   const q = firstSearchParam(record.q).slice(0, MAX_QUERY_LEN);
   const rawSort = firstSearchParam(record.sort).toLowerCase();
   const rawPipeline = firstSearchParam(record.pipeline).toLowerCase();
-  const rawView = firstSearchParam(record.view).toLowerCase();
   const sort: LeadListSortParam = SORT_VALUES.includes(rawSort as LeadListSortParam)
     ? (rawSort as LeadListSortParam)
     : LEAD_LIST_DEFAULT_SORT;
   const pipeline: LeadListPipelineParam = PIPELINE_VALUES.includes(rawPipeline as LeadListPipelineParam)
     ? (rawPipeline as LeadListPipelineParam)
     : LEAD_LIST_DEFAULT_PIPELINE;
-  const view: LeadListViewParam = VIEW_VALUES.includes(rawView as LeadListViewParam)
-    ? (rawView as LeadListViewParam)
-    : LEAD_LIST_DEFAULT_VIEW;
-  return { q, sort, pipeline, view };
+  return { q, sort, pipeline };
 }
 
 export function leadListWhere(
@@ -85,6 +80,7 @@ export function leadListWhere(
           { contact: { path: ["name"], string_contains: lowered } },
           { contact: { path: ["email"], string_contains: lowered } },
           { request: { path: ["type"], string_contains: lowered } },
+          { title: { contains: term, mode: "insensitive" } },
           {
             customer: {
               is: {
@@ -103,11 +99,12 @@ export function leadListWhere(
 
 export function leadListOrderBy(sort: LeadListSortParam): Prisma.LeadOrderByWithRelationInput {
   switch (sort) {
-    case "title":
-      /** `title` is a derived field — fall back to creation order for stability. */
-      return { createdAt: "desc" };
+    case "title_asc":
+      return { title: "asc" };
     case "age_asc":
       return { createdAt: "asc" };
+    case "updated":
+      return { updatedAt: "desc" };
     case "created":
     default:
       return { createdAt: "desc" };
@@ -119,26 +116,38 @@ export function leadRowMatchesPipeline(
   conditionCode: string,
 ): boolean {
   switch (pipeline) {
+    case "needs_action":
+      return (
+        conditionCode === "NEEDS_INTAKE_DETAILS" ||
+        conditionCode === "CUSTOMER_MATCH_NEEDS_REVIEW" ||
+        conditionCode === "NEEDS_SALES_VISIT" ||
+        conditionCode === "READY_TO_QUOTE" ||
+        conditionCode === "QUOTE_DRAFT_IN_PROGRESS" ||
+        conditionCode === "QUOTE_READY_TO_SEND" ||
+        conditionCode === "CUSTOMER_REQUESTED_CHANGES" ||
+        conditionCode === "FOLLOW_UP_VISIT_REQUIRED" ||
+        conditionCode === "REVISION_DRAFT_IN_PROGRESS" ||
+        conditionCode === "REVISION_READY_TO_SEND"
+      );
+    case "waiting":
+      return conditionCode === "WAITING_ON_CUSTOMER" || conditionCode === "PAUSED";
+    case "scheduled":
+      return conditionCode === "SALES_VISIT_SCHEDULED";
     case "awarded":
       return conditionCode === "JOB_ACTIVE" || conditionCode === "APPROVED_READY_FOR_JOB";
     case "closed":
       return conditionCode === "LOST";
-    case "active":
+    case "all":
     default:
-      return (
-        conditionCode !== "JOB_ACTIVE" &&
-        conditionCode !== "APPROVED_READY_FOR_JOB" &&
-        conditionCode !== "LOST"
-      );
+      return true;
   }
 }
 
-/** Build relative `/leads` query string; omits default sort, view, and empty q. */
+/** Build relative `/leads` query string; omits default sort and empty q. */
 export function serializeLeadListHref(overrides: {
   q?: string;
   sort?: LeadListSortParam;
   pipeline?: LeadListPipelineParam;
-  view?: LeadListViewParam;
 }): string {
   const params = new URLSearchParams();
   const q = (overrides.q ?? "").trim().slice(0, MAX_QUERY_LEN);
@@ -152,10 +161,6 @@ export function serializeLeadListHref(overrides: {
   const pipeline = overrides.pipeline ?? LEAD_LIST_DEFAULT_PIPELINE;
   if (pipeline !== LEAD_LIST_DEFAULT_PIPELINE) {
     params.set("pipeline", pipeline);
-  }
-  const view = overrides.view ?? LEAD_LIST_DEFAULT_VIEW;
-  if (view !== LEAD_LIST_DEFAULT_VIEW) {
-    params.set("view", view);
   }
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";

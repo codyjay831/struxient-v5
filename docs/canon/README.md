@@ -31,6 +31,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [lead-intake-canon.md](./lead-intake-canon.md) | **Lead intake / public intake / Lead Review / Lead→Quote handoff** — source-of-truth, 5 slices, future intake chain guardrail |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | Full experience requirements: lead → workstation |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
+| [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |
 | [workstation-canon.md](./workstation-canon.md) | Workstation as **action-discovery destination**; cockpit / “what’s next” deep rules |
 | [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) | Non-negotiables, default decisions, **engineering delivery standards (I22)**, **light/dark appearance (I23)** |
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | v1 product locks: RBAC, states, money, portal, issues, Workstation, phasing |

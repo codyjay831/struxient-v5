@@ -3,16 +3,12 @@ import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import {
-  LeadsListClient,
-} from "@/components/leads/lead-list-client";
-import { LeadsBoardClient } from "@/components/leads/lead-board-client";
+import { LeadsListClient } from "@/components/leads/lead-list-client";
 import {
   serializeLeadListRow,
   type SerializedLeadRow,
 } from "@/lib/serialize-lead-list-row";
-import { LeadListSearchForm } from "@/components/leads/lead-list-search-form";
-import { LeadListFiltersClient } from "@/components/leads/lead-list-filters-client";
+import { LeadListToolbar } from "@/components/leads/lead-list-toolbar";
 import { LeadScaffoldingDialog } from "@/components/leads/lead-scaffolding-dialog";
 import { ButtonLink, buttonClassName } from "@/components/ui/button";
 import {
@@ -23,10 +19,8 @@ import {
   serializeLeadListHref,
   LEAD_LIST_DEFAULT_SORT,
   LEAD_LIST_DEFAULT_PIPELINE,
-  LEAD_LIST_DEFAULT_VIEW,
   type LeadListSortParam,
   type LeadListPipelineParam,
-  type LeadListViewParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadOrgCustomersForMatchGate } from "@/lib/lead-customer-match-gate";
@@ -65,7 +59,7 @@ export default async function LeadsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const { q, sort, pipeline, view } = parseLeadListSearchParams(sp);
+  const { q, sort, pipeline } = parseLeadListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getCommercialRequestContextOrNull();
@@ -178,33 +172,9 @@ export default async function LeadsPage({
   const hasActiveListFilters =
     q.length > 0 ||
     sort !== LEAD_LIST_DEFAULT_SORT ||
-    pipeline !== LEAD_LIST_DEFAULT_PIPELINE ||
-    view !== LEAD_LIST_DEFAULT_VIEW;
+    pipeline !== LEAD_LIST_DEFAULT_PIPELINE;
 
-  const sortOptions: LeadListSortParam[] = ["created", "title", "age_asc"];
-  const pipelineOptions: LeadListPipelineParam[] = ["active", "awarded", "closed"];
-  const viewOptions: LeadListViewParam[] = ["board", "list"];
-
-  const sortNavItems = sortOptions.map((s) => ({
-    key: s,
-    href: serializeLeadListHref({ q, sort: s, pipeline, view }),
-    label: sortLabel(s),
-    active: sort === s,
-  }));
-  const pipelineNavItems = pipelineOptions.map((p) => ({
-    key: p,
-    href: serializeLeadListHref({ q, sort, pipeline: p, view }),
-    label: p === "active" ? "Active" : p === "awarded" ? "Awarded" : "Closed",
-    active: pipeline === p,
-  }));
-  const viewNavItems = viewOptions.map((v) => ({
-    key: v,
-    href: serializeLeadListHref({ q, sort, pipeline, view: v }),
-    label: v === "board" ? "Board" : "List",
-    active: view === v,
-  }));
-
-  const pageWidthClass = view === "board" ? "mx-auto max-w-[100rem] px-4" : "mx-auto max-w-5xl";
+  const pageWidthClass = "mx-auto w-full max-w-5xl";
 
   return (
     <div className={pageWidthClass}>
@@ -227,71 +197,51 @@ export default async function LeadsPage({
       />
 
       <div className="mb-10">
-        <div className="mb-4 space-y-3 border-y border-border py-3">
-          <LeadListSearchForm
-            q={q}
-            sort={sort}
-            pipeline={pipeline}
-            view={view}
-            matchingCount={matchingCount}
-            totalInOrg={totalInOrg}
-            hasActiveListFilters={hasActiveListFilters}
-            controlClass="w-full min-w-[12rem] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            primaryLinkClass={primaryLinkClass}
-            mutedLinkClass={mutedLinkClass}
-          />
+        <LeadListToolbar
+          q={q}
+          sort={sort}
+          pipeline={pipeline}
+          matchingCount={matchingCount}
+          totalInOrg={totalInOrg}
+          hasActiveListFilters={hasActiveListFilters}
+        />
 
-          <LeadListFiltersClient
-            viewItems={viewNavItems}
-            viewActiveClass={pipelineLinkActive}
-            viewIdleClass={pipelineLinkIdle}
-            pipelineItems={pipelineNavItems}
-            pipelineActiveClass={pipelineLinkActive}
-            pipelineIdleClass={pipelineLinkIdle}
-            sortItems={sortNavItems}
-            sortActiveClass={sortLinkActive}
-            sortIdleClass={sortLinkIdle}
-          />
-        </div>
-
-        <WorkspacePanel padding="none" className="mb-6 overflow-hidden">
+        <div className="mt-4">
           {totalInOrg === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                icon={Users}
-                title="No sales opportunities yet"
-                description="No opportunities yet. Add a request manually or share your public request link."
-              >
-                <ButtonLink href="/leads/new" variant="primary" size="sm">
-                  New request
-                </ButtonLink>
-              </EmptyState>
-            </div>
+            <WorkspacePanel padding="none" className="overflow-hidden">
+              <div className="p-6">
+                <EmptyState
+                  icon={Users}
+                  title="No sales opportunities yet"
+                  description="No opportunities yet. Add a request manually or share your public request link."
+                >
+                  <ButtonLink href="/leads/new" variant="primary" size="sm">
+                    New request
+                  </ButtonLink>
+                </EmptyState>
+              </div>
+            </WorkspacePanel>
           ) : matchingCount === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                icon={Search}
-                title="No opportunities match this view"
-                description="Try a different search term or change sort. Records still exist in your organization—they are just filtered out here."
-              >
-                <ButtonLink href="/leads" scroll={false} variant="primary" size="sm">
-                  Clear filters
-                </ButtonLink>
-                <ButtonLink href="/leads/new" variant="muted" size="sm">
-                  New request
-                </ButtonLink>
-              </EmptyState>
-            </div>
-          ) : view === "board" ? (
-            <LeadsBoardClient
-              leads={pipelineLeads}
-              pipeline={pipeline}
-              orgHasLeads={totalInOrg > 0}
-            />
+            <WorkspacePanel padding="none" className="overflow-hidden">
+              <div className="p-6">
+                <EmptyState
+                  icon={Search}
+                  title="No opportunities match this view"
+                  description="Try a different search term or change sort. Records still exist in your organization—they are just filtered out here."
+                >
+                  <ButtonLink href="/leads" scroll={false} variant="primary" size="sm">
+                    Clear filters
+                  </ButtonLink>
+                  <ButtonLink href="/leads/new" variant="muted" size="sm">
+                    New request
+                  </ButtonLink>
+                </EmptyState>
+              </div>
+            </WorkspacePanel>
           ) : (
             <LeadsListClient leads={pipelineLeads} orgHasLeads={totalInOrg > 0} />
           )}
-        </WorkspacePanel>
+        </div>
       </div>
     </div>
   );

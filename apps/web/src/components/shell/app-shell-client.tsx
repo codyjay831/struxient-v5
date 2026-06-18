@@ -33,7 +33,7 @@ export function AppShellClient({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   const signOutForm = (className?: string) => (
-    <form action={signOutAction}>
+    <form action={signOutAction} className="w-full">
       <button type="submit" className={buttonClassName({ variant: "ghost", size: "sm", className })}>
         Sign out
       </button>
@@ -45,11 +45,19 @@ export function AppShellClient({
       <aside className={shellSidebarClass}>
         <Link
           href="/workstation"
-          className="mb-8 flex h-12 items-center px-3 transition-opacity hover:opacity-80"
+          className="mb-6 flex h-12 items-center px-3 transition-opacity hover:opacity-80"
         >
           <StruxientLogo size="md" />
         </Link>
         <SidebarNav role={role} />
+        <div className="mt-6 flex flex-col gap-4 border-t border-border pt-6 px-3">
+          <OrganizationSwitcher
+            organizations={organizations}
+            activeOrganizationId={activeOrganizationId}
+          />
+          <AppearanceControl />
+          {signOutForm("w-full justify-start")}
+        </div>
       </aside>
 
       <MobileNavDrawer
@@ -66,6 +74,11 @@ export function AppShellClient({
             >
               <StruxientLogo size="md" />
             </Link>
+            <OrganizationSwitcher
+              organizations={organizations}
+              activeOrganizationId={activeOrganizationId}
+            />
+            <AppearanceControl />
             <div className="lg:hidden">{signOutForm("w-full justify-start")}</div>
           </div>
         }
@@ -74,7 +87,7 @@ export function AppShellClient({
       </MobileNavDrawer>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className={shellHeaderClass}>
+        <header className={`${shellHeaderClass} lg:hidden`}>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <button
               ref={menuButtonRef}
@@ -92,14 +105,6 @@ export function AppShellClient({
             >
               <StruxientLogo size="sm" />
             </Link>
-          </div>
-          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-            <OrganizationSwitcher
-              organizations={organizations}
-              activeOrganizationId={activeOrganizationId}
-            />
-            <AppearanceControl />
-            <div className="hidden sm:block">{signOutForm()}</div>
           </div>
         </header>
         <main className={shellMainClass}>{children}</main>

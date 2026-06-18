@@ -48,6 +48,7 @@ What to **salvage from which line** (and what v5 **rejects**) is summarized in [
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Contractor narrative: intake → completion |
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Templates (line-only vs composite), quote vs post-sign execution planning |
 | [lineage-and-prior-art.md](./lineage-and-prior-art.md) | What to carry forward from Full_Cursor (genesis) + v2–v4; repeated failure modes; positioning |
+| [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |
 | [workstation-canon.md](./workstation-canon.md) | Deep rules for the cockpit / “what’s next” experience |
 | [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) | Non-negotiable rules, default decisions, engineering delivery standards (I22), appearance (I23) |
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | **v1 locks:** RBAC, lifecycle state names, accounting boundary, intake, calendar, tenancy, change orders, payments, portal, construction issues, Workstation, phased roadmap |
