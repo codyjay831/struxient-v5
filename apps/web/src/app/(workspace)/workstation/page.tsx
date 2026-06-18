@@ -7,13 +7,11 @@ import { LEAD_PIPELINE_OPEN_STATUSES } from "@/lib/lead-display";
 import { db } from "@/lib/db";
 import { queryOrganizationSchedule } from "@/lib/schedule-query";
 import { getWeekRange } from "@/lib/scheduling/week-range";
-import {
-  queryWorkstationWorkItems,
-  type WorkstationWorkItem,
-} from "@/lib/workstation-query";
+import { queryWorkstationWorkItems } from "@/lib/workstation-query";
 import {
   parseWorkstationUrlState,
   buildWorkstationUrl,
+  serializeWorkstationUrlState,
 } from "@/lib/workstation/url-state";
 import { getSpecForRole } from "@/lib/workstation/role-feeds";
 import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
@@ -33,19 +31,6 @@ import { WorkstationShell } from "@/components/workstation/workstation-shell";
 export const dynamic = "force-dynamic";
 
 const secondaryActionClass = buttonClassName({ variant: "muted", size: "sm" });
-const primaryActionClass = buttonClassName({ variant: "primary", size: "sm" });
-
-function withSelectionHref(
-  row: { selectedId: string; selectedKind: string },
-  urlState: ReturnType<typeof parseWorkstationUrlState>,
-) {
-  return buildWorkstationUrl(urlState, {
-    selected: {
-      id: row.selectedId,
-      kind: row.selectedKind as Exclude<WorkstationWorkItem["kind"], "daily-log">,
-    },
-  });
-}
 
 export default async function WorkstationPage({
   searchParams,
@@ -61,7 +46,7 @@ export default async function WorkstationPage({
     const roleSpec = getSpecForRole(ctx.role);
     if (roleSpec.defaultTab !== "overview") {
       redirect(
-        `/workstation${buildWorkstationUrl({
+        `/workstation${serializeWorkstationUrlState({
           v: 1,
           tab: roleSpec.defaultTab,
           lens: roleSpec.defaultLens,
@@ -145,8 +130,6 @@ export default async function WorkstationPage({
     redirect(`/workstation${cleared}`);
   }
 
-  const topAction = presentation.overviewNextActions[0];
-  const topActionHref = topAction ? withSelectionHref(topAction, urlState) : null;
   const highRiskCount = presentation.overviewNextActions.filter(
     (item) => item.tone === "danger",
   ).length;
@@ -218,17 +201,12 @@ export default async function WorkstationPage({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="min-w-0">
           <p className="text-sm text-foreground-muted">
-            {topAction
+            {presentation.overviewNextActions.length > 0
               ? `${presentation.overviewNextActions.length} ranked action${presentation.overviewNextActions.length === 1 ? "" : "s"} ready`
               : "No urgent work flagged."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {topActionHref ? (
-            <Link href={topActionHref} scroll={false} className={primaryActionClass}>
-              {topAction?.nextAction ?? "Review top issue"}
-            </Link>
-          ) : null}
           {showQuickActions && quickActions.includes("new-intake") ? (
             <Link href="/leads/new" className={secondaryActionClass}>
               <Plus className="size-3.5" />

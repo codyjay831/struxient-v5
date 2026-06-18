@@ -47,6 +47,7 @@ export type CriticalCategory =
   | "blocked_jobs"
   | "payment_holds"
   | "schedule_risk"
+  | "sales_handoffs"
   | "customer_decisions"
   | "proof_logs";
 
@@ -54,6 +55,7 @@ export const CRITICAL_CATEGORY_LABELS: Record<CriticalCategory, string> = {
   blocked_jobs: "Blocked jobs",
   payment_holds: "Payment holds",
   schedule_risk: "Schedule risk",
+  sales_handoffs: "Sales to Production",
   customer_decisions: "Customer decisions",
   proof_logs: "Proof / logs needed",
 };
@@ -62,6 +64,7 @@ export const CRITICAL_CATEGORY_EMPTY: Record<CriticalCategory, string> = {
   blocked_jobs: "No blocked jobs right now.",
   payment_holds: "No payment holds blocking work.",
   schedule_risk: "No schedule risks flagged.",
+  sales_handoffs: "No approved quotes waiting for job setup.",
   customer_decisions: "No customer decisions waiting.",
   proof_logs: "No proof or log review needed.",
 };
@@ -238,6 +241,7 @@ const CRITICAL_CATEGORY_ORDER: CriticalCategory[] = [
   "payment_holds",
   "blocked_jobs",
   "schedule_risk",
+  "sales_handoffs",
   "customer_decisions",
   "proof_logs",
 ];
@@ -256,6 +260,17 @@ function isWaitingItem(item: WorkstationWorkItem): boolean {
 
 function isBlockedItem(item: WorkstationWorkItem): boolean {
   return Boolean(item.isBlocked) && !item.isWaitingOnSignals;
+}
+
+function isQuoteJobSetupHandoff(item: WorkstationWorkItem): boolean {
+  if (item.kind !== "quote" || item.filterCategory !== "quotes") return false;
+  const actionType = item.workflow?.nextAction?.type;
+  if (actionType === "OPEN_EXECUTION_REVIEW" || actionType === "ACTIVATE_JOB") {
+    return true;
+  }
+
+  const rawAction = (item.actionLabel ?? item.nextStep ?? "").trim();
+  return /^Review job plan\.?$/i.test(rawAction) || /^Create job\.?$/i.test(rawAction);
 }
 
 function normalizeActionLabel(item: WorkstationWorkItem): string {
@@ -328,6 +343,9 @@ function resolveTone(item: WorkstationWorkItem): WorkstationPresentationTone {
 
 function resolveCategoryLabel(item: WorkstationWorkItem): string | undefined {
   if (item.filterCategory === "payments") return "Money";
+  if (isQuoteJobSetupHandoff(item)) {
+    return "Sales to Production";
+  }
   if (item.filterCategory === "leads" || item.filterCategory === "quotes") return "Leads & Quotes";
   if (item.filterCategory === "tasks") return "Tasks";
   if (item.filterCategory === "jobs" || item.filterCategory === "issues") return "Jobs";
@@ -339,6 +357,9 @@ function resolveCategoryLabel(item: WorkstationWorkItem): string | undefined {
 export function resolveCriticalCategory(item: WorkstationWorkItem): CriticalCategory | null {
   if (item.filterCategory === "payments" && (item.group === "investigate" || isBlockedItem(item))) {
     return "payment_holds";
+  }
+  if (isQuoteJobSetupHandoff(item)) {
+    return "sales_handoffs";
   }
   if (item.status === "Needs schedule" || item.status === "Missed") {
     return "schedule_risk";
@@ -513,7 +534,7 @@ export function buildCriticalGroups(
   for (const item of criticalRaw) {
     const category = resolveCriticalCategory(item);
     if (!category) continue;
-    if (nextActionIds.has(item.id)) continue;
+    if (nextActionIds.has(item.id) && category !== "sales_handoffs") continue;
 
     const list = grouped.get(category) ?? [];
     if (list.length >= criticalPerGroup) continue;

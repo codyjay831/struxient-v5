@@ -233,6 +233,36 @@ test("buildDomainQueues filters tasks and money separately", () => {
   assert.equal(queues.jobs.length, 0);
 });
 
+test("buildWorkstationPresentation surfaces quote handoffs as critical sales to production work", () => {
+  const quote = makeItem({
+    id: "quote-1",
+    kind: "quote",
+    filterCategory: "quotes",
+    title: "Estimate / Quote - Cody Barbour",
+    parentLabel: "Cody Barbour",
+    nextStep: "Review job plan.",
+    recordId: "quote-1",
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [quote],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  assert.equal(result.overviewNextActions[0]?.identity, "Cody Barbour");
+  assert.equal(result.overviewNextActions[0]?.workItem, "Estimate / Quote - Cody Barbour");
+  assert.equal(result.overviewNextActions[0]?.nextAction, "Review job plan");
+  assert.equal(result.overviewNextActions[0]?.categoryLabel, "Sales to Production");
+  assert.equal(
+    result.overviewCriticalGroups.find((group) => group.category === "sales_handoffs")?.items[0]
+      ?.categoryLabel,
+    "Sales to Production",
+  );
+});
+
 test("buildWorkstationPresentation builds seven-day week preview", () => {
   const result = buildWorkstationPresentation({
     items: [],

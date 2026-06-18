@@ -467,10 +467,14 @@ export async function queryWorkstationWorkItems(
     });
     const workflow = toEmbeddedWorkflow(recordState);
 
+    const isApprovedQuoteHandoff =
+      readiness.state === "APPROVED_READY_TO_ACTIVATE" ||
+      readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW";
+
     let priority: WorkstationWorkItemPriority = "medium";
     if (
       workflow.priority === "blocking" ||
-      readiness.state === "APPROVED_READY_TO_ACTIVATE" ||
+      isApprovedQuoteHandoff ||
       openChangeRequest
     ) {
       priority = "critical";
@@ -482,7 +486,7 @@ export async function queryWorkstationWorkItems(
 
     const group: WorkstationWorkItemGroup =
       workflow.priority === "blocking" ||
-      readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW" ||
+      isApprovedQuoteHandoff ||
       openChangeRequest
         ? "investigate"
         : "ready";
@@ -516,6 +520,8 @@ export async function queryWorkstationWorkItems(
         ? openChangeRequest.requiresVisit
           ? "Customer requested changes and follow-up visit may be required."
           : "Customer requested changes on this quote."
+        : isApprovedQuoteHandoff
+          ? "Approved quote is waiting for job setup."
         : isCustomerAccepted
           ? "Accepted by customer via portal."
           : rankReason || workflow.reason,
