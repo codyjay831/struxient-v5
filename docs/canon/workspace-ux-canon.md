@@ -108,5 +108,18 @@ The Sales detail drawer prioritizes fast context and action:
   - Must trap focus and prevent body scroll when open.
   - Must close on Escape or when clicking the backdrop.
 
+## Workstation Interaction Contract (Milestone 2)
+
+Workstation is the contractor execution cockpit. It is not a dashboard-card surface.
+
+- Default hierarchy is `Needs action` -> `Today` -> `Waiting / blocked` -> `This week` -> supporting context.
+- `Needs action` is the primary queue and must be row-first with explicit reason + next action.
+- `Today` and `This week` are compact secondary sections and must not dominate when empty.
+- Empty schedule states stay compact (`Nothing scheduled or due today`) rather than large panels.
+- Severity and action are separate: red only for true risk/blocked/overdue, not all attention items.
+- Presentation grouping is derived from canonical helpers and query truth; do not add UI-only workflow fields.
+- Workstation item rows must keep one clear visible next action and route-backed contextual detail behavior.
+
 ---
-*Canon update (2026-06-18): Initial workspace UX canon established for Milestone 1.*
+*Canon update (2026-06-18): Initial workspace UX canon established for Milestone 1.  
+Canon update (2026-06-18): Added Workstation Milestone 2 execution-cockpit interaction contract.*

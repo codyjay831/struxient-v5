@@ -6,11 +6,11 @@ export const WORKSTATION_LENS_LABELS: Record<
   "attention" | "today" | "waiting" | "upcoming" | "all",
   string
 > = {
-  attention: "The Board",
+  attention: "Workstation",
   today: "Today",
-  waiting: "Waiting",
+  waiting: "Waiting / blocked",
   upcoming: "Upcoming",
-  all: "All items",
+  all: "All work",
 };
 
 export const WORKSTATION_COPY = {

@@ -1,4 +1,17 @@
-import { WorkstationLens, WorkstationFilterCategory, WorkstationWorkItemKind } from "../workstation-query";
+import {
+  WorkstationLens,
+  WorkstationFilterCategory,
+  WorkstationWorkItemKind,
+} from "../workstation-query";
+
+export type WorkstationTab =
+  | "overview"
+  | "tasks"
+  | "jobs"
+  | "calendar"
+  | "commercial"
+  | "money"
+  | "activity";
 
 export interface WorkstationSelection {
   id: string;
@@ -9,6 +22,7 @@ export interface WorkstationSelection {
 
 export interface WorkstationUrlState {
   v: number;
+  tab: WorkstationTab;
   lens: WorkstationLens;
   filter: WorkstationFilterCategory;
   selected?: WorkstationSelection;
@@ -16,13 +30,38 @@ export interface WorkstationUrlState {
 
 const CURRENT_VERSION = 1;
 
+const VALID_TABS = new Set<WorkstationTab>([
+  "overview",
+  "tasks",
+  "jobs",
+  "calendar",
+  "commercial",
+  "money",
+  "activity",
+]);
+
+/** Map legacy lens URLs to the new tab model. */
+export function resolveWorkstationTab(
+  tabParam: string | undefined,
+  lens: WorkstationLens,
+): WorkstationTab {
+  if (tabParam && VALID_TABS.has(tabParam as WorkstationTab)) {
+    return tabParam as WorkstationTab;
+  }
+  if (lens === "attention") return "overview";
+  if (lens === "today" || lens === "upcoming") return "calendar";
+  if (lens === "waiting") return "tasks";
+  if (lens === "all") return "tasks";
+  return "overview";
+}
+
 /**
  * Central parser/serializer for Workstation URL state.
  *
- * Schema: ?v=1&lens=&filter=&selectedId=&selectedKind=&step=
+ * Schema: ?v=1&tab=&lens=&filter=&selectedId=&selectedKind=&step=
  */
 export function parseWorkstationUrlState(
-  searchParams: URLSearchParams | Record<string, string | string[] | undefined>
+  searchParams: URLSearchParams | Record<string, string | string[] | undefined>,
 ): WorkstationUrlState {
   const get = (key: string): string | undefined => {
     if (searchParams instanceof URLSearchParams) {
@@ -35,7 +74,8 @@ export function parseWorkstationUrlState(
   const v = parseInt(get("v") || "1", 10);
   const lens = (get("lens") || "attention") as WorkstationLens;
   const filter = (get("filter") || "all") as WorkstationFilterCategory;
-  
+  const tab = resolveWorkstationTab(get("tab"), lens);
+
   const selectedId = get("selectedId");
   const selectedKind = get("selectedKind") as WorkstationWorkItemKind | undefined;
   const step = get("step");
@@ -45,18 +85,19 @@ export function parseWorkstationUrlState(
     selected = { id: selectedId, kind: selectedKind, step };
   }
 
-  return { v, lens, filter, selected };
+  return { v, tab, lens, filter, selected };
 }
 
 export function serializeWorkstationUrlState(
-  state: Partial<WorkstationUrlState>
+  state: Partial<WorkstationUrlState>,
 ): string {
   const p = new URLSearchParams();
   p.set("v", (state.v || CURRENT_VERSION).toString());
-  
+
+  if (state.tab && state.tab !== "overview") p.set("tab", state.tab);
   if (state.lens && state.lens !== "attention") p.set("lens", state.lens);
   if (state.filter && state.filter !== "all") p.set("filter", state.filter);
-  
+
   if (state.selected) {
     p.set("selectedId", state.selected.id);
     p.set("selectedKind", state.selected.kind);
@@ -72,7 +113,21 @@ export function serializeWorkstationUrlState(
  */
 export function buildWorkstationUrl(
   currentState: WorkstationUrlState,
-  updates: Partial<WorkstationUrlState>
+  updates: Partial<WorkstationUrlState>,
 ): string {
   return serializeWorkstationUrlState({ ...currentState, ...updates });
 }
+
+export const WORKSTATION_TABS: {
+  tab: WorkstationTab;
+  label: string;
+  description: string;
+}[] = [
+  { tab: "overview", label: "Overview", description: "Morning command center" },
+  { tab: "tasks", label: "Tasks", description: "Assigned, blocked, and ready work" },
+  { tab: "jobs", label: "Jobs", description: "Active job health and next steps" },
+  { tab: "calendar", label: "Calendar", description: "Schedule, due work, and timing risk" },
+  { tab: "commercial", label: "Leads & Quotes", description: "Pipeline follow-up and decisions" },
+  { tab: "money", label: "Money", description: "Payments due and execution holds" },
+  { tab: "activity", label: "Activity", description: "Recent changes and log review" },
+];
