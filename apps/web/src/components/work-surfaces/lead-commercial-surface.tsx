@@ -113,8 +113,12 @@ function OpportunityActionControl({
               const result = await createRevisionDraftForQuoteChangeRequestAction(
                 action.targetChangeRequestId!,
               );
-              if (!result.ok || !result.revisedQuoteId) {
-                setError(result.error ?? "Could not create revision draft.");
+              if (!result.ok) {
+                setError(result.error);
+                return;
+              }
+              if (!result.revisedQuoteId) {
+                setError("Could not create revision draft.");
                 return;
               }
               router.push(`/quotes/${result.revisedQuoteId}`);
@@ -146,13 +150,13 @@ function OpportunityActionControl({
             startTransition(async () => {
               const result = await resumeOpportunityWorkspaceAction(leadId);
               if (!result.success) {
-                setError(result.error ?? "Could not resume this opportunity.");
+                setError(result.error ?? "Could not resume this lead.");
                 return;
               }
               onMutationSuccess?.();
             });
           }}
-          title="Clear pause and return this opportunity to the open pipeline."
+          title="Clear pause and return this lead to the open pipeline."
           className={variant === "primary" ? primaryActionClass : secondaryActionClass}
         >
           {isPending ? "Resuming..." : action.label}
@@ -196,10 +200,7 @@ function OpportunityActionControl({
       break;
     case "SCHEDULE_SALES_VISIT":
     case "COMPLETE_SALES_VISIT":
-      title = "Open schedule to plan or complete a sales visit.";
-      break;
-    case "RESUME_OPPORTUNITY":
-      title = "Resume this opportunity.";
+      title = "Open schedule to plan or complete a site visit.";
       break;
   }
 
@@ -324,7 +325,7 @@ export function LeadCommercialSurface({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5">
                 <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
-                  {lead.customerDisplayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact"}
+                  {customer?.displayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact"}
                 </h2>
                 <p className="text-sm text-foreground-muted">{lead.title}</p>
                 <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">

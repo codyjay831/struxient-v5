@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { redirect } from "next/navigation";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,18 +10,14 @@ import {
   type SerializedLeadRow,
 } from "@/lib/serialize-lead-list-row";
 import { LeadListToolbar } from "@/components/leads/lead-list-toolbar";
-import { LeadScaffoldingDialog } from "@/components/leads/lead-scaffolding-dialog";
-import { ButtonLink, buttonClassName } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import {
   parseLeadListSearchParams,
   leadListWhere,
   leadListOrderBy,
   leadRowMatchesPipeline,
-  serializeLeadListHref,
   LEAD_LIST_DEFAULT_SORT,
   LEAD_LIST_DEFAULT_PIPELINE,
-  type LeadListSortParam,
-  type LeadListPipelineParam,
 } from "@/lib/lead-list-query";
 import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadOrgCustomersForMatchGate } from "@/lib/lead-customer-match-gate";
@@ -29,28 +26,27 @@ import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
 
-const primaryLinkClass = buttonClassName({ variant: "primary", size: "sm" });
-const mutedLinkClass = buttonClassName({ variant: "muted", size: "sm" });
+function firstParam(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return null;
+}
 
-const sortLinkBase =
-  "inline-flex items-center rounded-md border px-2.5 py-1 text-[0.7rem] font-medium transition-colors";
-const sortLinkActive = `${sortLinkBase} border-border-strong bg-foreground/[0.04] text-foreground`;
-const sortLinkIdle = `${sortLinkBase} border-transparent text-foreground-muted hover:border-border hover:bg-foreground/[0.02] hover:text-foreground`;
-const pipelineLinkBase =
-  "inline-flex items-center rounded-md border px-2.5 py-1 text-[0.7rem] font-medium transition-colors";
-const pipelineLinkActive = `${pipelineLinkBase} border-border-strong bg-foreground/[0.04] text-foreground`;
-const pipelineLinkIdle = `${pipelineLinkBase} border-transparent text-foreground-muted hover:border-border hover:bg-foreground/[0.02] hover:text-foreground`;
-
-function sortLabel(sort: LeadListSortParam): string {
-  switch (sort) {
-    case "title":
-      return "Title A–Z";
-    case "age_asc":
-      return "Oldest first";
-    case "created":
-    default:
-      return "Newest created";
+function leadsHrefWithout(
+  record: Record<string, string | string[] | undefined>,
+  keysToRemove: string[],
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(record)) {
+    if (keysToRemove.includes(key)) continue;
+    if (typeof value === "string") {
+      params.set(key, value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) params.append(key, item);
+    }
   }
+  const query = params.toString();
+  return query ? `/leads?${query}` : "/leads";
 }
 
 export default async function LeadsPage({
@@ -59,7 +55,11 @@ export default async function LeadsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  if (sp.view) {
+    redirect(leadsHrefWithout(sp, ["view"]));
+  }
   const { q, sort, pipeline } = parseLeadListSearchParams(sp);
+  const selectedLeadParam = firstParam(sp.lead);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getCommercialRequestContextOrNull();
@@ -131,6 +131,16 @@ export default async function LeadsPage({
     }),
     db.lead.count({ where: { organizationId: ctx.organizationId } }),
   ]);
+  const selectedLead =
+    selectedLeadParam && selectedLeadParam.trim().length > 0
+      ? await db.lead.findFirst({
+          where: { id: selectedLeadParam, organizationId: ctx.organizationId },
+          select: { id: true },
+        })
+      : null;
+  if (selectedLeadParam && !selectedLead) {
+    redirect(leadsHrefWithout(sp, ["lead"]));
+  }
 
   const customerIds = [
     ...new Set(leads.map((lead) => lead.customerId).filter((id): id is string => Boolean(id))),
@@ -145,7 +155,7 @@ export default async function LeadsPage({
       : [];
   const customerPrimaryById = new Map<string, { googlePlaceId: string }>();
   for (const row of customerPrimaryLocations) {
-    if (!customerPrimaryById.has(row.customerId)) {
+    if (row.customerId && !customerPrimaryById.has(row.customerId)) {
       customerPrimaryById.set(row.customerId, { googlePlaceId: row.googlePlaceId });
     }
   }
@@ -189,9 +199,8 @@ export default async function LeadsPage({
               </ButtonLink>
             ) : null}
             <ButtonLink href="/leads/new" variant="primary" size="sm">
-              New request
+              Add lead
             </ButtonLink>
-            <LeadScaffoldingDialog />
           </>
         }
       />
@@ -212,34 +221,38 @@ export default async function LeadsPage({
               <div className="p-6">
                 <EmptyState
                   icon={Users}
-                  title="No sales opportunities yet"
-                  description="No opportunities yet. Add a request manually or share your public request link."
+                  title="No leads yet"
+                  description="No leads yet. Add a lead manually or share your public request link."
                 >
                   <ButtonLink href="/leads/new" variant="primary" size="sm">
-                    New request
+                    Add lead
                   </ButtonLink>
                 </EmptyState>
               </div>
             </WorkspacePanel>
-          ) : matchingCount === 0 ? (
+          ) : matchingCount === 0 && !selectedLead ? (
             <WorkspacePanel padding="none" className="overflow-hidden">
               <div className="p-6">
                 <EmptyState
                   icon={Search}
-                  title="No opportunities match this view"
+                  title="No leads match this view"
                   description="Try a different search term or change sort. Records still exist in your organization—they are just filtered out here."
                 >
                   <ButtonLink href="/leads" scroll={false} variant="primary" size="sm">
                     Clear filters
                   </ButtonLink>
                   <ButtonLink href="/leads/new" variant="muted" size="sm">
-                    New request
+                    Add lead
                   </ButtonLink>
                 </EmptyState>
               </div>
             </WorkspacePanel>
           ) : (
-            <LeadsListClient leads={pipelineLeads} orgHasLeads={totalInOrg > 0} />
+            <LeadsListClient
+              leads={pipelineLeads}
+              orgHasLeads={totalInOrg > 0}
+              selectedLeadId={selectedLead?.id ?? null}
+            />
           )}
         </div>
       </div>

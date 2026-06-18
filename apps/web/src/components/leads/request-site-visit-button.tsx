@@ -50,7 +50,7 @@ export function RequestSiteVisitButton({
     return (
       <Link href="/schedule" className={quickActionClass} title="Open schedule to confirm this site visit.">
         <CalendarDays className="size-3" />
-        Schedule visit
+        Schedule site visit
       </Link>
     );
   }
@@ -73,7 +73,7 @@ export function RequestSiteVisitButton({
             router.refresh();
           });
         }}
-        title="Request a site visit for this opportunity."
+        title="Request a site visit for this lead."
         className={quickActionClass}
       >
         <CalendarDays className="size-3" />

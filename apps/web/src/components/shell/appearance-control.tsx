@@ -40,7 +40,7 @@ export function AppearanceControl() {
   }
 
   return (
-    <fieldset className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5 shadow-sm">
+    <fieldset className="flex w-full shrink-0 items-center justify-between gap-0.5 rounded-lg border border-border bg-surface p-0.5 shadow-sm">
       <legend className="sr-only">Appearance</legend>
       {modes.map(({ id, label, icon: Icon }) => {
         const active = theme === id;
@@ -52,14 +52,14 @@ export function AppearanceControl() {
             title={label}
             aria-pressed={active}
             className={[
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
               active
                 ? "bg-foreground/5 text-foreground"
                 : "text-foreground-muted hover:bg-foreground/[0.04] hover:text-foreground",
             ].join(" ")}
           >
             <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} aria-hidden />
-            <span className="hidden sm:inline">{label}</span>
+            <span className="sr-only">{label}</span>
           </button>
         );
       })}

@@ -30,12 +30,12 @@ export default async function NewLeadPage() {
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales", href: "/leads" },
-          { label: "New request" },
+          { label: "Add lead" },
         ]}
       />
       <PageHeader
-        title="New request"
-        description="After saving, open the opportunity to link a customer and start a quote."
+        title="Add lead"
+        description="After saving, open the lead to link a customer and start a quote."
         actions={
           <Link href="/leads" className={listLinkClass}>
             ← Sales

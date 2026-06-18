@@ -295,12 +295,12 @@ test("unlinked lead with existing customer match blocks START_QUOTE", () => {
   });
   assert.equal(flow.conditionCode, "CUSTOMER_MATCH_NEEDS_REVIEW");
   assert.equal(flow.primaryAction?.kind, "REVIEW_CUSTOMER_MATCH");
-  assert.equal(flow.primaryAction?.label, "Review customer match");
+  assert.equal(flow.primaryAction?.label, "Review match");
 });
 
 test("REVIEW_CUSTOMER_MATCH href scrolls to customer link panel", () => {
   const href = resolveOpportunityActionHref(
-    { kind: "REVIEW_CUSTOMER_MATCH", label: "Review customer match", targetLeadId: "lead-1" },
+    { kind: "REVIEW_CUSTOMER_MATCH", label: "Review match", targetLeadId: "lead-1" },
     { leadId: "lead-1" },
   );
   assert.equal(href, "/leads/lead-1#customer-link");

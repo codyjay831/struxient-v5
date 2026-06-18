@@ -7,7 +7,7 @@ import {
   type LeadCustomerMatchHints,
 } from "@/lib/lead-customer-match-hints";
 
-export { hasBlockingCustomerMatch, CUSTOMER_MATCH_FETCH_CAP };
+export { hasBlockingCustomerMatch, CUSTOMER_MATCH_FETCH_CAP, type CustomerMatchRow };
 
 const customerSelect = {
   id: true,

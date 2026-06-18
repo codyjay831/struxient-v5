@@ -80,7 +80,6 @@ export function leadListWhere(
           { contact: { path: ["name"], string_contains: lowered } },
           { contact: { path: ["email"], string_contains: lowered } },
           { request: { path: ["type"], string_contains: lowered } },
-          { title: { contains: term, mode: "insensitive" } },
           {
             customer: {
               is: {
@@ -100,7 +99,7 @@ export function leadListWhere(
 export function leadListOrderBy(sort: LeadListSortParam): Prisma.LeadOrderByWithRelationInput {
   switch (sort) {
     case "title_asc":
-      return { title: "asc" };
+      return { createdAt: "asc" }; // Fallback since title is derived
     case "age_asc":
       return { createdAt: "asc" };
     case "updated":

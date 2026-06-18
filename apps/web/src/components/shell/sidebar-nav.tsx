@@ -133,9 +133,7 @@ export function SidebarNav({
       <NavSection title="Relationships" items={relationshipItems} pathname={pathname} onNavigate={onNavigate} />
       <NavSection title="Work" items={workNav} pathname={pathname} onNavigate={onNavigate} />
       <NavSection title="Finance" items={financeItems} pathname={pathname} onNavigate={onNavigate} />
-      <div className="mt-auto">
-        <NavSection title="" items={utilityNav} pathname={pathname} onNavigate={onNavigate} />
-      </div>
+      <NavSection title="" items={utilityNav} pathname={pathname} onNavigate={onNavigate} />
     </nav>
   );
 }

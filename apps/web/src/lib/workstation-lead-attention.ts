@@ -1,4 +1,4 @@
-import type { OpportunityFlowConditionCode } from "./opportunity-flow";
+import type { OpportunityConditionCode } from "./opportunity-flow";
 
 export type LeadWorkstationAttentionGroup =
   | "investigate"
@@ -11,7 +11,7 @@ export type LeadWorkstationAttentionGroup =
 export type LeadWorkstationAttentionPriority = "critical" | "high" | "medium" | "low";
 
 export function classifyLeadWorkstationAttention(input: {
-  conditionCode: OpportunityFlowConditionCode;
+  conditionCode: OpportunityConditionCode;
   hasPendingVisit: boolean;
 }): {
   group: LeadWorkstationAttentionGroup;

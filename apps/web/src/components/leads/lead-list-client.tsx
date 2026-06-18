@@ -10,15 +10,15 @@
  */
 
 import Link from "next/link";
-import { useCallback, useMemo, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useRef, type KeyboardEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Drawer } from "@/components/ui/drawer";
 import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
 import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
-import { formatOpportunityPhaseLabel } from "@/lib/opportunity-board";
+import { leadRowMatchesPipeline } from "@/lib/lead-list-query";
 
 /* ─── Compact lead row ───────────────────────────────────────────────────── */
 
@@ -29,12 +29,12 @@ function LeadRow({
 }: {
   lead: SerializedLeadRow;
   active: boolean;
-  onOpen: () => void;
+  onOpen: (trigger: HTMLDivElement) => void;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onOpen();
+      onOpen(event.currentTarget);
     }
   };
   const toneDotClass =
@@ -47,16 +47,21 @@ function LeadRow({
           : "bg-foreground-subtle";
 
   const primaryName = lead.customerDisplayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact";
+  const workLabel =
+    lead.title && lead.title !== "New lead" && lead.title !== "Untitled Request"
+      ? lead.title
+      : null;
+  const secondaryParts = [workLabel, lead.jobsiteAddressLine].filter(Boolean);
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={onOpen}
+      onClick={(event) => onOpen(event.currentTarget)}
       onKeyDown={onKeyDown}
-      aria-label={`Open opportunity: ${lead.title}`}
+      aria-label={`Open lead: ${lead.title}`}
       className={[
-        "group relative flex w-full cursor-pointer flex-col gap-2 border-l-2 px-4 py-3.5 text-left transition-colors sm:flex-row sm:items-start sm:gap-4",
+        "group relative flex w-full cursor-pointer flex-col gap-2 border-l-2 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex-row sm:items-center sm:gap-4",
         active
           ? "border-accent bg-background"
           : "border-transparent hover:bg-background/60",
@@ -73,24 +78,24 @@ function LeadRow({
         </div>
 
         {/* Secondary: requested work; city/location */}
-        <div className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
-          <span className="truncate max-w-[20rem]">{lead.title}</span>
-          {lead.jobsiteAddressLine && (
-            <>
-              <span aria-hidden>·</span>
-              <span className="truncate max-w-[12rem]">{lead.jobsiteAddressLine}</span>
-            </>
-          )}
-        </div>
+        {secondaryParts.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
+            {workLabel ? <span className="max-w-[20rem] truncate">{workLabel}</span> : null}
+            {workLabel && lead.jobsiteAddressLine ? <span aria-hidden>·</span> : null}
+            {lead.jobsiteAddressLine ? (
+              <span className="max-w-[12rem] truncate">{lead.jobsiteAddressLine}</span>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Operational: next required action or blocked/waiting reason; age */}
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle mt-0.5">
-          {lead.nextStepLabel ? (
-            <span className="font-medium text-foreground-muted">Next: {lead.nextStepLabel}</span>
-          ) : lead.progressDescription ? (
+          {lead.progressDescription ? (
             <span className="font-medium text-foreground-muted">{lead.progressDescription}</span>
           ) : null}
-          <span aria-hidden>·</span>
+          {lead.progressDescription ? (
+            <span aria-hidden>·</span>
+          ) : null}
           <span>{lead.opportunityFlow.ageLabel || lead.ageLabel}</span>
           {lead.valueLabel && (
             <>
@@ -125,16 +130,20 @@ const primaryLinkClass =
 export function LeadsListClient({
   leads,
   orgHasLeads,
+  selectedLeadId,
 }: {
   leads: SerializedLeadRow[];
   orgHasLeads: boolean;
+  selectedLeadId?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const leadIds = useMemo(() => new Set(leads.map((lead) => lead.id)), [leads]);
   const openParam = searchParams.get("lead");
-  const openLeadId = openParam && leadIds.has(openParam) ? openParam : null;
+  const openLeadId =
+    openParam && (leadIds.has(openParam) || openParam === selectedLeadId) ? openParam : null;
 
   const writeOpenParam = useCallback(
     (leadId: string | null, mode: "push" | "replace") => {
@@ -151,13 +160,30 @@ export function LeadsListClient({
     [pathname, router, searchParams],
   );
 
-  const openWorkspace = useCallback((id: string) => {
+  const openWorkspace = useCallback((id: string, trigger: HTMLElement) => {
+    returnFocusRef.current = trigger;
     writeOpenParam(id, "push");
   }, [writeOpenParam]);
 
   const closeWorkspace = useCallback(() => {
     writeOpenParam(null, "replace");
   }, [writeOpenParam]);
+
+  const needsActionLeads = leads.filter((l) => leadRowMatchesPipeline("needs_action", l.progressState));
+  const waitingLeads = leads.filter((l) => leadRowMatchesPipeline("waiting", l.progressState));
+  const scheduledLeads = leads.filter((l) => leadRowMatchesPipeline("scheduled", l.progressState));
+  const awardedLeads = leads.filter((l) => leadRowMatchesPipeline("awarded", l.progressState));
+  const closedLeads = leads.filter((l) => leadRowMatchesPipeline("closed", l.progressState));
+
+  // If the pipeline filter is active, we might just have all leads in one group.
+  // But we can just render the groups that have items.
+  const groups = [
+    { id: "needs_action", label: "Needs action", items: needsActionLeads },
+    { id: "waiting", label: "Waiting", items: waitingLeads },
+    { id: "scheduled", label: "Scheduled", items: scheduledLeads },
+    { id: "awarded", label: "Awarded", items: awardedLeads },
+    { id: "closed", label: "Closed", items: closedLeads },
+  ].filter(g => g.items.length > 0);
 
   return (
     <>
@@ -169,31 +195,48 @@ export function LeadsListClient({
             title="Queue is empty"
             description={
               orgHasLeads
-                ? "All active opportunities have progressed to jobs or are archived."
-                : "No opportunities yet. Add one when a call, walk-in, or message comes in."
+                ? "All active leads have progressed to jobs or are closed."
+                : "No leads yet. Add one when a call, walk-in, or message comes in."
             }
           >
             <div className="flex flex-col items-center gap-4">
               <Link href="/leads/new" className={primaryLinkClass}>
-                New intake
+                Add lead
               </Link>
             </div>
           </EmptyState>
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {leads.map((lead) => (
-            <LeadRow
-              key={lead.id}
-              lead={lead}
-              active={lead.id === openLeadId}
-              onOpen={() => openWorkspace(lead.id)}
-            />
+        <div className="flex flex-col gap-8">
+          {groups.map((group) => (
+            <section key={group.id} aria-labelledby={`group-${group.id}`}>
+              <h3
+                id={`group-${group.id}`}
+                className="mb-2 px-1 text-[0.65rem] font-bold uppercase tracking-widest text-foreground-subtle"
+              >
+                {group.label} · {group.items.length}
+              </h3>
+              <div className="divide-y divide-border rounded-lg border border-border bg-surface shadow-sm overflow-hidden">
+                {group.items.map((lead) => (
+                  <LeadRow
+                    key={lead.id}
+                    lead={lead}
+                    active={lead.id === openLeadId}
+                    onOpen={(trigger) => openWorkspace(lead.id, trigger)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
 
-      <Drawer open={openLeadId != null} onClose={closeWorkspace} title="Opportunity Details">
+      <Drawer
+        open={openLeadId != null}
+        onClose={closeWorkspace}
+        ariaLabel="Lead details"
+        returnFocusRef={returnFocusRef}
+      >
         {openLeadId ? (
           <LeadWorkspaceDialogBody
             key={openLeadId}

@@ -3,7 +3,7 @@
 import { useCallback, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { QuoteStatus } from "@prisma/client";
-import { CenteredWorkspaceDialog } from "@/components/ui/centered-workspace-dialog";
+import { Drawer } from "@/components/ui/drawer";
 import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
 import {
   QuoteWorkspaceDialogBody,
@@ -103,8 +103,8 @@ export function WorkstationSelectionModal({
     );
 
   return (
-    <CenteredWorkspaceDialog open={item != null} onClose={handleClose}>
+    <Drawer open={item != null} onClose={handleClose} ariaLabel="Work item details">
       {body}
-    </CenteredWorkspaceDialog>
+    </Drawer>
   );
 }

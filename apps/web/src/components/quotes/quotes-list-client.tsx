@@ -18,7 +18,7 @@
 import { useCallback, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { CenteredWorkspaceDialog } from "@/components/ui/centered-workspace-dialog";
+import { Drawer } from "@/components/ui/drawer";
 import {
   QuoteWorkspaceDialogBody,
   quoteDisplayFromListRow,
@@ -117,7 +117,7 @@ export function QuotesListClient({ quotes }: { quotes: SerializedQuoteListRow[] 
         ))}
       </ul>
 
-      <CenteredWorkspaceDialog open={openQuote != null} onClose={closeWorkspace}>
+      <Drawer open={openQuote != null} onClose={closeWorkspace} ariaLabel="Quote details">
         {openQuote ? (
           <QuoteWorkspaceDialogBody
             key={openQuote.id}
@@ -125,7 +125,7 @@ export function QuotesListClient({ quotes }: { quotes: SerializedQuoteListRow[] 
             onClose={closeWorkspace}
           />
         ) : null}
-      </CenteredWorkspaceDialog>
+      </Drawer>
     </>
   );
 }

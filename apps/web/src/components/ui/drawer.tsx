@@ -7,6 +7,7 @@ export function Drawer({
   open,
   onClose,
   title,
+  ariaLabel,
   children,
   returnFocusRef,
   widthClass = "w-full sm:w-[500px] md:w-[600px] lg:w-[700px]",
@@ -14,6 +15,7 @@ export function Drawer({
   open: boolean;
   onClose: () => void;
   title?: string;
+  ariaLabel?: string;
   children: ReactNode;
   returnFocusRef?: React.RefObject<HTMLElement | null>;
   widthClass?: string;
@@ -32,7 +34,11 @@ export function Drawer({
     document.body.style.overflow = "hidden";
     
     // Focus the close button or panel
-    closeButtonRef.current?.focus();
+    if (closeButtonRef.current) {
+      closeButtonRef.current.focus();
+    } else {
+      panelRef.current?.focus();
+    }
 
     return () => {
       document.body.style.overflow = originalOverflow;
@@ -49,7 +55,44 @@ export function Drawer({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !panelRef.current) {
+        return;
+      }
+
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          [
+            "a[href]",
+            "button:not([disabled])",
+            "textarea:not([disabled])",
+            "input:not([disabled])",
+            "select:not([disabled])",
+            "[tabindex]:not([tabindex='-1'])",
+          ].join(","),
+        ),
+      ).filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null);
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
@@ -71,21 +114,24 @@ export function Drawer({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title ?? "Drawer"}
-        className={`relative flex h-full flex-col border-l border-border bg-surface shadow-2xl transition-transform ${widthClass}`}
+        aria-label={ariaLabel ?? title ?? "Details"}
+        tabIndex={-1}
+        className={`relative flex h-full flex-col border-l border-border bg-surface shadow-2xl transition-transform ${widthClass} focus:outline-none`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-6">
-          <span className="text-sm font-medium text-foreground">{title}</span>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-2 text-foreground-subtle transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </div>
+        {title ? (
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-6">
+            <span className="text-sm font-medium text-foreground">{title}</span>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md p-2 text-foreground-subtle transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>

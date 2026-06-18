@@ -78,7 +78,7 @@ export function LeadListToolbar({
         >
           <div className="min-w-0 flex-1 sm:max-w-sm">
             <label className="sr-only" htmlFor="intake-list-search">
-              Search opportunities
+              Search leads
             </label>
             <input
               id="intake-list-search"
@@ -136,12 +136,20 @@ export function LeadListToolbar({
         </form>
         
         <p
-          className="shrink-0 text-sm font-medium tabular-nums text-foreground-muted"
+          className="shrink-0 text-sm font-medium text-foreground-muted"
           role="status"
           aria-live="polite"
         >
-          <span className="text-foreground">{matchingCount}</span>
-          <span className="text-foreground-subtle"> / {totalInOrg}</span>
+          {pipeline === "all" && !q && matchingCount === totalInOrg ? (
+            <span>{totalInOrg} {totalInOrg === 1 ? "lead" : "leads"}</span>
+          ) : (
+            <span>
+              <span className="text-foreground">{matchingCount}</span>
+              {" "}
+              {pipeline === "all" || q ? "matching" : pipelineOptions.find(p => p.value === pipeline)?.label.toLowerCase() ?? "matching"}
+              <span className="text-foreground-subtle"> · {totalInOrg} total</span>
+            </span>
+          )}
         </p>
       </div>
     </div>
