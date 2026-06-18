@@ -63,7 +63,7 @@ export function LeadWorkspaceDialogBody({
         <div className="flex min-h-0 flex-1 flex-col">
           <LeadCommercialSurface
             payload={payload}
-            entryPoint="record"
+            entryPoint="sales_modal"
             onMutationSuccess={handleMutationSuccess}
             onClose={onClose}
           />

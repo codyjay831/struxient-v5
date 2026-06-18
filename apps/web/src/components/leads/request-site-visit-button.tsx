@@ -8,8 +8,7 @@ import { LeadVisitRequestStatus } from "@prisma/client";
 import { requestSiteVisitForLeadWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import type { LeadVisitRequestPayload } from "@/lib/lead-display";
 
-const quickActionClass =
-  "inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60";
+import { leadReviewQuickActionClass } from "@/components/leads/lead-review-quick-action-class";
 
 function findOpenVisit(visits: LeadVisitRequestPayload[]) {
   return (
@@ -39,7 +38,7 @@ export function RequestSiteVisitButton({
 
   if (openVisit?.status === LeadVisitRequestStatus.CONFIRMED) {
     return (
-      <Link href="/schedule" className={quickActionClass} title="Open schedule to complete this site visit.">
+      <Link href="/schedule" className={leadReviewQuickActionClass} title="Open schedule to complete this site visit.">
         <CalendarDays className="size-3" />
         Complete visit
       </Link>
@@ -48,7 +47,7 @@ export function RequestSiteVisitButton({
 
   if (openVisit?.status === LeadVisitRequestStatus.PENDING) {
     return (
-      <Link href="/schedule" className={quickActionClass} title="Open schedule to confirm this site visit.">
+      <Link href="/schedule" className={leadReviewQuickActionClass} title="Open schedule to confirm this site visit.">
         <CalendarDays className="size-3" />
         Schedule site visit
       </Link>
@@ -74,7 +73,7 @@ export function RequestSiteVisitButton({
           });
         }}
         title="Request a site visit for this lead."
-        className={quickActionClass}
+        className={leadReviewQuickActionClass}
       >
         <CalendarDays className="size-3" />
         {isPending ? "Requesting..." : "Request site visit"}

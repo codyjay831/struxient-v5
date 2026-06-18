@@ -58,8 +58,11 @@ export default async function LeadsPage({
   if (sp.view) {
     redirect(leadsHrefWithout(sp, ["view"]));
   }
-  const { q, sort, pipeline } = parseLeadListSearchParams(sp);
   const selectedLeadParam = firstParam(sp.lead);
+  if (selectedLeadParam && selectedLeadParam.trim().length > 0) {
+    redirect(`/leads/${selectedLeadParam.trim()}`);
+  }
+  const { q, sort, pipeline } = parseLeadListSearchParams(sp);
   const fromWorkstation = sp["from"] === "workstation";
   const returnSection = typeof sp["section"] === "string" ? sp["section"] : "investigate";
   const ctx = await getCommercialRequestContextOrNull();
@@ -131,16 +134,6 @@ export default async function LeadsPage({
     }),
     db.lead.count({ where: { organizationId: ctx.organizationId } }),
   ]);
-  const selectedLead =
-    selectedLeadParam && selectedLeadParam.trim().length > 0
-      ? await db.lead.findFirst({
-          where: { id: selectedLeadParam, organizationId: ctx.organizationId },
-          select: { id: true },
-        })
-      : null;
-  if (selectedLeadParam && !selectedLead) {
-    redirect(leadsHrefWithout(sp, ["lead"]));
-  }
 
   const customerIds = [
     ...new Set(leads.map((lead) => lead.customerId).filter((id): id is string => Boolean(id))),
@@ -230,7 +223,7 @@ export default async function LeadsPage({
                 </EmptyState>
               </div>
             </WorkspacePanel>
-          ) : matchingCount === 0 && !selectedLead ? (
+          ) : matchingCount === 0 ? (
             <WorkspacePanel padding="none" className="overflow-hidden">
               <div className="p-6">
                 <EmptyState
@@ -248,11 +241,7 @@ export default async function LeadsPage({
               </div>
             </WorkspacePanel>
           ) : (
-            <LeadsListClient
-              leads={pipelineLeads}
-              orgHasLeads={totalInOrg > 0}
-              selectedLeadId={selectedLead?.id ?? null}
-            />
+            <LeadsListClient leads={pipelineLeads} orgHasLeads={totalInOrg > 0} />
           )}
         </div>
       </div>

@@ -4,9 +4,8 @@ import { LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/load
 import {
   formatAttachmentFileSize,
   formatLeadChannel,
-  formatLeadStatus,
 } from "@/lib/lead-display";
-import { LeadStatus, QuoteStatus } from "@prisma/client";
+import { QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { StatusBadge, StatusBadgeTone } from "@/components/ui/status-badge";
 import {
@@ -14,8 +13,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  CheckCircle2,
-  ExternalLink,
   Pencil,
   ChevronDown,
   Clock,
@@ -28,10 +25,6 @@ import {
   resolveOpportunityActionHref,
   type OpportunityAction,
 } from "@/lib/opportunity-flow";
-import {
-  OPPORTUNITY_PHASE_ORDER,
-  formatOpportunityPhaseLabel,
-} from "@/lib/opportunity-board";
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
@@ -39,7 +32,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { closeOrPauseLeadWorkspaceAction, resumeOpportunityWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { createRevisionDraftForQuoteChangeRequestAction } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import { useRouter } from "next/navigation";
-import { RequestSiteVisitButton } from "@/components/leads/request-site-visit-button";
+import { LeadReviewQuickActions } from "@/components/leads/lead-review-quick-actions";
 import { LeadCustomerActionPanel } from "@/components/leads/lead-customer-action-panel";
 import { LeadAddressResolvePanel } from "@/components/leads/lead-address-resolve-panel";
 import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
@@ -48,7 +41,7 @@ import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
-  entryPoint?: "workstation" | "record";
+  entryPoint?: "workstation" | "record" | "sales_modal";
   /** When set, called after in-place mutations (e.g. customer attach) instead of only `router.refresh()`. */
   onMutationSuccess?: () => void;
   /** When set, renders a close button in the header (e.g. dialog workspace). */
@@ -57,7 +50,6 @@ export interface LeadCommercialSurfaceProps {
 
 const sectionTitleClass =
   "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
-const phaseOrder = OPPORTUNITY_PHASE_ORDER;
 
 const primaryActionClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
@@ -215,10 +207,6 @@ function OpportunityActionControl({
   );
 }
 
-function phaseLabel(phase: string): string {
-  return formatOpportunityPhaseLabel(phase);
-}
-
 export function LeadCommercialSurface({
   payload,
   entryPoint = "record",
@@ -240,6 +228,7 @@ export function LeadCommercialSurface({
   const router = useRouter();
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
+  const [showSecondaryDetails, setShowSecondaryDetails] = useState(false);
   const [closePanelOpen, setClosePanelOpen] = useState(false);
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [siteDrawerOpen, setSiteDrawerOpen] = useState(false);
@@ -276,8 +265,6 @@ export function LeadCommercialSurface({
   } as const;
 
   const editHref = `/leads/${lead.id}/edit`;
-  const callablePhone = lead.phone.trim();
-  const emailableAddress = lead.email.trim();
 
   useEffect(() => {
     workstationTelemetry.trackSurfaceOpen("lead", lead.id, entryPoint);
@@ -316,122 +303,141 @@ export function LeadCommercialSurface({
     lead.jobsiteAddressLine.trim().length > 0 &&
     serviceAddressContext?.customer == null;
 
+  const isModalContext = Boolean(onClose);
+
+  const scopeField = reviewViewModel.requestFields.find((f) => f.label === "What they need");
+  const timingField = reviewViewModel.requestFields.find((f) => f.label === "Timing");
+
+  const headerSubtitle = [
+    scopeField?.value ?? reviewViewModel.scopeText,
+    timingField?.value,
+    lead.jobsiteAddressLine.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const visibleRequirements = opportunityFlow.requirements.filter(
+    (req) => req !== "Review customer match",
+  );
+
+  const showFooter = !isModalContext;
+  const showSecondarySections = isModalContext ? showSecondaryDetails : true;
+
   return (
     <div className="@container flex min-h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-6 p-4 sm:p-6">
-          {/* Decision header */}
-          <header className="space-y-4">
+        <div className={`flex flex-col gap-6 ${isModalContext ? "p-4" : "p-4 sm:p-6"}`}>
+          <header className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1.5">
-                <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
-                  {customer?.displayName ?? lead.contactName ?? lead.companyName ?? lead.email ?? "Unknown contact"}
+              <div className="min-w-0 space-y-1">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground truncate">
+                  {lead.title}
                 </h2>
-                <p className="text-sm text-foreground-muted">{lead.title}</p>
+                {headerSubtitle ? (
+                  <p className="text-sm text-foreground-muted">{headerSubtitle}</p>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
                   <span>{formatLeadChannel(lead.channel)}</span>
-                  <span>·</span>
-                  <span>{lead.jobsiteAddressLine || "No address provided"}</span>
+                  {lead.contactName ? (
+                    <>
+                      <span>·</span>
+                      <span>{lead.contactName}</span>
+                    </>
+                  ) : null}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {onClose ? (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Close workspace"
-                    className="rounded-md p-2 text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
-                  >
-                    <X className="w-5 h-5" strokeWidth={1.5} />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {callablePhone ? (
-                <a
-                  href={`tel:${callablePhone}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                >
-                  <Phone className="size-3.5" />
-                  Call
-                </a>
-              ) : null}
-              {emailableAddress ? (
-                <a
-                  href={`mailto:${emailableAddress}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-                >
-                  <Mail className="size-3.5" />
-                  Email
-                </a>
-              ) : null}
-              {!isTerminalPhase ? (
-                <RequestSiteVisitButton
-                  leadId={lead.id}
-                  visits={visitRequests}
-                  onSuccess={notifyMutationSuccess}
-                />
+              {onClose || entryPoint === "sales_modal" ? (
+                <div className="flex shrink-0 items-center gap-1">
+                  {entryPoint === "sales_modal" ? (
+                    <Link
+                      href={`/leads/${lead.id}`}
+                      className="rounded-md px-2 py-1.5 text-xs font-medium text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+                    >
+                      Full record
+                    </Link>
+                  ) : null}
+                  {onClose ? (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close"
+                      className="rounded-md p-2 text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+                    >
+                      <X className="w-5 h-5" strokeWidth={1.5} />
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
+            <LeadReviewQuickActions
+              phone={lead.phone}
+              email={lead.email}
+              leadId={lead.id}
+              visits={visitRequests}
+              siteVisitDisabled={isTerminalPhase}
+              onSuccess={notifyMutationSuccess}
+            />
           </header>
 
-            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge
-                  label={opportunityFlow.conditionLabel}
-                  tone={
-                    opportunityFlow.phase === "WON"
-                      ? "approved"
-                      : opportunityFlow.phase === "CUSTOMER_REVIEW"
-                        ? "sent"
-                        : opportunityFlow.phase === "LOST"
-                          ? "neutral"
-                          : opportunityFlow.phase === "PAUSED"
-                            ? "warning"
-                            : "draft"
-                  }
-                />
-                {opportunityFlow.ageLabel ? (
-                  <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
-                ) : null}
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-                {opportunityFlow.summary}
-              </p>
-              {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  {opportunityFlow.primaryAction ? (
-                    <OpportunityActionControl
-                      action={opportunityFlow.primaryAction}
-                      leadId={lead.id}
-                      variant="primary"
-                      onReviewCustomerMatch={scrollToCustomerMatch}
-                      onMutationSuccess={notifyMutationSuccess}
-                    />
-                  ) : null}
-                  {opportunityFlow.secondaryActions.map((action) => (
-                    <OpportunityActionControl
-                      key={`${action.kind}:${action.label}`}
-                      action={action}
-                      leadId={lead.id}
-                      variant="secondary"
-                      onReviewCustomerMatch={scrollToCustomerMatch}
-                      onMutationSuccess={notifyMutationSuccess}
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {opportunityFlow.requirements.length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {opportunityFlow.requirements.map((req) => (
-                    <span key={req} className="rounded-full border border-border px-2 py-0.5 text-[0.7rem] text-foreground-muted">
-                      {req}
-                    </span>
-                  ))}
-                </div>
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge
+                label={opportunityFlow.conditionLabel}
+                tone={
+                  opportunityFlow.phase === "WON"
+                    ? "approved"
+                    : opportunityFlow.phase === "CUSTOMER_REVIEW"
+                      ? "sent"
+                      : opportunityFlow.phase === "LOST"
+                        ? "neutral"
+                        : opportunityFlow.phase === "PAUSED"
+                          ? "warning"
+                          : "draft"
+                }
+              />
+              {opportunityFlow.ageLabel ? (
+                <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
               ) : null}
             </div>
+            <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+              {opportunityFlow.summary}
+            </p>
+            {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {opportunityFlow.primaryAction ? (
+                  <OpportunityActionControl
+                    action={opportunityFlow.primaryAction}
+                    leadId={lead.id}
+                    variant="primary"
+                    onReviewCustomerMatch={scrollToCustomerMatch}
+                    onMutationSuccess={notifyMutationSuccess}
+                  />
+                ) : null}
+                {opportunityFlow.secondaryActions.map((action) => (
+                  <OpportunityActionControl
+                    key={`${action.kind}:${action.label}`}
+                    action={action}
+                    leadId={lead.id}
+                    variant="secondary"
+                    onReviewCustomerMatch={scrollToCustomerMatch}
+                    onMutationSuccess={notifyMutationSuccess}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {visibleRequirements.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {visibleRequirements.map((req) => (
+                  <span
+                    key={req}
+                    className="rounded-full border border-border px-2 py-0.5 text-[0.7rem] text-foreground-muted"
+                  >
+                    {req}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
             {showAddressResolvePanel ? (
               <div ref={addressVerifyRef}>
@@ -445,27 +451,26 @@ export function LeadCommercialSurface({
               </div>
             ) : null}
 
-            {!customer ? (
-              <LeadCustomerActionPanel
-                panelRef={customerSectionRef}
-                lead={{
-                  id: lead.id,
-                  title: lead.title,
-                  contactName: lead.contactName,
-                  companyName: lead.companyName,
-                  email: lead.email,
-                  phone: lead.phone,
-                  notes: lead.notes,
-                  source: lead.channel,
-                  jobsiteAddressLine: lead.jobsiteAddressLine,
-                }}
-                editLeadHref={editHref}
-                hasBlockingCustomerMatch={hasBlockingCustomerMatch}
-                suggestedMatches={matches}
-                onSuccess={notifyMutationSuccess}
-                onError={(message) => setSurfaceError(message)}
-              />
-            ) : null}
+            <LeadCustomerActionPanel
+              panelRef={customerSectionRef}
+              lead={{
+                id: lead.id,
+                title: lead.title,
+                contactName: lead.contactName,
+                companyName: lead.companyName,
+                email: lead.email,
+                phone: lead.phone,
+                notes: lead.notes,
+                source: lead.channel,
+                jobsiteAddressLine: lead.jobsiteAddressLine,
+              }}
+              linkedCustomer={customer}
+              hasBlockingCustomerMatch={hasBlockingCustomerMatch}
+              suggestedMatches={matches}
+              onSuccess={notifyMutationSuccess}
+              onError={(message) => setSurfaceError(message)}
+              compact={isModalContext}
+            />
 
             {surfaceError ? (
               <p className="rounded-lg border border-danger/30 bg-danger/[0.06] px-3 py-2 text-sm text-danger">
@@ -473,6 +478,20 @@ export function LeadCommercialSurface({
               </p>
             ) : null}
 
+          {isModalContext ? (
+            <button
+              type="button"
+              onClick={() => setShowSecondaryDetails((open) => !open)}
+              className="flex w-full items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-foreground/[0.02] hover:text-foreground"
+            >
+              <ChevronDown
+                className={`size-3.5 transition-transform ${showSecondaryDetails ? "rotate-180" : ""}`}
+              />
+              {showSecondaryDetails ? "Hide details" : "Show request & contact details"}
+            </button>
+          ) : null}
+
+          {showSecondarySections ? (
           <div className="space-y-8">
             {/* Request summary */}
             <section className="space-y-3" aria-labelledby="lead-review-request">
@@ -596,19 +615,6 @@ export function LeadCommercialSurface({
                   </div>
                 </div>
                 <SiteDetailsRow data={siteData} onOpen={() => setSiteDrawerOpen(true)} />
-
-                {customer ? (
-                  <div className="flex items-center gap-2 rounded-lg bg-foreground/[0.02] p-2 text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
-                    <CheckCircle2 className="size-3 text-success" />
-                    Linked: {customer.displayName}
-                    <Link
-                      href={customer.href}
-                      className="ml-auto flex items-center gap-1 hover:text-foreground"
-                    >
-                      View <ExternalLink className="size-2.5" />
-                    </Link>
-                  </div>
-                ) : null}
               </div>
               <SiteDetailsDrawer
                 open={siteDrawerOpen}
@@ -721,9 +727,11 @@ export function LeadCommercialSurface({
               </section>
             ) : null}
           </div>
+          ) : null}
         </div>
       </div>
 
+      {showFooter ? (
       <footer className="shrink-0 border-t border-border bg-surface px-4 py-3 sm:px-6">
         <div className="space-y-3">
           {closePanelOpen ? (
@@ -761,6 +769,7 @@ export function LeadCommercialSurface({
           </div>
         </div>
       </footer>
+      ) : null}
     </div>
   );
 }

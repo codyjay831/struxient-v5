@@ -12,6 +12,17 @@ export type CustomerMatchHint = {
   matchOn: "email" | "phone" | "both";
 };
 
+/** Human-readable match reason chips for customer-match decision UI. */
+export function customerMatchReasonLabels(matchOn: CustomerMatchHint["matchOn"]): string[] {
+  if (matchOn === "both") {
+    return ["Same email", "Same phone"];
+  }
+  if (matchOn === "email") {
+    return ["Same email"];
+  }
+  return ["Same phone"];
+}
+
 export type LeadCustomerMatchHints =
   | { kind: "skipped-no-contact" }
   | {
