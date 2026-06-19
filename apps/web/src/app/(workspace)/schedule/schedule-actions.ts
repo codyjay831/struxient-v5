@@ -31,6 +31,7 @@ import {
   unlinkTasksFromScheduleEvent,
 } from "@/lib/scheduling/event-link-service";
 import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
+import { queryOrganizationSchedule, type ScheduleEvent } from "@/lib/schedule-query";
 
 type ScheduleActionState = {
   error?: string;
@@ -38,12 +39,57 @@ type ScheduleActionState = {
   eventId?: string;
 };
 
+export type LeadVisitScheduleContextEvent = Pick<
+  ScheduleEvent,
+  "id" | "kind" | "title" | "subtitle" | "status" | "startAt" | "endAt" | "allDay" | "assigneeLabel" | "recordId"
+>;
+
+export type LeadVisitScheduleContextResult =
+  | { success: true; events: LeadVisitScheduleContextEvent[] }
+  | { success: false; error: string };
+
 function requireSchedulePermission(
   role: import("@prisma/client").StaffRole,
   permission: import("@/lib/scheduling/schedule-permissions").SchedulePermission,
 ): string | null {
   const gate = assertSchedulePermission(role, permission);
   return gate.ok ? null : gate.error;
+}
+
+export async function getLeadVisitScheduleContextAction(
+  range: { startAt: Date; endAt: Date },
+): Promise<LeadVisitScheduleContextResult> {
+  const session = await requireMutableSession();
+
+  try {
+    const schedule = await queryOrganizationSchedule(
+      session.organizationId,
+      range,
+      session.role,
+      session.userId,
+    );
+
+    return {
+      success: true,
+      events: schedule.events
+        .filter((event) => event.kind !== "payment-overlay")
+        .map((event) => ({
+          id: event.id,
+          kind: event.kind,
+          title: event.title,
+          subtitle: event.subtitle,
+          status: event.status,
+          startAt: event.startAt,
+          endAt: event.endAt,
+          allDay: event.allDay,
+          assigneeLabel: event.assigneeLabel,
+          recordId: event.recordId,
+        })),
+    };
+  } catch (error) {
+    console.error("Failed to load lead visit schedule context", error);
+    return { success: false, error: "Failed to load schedule context." };
+  }
 }
 
 export async function confirmLeadVisitRequestAction(

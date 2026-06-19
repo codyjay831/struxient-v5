@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { CalendarDays } from "lucide-react";
 import { LeadVisitRequestStatus } from "@prisma/client";
 import { requestSiteVisitForLeadWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import type { LeadVisitRequestPayload } from "@/lib/lead-display";
+import { LeadSiteVisitSchedulerDialog } from "@/components/leads/lead-site-visit-scheduler-dialog";
 
 import { leadReviewQuickActionClass } from "@/components/leads/lead-review-quick-action-class";
 
@@ -31,26 +30,87 @@ export function RequestSiteVisitButton({
   disabled?: boolean;
   onSuccess?: () => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [requestedVisitId, setRequestedVisitId] = useState<string | null>(null);
   const openVisit = findOpenVisit(visits);
+  const schedulerVisitId = openVisit?.id ?? requestedVisitId;
+  const schedulerInitialDate = openVisit?.confirmedDate ?? openVisit?.requestedDate ?? null;
+  const schedulerMode = openVisit?.status === LeadVisitRequestStatus.CONFIRMED ? "reschedule" : "confirm";
 
   if (openVisit?.status === LeadVisitRequestStatus.CONFIRMED) {
     return (
-      <Link href="/schedule" className={leadReviewQuickActionClass} title="Open schedule to complete this site visit.">
-        <CalendarDays className="size-3" />
-        Complete visit
-      </Link>
+      <>
+        <button
+          type="button"
+          className={leadReviewQuickActionClass}
+          title="Adjust the scheduled site visit time."
+          onClick={() => setSchedulerOpen(true)}
+        >
+          <CalendarDays className="size-3" />
+          Reschedule visit
+        </button>
+        <LeadSiteVisitSchedulerDialog
+          open={schedulerOpen}
+          onOpenChange={setSchedulerOpen}
+          requestId={schedulerVisitId}
+          mode={schedulerMode}
+          initialDate={schedulerInitialDate}
+          requestedWindow={openVisit.requestedWindow}
+          onScheduled={onSuccess}
+        />
+      </>
     );
   }
 
   if (openVisit?.status === LeadVisitRequestStatus.PENDING) {
     return (
-      <Link href="/schedule" className={leadReviewQuickActionClass} title="Open schedule to confirm this site visit.">
-        <CalendarDays className="size-3" />
-        Schedule site visit
-      </Link>
+      <>
+        <button
+          type="button"
+          className={leadReviewQuickActionClass}
+          title="Pick a time and confirm this site visit."
+          onClick={() => setSchedulerOpen(true)}
+        >
+          <CalendarDays className="size-3" />
+          Schedule visit
+        </button>
+        <LeadSiteVisitSchedulerDialog
+          open={schedulerOpen}
+          onOpenChange={setSchedulerOpen}
+          requestId={schedulerVisitId}
+          mode="confirm"
+          initialDate={schedulerInitialDate}
+          requestedWindow={openVisit.requestedWindow}
+          onScheduled={onSuccess}
+        />
+      </>
+    );
+  }
+
+  if (requestedVisitId) {
+    return (
+      <>
+        <button
+          type="button"
+          className={leadReviewQuickActionClass}
+          title="Pick a time and confirm this site visit."
+          onClick={() => setSchedulerOpen(true)}
+        >
+          <CalendarDays className="size-3" />
+          Schedule visit
+        </button>
+        <LeadSiteVisitSchedulerDialog
+          open={schedulerOpen}
+          onOpenChange={setSchedulerOpen}
+          requestId={requestedVisitId}
+          mode="confirm"
+          initialDate={null}
+          requestedWindow={null}
+          onScheduled={onSuccess}
+        />
+      </>
     );
   }
 
@@ -67,9 +127,8 @@ export function RequestSiteVisitButton({
               setError(result.error ?? "Could not request a site visit.");
               return;
             }
-            onSuccess?.();
-            router.push("/schedule");
-            router.refresh();
+            setRequestedVisitId(result.visitRequestId);
+            setSchedulerOpen(true);
           });
         }}
         title="Request a site visit for this lead."
@@ -83,6 +142,15 @@ export function RequestSiteVisitButton({
           {error}
         </p>
       ) : null}
+      <LeadSiteVisitSchedulerDialog
+        open={schedulerOpen}
+        onOpenChange={setSchedulerOpen}
+        requestId={schedulerVisitId}
+        mode="confirm"
+        initialDate={schedulerInitialDate}
+        requestedWindow={openVisit?.requestedWindow}
+        onScheduled={onSuccess}
+      />
     </div>
   );
 }

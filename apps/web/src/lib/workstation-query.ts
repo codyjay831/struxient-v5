@@ -13,6 +13,7 @@ import {
   QuoteCheckpointKind,
   QuoteCheckpointSource,
   StaffRole,
+  LeadVisitRequestStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -349,7 +350,18 @@ export async function queryWorkstationWorkItems(
     where: { organizationId, status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] } },
     include: {
       customer: true,
-      lead: true,
+      lead: {
+        include: {
+          visitRequests: {
+            where: {
+              status: {
+                in: [LeadVisitRequestStatus.PENDING, LeadVisitRequestStatus.CONFIRMED],
+              },
+            },
+            orderBy: [{ confirmedDate: "asc" }, { requestedDate: "asc" }, { createdAt: "desc" }],
+          },
+        },
+      },
       job: true,
       checkpoints: {
         where: { kind: QuoteCheckpointKind.APPROVAL },
@@ -456,6 +468,12 @@ export async function queryWorkstationWorkItems(
 
     const openChangeRequest = quote.changeRequests[0] ?? null;
     const draftRevision = quote.revisedQuotes[0] ?? null;
+    const openSalesVisit = quote.lead?.visitRequests[0] ?? null;
+    const openSalesVisitDate = openSalesVisit?.confirmedDate ?? openSalesVisit?.requestedDate ?? null;
+    const openSalesVisitDateLabel = openSalesVisitDate
+      ? openSalesVisitDate.toLocaleDateString()
+      : "anytime";
+    const openSalesVisitIsPending = openSalesVisit?.status === LeadVisitRequestStatus.PENDING;
 
     const recordState = buildQuoteRecordActionState({
       quoteId: quote.id,
@@ -472,7 +490,11 @@ export async function queryWorkstationWorkItems(
       readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW";
 
     let priority: WorkstationWorkItemPriority = "medium";
-    if (
+    if (openSalesVisitIsPending) {
+      priority = "critical";
+    } else if (openSalesVisit) {
+      priority = "high";
+    } else if (
       workflow.priority === "blocking" ||
       isApprovedQuoteHandoff ||
       openChangeRequest
@@ -484,8 +506,11 @@ export async function queryWorkstationWorkItems(
       priority = "low";
     }
 
-    const group: WorkstationWorkItemGroup =
-      workflow.priority === "blocking" ||
+    const group: WorkstationWorkItemGroup = openSalesVisitIsPending
+      ? "investigate"
+      : openSalesVisit
+        ? "scheduled"
+        : workflow.priority === "blocking" ||
       isApprovedQuoteHandoff ||
       openChangeRequest
         ? "investigate"
@@ -503,7 +528,11 @@ export async function queryWorkstationWorkItems(
       kind: "quote",
       title: primaryIdentity,
       subtitle,
-      status: openChangeRequest
+      status: openSalesVisit
+        ? openSalesVisitIsPending
+          ? "Site visit requested"
+          : "Site visit scheduled"
+        : openChangeRequest
         ? draftRevision
           ? draftRevision.lineItems.length > 0
             ? "Revision ready to send"
@@ -516,7 +545,11 @@ export async function queryWorkstationWorkItems(
       lane,
       withinLaneRank,
       filterCategory: "quotes",
-      reason: openChangeRequest
+      reason: openSalesVisit
+        ? openSalesVisitIsPending
+          ? `Site visit requested for ${openSalesVisitDateLabel}.`
+          : `Site visit scheduled for ${openSalesVisitDateLabel}.`
+        : openChangeRequest
         ? openChangeRequest.requiresVisit
           ? "Customer requested changes and follow-up visit may be required."
           : "Customer requested changes on this quote."
@@ -525,7 +558,11 @@ export async function queryWorkstationWorkItems(
         : isCustomerAccepted
           ? "Accepted by customer via portal."
           : rankReason || workflow.reason,
-      nextStep: openChangeRequest
+      nextStep: openSalesVisit
+        ? openSalesVisitIsPending
+          ? "Schedule site visit."
+          : "Complete site visit."
+        : openChangeRequest
         ? draftRevision
           ? "Continue revision draft."
           : "Create revision draft."
