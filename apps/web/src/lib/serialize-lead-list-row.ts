@@ -18,6 +18,7 @@ import {
 } from "@/lib/lead-display";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { readSignals } from "@/lib/lead/lead-projection";
+import { toOpportunityFlowVisitInput } from "@/lib/scheduling/serialize-lead-visit-request";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
 import type { LeadChannel, LeadStatus, QuoteStatus, JobStatus, Prisma } from "@prisma/client";
 
@@ -208,15 +209,7 @@ export function serializeLeadListRow(
       isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
     },
     quotes: flowQuoteInputs,
-    visits: (lead.visitRequests ?? []).map((visit) => ({
-      id: visit.id,
-      status: visit.status,
-      requestedDate: visit.requestedDate,
-      requestedWindow: visit.requestedWindow,
-      confirmedDate: visit.confirmedDate,
-      completedAt: visit.completedAt,
-      createdAt: visit.createdAt,
-    })),
+    visits: (lead.visitRequests ?? []).map((visit) => toOpportunityFlowVisitInput(visit)),
     changeRequests: lead.quotes.flatMap((quote) =>
       quote.changeRequests.map((request) => ({
         id: request.id,

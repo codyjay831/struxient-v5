@@ -317,3 +317,77 @@ test("linked customer skips customer match gate even when match flag is set", ()
   assert.equal(flow.conditionCode, "READY_TO_QUOTE");
   assert.equal(flow.primaryAction?.kind, "START_QUOTE");
 });
+
+test("completed visit with QUOTE_READY becomes ready to quote", () => {
+  const flow = getOpportunityFlow({
+    lead: baseLead,
+    quotes: [],
+    visits: [
+      {
+        id: "visit-1",
+        status: "COMPLETED",
+        completedAt: new Date("2026-06-17T12:00:00.000Z"),
+        outcome: "QUOTE_READY",
+        nextAction: "START_QUOTE",
+        createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      },
+    ],
+    changeRequests: [],
+    now: new Date("2026-06-18T12:00:00.000Z"),
+  });
+  assert.equal(flow.conditionCode, "READY_TO_QUOTE");
+});
+
+test("completed visit with MISSING_INFORMATION does not become quote-ready", () => {
+  const flow = getOpportunityFlow({
+    lead: baseLead,
+    quotes: [],
+    visits: [
+      {
+        id: "visit-1",
+        status: "COMPLETED",
+        completedAt: new Date("2026-06-17T12:00:00.000Z"),
+        outcome: "MISSING_INFORMATION",
+        nextAction: "COLLECT_MISSING_INFO",
+        createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      },
+    ],
+    changeRequests: [],
+    now: new Date("2026-06-18T12:00:00.000Z"),
+  });
+  assert.equal(flow.conditionCode, "NEEDS_INTAKE_DETAILS");
+  assert.notEqual(flow.conditionCode, "READY_TO_QUOTE");
+});
+
+test("no-show recovery drives schedule action", () => {
+  const flow = getOpportunityFlow({
+    lead: baseLead,
+    quotes: [],
+    visits: [
+      {
+        id: "visit-1",
+        status: "NO_SHOW",
+        completedAt: new Date("2026-06-17T12:00:00.000Z"),
+        outcome: "CUSTOMER_NO_SHOW",
+        nextAction: "SCHEDULE_ANOTHER_VISIT",
+        createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      },
+    ],
+    changeRequests: [],
+    now: new Date("2026-06-18T12:00:00.000Z"),
+  });
+  assert.equal(flow.primaryAction?.kind, "SCHEDULE_SALES_VISIT");
+});
+
+test("COMPLETE_SALES_VISIT routes to lead surface", () => {
+  const href = resolveOpportunityActionHref(
+    {
+      kind: "COMPLETE_SALES_VISIT",
+      label: "Complete site visit",
+      targetLeadId: "lead-1",
+      targetVisitRequestId: "visit-1",
+    },
+    { leadId: "lead-1" },
+  );
+  assert.equal(href, "/leads/lead-1");
+});

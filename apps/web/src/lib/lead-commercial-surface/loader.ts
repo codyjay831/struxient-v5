@@ -27,13 +27,35 @@ import {
   type LeadIntakeProjection,
 } from "@/lib/lead-intake-projection";
 import type { LeadVisitRequestPayload } from "@/lib/lead-display";
+import { canViewLeadVisitAccessDetails, canEditLeadVisitAccessDetails } from "@/lib/scheduling/lead-visit-access";
+import {
+  resolveLeadSurfaceAccess,
+  ASSIGNED_LEAD_CONTEXT_VISIT_STATUSES,
+  canLoadLeadVisitSchedulerStaff,
+} from "@/lib/scheduling/lead-visit-lead-access";
+import { presentOpportunityFlowForAssignedVisitSurface } from "@/lib/scheduling/assigned-lead-visit-surface-presentation";
+import {
+  serializeLeadVisitRequest,
+  toOpportunityFlowVisitInput,
+} from "@/lib/scheduling/serialize-lead-visit-request";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import {
+  siteDetailsPayloadFromResolved,
+  type SiteDetailsPayload,
+} from "@/lib/site-details/presentation";
 
-import { AttachmentStatus, LeadChannel, LeadCloseReason, LeadStatus, NeededByBucket } from "@prisma/client";
+import { AttachmentStatus, LeadChannel, LeadCloseReason, LeadStatus, NeededByBucket, StaffRole } from "@prisma/client";
 
 const CUSTOMER_LINK_FETCH_CAP = 500;
 const LEAD_ATTACHMENT_CAP = 20;
 const LEAD_EVENT_CAP = 30;
+
+export type LeadSurfaceMode = "commercial" | "assigned_visit";
+
+export type SchedulerStaffOption = {
+  id: string;
+  label: string;
+};
 
 export interface LeadCommercialSurfacePayload {
   lead: {
@@ -61,42 +83,7 @@ export interface LeadCommercialSurfacePayload {
     neededByBucket: NeededByBucket | null;
     neededByDate: Date | null;
     serviceLocationId: string | null;
-    siteDetails: {
-      apn: string | null;
-      apnSourceTitle?: string | null;
-      apnSourceUrl?: string | null;
-      apnVerificationUrl?: string | null;
-      apnConflict?: {
-        value: string;
-        sourceTitle: string | null;
-        sourceUrl: string | null;
-      } | null;
-      utilityName: string | null;
-      utilityOfficialWebsite?: string | null;
-      utilityServiceUpgradeUrl?: string | null;
-      utilityCoverageSourceTitle?: string | null;
-      utilityCoverageSourceUrl?: string | null;
-      jurisdictionName: string | null;
-      jurisdictionBuildingDepartmentName?: string | null;
-      jurisdictionOfficialWebsite?: string | null;
-      jurisdictionBuildingDepartmentUrl?: string | null;
-      jurisdictionPermitPortalUrl?: string | null;
-      jurisdictionFormsUrl?: string | null;
-      jurisdictionInspectionsUrl?: string | null;
-      assessorCounty?: string | null;
-      assessorState?: string | null;
-      assessorSearchUrl?: string | null;
-      assessorParcelGisUrl?: string | null;
-      detailsStatus:
-        | "DATABASE_MATCH"
-        | "AI_FOUND"
-        | "USER_REVIEWED"
-        | "USER_CORRECTED"
-        | "UNVERIFIED"
-        | "CONFLICT"
-        | "STALE";
-      missingScopes: string[];
-    } | null;
+    siteDetails: SiteDetailsPayload | null;
   };
   customer: {
     id: string;
@@ -122,6 +109,10 @@ export interface LeadCommercialSurfacePayload {
   reviewDisplay: LeadReviewDisplay;
   /** Derived DTO for future AI prompts — not persisted. */
   intakeProjection: LeadIntakeProjection;
+  surfaceMode: LeadSurfaceMode;
+  schedulerStaffOptions: SchedulerStaffOption[];
+  /** FIELD-safe office handoff copy on restricted assigned-visit surface. */
+  assignedFieldStatusLine: string | null;
 }
 
 export function buildReviewDisplayForPayload(
@@ -153,6 +144,307 @@ export function buildReviewDisplayForPayload(
   });
 }
 
+async function loadSchedulerStaffOptions(
+  organizationId: string,
+): Promise<SchedulerStaffOption[]> {
+  const memberships = await db.membership.findMany({
+    where: {
+      organizationId,
+      role: {
+        in: [StaffRole.OWNER, StaffRole.ADMIN, StaffRole.OFFICE, StaffRole.FIELD],
+      },
+    },
+    select: {
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { user: { name: "asc" } },
+  });
+
+  return memberships.map((membership) => ({
+    id: membership.user.id,
+    label: membership.user.name ?? membership.user.email ?? membership.user.id,
+  }));
+}
+
+export async function loadLeadSurface(
+  leadId: string,
+  ctx: RequestContext,
+): Promise<LeadCommercialSurfacePayload | null> {
+  const access = await resolveLeadSurfaceAccess(ctx, leadId);
+  if (access.mode === "denied") return null;
+
+  if (access.mode === "commercial") {
+    const payload = await loadLeadCommercialSurface(leadId, ctx);
+    if (!payload) return null;
+    return payload;
+  }
+
+  return loadAssignedLeadVisitSurface(leadId, ctx);
+}
+
+export async function loadAssignedLeadVisitSurface(
+  leadId: string,
+  ctx: RequestContext,
+): Promise<LeadCommercialSurfacePayload | null> {
+  const assignedVisit = await db.leadVisitRequest.findFirst({
+    where: {
+      organizationId: ctx.organizationId,
+      leadId,
+      assignedUserId: ctx.userId,
+      status: { in: ASSIGNED_LEAD_CONTEXT_VISIT_STATUSES },
+    },
+    select: { id: true },
+  });
+  if (!assignedVisit) return null;
+
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, organizationId: ctx.organizationId },
+    include: {
+      visitRequests: {
+        where: {
+          assignedUserId: ctx.userId,
+          status: { in: ASSIGNED_LEAD_CONTEXT_VISIT_STATUSES },
+        },
+        orderBy: { createdAt: "desc" },
+        include: {
+          assignedUser: { select: { name: true, email: true } },
+        },
+      },
+      serviceLocation: {
+        select: {
+          id: true,
+          organizationId: true,
+          apn: true,
+          detailsStatus: true,
+          utility: { select: { name: true } },
+          jurisdiction: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  if (!lead || lead.visitRequests.length === 0) return null;
+
+  const projected = projectLead({
+    id: lead.id,
+    status: lead.status,
+    channel: lead.channel,
+    customerId: lead.customerId,
+    convertedAt: null,
+    createdAt: lead.createdAt,
+    updatedAt: lead.updatedAt,
+    contact: lead.contact,
+    request: lead.request,
+    address: lead.address,
+    signals: lead.signals,
+  });
+
+  const requestJson = readRequest(lead.request);
+  const { signalsJson } = leadReviewFactsFromLeadJson({
+    request: lead.request,
+    signals: lead.signals,
+  });
+
+  const jobsiteAddressLine = jobsiteLineFromLead({
+    address: lead.address,
+    signals: lead.signals,
+  });
+
+  const safeServiceLocation =
+    lead.serviceLocation && lead.serviceLocation.organizationId === ctx.organizationId
+      ? lead.serviceLocation
+      : null;
+  const resolvedSiteDetails = safeServiceLocation
+    ? await resolveSiteDetailsForServiceLocation(
+        db as unknown as Parameters<typeof resolveSiteDetailsForServiceLocation>[0],
+        { organizationId: ctx.organizationId, serviceLocationId: safeServiceLocation.id },
+      )
+    : null;
+  const siteDetails = resolvedSiteDetails
+    ? siteDetailsPayloadFromResolved(resolvedSiteDetails)
+    : null;
+
+  const opportunityFlow = presentOpportunityFlowForAssignedVisitSurface(
+    getOpportunityFlow({
+      lead: {
+        id: lead.id,
+        status: lead.status,
+        followUpAt: lead.followUpAt,
+        customerId: null,
+        contactName: projected.contactName,
+        companyName: projected.companyName,
+        email: projected.email,
+        phone: projected.phone,
+        jobsiteAddressLine,
+        isAddressVerified: isLeadAddressVerified(lead),
+      },
+      quotes: [],
+      visits: lead.visitRequests.map((v) => toOpportunityFlowVisitInput(v)),
+      changeRequests: [],
+      hasExistingCustomerMatch: false,
+    }),
+    lead.visitRequests.map((v) => ({
+      id: v.id,
+      status: v.status,
+      outcome: v.outcome,
+      nextAction: v.nextAction,
+      updatedAt: v.updatedAt,
+    })),
+  );
+  const assignedFieldStatusLine = opportunityFlow.assignedFieldStatusLine;
+  const { assignedFieldStatusLine: _strip, ...assignedOpportunityFlow } = opportunityFlow;
+
+  const neededByDate =
+    requestJson.neededByDate instanceof Date
+      ? requestJson.neededByDate
+      : requestJson.neededByDate
+        ? new Date(requestJson.neededByDate)
+        : null;
+
+  const visitRequests: LeadVisitRequestPayload[] = lead.visitRequests.map((v) => {
+    const accessCtx = {
+      role: ctx.role,
+      userId: ctx.userId,
+      assignedUserId: v.assignedUserId,
+    };
+    return serializeLeadVisitRequest(v, {
+      canViewAccessDetails: canViewLeadVisitAccessDetails(accessCtx),
+      canEditAccessDetails: canEditLeadVisitAccessDetails(accessCtx),
+    });
+  });
+
+  const intakeSnapshot = intakeSnapshotForCustomerFromLead({
+    address: lead.address,
+    signals: lead.signals,
+  });
+  const intakeForBlock = intakeSnapshot
+    ? {
+        defaultDisplayAddress:
+          intakeSnapshot.formattedAddress.trim() || intakeSnapshot.addressLine1.trim(),
+        structuredJson: JSON.stringify(intakeSnapshot),
+      }
+    : { defaultDisplayAddress: "", structuredJson: "" };
+
+  const serviceAddressContext: LeadServiceAddressContext = {
+    customer: null,
+    intake: intakeForBlock,
+  };
+
+  const reviewViewModel = buildLeadReviewViewModel({
+    leadId: lead.id,
+    channel: lead.channel,
+    notes: projected.notes,
+    requestType: requestJson.type ?? projected.requestType,
+    scopeSummary: requestJson.scope,
+    neededByBucket: requestJson.neededByBucket,
+    neededByDate,
+    requestJson,
+    signalsJson,
+    contactName: projected.contactName,
+    companyName: projected.companyName,
+    email: projected.email,
+    phone: projected.phone,
+    jobsiteAddressLine,
+    isAddressVerified: isLeadAddressVerified(lead),
+    attachments: [],
+    events: [],
+    visitRequests: lead.visitRequests.map((v) => ({
+      id: v.id,
+      status: v.status,
+      requestedDate: v.requestedDate,
+      requestedWindow: v.requestedWindow,
+      confirmedDate: v.confirmedDate,
+      completedAt: v.completedAt,
+      purpose: v.purpose,
+      notes: v.notes,
+    })),
+  });
+
+  const leadPayload: LeadCommercialSurfacePayload["lead"] = {
+    id: lead.id,
+    title: projected.title,
+    contactName: projected.contactName || "",
+    email: projected.email || "",
+    phone: projected.phone || "",
+    notes: "",
+    companyName: projected.companyName || "",
+    status: lead.status,
+    closeReason: lead.closeReason,
+    channel: lead.channel,
+    followUpAt: lead.followUpAt,
+    closedAt: lead.closedAt,
+    createdAt: lead.createdAt,
+    updatedAt: lead.updatedAt,
+    address: lead.address,
+    signals: lead.signals,
+    jobsiteAddressLine: jobsiteAddressLine || "",
+    isAddressVerified: isLeadAddressVerified(lead),
+    isAddressQuoteReady: isLeadAddressQuoteReady({ address: lead.address, signals: lead.signals }, null),
+    requestType: requestJson.type ?? projected.requestType,
+    scopeSummary: requestJson.scope,
+    neededByBucket: requestJson.neededByBucket,
+    neededByDate,
+    serviceLocationId: lead.serviceLocationId,
+    siteDetails,
+  };
+
+  const intakeProjection = buildLeadIntakeProjection({
+    organizationId: ctx.organizationId,
+    lead: {
+      id: lead.id,
+      status: lead.status,
+      channel: lead.channel,
+      customerId: null,
+      convertedAt: null,
+      createdAt: lead.createdAt,
+      updatedAt: lead.updatedAt,
+      contact: lead.contact,
+      request: lead.request,
+      address: lead.address,
+      signals: lead.signals,
+    },
+    jobsiteAddressLine,
+    isAddressVerified: isLeadAddressVerified(lead),
+    visits: lead.visitRequests.map((v) => toOpportunityFlowVisitInput(v)),
+  });
+
+  return {
+    lead: leadPayload,
+    customer: null,
+    matchHints: null,
+    linkedQuotes: [],
+    hasBlockingCustomerMatch: false,
+    opportunityFlow: assignedOpportunityFlow,
+    serviceAddressContext,
+    visitRequests,
+    reviewViewModel,
+    intakeProjection,
+    reviewDisplay: buildLeadReviewDisplay({
+      entryPoint: "record",
+      lead: {
+        title: leadPayload.title,
+        contactName: leadPayload.contactName,
+        companyName: leadPayload.companyName,
+        email: leadPayload.email,
+        phone: leadPayload.phone,
+        channel: leadPayload.channel,
+        jobsiteAddressLine: leadPayload.jobsiteAddressLine,
+        scopeSummary: leadPayload.scopeSummary,
+        requestType: leadPayload.requestType,
+        serviceLocationId: leadPayload.serviceLocationId,
+        isAddressVerified: leadPayload.isAddressVerified,
+        isAddressQuoteReady: leadPayload.isAddressQuoteReady,
+      },
+      customer: null,
+      reviewViewModel,
+      serviceAddressContext,
+    }),
+    surfaceMode: "assigned_visit",
+    schedulerStaffOptions: [],
+    assignedFieldStatusLine,
+  };
+}
+
 export async function loadLeadCommercialSurface(
   leadId: string,
   ctx: RequestContext
@@ -173,6 +465,9 @@ export async function loadLeadCommercialSurface(
       },
       visitRequests: {
         orderBy: { createdAt: "desc" },
+        include: {
+          assignedUser: { select: { name: true, email: true } },
+        },
       },
     },
   });
@@ -228,38 +523,7 @@ export async function loadLeadCommercialSurface(
       )
     : null;
   const siteDetails = resolvedSiteDetails
-    ? {
-        apn: resolvedSiteDetails.apn,
-        apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
-        apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
-        apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
-        apnConflict: resolvedSiteDetails.apnConflict
-          ? {
-              value: resolvedSiteDetails.apnConflict.value,
-              sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
-              sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
-            }
-          : null,
-        utilityName: resolvedSiteDetails.utility?.name ?? null,
-        utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
-        utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
-        utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
-        utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
-        jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
-        jurisdictionBuildingDepartmentName:
-          resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
-        jurisdictionOfficialWebsite: resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
-        jurisdictionBuildingDepartmentUrl: resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
-        jurisdictionPermitPortalUrl: resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
-        jurisdictionFormsUrl: null,
-        jurisdictionInspectionsUrl: null,
-        assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
-        assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
-        assessorSearchUrl: resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
-        assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
-        detailsStatus: resolvedSiteDetails.detailsStatus,
-        missingScopes: resolvedSiteDetails.missingScopes,
-      }
+    ? siteDetailsPayloadFromResolved(resolvedSiteDetails)
     : null;
 
   const [linkedQuotes, attachments, leadEvents] = await Promise.all([
@@ -371,6 +635,12 @@ export async function loadLeadCommercialSurface(
     requiresVisit: row.requiresVisit,
   }));
 
+  const canViewAccess = canViewLeadVisitAccessDetails({
+    role: ctx.role,
+    userId: ctx.userId,
+    assignedUserId: null,
+  });
+
   const opportunityFlow = getOpportunityFlow({
     lead: {
       id: lead.id,
@@ -385,15 +655,7 @@ export async function loadLeadCommercialSurface(
       isAddressVerified: isAddressQuoteReady,
     },
     quotes: progressQuoteInputs,
-    visits: lead.visitRequests.map((v) => ({
-      id: v.id,
-      status: v.status,
-      requestedDate: v.requestedDate,
-      requestedWindow: v.requestedWindow,
-      confirmedDate: v.confirmedDate,
-      completedAt: v.completedAt,
-      createdAt: v.createdAt,
-    })),
+    visits: lead.visitRequests.map((v) => toOpportunityFlowVisitInput(v)),
     changeRequests: changeRequestInputs,
     hasExistingCustomerMatch:
       matchHints?.kind === "checked" && matchHints.matches.length > 0,
@@ -406,17 +668,20 @@ export async function loadLeadCommercialSurface(
         ? new Date(requestJson.neededByDate)
         : null;
 
-  const visitRequests: LeadVisitRequestPayload[] = lead.visitRequests.map((v) => ({
-    id: v.id,
-    requestedDate: v.requestedDate,
-    requestedWindow: v.requestedWindow,
-    confirmedDate: v.confirmedDate,
-    completedAt: v.completedAt,
-    status: v.status,
-    notes: v.notes,
-    purpose: v.purpose,
-    createdAt: v.createdAt,
-  }));
+  const visitRequests: LeadVisitRequestPayload[] = lead.visitRequests.map((v) => {
+    const accessCtx = {
+      role: ctx.role,
+      userId: ctx.userId,
+      assignedUserId: v.assignedUserId,
+    };
+    const canView =
+      canViewAccess ||
+      canViewLeadVisitAccessDetails(accessCtx);
+    return serializeLeadVisitRequest(v, {
+      canViewAccessDetails: canView,
+      canEditAccessDetails: canView && canEditLeadVisitAccessDetails(accessCtx),
+    });
+  });
 
   const reviewViewModel = buildLeadReviewViewModel({
     leadId: lead.id,
@@ -507,15 +772,7 @@ export async function loadLeadCommercialSurface(
     jobsiteAddressLine,
     isAddressVerified: isAddressQuoteReady,
     quotes: progressQuoteInputs,
-    visits: lead.visitRequests.map((v) => ({
-      id: v.id,
-      status: v.status,
-      requestedDate: v.requestedDate,
-      requestedWindow: v.requestedWindow,
-      confirmedDate: v.confirmedDate,
-      completedAt: v.completedAt,
-      createdAt: v.createdAt,
-    })),
+    visits: lead.visitRequests.map((v) => toOpportunityFlowVisitInput(v)),
     changeRequests: changeRequestInputs,
     hasExistingCustomerMatch:
       matchHints?.kind === "checked" && matchHints.matches.length > 0,
@@ -559,6 +816,10 @@ export async function loadLeadCommercialSurface(
       }
     : null;
 
+  const schedulerStaffOptions = canLoadLeadVisitSchedulerStaff(ctx.role)
+    ? await loadSchedulerStaffOptions(ctx.organizationId)
+    : [];
+
   return {
     lead: leadPayload,
     customer: customerPayload,
@@ -579,5 +840,8 @@ export async function loadLeadCommercialSurface(
       "record",
     ),
     intakeProjection,
+    surfaceMode: "commercial",
+    schedulerStaffOptions,
+    assignedFieldStatusLine: null,
   };
 }

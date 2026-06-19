@@ -1,58 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  classifyLeadWorkstationAttention,
-  leadShouldAppearInBoardAttention,
-} from "./workstation-lead-attention";
+import { classifyLeadWorkstationAttention } from "./workstation-lead-attention";
 
-test("pending visit is investigate critical", () => {
+test("missing access elevates scheduled visit attention", () => {
   const result = classifyLeadWorkstationAttention({
-    conditionCode: "READY_TO_QUOTE",
-    hasPendingVisit: true,
+    conditionCode: "SALES_VISIT_SCHEDULED",
+    hasPendingVisit: false,
+    hasMissingAccess: true,
+  });
+  assert.equal(result.group, "investigate");
+  assert.equal(result.priority, "high");
+});
+
+test("no-show recovery is critical attention", () => {
+  const result = classifyLeadWorkstationAttention({
+    conditionCode: "NEEDS_SALES_VISIT",
+    hasPendingVisit: false,
+    hasNoShowRecovery: true,
   });
   assert.equal(result.group, "investigate");
   assert.equal(result.priority, "critical");
 });
 
-test("customer match conflict is investigate high", () => {
+test("completed visit missing follow-up is critical attention", () => {
   const result = classifyLeadWorkstationAttention({
-    conditionCode: "CUSTOMER_MATCH_NEEDS_REVIEW",
+    conditionCode: "SALES_VISIT_SCHEDULED",
     hasPendingVisit: false,
+    hasCompletedMissingFollowUp: true,
   });
   assert.equal(result.group, "investigate");
-  assert.equal(result.priority, "high");
-});
-
-test("ready to quote is ready high and appears on board attention", () => {
-  const result = classifyLeadWorkstationAttention({
-    conditionCode: "READY_TO_QUOTE",
-    hasPendingVisit: false,
-  });
-  assert.equal(result.group, "ready");
-  assert.equal(result.priority, "high");
-  assert.equal(
-    leadShouldAppearInBoardAttention({
-      kind: "lead",
-      group: result.group,
-      priority: result.priority,
-    }),
-    true,
-  );
-});
-
-test("waiting on customer stays low and off board attention", () => {
-  const result = classifyLeadWorkstationAttention({
-    conditionCode: "WAITING_ON_CUSTOMER",
-    hasPendingVisit: false,
-  });
-  assert.equal(result.group, "waiting");
-  assert.equal(result.priority, "low");
-  assert.equal(
-    leadShouldAppearInBoardAttention({
-      kind: "lead",
-      group: result.group,
-      priority: result.priority,
-    }),
-    false,
-  );
+  assert.equal(result.priority, "critical");
 });

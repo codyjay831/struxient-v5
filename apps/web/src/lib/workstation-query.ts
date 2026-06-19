@@ -77,6 +77,18 @@ import {
 } from "@/lib/lead-customer-match-gate";
 import { hasBlockingCustomerMatch } from "@/lib/lead-customer-match-hints";
 import { classifyLeadWorkstationAttention } from "@/lib/workstation-lead-attention";
+import { toOpportunityFlowVisitInput } from "@/lib/scheduling/serialize-lead-visit-request";
+import { resolveLeadVisitScheduledStart } from "@/lib/scheduling/lead-visit-schedule-service";
+import {
+  classifyAssignedLeadVisitWorkstationAttention,
+  resolveLeadVisitWorkstationHref,
+  visitHasMissingAccess,
+  visitHasMissingOutcome,
+} from "@/lib/scheduling/lead-visit-lead-access";
+import {
+  hasAccessSnapshotContent,
+  LeadVisitAccessSnapshotSchema,
+} from "@/lib/scheduling/lead-visit-schemas";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
@@ -282,15 +294,7 @@ export async function queryWorkstationWorkItems(
         latestApprovalAt: null,
         job: q.job,
       })),
-      visits: lead.visitRequests.map((v) => ({
-        id: v.id,
-        status: v.status,
-        requestedDate: v.requestedDate,
-        requestedWindow: v.requestedWindow,
-        confirmedDate: v.confirmedDate,
-        completedAt: v.completedAt,
-        createdAt: v.createdAt,
-      })),
+      visits: lead.visitRequests.map((v) => toOpportunityFlowVisitInput(v)),
       changeRequests: [],
       hasExistingCustomerMatch,
       now,
@@ -306,10 +310,36 @@ export async function queryWorkstationWorkItems(
 
     const pendingVisit =
       lead.visitRequests.find((v) => v.status === "PENDING") ?? null;
+    const scheduledVisit =
+      lead.visitRequests.find((v) => v.status === LeadVisitRequestStatus.CONFIRMED) ?? null;
+    const noShowVisit =
+      lead.visitRequests.find((v) => v.status === LeadVisitRequestStatus.NO_SHOW) ?? null;
+    const completedMissingOutcome = lead.visitRequests.find(
+      (v) => v.status === LeadVisitRequestStatus.COMPLETED && (!v.outcome || !v.nextAction),
+    );
+    const scheduledStart = scheduledVisit
+      ? resolveLeadVisitScheduledStart(scheduledVisit)
+      : null;
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isVisitDueTodayOrTomorrow =
+      scheduledStart != null &&
+      scheduledStart.getTime() <= tomorrow.getTime() + 24 * 60 * 60 * 1000 &&
+      scheduledStart.getTime() >= now.getTime() - 24 * 60 * 60 * 1000;
+    const accessParsed = scheduledVisit
+      ? LeadVisitAccessSnapshotSchema.safeParse(scheduledVisit.accessSnapshotJson)
+      : null;
+    const hasMissingAccess =
+      scheduledVisit != null &&
+      !(accessParsed?.success && hasAccessSnapshotContent(accessParsed.data));
 
     const { group, priority } = classifyLeadWorkstationAttention({
       conditionCode: progress.conditionCode,
       hasPendingVisit: pendingVisit != null,
+      hasMissingAccess,
+      hasNoShowRecovery: noShowVisit != null,
+      hasCompletedMissingFollowUp: completedMissingOutcome != null,
+      isVisitDueTodayOrTomorrow,
     });
 
     const { lane, withinLaneRank, reason: rankReason } = rank({
@@ -321,7 +351,11 @@ export async function queryWorkstationWorkItems(
 
     const effectiveReason = pendingVisit
       ? `Site visit requested for ${pendingVisit.requestedDate?.toLocaleDateString() ?? "anytime"}.`
-      : rankReason || workflow.reason;
+      : hasMissingAccess
+        ? "Scheduled site visit is missing access details."
+        : noShowVisit
+          ? "Site visit no-show needs recovery."
+          : rankReason || workflow.reason;
     const effectiveNextStep = workflow.nextAction?.label ?? "Review in Sales.";
 
     items.push({
@@ -343,6 +377,79 @@ export async function queryWorkstationWorkItems(
       updatedAt: lead.updatedAt,
       workflow,
     });
+  }
+
+  if (!commercialReadable) {
+    const assignedVisits = await db.leadVisitRequest.findMany({
+      where: {
+        organizationId,
+        assignedUserId: userId,
+        status: {
+          in: [
+            LeadVisitRequestStatus.PENDING,
+            LeadVisitRequestStatus.CONFIRMED,
+            LeadVisitRequestStatus.NO_SHOW,
+            LeadVisitRequestStatus.COMPLETED,
+          ],
+        },
+      },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            title: true,
+            contactName: true,
+            email: true,
+            phone: true,
+            updatedAt: true,
+          },
+        },
+      },
+      orderBy: [{ scheduledStartAt: "asc" }, { confirmedDate: "asc" }, { createdAt: "desc" }],
+    });
+
+    for (const visit of assignedVisits) {
+      const scheduledStart = resolveLeadVisitScheduledStart(visit);
+      const hasMissingAccess =
+        visit.status === LeadVisitRequestStatus.CONFIRMED &&
+        visitHasMissingAccess(visit.accessSnapshotJson);
+      const hasMissingOutcome = visitHasMissingOutcome(visit);
+      const attention = classifyAssignedLeadVisitWorkstationAttention({
+        status: visit.status,
+        scheduledStart,
+        hasMissingAccess,
+        hasMissingOutcome,
+        now,
+      });
+      if (!attention.include) continue;
+
+      const { lane, withinLaneRank } = rank(
+        { kind: "lead", priority: attention.priority, group: attention.group, updatedAt: visit.updatedAt },
+        role,
+        now,
+      );
+
+      items.push({
+        id: `assigned-visit-${visit.id}`,
+        kind: "lead",
+        title: visit.lead.title,
+        subtitle: visit.lead.contactName || visit.lead.email || visit.lead.phone || undefined,
+        status: visit.status,
+        priority: attention.priority,
+        group: attention.group,
+        lens: attention.lens,
+        lane,
+        withinLaneRank,
+        filterCategory: "leads",
+        reason: attention.reason,
+        nextStep: attention.nextStep,
+        recordId: visit.lead.id,
+        href: resolveLeadVisitWorkstationHref(visit.lead.id),
+        updatedAt: visit.updatedAt,
+        assignedUserId: visit.assignedUserId,
+        scheduledStartAt: scheduledStart,
+      });
+    }
   }
 
   // 2. Quotes

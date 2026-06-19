@@ -8,6 +8,12 @@ import {
   rescheduleLeadVisitRequestAction,
   type LeadVisitScheduleContextEvent,
 } from "@/app/(workspace)/schedule/schedule-actions";
+import type { SchedulerStaffOption } from "@/lib/lead-commercial-surface/loader";
+import {
+  DEFAULT_ESTIMATED_DURATION_MINUTES,
+  type LeadVisitAccessSnapshot,
+  type LeadVisitSiteContactSnapshot,
+} from "@/lib/scheduling/lead-visit-schemas";
 import {
   Dialog,
   DialogContent,
@@ -117,6 +123,13 @@ export function LeadSiteVisitSchedulerDialog({
   mode = "confirm",
   initialDate,
   requestedWindow,
+  assigneeOptions = [],
+  initialAssigneeId,
+  initialDurationMinutes,
+  initialArrivalWindowLabel,
+  initialAccessSnapshot,
+  initialSiteContactSnapshot,
+  expectedUpdatedAt,
   onScheduled,
 }: {
   open: boolean;
@@ -125,6 +138,13 @@ export function LeadSiteVisitSchedulerDialog({
   mode?: SchedulerMode;
   initialDate?: Date | null;
   requestedWindow?: string | null;
+  assigneeOptions?: SchedulerStaffOption[];
+  initialAssigneeId?: string | null;
+  initialDurationMinutes?: number | null;
+  initialArrivalWindowLabel?: string | null;
+  initialAccessSnapshot?: LeadVisitAccessSnapshot | null;
+  initialSiteContactSnapshot?: LeadVisitSiteContactSnapshot | null;
+  expectedUpdatedAt?: Date;
   onScheduled?: () => void;
 }) {
   const defaultDate = useMemo(() => getDefaultVisitDate(initialDate), [initialDate]);
@@ -133,7 +153,28 @@ export function LeadSiteVisitSchedulerDialog({
   );
   const [dateValue, setDateValue] = useState(() => toDateInputValue(defaultDate));
   const [timeValue, setTimeValue] = useState(() => toTimeInputValue(defaultDate));
-  const [notifyCustomer, setNotifyCustomer] = useState(true);
+  const [assignedUserId, setAssignedUserId] = useState(initialAssigneeId ?? "");
+  const [durationMinutes, setDurationMinutes] = useState(
+    String(initialDurationMinutes ?? DEFAULT_ESTIMATED_DURATION_MINUTES),
+  );
+  const [arrivalWindowLabel, setArrivalWindowLabel] = useState(initialArrivalWindowLabel ?? "");
+  const [accessSnapshot, setAccessSnapshot] = useState<LeadVisitAccessSnapshot>({
+    someoneMustBeHome: initialAccessSnapshot?.someoneMustBeHome ?? false,
+    gateCode: initialAccessSnapshot?.gateCode ?? "",
+    garageAccess: initialAccessSnapshot?.garageAccess ?? "",
+    lockbox: initialAccessSnapshot?.lockbox ?? "",
+    pets: initialAccessSnapshot?.pets ?? "",
+    parking: initialAccessSnapshot?.parking ?? "",
+    callOnArrival: initialAccessSnapshot?.callOnArrival ?? false,
+    accessNotes: initialAccessSnapshot?.accessNotes ?? "",
+  });
+  const [siteContactSnapshot, setSiteContactSnapshot] = useState<LeadVisitSiteContactSnapshot>({
+    name: initialSiteContactSnapshot?.name ?? "",
+    phone: initialSiteContactSnapshot?.phone ?? "",
+    email: initialSiteContactSnapshot?.email ?? "",
+    relationship: initialSiteContactSnapshot?.relationship ?? "",
+    notes: initialSiteContactSnapshot?.notes ?? "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [scheduleEvents, setScheduleEvents] = useState<LeadVisitScheduleContextEvent[]>([]);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -155,7 +196,7 @@ export function LeadSiteVisitSchedulerDialog({
     [scheduleEvents, selectedDate],
   );
   const title = mode === "reschedule" ? "Reschedule site visit" : "Schedule site visit";
-  const actionLabel = mode === "reschedule" ? "Reschedule visit" : "Confirm visit";
+  const actionLabel = mode === "reschedule" ? "Reschedule visit" : "Schedule visit";
 
   useEffect(() => {
     if (!open) return;
@@ -299,6 +340,121 @@ export function LeadSiteVisitSchedulerDialog({
                 onChange={(event) => setTimeValue(event.target.value)}
               />
             </label>
+            <label>
+              <span className={workspaceFormFieldLabelClass}>Assigned estimator</span>
+              <select
+                className={workspaceFormControlClass}
+                value={assignedUserId}
+                onChange={(event) => setAssignedUserId(event.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {assigneeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className={workspaceFormFieldLabelClass}>Duration (minutes)</span>
+              <input
+                type="number"
+                min={15}
+                step={15}
+                className={workspaceFormControlClass}
+                value={durationMinutes}
+                onChange={(event) => setDurationMinutes(event.target.value)}
+              />
+            </label>
+            <label className="sm:col-span-2">
+              <span className={workspaceFormFieldLabelClass}>Arrival window</span>
+              <input
+                className={workspaceFormControlClass}
+                value={arrivalWindowLabel}
+                onChange={(event) => setArrivalWindowLabel(event.target.value)}
+                placeholder="e.g. 9:00 AM - 11:00 AM"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-3 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              Access snapshot
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(accessSnapshot.someoneMustBeHome)}
+                  onChange={(event) =>
+                    setAccessSnapshot((current) => ({
+                      ...current,
+                      someoneMustBeHome: event.target.checked,
+                    }))
+                  }
+                />
+                Someone must be home
+              </label>
+              <label>
+                <span className={workspaceFormFieldLabelClass}>Gate code</span>
+                <input
+                  className={workspaceFormControlClass}
+                  value={accessSnapshot.gateCode ?? ""}
+                  onChange={(event) =>
+                    setAccessSnapshot((current) => ({ ...current, gateCode: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                <span className={workspaceFormFieldLabelClass}>Lockbox</span>
+                <input
+                  className={workspaceFormControlClass}
+                  value={accessSnapshot.lockbox ?? ""}
+                  onChange={(event) =>
+                    setAccessSnapshot((current) => ({ ...current, lockbox: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className={workspaceFormFieldLabelClass}>Access notes</span>
+                <textarea
+                  className={workspaceFormControlClass}
+                  rows={2}
+                  value={accessSnapshot.accessNotes ?? ""}
+                  onChange={(event) =>
+                    setAccessSnapshot((current) => ({
+                      ...current,
+                      accessNotes: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle pt-2">
+              Site contact snapshot
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label>
+                <span className={workspaceFormFieldLabelClass}>Name</span>
+                <input
+                  className={workspaceFormControlClass}
+                  value={siteContactSnapshot.name ?? ""}
+                  onChange={(event) =>
+                    setSiteContactSnapshot((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                <span className={workspaceFormFieldLabelClass}>Phone</span>
+                <input
+                  className={workspaceFormControlClass}
+                  value={siteContactSnapshot.phone ?? ""}
+                  onChange={(event) =>
+                    setSiteContactSnapshot((current) => ({ ...current, phone: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
           </div>
 
           <div className="rounded-lg border border-border bg-background p-3">
@@ -351,15 +507,6 @@ export function LeadSiteVisitSchedulerDialog({
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-foreground-muted">
-            <input
-              type="checkbox"
-              checked={notifyCustomer}
-              onChange={(event) => setNotifyCustomer(event.target.checked)}
-            />
-            Notify customer
-          </label>
-
           {error ? (
             <p className="text-sm text-danger" role="alert">
               {error}
@@ -375,8 +522,8 @@ export function LeadSiteVisitSchedulerDialog({
             disabled={isPending || !requestId}
             onClick={() => {
               setError(null);
-              const confirmedDate = parseLocalDateTime(dateValue, timeValue);
-              if (!confirmedDate) {
+              const scheduledStartAt = parseLocalDateTime(dateValue, timeValue);
+              if (!scheduledStartAt) {
                 setError("Choose a valid visit date and time.");
                 return;
               }
@@ -386,10 +533,34 @@ export function LeadSiteVisitSchedulerDialog({
               }
 
               startTransition(async () => {
+                const parsedDuration = Number.parseInt(durationMinutes, 10);
+                const scheduleDetails = {
+                  scheduledStartAt,
+                  estimatedDurationMinutes: Number.isFinite(parsedDuration)
+                    ? parsedDuration
+                    : DEFAULT_ESTIMATED_DURATION_MINUTES,
+                  assignedUserId: assignedUserId || null,
+                  arrivalWindowLabel: arrivalWindowLabel.trim() || null,
+                  accessSnapshot,
+                  siteContactSnapshot,
+                  notes: requestedWindow ?? undefined,
+                };
+                const actionOptions = {
+                  sourceSurface: "lead" as const,
+                  expectedUpdatedAt,
+                };
                 const result =
                   mode === "reschedule"
-                    ? await rescheduleLeadVisitRequestAction(requestId, confirmedDate, notifyCustomer)
-                    : await confirmLeadVisitRequestAction(requestId, confirmedDate, notifyCustomer);
+                    ? await rescheduleLeadVisitRequestAction(
+                        requestId,
+                        scheduleDetails,
+                        actionOptions,
+                      )
+                    : await confirmLeadVisitRequestAction(
+                        requestId,
+                        scheduleDetails,
+                        actionOptions,
+                      );
 
                 if (result.error) {
                   setError(result.error);

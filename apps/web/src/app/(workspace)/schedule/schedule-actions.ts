@@ -16,7 +16,19 @@ import {
   rescheduleLeadVisitRequest,
   completeLeadVisitRequest,
   markLeadVisitNoShow,
+  updateLeadVisitAccessDetails,
+  updateLeadVisitOutcome,
+  type LeadVisitScheduleDetailsInput,
+  type LeadVisitSourceSurface,
 } from "@/lib/scheduling/lead-visit-schedule-service";
+import type {
+  LeadVisitNextAction,
+  LeadVisitOutcome,
+} from "@prisma/client";
+import type {
+  LeadVisitAccessSnapshot,
+  LeadVisitSiteContactSnapshot,
+} from "@/lib/scheduling/lead-visit-schemas";
 import { upsertScheduleBlock } from "@/lib/scheduling/schedule-block-service";
 import { setTaskScheduleActionCore } from "@/lib/task-timing";
 import {
@@ -92,10 +104,23 @@ export async function getLeadVisitScheduleContextAction(
   }
 }
 
+function revalidateLeadVisitPaths(leadId?: string | null) {
+  revalidatePath("/schedule");
+  revalidatePath("/workstation");
+  revalidatePath("/workstation/schedule");
+  revalidatePath("/leads");
+  if (leadId) revalidatePath(`/leads/${leadId}`);
+}
+
+export type LeadVisitScheduleDetailsActionInput = LeadVisitScheduleDetailsInput;
+
 export async function confirmLeadVisitRequestAction(
   requestId: string,
-  confirmedDate: Date,
-  notifyCustomer: boolean,
+  scheduleDetails: LeadVisitScheduleDetailsActionInput,
+  options?: {
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
 ): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
 
@@ -105,10 +130,11 @@ export async function confirmLeadVisitRequestAction(
         {
           organizationId: session.organizationId,
           requestId,
-          confirmedDate,
-          notifyCustomer,
+          scheduleDetails,
           actorUserId: session.userId,
           role: session.role,
+          sourceSurface: options?.sourceSurface ?? "calendar",
+          expectedUpdatedAt: options?.expectedUpdatedAt,
         },
         tx,
       ),
@@ -120,20 +146,21 @@ export async function confirmLeadVisitRequestAction(
       select: { leadId: true },
     });
 
-    revalidatePath("/schedule");
-    revalidatePath("/workstation");
-    revalidatePath("/workstation/schedule");
-    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    revalidateLeadVisitPaths(request?.leadId);
     return { success: true };
   } catch (error) {
     console.error("Failed to confirm lead visit request", error);
-    return { error: "Failed to confirm estimate visit." };
+    return { error: "Failed to schedule estimate visit." };
   }
 }
 
 export async function cancelLeadVisitRequestAction(
   requestId: string,
   note?: string,
+  options?: {
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
 ): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
 
@@ -146,6 +173,8 @@ export async function cancelLeadVisitRequestAction(
           note,
           actorUserId: session.userId,
           role: session.role,
+          sourceSurface: options?.sourceSurface ?? "calendar",
+          expectedUpdatedAt: options?.expectedUpdatedAt,
         },
         tx,
       ),
@@ -157,9 +186,7 @@ export async function cancelLeadVisitRequestAction(
       select: { leadId: true },
     });
 
-    revalidatePath("/schedule");
-    revalidatePath("/workstation");
-    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    revalidateLeadVisitPaths(request?.leadId);
     return { success: true };
   } catch (error) {
     console.error("Failed to cancel lead visit request", error);
@@ -169,8 +196,11 @@ export async function cancelLeadVisitRequestAction(
 
 export async function rescheduleLeadVisitRequestAction(
   requestId: string,
-  confirmedDate: Date,
-  notifyCustomer: boolean,
+  scheduleDetails: LeadVisitScheduleDetailsActionInput,
+  options?: {
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
 ): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
 
@@ -180,10 +210,11 @@ export async function rescheduleLeadVisitRequestAction(
         {
           organizationId: session.organizationId,
           requestId,
-          confirmedDate,
-          notifyCustomer,
+          scheduleDetails,
           actorUserId: session.userId,
           role: session.role,
+          sourceSurface: options?.sourceSurface ?? "calendar",
+          expectedUpdatedAt: options?.expectedUpdatedAt,
         },
         tx,
       ),
@@ -195,9 +226,7 @@ export async function rescheduleLeadVisitRequestAction(
       select: { leadId: true },
     });
 
-    revalidatePath("/schedule");
-    revalidatePath("/workstation");
-    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    revalidateLeadVisitPaths(request?.leadId);
     return { success: true };
   } catch (error) {
     console.error("Failed to reschedule lead visit request", error);
@@ -207,7 +236,13 @@ export async function rescheduleLeadVisitRequestAction(
 
 export async function completeLeadVisitRequestAction(
   requestId: string,
-  completionNotes?: string,
+  input: {
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
+    completionNotes?: string;
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
 ): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
   try {
@@ -218,7 +253,11 @@ export async function completeLeadVisitRequestAction(
           requestId,
           actorUserId: session.userId,
           role: session.role,
-          completionNotes,
+          outcome: input.outcome,
+          nextAction: input.nextAction,
+          completionNotes: input.completionNotes,
+          sourceSurface: input.sourceSurface ?? "calendar",
+          expectedUpdatedAt: input.expectedUpdatedAt,
         },
         tx,
       ),
@@ -228,9 +267,7 @@ export async function completeLeadVisitRequestAction(
       where: { id: requestId, organizationId: session.organizationId },
       select: { leadId: true },
     });
-    revalidatePath("/schedule");
-    revalidatePath("/workstation");
-    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    revalidateLeadVisitPaths(request?.leadId);
     return { success: true };
   } catch (error) {
     console.error("Failed to complete lead visit request", error);
@@ -240,7 +277,13 @@ export async function completeLeadVisitRequestAction(
 
 export async function markLeadVisitNoShowAction(
   requestId: string,
-  completionNotes?: string,
+  input: {
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
+    completionNotes?: string;
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
 ): Promise<ScheduleActionState> {
   const session = await requireMutableSession();
   try {
@@ -251,7 +294,11 @@ export async function markLeadVisitNoShowAction(
           requestId,
           actorUserId: session.userId,
           role: session.role,
-          completionNotes,
+          outcome: input.outcome,
+          nextAction: input.nextAction,
+          completionNotes: input.completionNotes,
+          sourceSurface: input.sourceSurface ?? "calendar",
+          expectedUpdatedAt: input.expectedUpdatedAt,
         },
         tx,
       ),
@@ -261,13 +308,91 @@ export async function markLeadVisitNoShowAction(
       where: { id: requestId, organizationId: session.organizationId },
       select: { leadId: true },
     });
-    revalidatePath("/schedule");
-    revalidatePath("/workstation");
-    if (request?.leadId) revalidatePath(`/leads/${request.leadId}`);
+    revalidateLeadVisitPaths(request?.leadId);
     return { success: true };
   } catch (error) {
     console.error("Failed to mark no-show lead visit request", error);
     return { error: "Failed to mark estimate visit as no-show." };
+  }
+}
+
+export async function updateLeadVisitOutcomeAction(
+  requestId: string,
+  input: {
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
+    completionNotes?: string;
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
+): Promise<ScheduleActionState> {
+  const session = await requireMutableSession();
+  try {
+    const result = await db.$transaction(async (tx) =>
+      updateLeadVisitOutcome(
+        {
+          organizationId: session.organizationId,
+          requestId,
+          actorUserId: session.userId,
+          role: session.role,
+          outcome: input.outcome,
+          nextAction: input.nextAction,
+          completionNotes: input.completionNotes,
+          sourceSurface: input.sourceSurface ?? "lead",
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        },
+        tx,
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
+    });
+    revalidateLeadVisitPaths(request?.leadId);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update lead visit outcome", error);
+    return { error: "Failed to update visit outcome." };
+  }
+}
+
+export async function updateLeadVisitAccessDetailsAction(
+  requestId: string,
+  input: {
+    accessSnapshot?: LeadVisitAccessSnapshot | null;
+    siteContactSnapshot?: LeadVisitSiteContactSnapshot | null;
+    sourceSurface?: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
+): Promise<ScheduleActionState> {
+  const session = await requireMutableSession();
+  try {
+    const result = await db.$transaction(async (tx) =>
+      updateLeadVisitAccessDetails(
+        {
+          organizationId: session.organizationId,
+          requestId,
+          accessSnapshot: input.accessSnapshot,
+          siteContactSnapshot: input.siteContactSnapshot,
+          actorUserId: session.userId,
+          role: session.role,
+          sourceSurface: input.sourceSurface ?? "lead",
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        },
+        tx,
+      ),
+    );
+    if ("error" in result) return { error: result.error };
+    const request = await db.leadVisitRequest.findFirst({
+      where: { id: requestId, organizationId: session.organizationId },
+      select: { leadId: true },
+    });
+    revalidateLeadVisitPaths(request?.leadId);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update lead visit access details", error);
+    return { error: "Failed to update visit access details." };
   }
 }
 

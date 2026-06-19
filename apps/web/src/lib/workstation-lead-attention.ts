@@ -13,12 +13,20 @@ export type LeadWorkstationAttentionPriority = "critical" | "high" | "medium" | 
 export function classifyLeadWorkstationAttention(input: {
   conditionCode: OpportunityConditionCode;
   hasPendingVisit: boolean;
+  hasMissingAccess?: boolean;
+  hasNoShowRecovery?: boolean;
+  hasCompletedMissingFollowUp?: boolean;
+  isVisitDueTodayOrTomorrow?: boolean;
 }): {
   group: LeadWorkstationAttentionGroup;
   priority: LeadWorkstationAttentionPriority;
 } {
-  if (input.hasPendingVisit) {
+  if (input.hasPendingVisit || input.hasNoShowRecovery || input.hasCompletedMissingFollowUp) {
     return { group: "investigate", priority: "critical" };
+  }
+
+  if (input.hasMissingAccess || input.isVisitDueTodayOrTomorrow) {
+    return { group: "investigate", priority: "high" };
   }
 
   switch (input.conditionCode) {

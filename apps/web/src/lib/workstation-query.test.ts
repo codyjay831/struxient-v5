@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LeadVisitRequestStatus } from "@prisma/client";
+import { classifyAssignedLeadVisitWorkstationAttention } from "@/lib/scheduling/lead-visit-lead-access";
 import {
   JobScheduleEventStatus,
   TaskDueMode,
@@ -38,4 +40,17 @@ test("deriveSchedulingAttentionOverride ignores satisfied REQUIRED tasks", () =>
   });
 
   assert.equal(result, null);
+});
+
+test("assigned visit workstation cards avoid critical priority for far-future scheduled visits", () => {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  const attention = classifyAssignedLeadVisitWorkstationAttention({
+    status: LeadVisitRequestStatus.CONFIRMED,
+    scheduledStart: new Date("2026-09-01T10:00:00.000Z"),
+    hasMissingAccess: false,
+    hasMissingOutcome: false,
+    now,
+  });
+  assert.notEqual(attention.priority, "critical");
+  assert.equal(attention.lens, "upcoming");
 });

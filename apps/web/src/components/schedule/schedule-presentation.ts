@@ -35,6 +35,7 @@ export function getScheduleStatusLabel(event: ScheduleEvent): string | null {
   if (!event.status) return null;
   if (event.kind === "job-schedule-event" && event.status === "TENTATIVE") return "Tentative";
   if (event.kind === "lead-visit-request" && event.status === "PENDING") return "Request";
+  if (event.kind === "lead-visit-request" && event.status === "CONFIRMED") return "Scheduled";
   if (event.kind === "task" && event.status === "Due") return "Deadline";
   if (event.kind === "schedule-block") {
     return event.status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());

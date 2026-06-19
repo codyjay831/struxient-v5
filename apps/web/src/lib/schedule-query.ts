@@ -18,6 +18,16 @@ import {
   getTaskVisibilityWhere,
 } from "@/lib/authz/resource-access";
 import { canReadCommercial } from "@/lib/authz/capabilities";
+import { shouldLoadAllLeadVisitsForSchedule } from "@/lib/scheduling/lead-visit-access";
+import {
+  formatLeadVisitStatusLabel,
+  resolveLeadVisitScheduledStart,
+} from "@/lib/scheduling/lead-visit-schedule-service";
+import {
+  DEFAULT_ESTIMATED_DURATION_MINUTES,
+  hasAccessSnapshotContent,
+  LeadVisitAccessSnapshotSchema,
+} from "@/lib/scheduling/lead-visit-schemas";
 
 function scopeHrefForLeadQuotes(
   quotes: Array<{ id: string; status: string }>,
@@ -110,48 +120,70 @@ export async function queryOrganizationSchedule(
   userId: string,
 ): Promise<ScheduleQueryResult> {
   const commercialReadable = canReadCommercial(role);
+  const loadAllLeadVisits = shouldLoadAllLeadVisitsForSchedule(role);
   const jobVisibilityWhere = getJobVisibilityWhere(role, userId);
   const taskVisibilityWhere = getTaskVisibilityWhere(role, userId);
 
-  const [leadRequests, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
-    commercialReadable
-      ? db.leadVisitRequest.findMany({
-      where: {
-        organizationId,
-        status: { in: [LeadVisitRequestStatus.PENDING, LeadVisitRequestStatus.CONFIRMED] },
-        OR: [
+  const leadVisitDateRangeFilter = {
+    OR: [
+      { scheduledStartAt: { gte: range.startAt, lt: range.endAt } },
+      {
+        AND: [
+          { scheduledStartAt: null },
           { confirmedDate: { gte: range.startAt, lt: range.endAt } },
-          {
-            AND: [
-              { confirmedDate: null },
-              { requestedDate: { gte: range.startAt, lt: range.endAt } },
-            ],
-          },
         ],
       },
-      select: {
-        id: true,
-        status: true,
-        requestedDate: true,
-        confirmedDate: true,
-        requestedWindow: true,
-        notes: true,
-        lead: {
+      {
+        AND: [
+          { scheduledStartAt: null },
+          { confirmedDate: null },
+          { requestedDate: { gte: range.startAt, lt: range.endAt } },
+        ],
+      },
+    ],
+  };
+
+  const [leadRequests, scheduleEvents, blocks, tasksInRange, readyTaskCandidates] = await Promise.all([
+    loadAllLeadVisits || role === StaffRole.FIELD
+      ? db.leadVisitRequest.findMany({
+          where: {
+            organizationId,
+            status: { in: [LeadVisitRequestStatus.PENDING, LeadVisitRequestStatus.CONFIRMED] },
+            ...leadVisitDateRangeFilter,
+            ...(loadAllLeadVisits ? {} : { assignedUserId: userId }),
+          },
           select: {
             id: true,
-            title: true,
-            contact: true,
-            quotes: {
-              where: { status: { not: "ARCHIVED" } },
-              orderBy: { updatedAt: "desc" },
-              take: 3,
-              select: { id: true, status: true },
+            status: true,
+            requestedDate: true,
+            requestedWindow: true,
+            confirmedDate: true,
+            scheduledStartAt: true,
+            scheduledEndAt: true,
+            estimatedDurationMinutes: true,
+            arrivalWindowLabel: true,
+            assignedUserId: true,
+            accessSnapshotJson: true,
+            outcome: true,
+            nextAction: true,
+            notes: true,
+            assignedUser: { select: { id: true, name: true, email: true } },
+            lead: {
+              select: {
+                id: true,
+                title: true,
+                contact: true,
+                quotes: {
+                  where: { status: { not: "ARCHIVED" } },
+                  orderBy: { updatedAt: "desc" },
+                  take: 3,
+                  select: { id: true, status: true },
+                },
+              },
             },
           },
-        },
-      },
-      orderBy: [{ confirmedDate: "asc" }, { requestedDate: "asc" }],
-      })
+          orderBy: [{ scheduledStartAt: "asc" }, { confirmedDate: "asc" }, { requestedDate: "asc" }],
+        })
       : Promise.resolve([]),
     queryOrganizationScheduleProjection({ organizationId, range, role, userId }),
     db.scheduleBlock.findMany({
@@ -306,17 +338,33 @@ export async function queryOrganizationSchedule(
   }
 
   for (const request of leadRequests) {
-    const eventDate = request.confirmedDate ?? request.requestedDate;
+    const eventDate = resolveLeadVisitScheduledStart(request);
     if (!eventDate) continue;
+
+    const accessParsed = LeadVisitAccessSnapshotSchema.safeParse(request.accessSnapshotJson);
+    const hasAccess = accessParsed.success && hasAccessSnapshotContent(accessParsed.data);
+    const durationMinutes = request.estimatedDurationMinutes ?? DEFAULT_ESTIMATED_DURATION_MINUTES;
+    const endAt =
+      request.scheduledEndAt ??
+      new Date(eventDate.getTime() + durationMinutes * 60 * 1000);
+
+    const subtitleParts = [
+      formatLeadVisitStatusLabel(request.status),
+      request.arrivalWindowLabel ?? request.requestedWindow ?? undefined,
+      !hasAccess ? "Missing access details" : undefined,
+    ].filter(Boolean);
 
     events.push({
       id: `lead-visit-${request.id}`,
       kind: "lead-visit-request",
       title: request.lead.title,
-      subtitle: request.requestedWindow ?? request.notes ?? undefined,
+      subtitle: subtitleParts.join(" · ") || request.notes || undefined,
       status: request.status,
       startAt: eventDate,
-      endAt: null,
+      endAt,
+      assigneeUserId: request.assignedUserId,
+      assigneeLabel:
+        request.assignedUser?.name ?? request.assignedUser?.email ?? null,
       recordHref: `/leads/${request.lead.id}`,
       scopeHref: scopeHrefForLeadQuotes(request.lead.quotes, request.lead.id),
       recordId: request.id,

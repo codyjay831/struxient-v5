@@ -242,6 +242,7 @@ model User {
   memberships                Membership[]
   resolvedChangeRequests     QuoteChangeRequest[]
   completedLeadVisits        LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
+  assignedLeadVisits         LeadVisitRequest[]            @relation("LeadVisitAssignedTo")
   sessions                   Session[]
   siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
   serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
@@ -1605,28 +1606,44 @@ model JobPaymentRequirement {
 }
 
 model LeadVisitRequest {
-  id              String                 @id @default(cuid())
-  organizationId  String
-  leadId          String
-  requestedDate   DateTime?
-  requestedWindow String?
-  confirmedDate   DateTime?
-  scheduledEndAt  DateTime?
-  completedAt     DateTime?
-  completedByUserId String?
-  completionNotes String?
-  purpose         LeadVisitPurpose?
-  status          LeadVisitRequestStatus @default(PENDING)
-  notes           String?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  lead            Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  completedBy     User?                  @relation("LeadVisitCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
-  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                       String                 @id @default(cuid())
+  organizationId           String
+  leadId                   String
+  requestedDate            DateTime?
+  requestedWindow          String?
+  confirmedDate            DateTime?
+  scheduledStartAt         DateTime?
+  scheduledEndAt           DateTime?
+  estimatedDurationMinutes Int?
+  arrivalWindowStartAt     DateTime?
+  arrivalWindowEndAt       DateTime?
+  arrivalWindowLabel       String?
+  assignedUserId           String?
+  accessSnapshotJson       Json?
+  siteContactSnapshotJson  Json?
+  accessDetailsUpdatedAt   DateTime?
+  outcome                  LeadVisitOutcome?
+  nextAction               LeadVisitNextAction?
+  outcomeSelectedAt        DateTime?
+  completedAt              DateTime?
+  completedByUserId        String?
+  completionNotes          String?
+  purpose                  LeadVisitPurpose?
+  status                   LeadVisitRequestStatus @default(PENDING)
+  notes                    String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  lead                     Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  completedBy              User?                  @relation("LeadVisitCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  assignedUser             User?                  @relation("LeadVisitAssignedTo", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  organization             Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([leadId])
   @@index([status])
+  @@index([organizationId, assignedUserId, status])
+  @@index([organizationId, scheduledStartAt])
+  @@index([organizationId, status, scheduledStartAt])
 }
 
 model ScheduleBlock {
@@ -2224,6 +2241,27 @@ enum LeadVisitPurpose {
   SCOPE_VERIFICATION
   REVISION_VERIFICATION
   OTHER
+}
+
+enum LeadVisitOutcome {
+  QUOTE_READY
+  QUOTE_NEEDS_REVISION
+  MISSING_INFORMATION
+  FOLLOW_UP_NEEDED
+  CUSTOMER_NO_SHOW
+  CONTRACTOR_MISSED
+  RESCHEDULE_NEEDED
+  DISQUALIFIED
+}
+
+enum LeadVisitNextAction {
+  START_QUOTE
+  OPEN_OR_REVISE_QUOTE
+  COLLECT_MISSING_INFO
+  FOLLOW_UP_CUSTOMER
+  SCHEDULE_ANOTHER_VISIT
+  CLOSE_OR_DISQUALIFY
+  NONE_REQUIRED
 }
 
 enum ScheduleBlockType {

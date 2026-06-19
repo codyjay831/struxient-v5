@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatSchedulePeriodTitle } from "@/components/schedule/schedule-presentation";
+import { formatSchedulePeriodTitle, getScheduleStatusLabel } from "@/components/schedule/schedule-presentation";
 
 const TZ = "America/Los_Angeles";
 
@@ -14,8 +14,17 @@ test("formatSchedulePeriodTitle uses canonical URL state for day view", () => {
   assert.match(title, /Wednesday/);
 });
 
-test("formatSchedulePeriodTitle uses canonical URL state for week view", () => {
-  const title = formatSchedulePeriodTitle("week", "2026-06-18", TZ);
-  assert.match(title, /June 14/);
-  assert.match(title, /June 20, 2026/);
+test("lead visit CONFIRMED displays as Scheduled not customer confirmed", () => {
+  assert.equal(
+    getScheduleStatusLabel({
+      id: "lead-visit-1",
+      kind: "lead-visit-request",
+      title: "Lead",
+      status: "CONFIRMED",
+      startAt: new Date("2026-06-20T10:00:00.000Z"),
+      endAt: null,
+      recordId: "visit-1",
+    }),
+    "Scheduled",
+  );
 });

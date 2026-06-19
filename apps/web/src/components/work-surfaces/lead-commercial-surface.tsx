@@ -7,7 +7,7 @@ import {
 import {
   formatAttachmentFileSize,
 } from "@/lib/lead-display";
-import { QuoteStatus } from "@prisma/client";
+import { LeadVisitRequestStatus, QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import { StatusBadge, StatusBadgeTone } from "@/components/ui/status-badge";
 import {
@@ -40,6 +40,22 @@ import { LeadAddressResolvePanel } from "@/components/leads/lead-address-resolve
 import { CloseOrPauseLeadForm } from "@/components/leads/close-or-pause-lead-form";
 import { SiteDetailsRow } from "@/components/site-details/site-details-row";
 import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
+import { LeadSiteVisitSchedulerDialog } from "@/components/leads/lead-site-visit-scheduler-dialog";
+import {
+  findVisitForCompletionAction,
+  LeadVisitCompletionDialog,
+} from "@/components/leads/lead-visit-completion-dialog";
+import { LeadVisitAccessDetailsPanel } from "@/components/leads/lead-visit-access-details-panel";
+import type { LeadVisitRequestPayload } from "@/lib/lead-display";
+import type { SchedulerStaffOption } from "@/lib/lead-commercial-surface/loader";
+import {
+  formatLeadVisitNextActionLabel,
+  formatLeadVisitOutcomeLabel,
+  formatLeadVisitStatusLabel,
+} from "@/lib/scheduling/lead-visit-presentation";
+import { resolveLeadVisitScheduledStart } from "@/lib/scheduling/lead-visit-schedule-service";
+import { isAssignedVisitFieldAction } from "@/lib/scheduling/assigned-lead-visit-surface-presentation";
+import { toSiteDetailsRowData } from "@/lib/site-details/presentation";
 
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
@@ -53,28 +69,41 @@ export interface LeadCommercialSurfaceProps {
 const sectionTitleClass =
   "text-xs font-bold uppercase tracking-widest text-foreground-subtle";
 
-const primaryActionClass =
-  "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
+const cardActionBaseClass =
+  "inline-flex min-h-9 w-full min-w-[8.5rem] items-center justify-center rounded-lg px-3 py-2 text-center text-xs font-medium";
 
-const secondaryActionClass =
-  "inline-flex items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+const primaryActionClass = `${cardActionBaseClass} border border-border bg-accent text-accent-contrast transition-opacity hover:opacity-90`;
+
+const secondaryActionClass = `${cardActionBaseClass} border border-border text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground`;
 
 function OpportunityActionControl({
   action,
   leadId,
+  visitRequests,
+  schedulerStaffOptions,
   variant,
+  isAssignedVisitMode = false,
   onReviewCustomerMatch,
   onMutationSuccess,
 }: {
   action: OpportunityAction;
   leadId: string;
+  visitRequests: LeadVisitRequestPayload[];
+  schedulerStaffOptions: SchedulerStaffOption[];
   variant: "primary" | "secondary";
+  isAssignedVisitMode?: boolean;
   onReviewCustomerMatch?: () => void;
   onMutationSuccess?: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [completionOpen, setCompletionOpen] = useState(false);
+
+  if (isAssignedVisitMode && !isAssignedVisitFieldAction(action.kind)) {
+    return null;
+  }
 
   if (action.kind === "START_QUOTE") {
     return (
@@ -164,6 +193,72 @@ function OpportunityActionControl({
     );
   }
 
+  if (action.kind === "SCHEDULE_SALES_VISIT" && action.targetVisitRequestId) {
+    const visit = visitRequests.find((request) => request.id === action.targetVisitRequestId) ?? null;
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setSchedulerOpen(true)}
+          title="Pick a time and schedule this site visit."
+          className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+        >
+          {variant === "primary" ? "Schedule" : action.label}
+        </button>
+        <LeadSiteVisitSchedulerDialog
+          open={schedulerOpen}
+          onOpenChange={setSchedulerOpen}
+          requestId={action.targetVisitRequestId}
+          mode="confirm"
+          initialDate={visit?.requestedDate ?? visit?.scheduledStartAt ?? null}
+          requestedWindow={visit?.requestedWindow ?? null}
+          assigneeOptions={schedulerStaffOptions}
+          initialAssigneeId={visit?.assignedUserId ?? null}
+          initialDurationMinutes={visit?.estimatedDurationMinutes ?? null}
+          initialArrivalWindowLabel={visit?.arrivalWindowLabel ?? null}
+          initialAccessSnapshot={visit?.accessSnapshot ?? null}
+          initialSiteContactSnapshot={visit?.siteContactSnapshot ?? null}
+          expectedUpdatedAt={visit?.updatedAt}
+          onScheduled={onMutationSuccess}
+        />
+      </>
+    );
+  }
+
+  if (action.kind === "COMPLETE_SALES_VISIT") {
+    const visit = findVisitForCompletionAction(
+      visitRequests,
+      action.targetVisitRequestId,
+    );
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setCompletionOpen((open) => !open)}
+          title="Record what happened on the site visit and choose the next sales action."
+          className={variant === "primary" ? primaryActionClass : secondaryActionClass}
+        >
+          {action.label}
+        </button>
+        {visit ? (
+          <div className={completionOpen ? "mt-3" : "hidden"}>
+            <LeadVisitCompletionDialog
+              requestId={visit.id}
+              visitStatus={visit.status}
+              expectedUpdatedAt={visit.updatedAt}
+              onCompleted={() => {
+                setCompletionOpen(false);
+                onMutationSuccess?.();
+              }}
+            />
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
   const href = resolveOpportunityActionHref(action, { leadId });
 
   let title = action.label;
@@ -193,8 +288,10 @@ function OpportunityActionControl({
       title = "Open the active job.";
       break;
     case "SCHEDULE_SALES_VISIT":
+      title = "Schedule a site visit for this lead.";
+      break;
     case "COMPLETE_SALES_VISIT":
-      title = "Open schedule to plan or complete a site visit.";
+      title = "Record visit outcome and next sales action.";
       break;
   }
 
@@ -225,8 +322,12 @@ export function LeadCommercialSurface({
     reviewViewModel,
     serviceAddressContext,
     visitRequests,
+    surfaceMode,
+    schedulerStaffOptions,
+    assignedFieldStatusLine,
   } =
     payload;
+  const isAssignedVisitMode = surfaceMode === "assigned_visit";
   const router = useRouter();
   const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
@@ -236,35 +337,11 @@ export function LeadCommercialSurface({
   const [siteDrawerOpen, setSiteDrawerOpen] = useState(false);
   const customerSectionRef = useRef<HTMLDivElement>(null);
   const addressVerifyRef = useRef<HTMLDivElement>(null);
-  const siteData = {
-    serviceLocationId: lead.serviceLocationId,
+  const siteData = toSiteDetailsRowData({
     line: lead.jobsiteAddressLine || null,
-    apn: lead.siteDetails?.apn ?? null,
-    apnSourceTitle: lead.siteDetails?.apnSourceTitle ?? null,
-    apnSourceUrl: lead.siteDetails?.apnSourceUrl ?? null,
-    apnVerificationUrl: lead.siteDetails?.apnVerificationUrl ?? null,
-    apnConflict: lead.siteDetails?.apnConflict ?? null,
-    utilityName: lead.siteDetails?.utilityName ?? null,
-    utilityOfficialWebsite: lead.siteDetails?.utilityOfficialWebsite ?? null,
-    utilityServiceUpgradeUrl: lead.siteDetails?.utilityServiceUpgradeUrl ?? null,
-    utilityCoverageSourceTitle: lead.siteDetails?.utilityCoverageSourceTitle ?? null,
-    utilityCoverageSourceUrl: lead.siteDetails?.utilityCoverageSourceUrl ?? null,
-    jurisdictionName: lead.siteDetails?.jurisdictionName ?? null,
-    jurisdictionBuildingDepartmentName:
-      lead.siteDetails?.jurisdictionBuildingDepartmentName ?? null,
-    jurisdictionOfficialWebsite: lead.siteDetails?.jurisdictionOfficialWebsite ?? null,
-    jurisdictionBuildingDepartmentUrl:
-      lead.siteDetails?.jurisdictionBuildingDepartmentUrl ?? null,
-    jurisdictionPermitPortalUrl: lead.siteDetails?.jurisdictionPermitPortalUrl ?? null,
-    jurisdictionFormsUrl: lead.siteDetails?.jurisdictionFormsUrl ?? null,
-    jurisdictionInspectionsUrl: lead.siteDetails?.jurisdictionInspectionsUrl ?? null,
-    assessorCounty: lead.siteDetails?.assessorCounty ?? null,
-    assessorState: lead.siteDetails?.assessorState ?? null,
-    assessorSearchUrl: lead.siteDetails?.assessorSearchUrl ?? null,
-    assessorParcelGisUrl: lead.siteDetails?.assessorParcelGisUrl ?? null,
-    detailsStatus: lead.siteDetails?.detailsStatus ?? "UNVERIFIED",
-    missingScopes: lead.siteDetails?.missingScopes ?? ["APN", "UTILITY", "JURISDICTION"],
-  } as const;
+    serviceLocationId: lead.serviceLocationId,
+    siteDetails: lead.siteDetails,
+  });
 
   const editHref = `/leads/${lead.id}/edit`;
 
@@ -308,7 +385,30 @@ export function LeadCommercialSurface({
   );
 
   const visibleRequirements = opportunityFlow.requirements.filter(
-    (req) => req !== "Review customer match",
+    (req) => {
+      if (req === "Review customer match") return false;
+
+      const primaryAction = opportunityFlow.primaryAction;
+      const normalizedRequirement = req.trim().toLowerCase();
+      const normalizedAction = primaryAction?.label.trim().toLowerCase();
+      if (normalizedAction && normalizedRequirement === normalizedAction) return false;
+
+      if (
+        primaryAction?.kind === "SCHEDULE_SALES_VISIT" &&
+        normalizedRequirement.startsWith("schedule ")
+      ) {
+        return false;
+      }
+
+      if (
+        primaryAction?.kind === "COMPLETE_SALES_VISIT" &&
+        normalizedRequirement.startsWith("complete ")
+      ) {
+        return false;
+      }
+
+      return true;
+    },
   );
 
   const showFooter = !isModalContext;
@@ -388,57 +488,79 @@ export function LeadCommercialSurface({
               email={lead.email}
               leadId={lead.id}
               visits={visitRequests}
-              siteVisitDisabled={isTerminalPhase}
+              siteVisitDisabled={isTerminalPhase || isAssignedVisitMode}
               onSuccess={notifyMutationSuccess}
             />
           </header>
 
           <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge
-                label={opportunityFlow.conditionLabel}
-                tone={
-                  opportunityFlow.phase === "WON"
-                    ? "approved"
-                    : opportunityFlow.phase === "CUSTOMER_REVIEW"
-                      ? "sent"
-                      : opportunityFlow.phase === "LOST"
-                        ? "neutral"
-                        : opportunityFlow.phase === "PAUSED"
-                          ? "warning"
-                          : "draft"
-                }
-              />
-              {opportunityFlow.ageLabel ? (
-                <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
+            <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge
+                    label={opportunityFlow.conditionLabel}
+                    tone={
+                      opportunityFlow.phase === "WON"
+                        ? "approved"
+                        : opportunityFlow.phase === "CUSTOMER_REVIEW"
+                          ? "sent"
+                          : opportunityFlow.phase === "LOST"
+                            ? "neutral"
+                            : opportunityFlow.phase === "PAUSED"
+                              ? "warning"
+                              : "draft"
+                    }
+                  />
+                  {opportunityFlow.ageLabel ? (
+                    <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
+                  ) : null}
+                </div>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+                  {opportunityFlow.summary}
+                </p>
+              </div>
+
+              {opportunityFlow.primaryAction ||
+              opportunityFlow.secondaryActions.length > 0 ||
+              (isAssignedVisitMode && assignedFieldStatusLine) ? (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[8.5rem] [&_a]:w-full [&_button]:w-full">
+                  {isAssignedVisitMode && assignedFieldStatusLine ? (
+                    <div
+                      className={`${secondaryActionClass} cursor-default text-center`}
+                      title="Office staff will handle the next commercial step."
+                    >
+                      {assignedFieldStatusLine}
+                    </div>
+                  ) : null}
+                  {opportunityFlow.primaryAction ? (
+                    <OpportunityActionControl
+                      action={opportunityFlow.primaryAction}
+                      leadId={lead.id}
+                      visitRequests={visitRequests}
+                      schedulerStaffOptions={schedulerStaffOptions}
+                      variant="primary"
+                      isAssignedVisitMode={isAssignedVisitMode}
+                      onReviewCustomerMatch={scrollToCustomerMatch}
+                      onMutationSuccess={notifyMutationSuccess}
+                    />
+                  ) : null}
+                  {opportunityFlow.secondaryActions.map((action) => (
+                    <OpportunityActionControl
+                      key={`${action.kind}:${action.label}`}
+                      action={action}
+                      leadId={lead.id}
+                      visitRequests={visitRequests}
+                      schedulerStaffOptions={schedulerStaffOptions}
+                      variant="secondary"
+                      isAssignedVisitMode={isAssignedVisitMode}
+                      onReviewCustomerMatch={scrollToCustomerMatch}
+                      onMutationSuccess={notifyMutationSuccess}
+                    />
+                  ))}
+                </div>
               ) : null}
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-              {opportunityFlow.summary}
-            </p>
-            {opportunityFlow.primaryAction || opportunityFlow.secondaryActions.length > 0 ? (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                {opportunityFlow.primaryAction ? (
-                  <OpportunityActionControl
-                    action={opportunityFlow.primaryAction}
-                    leadId={lead.id}
-                    variant="primary"
-                    onReviewCustomerMatch={scrollToCustomerMatch}
-                    onMutationSuccess={notifyMutationSuccess}
-                  />
-                ) : null}
-                {opportunityFlow.secondaryActions.map((action) => (
-                  <OpportunityActionControl
-                    key={`${action.kind}:${action.label}`}
-                    action={action}
-                    leadId={lead.id}
-                    variant="secondary"
-                    onReviewCustomerMatch={scrollToCustomerMatch}
-                    onMutationSuccess={notifyMutationSuccess}
-                  />
-                ))}
-              </div>
-            ) : null}
+
             {visibleRequirements.length > 0 ? (
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {visibleRequirements.map((req) => (
@@ -453,7 +575,7 @@ export function LeadCommercialSurface({
             ) : null}
           </div>
 
-            {reviewDisplay.addressResolve.show ? (
+            {reviewDisplay.addressResolve.show && !isAssignedVisitMode ? (
               <div ref={addressVerifyRef}>
                 <LeadAddressResolvePanel
                   leadId={lead.id}
@@ -465,6 +587,7 @@ export function LeadCommercialSurface({
               </div>
             ) : null}
 
+            {!isAssignedVisitMode ? (
             <LeadCustomerActionPanel
               panelRef={customerSectionRef}
               lead={{
@@ -486,6 +609,7 @@ export function LeadCommercialSurface({
               onError={(message) => setSurfaceError(message)}
               compact={isModalContext}
             />
+            ) : null}
 
             {surfaceError ? (
               <p className="rounded-lg border border-danger/30 bg-danger/[0.06] px-3 py-2 text-sm text-danger">
@@ -535,6 +659,59 @@ export function LeadCommercialSurface({
                   <p className="text-sm leading-relaxed text-foreground border-t border-border pt-3">
                     {reviewViewModel.scopeText}
                   </p>
+                ) : null}
+
+                {visitRequests.length > 0 ? (
+                  <div className="border-t border-border pt-3 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle flex items-center gap-1">
+                      <Clock className="size-3" /> Site visit
+                    </p>
+                    {visitRequests.map((visit) => {
+                      const scheduledStart = resolveLeadVisitScheduledStart(visit);
+                      return (
+                        <div key={visit.id} className="rounded-md border border-border px-3 py-2 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-foreground">
+                              {formatLeadVisitStatusLabel(visit.status)}
+                            </span>
+                            {scheduledStart ? (
+                              <span className="text-xs text-foreground-muted">
+                                {scheduledStart.toLocaleString()}
+                              </span>
+                            ) : null}
+                          </div>
+                          {visit.assignedUserLabel ? (
+                            <p className="text-xs text-foreground-muted mt-1">
+                              Assigned: {visit.assignedUserLabel}
+                            </p>
+                          ) : null}
+                          {visit.arrivalWindowLabel ? (
+                            <p className="text-xs text-foreground-muted">
+                              Arrival window: {visit.arrivalWindowLabel}
+                            </p>
+                          ) : null}
+                          {!visit.hasAccessDetails &&
+                          visit.status === LeadVisitRequestStatus.CONFIRMED ? (
+                            <p className="text-xs text-warning mt-1">Access details missing</p>
+                          ) : null}
+                          {visit.outcome ? (
+                            <p className="text-xs text-foreground-muted mt-1">
+                              Outcome: {formatLeadVisitOutcomeLabel(visit.outcome)}
+                            </p>
+                          ) : null}
+                          {visit.nextAction ? (
+                            <p className="text-xs text-foreground-muted">
+                              Next: {formatLeadVisitNextActionLabel(visit.nextAction)}
+                            </p>
+                          ) : null}
+                          <LeadVisitAccessDetailsPanel
+                            visit={visit}
+                            onSaved={notifyMutationSuccess}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : null}
 
                 {reviewViewModel.visits.length > 0 ? (
@@ -617,12 +794,14 @@ export function LeadCommercialSurface({
                 <h3 id="lead-review-jobsite" className={sectionTitleClass}>
                   Jobsite
                 </h3>
+                {!isAssignedVisitMode ? (
                 <Link
                   href={editHref}
                   className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground-subtle hover:text-foreground"
                 >
                   <Pencil className="size-2.5" /> Edit
                 </Link>
+                ) : null}
               </div>
 
               <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
@@ -735,7 +914,7 @@ export function LeadCommercialSurface({
               )}
             </section>
 
-            {linkedQuotes.length > 0 ? (
+            {linkedQuotes.length > 0 && !isAssignedVisitMode ? (
               <section className="space-y-3">
                 <h3 className={sectionTitleClass}>Quotes ({linkedQuotes.length})</h3>
                 <div className="space-y-2">
@@ -783,7 +962,7 @@ export function LeadCommercialSurface({
         </div>
       </div>
 
-      {showFooter ? (
+      {showFooter && !isAssignedVisitMode ? (
       <footer className="shrink-0 border-t border-border bg-surface px-4 py-3 sm:px-6">
         <div className="space-y-3">
           {closePanelOpen ? (

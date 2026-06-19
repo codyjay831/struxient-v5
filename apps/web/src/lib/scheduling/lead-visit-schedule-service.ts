@@ -1,10 +1,25 @@
-import { LeadVisitRequestStatus, StaffRole, type Prisma } from "@prisma/client";
-import { db, type ExtendedTransactionClient } from "@/lib/db";
-import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 import {
-  assertSchedulePermission,
-  type SchedulePermission,
-} from "./schedule-permissions";
+  LeadVisitNextAction,
+  LeadVisitOutcome,
+  LeadVisitRequestStatus,
+  Prisma,
+  StaffRole,
+  type Prisma as PrismaNamespace,
+} from "@prisma/client";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
+import {
+  assertCanCancelLeadVisit,
+  assertCanCompleteLeadVisit,
+  assertCanMutateLeadVisitSchedule,
+  type LeadVisitAccessContext,
+} from "./lead-visit-access";
+import {
+  DEFAULT_ESTIMATED_DURATION_MINUTES,
+  parseLeadVisitAccessSnapshot,
+  parseLeadVisitSiteContactSnapshot,
+  type LeadVisitAccessSnapshot,
+  type LeadVisitSiteContactSnapshot,
+} from "./lead-visit-schemas";
 
 export type LeadVisitScheduleAction =
   | "confirm"
@@ -13,21 +28,62 @@ export type LeadVisitScheduleAction =
   | "complete"
   | "no_show";
 
+export type LeadVisitSourceSurface = "lead" | "calendar" | "workstation" | "sales";
+
 export type LeadVisitServiceError = { error: string };
 
-const LEAD_VISIT_PERMISSION: Record<LeadVisitScheduleAction, SchedulePermission> = {
-  confirm: "confirm",
-  cancel: "cancel",
-  reschedule: "reschedule_confirmed",
-  complete: "confirm",
-  no_show: "confirm",
+export type LeadVisitScheduleDetailsInput = {
+  scheduledStartAt: Date;
+  scheduledEndAt?: Date | null;
+  estimatedDurationMinutes?: number | null;
+  assignedUserId?: string | null;
+  arrivalWindowStartAt?: Date | null;
+  arrivalWindowEndAt?: Date | null;
+  arrivalWindowLabel?: string | null;
+  accessSnapshot?: LeadVisitAccessSnapshot | null;
+  siteContactSnapshot?: LeadVisitSiteContactSnapshot | null;
+  notes?: string | null;
 };
 
-export function getLeadVisitActionPermission(
-  role: StaffRole,
-  action: LeadVisitScheduleAction,
-): { ok: true } | { ok: false; error: string } {
-  return assertSchedulePermission(role, LEAD_VISIT_PERMISSION[action]);
+const OUTCOME_NEXT_ACTION_MATRIX: Record<LeadVisitOutcome, readonly LeadVisitNextAction[]> = {
+  [LeadVisitOutcome.QUOTE_READY]: [
+    LeadVisitNextAction.START_QUOTE,
+    LeadVisitNextAction.OPEN_OR_REVISE_QUOTE,
+  ],
+  [LeadVisitOutcome.QUOTE_NEEDS_REVISION]: [LeadVisitNextAction.OPEN_OR_REVISE_QUOTE],
+  [LeadVisitOutcome.MISSING_INFORMATION]: [LeadVisitNextAction.COLLECT_MISSING_INFO],
+  [LeadVisitOutcome.FOLLOW_UP_NEEDED]: [LeadVisitNextAction.FOLLOW_UP_CUSTOMER],
+  [LeadVisitOutcome.CUSTOMER_NO_SHOW]: [
+    LeadVisitNextAction.SCHEDULE_ANOTHER_VISIT,
+    LeadVisitNextAction.FOLLOW_UP_CUSTOMER,
+    LeadVisitNextAction.CLOSE_OR_DISQUALIFY,
+  ],
+  [LeadVisitOutcome.CONTRACTOR_MISSED]: [
+    LeadVisitNextAction.SCHEDULE_ANOTHER_VISIT,
+    LeadVisitNextAction.FOLLOW_UP_CUSTOMER,
+  ],
+  [LeadVisitOutcome.RESCHEDULE_NEEDED]: [LeadVisitNextAction.SCHEDULE_ANOTHER_VISIT],
+  [LeadVisitOutcome.DISQUALIFIED]: [
+    LeadVisitNextAction.CLOSE_OR_DISQUALIFY,
+    LeadVisitNextAction.NONE_REQUIRED,
+  ],
+};
+
+export function getAllowedNextActions(outcome: LeadVisitOutcome): readonly LeadVisitNextAction[] {
+  return OUTCOME_NEXT_ACTION_MATRIX[outcome];
+}
+
+export function validateOutcomeNextActionPair(
+  outcome: LeadVisitOutcome,
+  nextAction: LeadVisitNextAction,
+): LeadVisitServiceError | null {
+  const allowed = OUTCOME_NEXT_ACTION_MATRIX[outcome];
+  if (!allowed.includes(nextAction)) {
+    return {
+      error: `Next action ${nextAction} is not allowed for outcome ${outcome}.`,
+    };
+  }
+  return null;
 }
 
 export function validateLeadVisitTransition(
@@ -35,10 +91,10 @@ export function validateLeadVisitTransition(
   action: LeadVisitScheduleAction,
 ): LeadVisitServiceError | null {
   if (action === "confirm" && status !== LeadVisitRequestStatus.PENDING) {
-    return { error: "Only pending estimate visits can be confirmed." };
+    return { error: "Only pending estimate visits can be scheduled." };
   }
   if (action === "reschedule" && status !== LeadVisitRequestStatus.CONFIRMED) {
-    return { error: "Only confirmed estimate visits can be rescheduled." };
+    return { error: "Only scheduled estimate visits can be rescheduled." };
   }
   if (action === "cancel" && status === LeadVisitRequestStatus.CANCELED) {
     return { error: "This estimate visit is already canceled." };
@@ -51,12 +107,47 @@ export function validateLeadVisitTransition(
     return { error: "This estimate visit cannot be canceled." };
   }
   if (action === "complete" && status !== LeadVisitRequestStatus.CONFIRMED) {
-    return { error: "Only confirmed estimate visits can be completed." };
+    return { error: "Only scheduled estimate visits can be completed." };
   }
   if (action === "no_show" && status !== LeadVisitRequestStatus.CONFIRMED) {
-    return { error: "Only confirmed estimate visits can be marked no-show." };
+    return { error: "Only scheduled estimate visits can be marked no-show." };
   }
   return null;
+}
+
+function accessContextFromVisit(
+  role: StaffRole,
+  userId: string,
+  assignedUserId: string | null | undefined,
+): LeadVisitAccessContext {
+  return { role, userId, assignedUserId };
+}
+
+function assertActionPermission(
+  ctx: LeadVisitAccessContext,
+  action: LeadVisitScheduleAction,
+): LeadVisitServiceError | null {
+  if (action === "cancel") {
+    const gate = assertCanCancelLeadVisit(ctx);
+    return gate.ok ? null : { error: gate.error };
+  }
+  if (action === "complete" || action === "no_show") {
+    const gate = assertCanCompleteLeadVisit(ctx);
+    return gate.ok ? null : { error: gate.error };
+  }
+  const gate = assertCanMutateLeadVisitSchedule(ctx);
+  return gate.ok ? null : { error: gate.error };
+}
+
+export function getLeadVisitActionPermission(
+  role: StaffRole,
+  action: LeadVisitScheduleAction,
+  assignedUserId?: string | null,
+  userId?: string,
+): { ok: true } | { ok: false; error: string } {
+  const ctx = accessContextFromVisit(role, userId ?? "", assignedUserId);
+  const result = assertActionPermission(ctx, action);
+  return result ? { ok: false, error: result.error } : { ok: true };
 }
 
 async function recordLeadVisitAudit(
@@ -64,7 +155,7 @@ async function recordLeadVisitAudit(
     leadId: string;
     actorUserId: string;
     type: string;
-    payload: Prisma.InputJsonValue;
+    payload: PrismaNamespace.InputJsonValue;
   },
   tx: ExtendedTransactionClient,
 ) {
@@ -78,39 +169,192 @@ async function recordLeadVisitAudit(
   });
 }
 
-export async function confirmLeadVisitRequest(
-  input: {
-    organizationId: string;
-    requestId: string;
-    confirmedDate: Date;
-    notifyCustomer: boolean;
-    actorUserId: string;
-    role: StaffRole;
-  },
-  tx: ExtendedTransactionClient = db,
-): Promise<{ success: true } | LeadVisitServiceError> {
-  const permission = getLeadVisitActionPermission(input.role, "confirm");
-  if (!permission.ok) return { error: permission.error };
+function resolveScheduledEndAt(input: LeadVisitScheduleDetailsInput): Date {
+  if (input.scheduledEndAt) return input.scheduledEndAt;
+  const durationMinutes = input.estimatedDurationMinutes ?? DEFAULT_ESTIMATED_DURATION_MINUTES;
+  return new Date(input.scheduledStartAt.getTime() + durationMinutes * 60 * 1000);
+}
 
-  const request = await tx.leadVisitRequest.findFirst({
-    where: { id: input.requestId, organizationId: input.organizationId },
+export function validateScheduleDetailsInput(
+  input: LeadVisitScheduleDetailsInput,
+): LeadVisitServiceError | null {
+  const scheduledEndAt = resolveScheduledEndAt(input);
+  if (scheduledEndAt <= input.scheduledStartAt) {
+    return { error: "Scheduled end must be after scheduled start." };
+  }
+  if (
+    input.arrivalWindowStartAt &&
+    input.arrivalWindowEndAt &&
+    input.arrivalWindowEndAt <= input.arrivalWindowStartAt
+  ) {
+    return { error: "Arrival window end must be after arrival window start." };
+  }
+  if (input.accessSnapshot) {
+    const parsed = parseLeadVisitAccessSnapshot(input.accessSnapshot);
+    if ("error" in parsed) return { error: parsed.error };
+  }
+  if (input.siteContactSnapshot) {
+    const parsed = parseLeadVisitSiteContactSnapshot(input.siteContactSnapshot);
+    if ("error" in parsed) return { error: parsed.error };
+  }
+  return null;
+}
+
+async function validateAssignedUser(
+  organizationId: string,
+  assignedUserId: string | null | undefined,
+  tx: ExtendedTransactionClient,
+): Promise<LeadVisitServiceError | null> {
+  if (!assignedUserId) return null;
+  const membership = await tx.membership.findFirst({
+    where: { organizationId, userId: assignedUserId },
+    select: { id: true },
+  });
+  if (!membership) {
+    return { error: "Assigned estimator must belong to this organization." };
+  }
+  return null;
+}
+
+function buildScheduleDetailsWriteData(
+  input: LeadVisitScheduleDetailsInput,
+): Record<string, unknown> {
+  const scheduledEndAt = resolveScheduledEndAt(input);
+  const estimatedDurationMinutes =
+    input.estimatedDurationMinutes ?? DEFAULT_ESTIMATED_DURATION_MINUTES;
+
+  const data: Record<string, unknown> = {
+    scheduledStartAt: input.scheduledStartAt,
+    scheduledEndAt,
+    confirmedDate: input.scheduledStartAt,
+    estimatedDurationMinutes,
+    assignedUserId: input.assignedUserId ?? null,
+    arrivalWindowStartAt: input.arrivalWindowStartAt ?? null,
+    arrivalWindowEndAt: input.arrivalWindowEndAt ?? null,
+    arrivalWindowLabel: input.arrivalWindowLabel ?? null,
+  };
+
+  if (input.accessSnapshot !== undefined) {
+    if (input.accessSnapshot == null) {
+      data.accessSnapshotJson = Prisma.DbNull;
+    } else {
+      data.accessSnapshotJson = parseLeadVisitAccessSnapshot(
+        input.accessSnapshot,
+      ) as LeadVisitAccessSnapshot;
+      data.accessDetailsUpdatedAt = new Date();
+    }
+  }
+
+  if (input.siteContactSnapshot !== undefined) {
+    data.siteContactSnapshotJson =
+      input.siteContactSnapshot == null
+        ? Prisma.DbNull
+        : (parseLeadVisitSiteContactSnapshot(
+            input.siteContactSnapshot,
+          ) as LeadVisitSiteContactSnapshot);
+  }
+
+  if (input.notes != null) {
+    data.notes = input.notes;
+  }
+
+  return data;
+}
+
+function assertConcurrency(
+  request: { updatedAt: Date; status: LeadVisitRequestStatus },
+  expectedUpdatedAt: Date | undefined,
+  action: LeadVisitScheduleAction,
+): LeadVisitServiceError | null {
+  const transition = validateLeadVisitTransition(request.status, action);
+  if (transition) return transition;
+  if (!expectedUpdatedAt) return null;
+  if (request.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+    return { error: "This visit was updated elsewhere. Refresh and try again." };
+  }
+  return null;
+}
+
+type LeadVisitRequestRow = {
+  id: string;
+  status: LeadVisitRequestStatus;
+  leadId: string;
+  updatedAt: Date;
+  assignedUserId: string | null;
+  scheduledStartAt: Date | null;
+  confirmedDate: Date | null;
+  accessSnapshotJson: unknown;
+  outcome: LeadVisitOutcome | null;
+  nextAction: LeadVisitNextAction | null;
+  lead: { id: string; title: string };
+};
+
+async function loadLeadVisitRequest(
+  organizationId: string,
+  requestId: string,
+  tx: ExtendedTransactionClient,
+): Promise<LeadVisitRequestRow | null> {
+  return tx.leadVisitRequest.findFirst({
+    where: { id: requestId, organizationId },
     select: {
       id: true,
       status: true,
       leadId: true,
+      updatedAt: true,
+      assignedUserId: true,
+      scheduledStartAt: true,
+      confirmedDate: true,
+      accessSnapshotJson: true,
+      outcome: true,
+      nextAction: true,
       lead: { select: { id: true, title: true } },
     },
   });
+}
+
+export async function confirmLeadVisitRequest(
+  input: {
+    organizationId: string;
+    requestId: string;
+    scheduleDetails: LeadVisitScheduleDetailsInput;
+    actorUserId: string;
+    role: StaffRole;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true } | LeadVisitServiceError> {
+  const detailsError = validateScheduleDetailsInput(input.scheduleDetails);
+  if (detailsError) return detailsError;
+
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
   if (!request) return { error: "Visit request not found." };
 
-  const transition = validateLeadVisitTransition(request.status, "confirm");
-  if (transition) return transition;
+  const ctx = accessContextFromVisit(
+    input.role,
+    input.actorUserId,
+    input.scheduleDetails.assignedUserId ?? request.assignedUserId,
+  );
+  const permission = assertActionPermission(ctx, "confirm");
+  if (permission) return permission;
+
+  const concurrency = assertConcurrency(request, input.expectedUpdatedAt, "confirm");
+  if (concurrency) return concurrency;
+
+  const assigneeError = await validateAssignedUser(
+    input.organizationId,
+    input.scheduleDetails.assignedUserId,
+    tx,
+  );
+  if (assigneeError) return assigneeError;
+
+  const writeData = buildScheduleDetailsWriteData(input.scheduleDetails);
 
   await tx.leadVisitRequest.update({
     where: { id: input.requestId },
     data: {
       status: LeadVisitRequestStatus.CONFIRMED,
-      confirmedDate: input.confirmedDate,
+      ...writeData,
     },
   });
 
@@ -118,31 +362,19 @@ export async function confirmLeadVisitRequest(
     {
       leadId: request.leadId,
       actorUserId: input.actorUserId,
-      type: "LEAD_VISIT_CONFIRMED",
+      type: "LEAD_VISIT_SCHEDULED",
       payload: {
         requestId: input.requestId,
-        confirmedDate: input.confirmedDate.toISOString(),
-        notifyCustomer: input.notifyCustomer,
-      },
-    },
-    tx,
-  );
-
-  await enqueueNotification(
-    {
-      organizationId: input.organizationId,
-      kind: "LEAD_VISIT_CONFIRMED",
-      title: `Estimate visit confirmed: ${request.lead.title}`,
-      body: input.notifyCustomer
-        ? "Customer notification requested."
-        : "Customer notification not requested.",
-      dedupeKey: `lead-visit-confirmed-${input.requestId}-${input.confirmedDate.toISOString()}`,
-      payloadJson: {
-        requestId: input.requestId,
-        leadId: request.leadId,
-        confirmedDate: input.confirmedDate.toISOString(),
-        notifyCustomer: input.notifyCustomer,
-        actorUserId: input.actorUserId,
+        sourceSurface: input.sourceSurface,
+        oldStatus: request.status,
+        newStatus: LeadVisitRequestStatus.CONFIRMED,
+        oldScheduledStartAt: request.scheduledStartAt?.toISOString() ?? request.confirmedDate?.toISOString() ?? null,
+        newScheduledStartAt: input.scheduleDetails.scheduledStartAt.toISOString(),
+        newScheduledEndAt: resolveScheduledEndAt(input.scheduleDetails).toISOString(),
+        assignedUserId: input.scheduleDetails.assignedUserId ?? null,
+        estimatedDurationMinutes:
+          input.scheduleDetails.estimatedDurationMinutes ?? DEFAULT_ESTIMATED_DURATION_MINUTES,
+        arrivalWindowLabel: input.scheduleDetails.arrivalWindowLabel ?? null,
       },
     },
     tx,
@@ -158,25 +390,20 @@ export async function cancelLeadVisitRequest(
     note?: string;
     actorUserId: string;
     role: StaffRole;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
   },
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | LeadVisitServiceError> {
-  const permission = getLeadVisitActionPermission(input.role, "cancel");
-  if (!permission.ok) return { error: permission.error };
-
-  const request = await tx.leadVisitRequest.findFirst({
-    where: { id: input.requestId, organizationId: input.organizationId },
-    select: {
-      id: true,
-      status: true,
-      leadId: true,
-      lead: { select: { title: true } },
-    },
-  });
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
   if (!request) return { error: "Visit request not found." };
 
-  const transition = validateLeadVisitTransition(request.status, "cancel");
-  if (transition) return transition;
+  const ctx = accessContextFromVisit(input.role, input.actorUserId, request.assignedUserId);
+  const permission = assertActionPermission(ctx, "cancel");
+  if (permission) return permission;
+
+  const concurrency = assertConcurrency(request, input.expectedUpdatedAt, "cancel");
+  if (concurrency) return concurrency;
 
   await tx.leadVisitRequest.update({
     where: { id: input.requestId },
@@ -193,24 +420,10 @@ export async function cancelLeadVisitRequest(
       type: "LEAD_VISIT_CANCELED",
       payload: {
         requestId: input.requestId,
+        sourceSurface: input.sourceSurface,
+        oldStatus: request.status,
+        newStatus: LeadVisitRequestStatus.CANCELED,
         note: input.note ?? null,
-      },
-    },
-    tx,
-  );
-
-  await enqueueNotification(
-    {
-      organizationId: input.organizationId,
-      kind: "LEAD_VISIT_CANCELED",
-      title: `Estimate visit canceled: ${request.lead.title}`,
-      body: input.note,
-      dedupeKey: `lead-visit-canceled-${input.requestId}`,
-      payloadJson: {
-        requestId: input.requestId,
-        leadId: request.leadId,
-        note: input.note,
-        actorUserId: input.actorUserId,
       },
     },
     tx,
@@ -223,35 +436,47 @@ export async function rescheduleLeadVisitRequest(
   input: {
     organizationId: string;
     requestId: string;
-    confirmedDate: Date;
-    notifyCustomer: boolean;
+    scheduleDetails: LeadVisitScheduleDetailsInput;
     actorUserId: string;
     role: StaffRole;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
   },
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | LeadVisitServiceError> {
-  const permission = getLeadVisitActionPermission(input.role, "reschedule");
-  if (!permission.ok) return { error: permission.error };
+  const detailsError = validateScheduleDetailsInput(input.scheduleDetails);
+  if (detailsError) return detailsError;
 
-  const request = await tx.leadVisitRequest.findFirst({
-    where: { id: input.requestId, organizationId: input.organizationId },
-    select: {
-      id: true,
-      status: true,
-      leadId: true,
-      lead: { select: { title: true } },
-    },
-  });
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
   if (!request) return { error: "Visit request not found." };
 
-  const transition = validateLeadVisitTransition(request.status, "reschedule");
-  if (transition) return transition;
+  const ctx = accessContextFromVisit(
+    input.role,
+    input.actorUserId,
+    input.scheduleDetails.assignedUserId ?? request.assignedUserId,
+  );
+  const permission = assertActionPermission(ctx, "reschedule");
+  if (permission) return permission;
+
+  const concurrency = assertConcurrency(request, input.expectedUpdatedAt, "reschedule");
+  if (concurrency) return concurrency;
+
+  const assigneeError = await validateAssignedUser(
+    input.organizationId,
+    input.scheduleDetails.assignedUserId,
+    tx,
+  );
+  if (assigneeError) return assigneeError;
+
+  const writeData = buildScheduleDetailsWriteData(input.scheduleDetails);
+  const oldStart =
+    request.scheduledStartAt?.toISOString() ?? request.confirmedDate?.toISOString() ?? null;
 
   await tx.leadVisitRequest.update({
     where: { id: input.requestId },
     data: {
       status: LeadVisitRequestStatus.CONFIRMED,
-      confirmedDate: input.confirmedDate,
+      ...writeData,
     },
   });
 
@@ -262,28 +487,84 @@ export async function rescheduleLeadVisitRequest(
       type: "LEAD_VISIT_RESCHEDULED",
       payload: {
         requestId: input.requestId,
-        confirmedDate: input.confirmedDate.toISOString(),
-        notifyCustomer: input.notifyCustomer,
+        sourceSurface: input.sourceSurface,
+        oldScheduledStartAt: oldStart,
+        newScheduledStartAt: input.scheduleDetails.scheduledStartAt.toISOString(),
+        newScheduledEndAt: resolveScheduledEndAt(input.scheduleDetails).toISOString(),
+        assignedUserId: input.scheduleDetails.assignedUserId ?? null,
+        oldAssignedUserId: request.assignedUserId,
       },
     },
     tx,
   );
 
-  await enqueueNotification(
+  return { success: true };
+}
+
+export async function updateLeadVisitAccessDetails(
+  input: {
+    organizationId: string;
+    requestId: string;
+    accessSnapshot?: LeadVisitAccessSnapshot | null;
+    siteContactSnapshot?: LeadVisitSiteContactSnapshot | null;
+    actorUserId: string;
+    role: StaffRole;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true } | LeadVisitServiceError> {
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
+  if (!request) return { error: "Visit request not found." };
+
+  const ctx = accessContextFromVisit(input.role, input.actorUserId, request.assignedUserId);
+  const permission = assertCanMutateLeadVisitSchedule(ctx);
+  if (!permission.ok) return { error: permission.error };
+
+  if (
+    request.status !== LeadVisitRequestStatus.PENDING &&
+    request.status !== LeadVisitRequestStatus.CONFIRMED
+  ) {
+    return { error: "Access details can only be updated on open visits." };
+  }
+
+  if (input.expectedUpdatedAt && request.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+    return { error: "This visit was updated elsewhere. Refresh and try again." };
+  }
+
+  let accessSnapshotJson: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull;
+  if (input.accessSnapshot != null) {
+    const parsed = parseLeadVisitAccessSnapshot(input.accessSnapshot);
+    if ("error" in parsed) return { error: parsed.error };
+    accessSnapshotJson = parsed;
+  }
+
+  let siteContactSnapshotJson: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull;
+  if (input.siteContactSnapshot != null) {
+    const parsed = parseLeadVisitSiteContactSnapshot(input.siteContactSnapshot);
+    if ("error" in parsed) return { error: parsed.error };
+    siteContactSnapshotJson = parsed;
+  }
+
+  await tx.leadVisitRequest.update({
+    where: { id: input.requestId },
+    data: {
+      accessSnapshotJson,
+      siteContactSnapshotJson,
+      accessDetailsUpdatedAt: new Date(),
+    },
+  });
+
+  await recordLeadVisitAudit(
     {
-      organizationId: input.organizationId,
-      kind: "LEAD_VISIT_RESCHEDULED",
-      title: `Estimate visit rescheduled: ${request.lead.title}`,
-      body: input.notifyCustomer
-        ? "Customer notification requested."
-        : "Customer notification not requested.",
-      dedupeKey: `lead-visit-rescheduled-${input.requestId}-${input.confirmedDate.toISOString()}`,
-      payloadJson: {
+      leadId: request.leadId,
+      actorUserId: input.actorUserId,
+      type: "LEAD_VISIT_ACCESS_UPDATED",
+      payload: {
         requestId: input.requestId,
-        leadId: request.leadId,
-        confirmedDate: input.confirmedDate.toISOString(),
-        notifyCustomer: input.notifyCustomer,
-        actorUserId: input.actorUserId,
+        sourceSurface: input.sourceSurface,
+        oldAccessSnapshot: request.accessSnapshotJson ?? null,
+        newAccessSnapshot: accessSnapshotJson === Prisma.DbNull ? null : accessSnapshotJson,
       },
     },
     tx,
@@ -298,21 +579,26 @@ export async function completeLeadVisitRequest(
     requestId: string;
     actorUserId: string;
     role: StaffRole;
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
     completionNotes?: string;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
   },
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | LeadVisitServiceError> {
-  const permission = getLeadVisitActionPermission(input.role, "complete");
-  if (!permission.ok) return { error: permission.error };
+  const pairError = validateOutcomeNextActionPair(input.outcome, input.nextAction);
+  if (pairError) return pairError;
 
-  const request = await tx.leadVisitRequest.findFirst({
-    where: { id: input.requestId, organizationId: input.organizationId },
-    select: { id: true, status: true, leadId: true },
-  });
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
   if (!request) return { error: "Visit request not found." };
 
-  const transition = validateLeadVisitTransition(request.status, "complete");
-  if (transition) return transition;
+  const ctx = accessContextFromVisit(input.role, input.actorUserId, request.assignedUserId);
+  const permission = assertActionPermission(ctx, "complete");
+  if (permission) return permission;
+
+  const concurrency = assertConcurrency(request, input.expectedUpdatedAt, "complete");
+  if (concurrency) return concurrency;
 
   const completedAt = new Date();
   await tx.leadVisitRequest.update({
@@ -322,6 +608,9 @@ export async function completeLeadVisitRequest(
       completedAt,
       completedByUserId: input.actorUserId,
       completionNotes: input.completionNotes || null,
+      outcome: input.outcome,
+      nextAction: input.nextAction,
+      outcomeSelectedAt: completedAt,
     },
   });
 
@@ -332,8 +621,15 @@ export async function completeLeadVisitRequest(
       type: "LEAD_VISIT_COMPLETED",
       payload: {
         requestId: input.requestId,
+        sourceSurface: input.sourceSurface,
+        oldStatus: request.status,
+        newStatus: LeadVisitRequestStatus.COMPLETED,
         completedAt: completedAt.toISOString(),
         completionNotes: input.completionNotes ?? null,
+        outcome: input.outcome,
+        nextAction: input.nextAction,
+        oldOutcome: request.outcome,
+        oldNextAction: request.nextAction,
       },
     },
     tx,
@@ -348,21 +644,34 @@ export async function markLeadVisitNoShow(
     requestId: string;
     actorUserId: string;
     role: StaffRole;
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
     completionNotes?: string;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
   },
   tx: ExtendedTransactionClient = db,
 ): Promise<{ success: true } | LeadVisitServiceError> {
-  const permission = getLeadVisitActionPermission(input.role, "no_show");
-  if (!permission.ok) return { error: permission.error };
+  const allowedOutcomes: LeadVisitOutcome[] = [
+    LeadVisitOutcome.CUSTOMER_NO_SHOW,
+    LeadVisitOutcome.CONTRACTOR_MISSED,
+  ];
+  if (!allowedOutcomes.includes(input.outcome)) {
+    return { error: "No-show must use CUSTOMER_NO_SHOW or CONTRACTOR_MISSED outcome." };
+  }
 
-  const request = await tx.leadVisitRequest.findFirst({
-    where: { id: input.requestId, organizationId: input.organizationId },
-    select: { id: true, status: true, leadId: true },
-  });
+  const pairError = validateOutcomeNextActionPair(input.outcome, input.nextAction);
+  if (pairError) return pairError;
+
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
   if (!request) return { error: "Visit request not found." };
 
-  const transition = validateLeadVisitTransition(request.status, "no_show");
-  if (transition) return transition;
+  const ctx = accessContextFromVisit(input.role, input.actorUserId, request.assignedUserId);
+  const permission = assertActionPermission(ctx, "no_show");
+  if (permission) return permission;
+
+  const concurrency = assertConcurrency(request, input.expectedUpdatedAt, "no_show");
+  if (concurrency) return concurrency;
 
   const completedAt = new Date();
   await tx.leadVisitRequest.update({
@@ -372,6 +681,9 @@ export async function markLeadVisitNoShow(
       completedAt,
       completedByUserId: input.actorUserId,
       completionNotes: input.completionNotes || null,
+      outcome: input.outcome,
+      nextAction: input.nextAction,
+      outcomeSelectedAt: completedAt,
     },
   });
 
@@ -382,7 +694,82 @@ export async function markLeadVisitNoShow(
       type: "LEAD_VISIT_NO_SHOW",
       payload: {
         requestId: input.requestId,
+        sourceSurface: input.sourceSurface,
+        oldStatus: request.status,
+        newStatus: LeadVisitRequestStatus.NO_SHOW,
         completedAt: completedAt.toISOString(),
+        completionNotes: input.completionNotes ?? null,
+        outcome: input.outcome,
+        nextAction: input.nextAction,
+      },
+    },
+    tx,
+  );
+
+  return { success: true };
+}
+
+export async function updateLeadVisitOutcome(
+  input: {
+    organizationId: string;
+    requestId: string;
+    actorUserId: string;
+    role: StaffRole;
+    outcome: LeadVisitOutcome;
+    nextAction: LeadVisitNextAction;
+    completionNotes?: string;
+    sourceSurface: LeadVisitSourceSurface;
+    expectedUpdatedAt?: Date;
+  },
+  tx: ExtendedTransactionClient = db,
+): Promise<{ success: true } | LeadVisitServiceError> {
+  const pairError = validateOutcomeNextActionPair(input.outcome, input.nextAction);
+  if (pairError) return pairError;
+
+  const request = await loadLeadVisitRequest(input.organizationId, input.requestId, tx);
+  if (!request) return { error: "Visit request not found." };
+
+  const ctx = accessContextFromVisit(input.role, input.actorUserId, request.assignedUserId);
+  const permission = assertCanCompleteLeadVisit(ctx);
+  if (!permission.ok) return { error: permission.error };
+
+  if (
+    request.status !== LeadVisitRequestStatus.COMPLETED &&
+    request.status !== LeadVisitRequestStatus.NO_SHOW
+  ) {
+    return {
+      error: "Outcome can only be updated on completed or no-show visits.",
+    };
+  }
+
+  if (input.expectedUpdatedAt && request.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+    return { error: "This visit was updated elsewhere. Refresh and try again." };
+  }
+
+  const outcomeSelectedAt = new Date();
+  await tx.leadVisitRequest.update({
+    where: { id: input.requestId },
+    data: {
+      outcome: input.outcome,
+      nextAction: input.nextAction,
+      completionNotes: input.completionNotes ?? undefined,
+      outcomeSelectedAt,
+    },
+  });
+
+  await recordLeadVisitAudit(
+    {
+      leadId: request.leadId,
+      actorUserId: input.actorUserId,
+      type: "LEAD_VISIT_OUTCOME_UPDATED",
+      payload: {
+        requestId: input.requestId,
+        sourceSurface: input.sourceSurface,
+        status: request.status,
+        oldOutcome: request.outcome,
+        newOutcome: input.outcome,
+        oldNextAction: request.nextAction,
+        newNextAction: input.nextAction,
         completionNotes: input.completionNotes ?? null,
       },
     },
@@ -390,4 +777,23 @@ export async function markLeadVisitNoShow(
   );
 
   return { success: true };
+}
+
+/** Resolve canonical scheduled start from stored fields during transition. */
+export function resolveLeadVisitScheduledStart(input: {
+  scheduledStartAt?: Date | null;
+  confirmedDate?: Date | null;
+  requestedDate?: Date | null;
+}): Date | null {
+  return input.scheduledStartAt ?? input.confirmedDate ?? input.requestedDate ?? null;
+}
+
+/** MVP 1 display label: CONFIRMED means internally scheduled, not customer-confirmed. */
+export function formatLeadVisitStatusLabel(status: LeadVisitRequestStatus): string {
+  if (status === LeadVisitRequestStatus.CONFIRMED) return "Scheduled";
+  if (status === LeadVisitRequestStatus.PENDING) return "Pending";
+  if (status === LeadVisitRequestStatus.COMPLETED) return "Completed";
+  if (status === LeadVisitRequestStatus.NO_SHOW) return "No-show";
+  if (status === LeadVisitRequestStatus.CANCELED) return "Canceled";
+  return status;
 }

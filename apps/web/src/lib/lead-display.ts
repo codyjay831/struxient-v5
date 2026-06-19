@@ -2,10 +2,16 @@ import type {
   LeadChannel,
   LeadCloseReason,
   LeadStatus,
+  LeadVisitNextAction,
+  LeadVisitOutcome,
   NeededByBucket,
   LeadVisitRequestStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import type {
+  LeadVisitAccessSnapshot,
+  LeadVisitSiteContactSnapshot,
+} from "@/lib/scheduling/lead-visit-schemas";
 
 /** Serializable lead visit request (Phase C site visits). */
 export type LeadVisitRequestPayload = {
@@ -13,11 +19,26 @@ export type LeadVisitRequestPayload = {
   requestedDate: Date | null;
   requestedWindow: string | null;
   confirmedDate: Date | null;
+  scheduledStartAt: Date | null;
+  scheduledEndAt: Date | null;
+  estimatedDurationMinutes: number | null;
+  arrivalWindowStartAt: Date | null;
+  arrivalWindowEndAt: Date | null;
+  arrivalWindowLabel: string | null;
+  assignedUserId: string | null;
+  assignedUserLabel: string | null;
+  accessSnapshot: LeadVisitAccessSnapshot | null;
+  siteContactSnapshot: LeadVisitSiteContactSnapshot | null;
+  hasAccessDetails: boolean;
+  outcome: LeadVisitOutcome | null;
+  nextAction: LeadVisitNextAction | null;
   completedAt?: Date | null;
   status: LeadVisitRequestStatus;
   purpose?: string | null;
   notes: string | null;
   createdAt: Date;
+  updatedAt: Date;
+  canEditAccessDetails?: boolean;
 };
 
 /** Serializable lead row for the detail shell (server-fetched, org-scoped). */

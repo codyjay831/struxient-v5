@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   JobScheduleEventCompletionOutcome,
+  LeadVisitNextAction,
+  LeadVisitOutcome,
   LeadVisitRequestStatus,
 } from "@prisma/client";
 import { X } from "lucide-react";
@@ -31,6 +33,7 @@ import {
   parseDatetimeLocalInTimezone,
 } from "@/lib/scheduling/deadline-timezone";
 import { getScheduleKindLabel, getScheduleStatusLabel } from "./schedule-presentation";
+import { LeadVisitOutcomeFields } from "@/components/leads/lead-visit-outcome-fields";
 
 type MemberOption = { id: string; label: string };
 
@@ -127,7 +130,9 @@ function ScheduleEventDetailsForm({
       : "",
   );
   const [assigneeId, setAssigneeId] = useState(event.assigneeUserId ?? "");
-  const [notifyCustomer, setNotifyCustomer] = useState(false);
+  const [visitOutcome, setVisitOutcome] = useState<LeadVisitOutcome | "">("");
+  const [visitNextAction, setVisitNextAction] = useState<LeadVisitNextAction | "">("");
+  const [visitCompletionMode, setVisitCompletionMode] = useState<"complete" | "no_show">("complete");
   const [completionOutcome, setCompletionOutcome] = useState<JobScheduleEventCompletionOutcome>(
     JobScheduleEventCompletionOutcome.WORK_COMPLETED,
   );
@@ -293,45 +298,37 @@ function ScheduleEventDetailsForm({
 
           {event.kind === "lead-visit-request" ? (
             <div className="space-y-3">
+              <p className="text-xs text-foreground-muted">
+                Quick calendar actions only. Edit full access and site contact details on the lead page.
+              </p>
               <input
                 type="datetime-local"
                 className="w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-foreground"
                 value={newDateTime}
                 onChange={(e) => setNewDateTime(e.target.value)}
               />
-              <label className="flex items-center gap-2 text-xs text-foreground-muted">
-                <input
-                  type="checkbox"
-                  checked={notifyCustomer}
-                  onChange={(e) => setNotifyCustomer(e.target.checked)}
-                />
-                Notify customer
-              </label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   disabled={isPending}
                   onClick={() =>
                     startTransition(async () => {
-                      const date = parseLocal(newDateTime);
+                      const scheduledStartAt = parseLocal(newDateTime);
+                      const scheduleDetails = { scheduledStartAt };
                       const result =
                         event.status === LeadVisitRequestStatus.PENDING
-                          ? await confirmLeadVisitRequestAction(
-                              event.recordId,
-                              date,
-                              notifyCustomer,
-                            )
-                          : await rescheduleLeadVisitRequestAction(
-                              event.recordId,
-                              date,
-                              notifyCustomer,
-                            );
+                          ? await confirmLeadVisitRequestAction(event.recordId, scheduleDetails, {
+                              sourceSurface: "calendar",
+                            })
+                          : await rescheduleLeadVisitRequestAction(event.recordId, scheduleDetails, {
+                              sourceSurface: "calendar",
+                            });
                       if (result.error) setError(result.error);
                       else onClose();
                     })
                   }
                 >
-                  {event.status === LeadVisitRequestStatus.PENDING ? "Confirm" : "Reschedule"}
+                  {event.status === LeadVisitRequestStatus.PENDING ? "Schedule" : "Reschedule"}
                 </Button>
                 <Button
                   size="sm"
@@ -339,7 +336,9 @@ function ScheduleEventDetailsForm({
                   disabled={isPending}
                   onClick={() =>
                     startTransition(async () => {
-                      const result = await cancelLeadVisitRequestAction(event.recordId);
+                      const result = await cancelLeadVisitRequestAction(event.recordId, eventReason.trim() || undefined, {
+                        sourceSurface: "calendar",
+                      });
                       if (result.error) setError(result.error);
                       else onClose();
                     })
@@ -347,45 +346,72 @@ function ScheduleEventDetailsForm({
                 >
                   Cancel
                 </Button>
-                {event.status === LeadVisitRequestStatus.CONFIRMED ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="muted"
-                      disabled={isPending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          const result = await completeLeadVisitRequestAction(
-                            event.recordId,
-                            eventReason.trim() || undefined,
-                          );
-                          if (result.error) setError(result.error);
-                          else onClose();
-                        })
-                      }
-                    >
-                      Mark completed
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="muted"
-                      disabled={isPending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          const result = await markLeadVisitNoShowAction(
-                            event.recordId,
-                            eventReason.trim() || undefined,
-                          );
-                          if (result.error) setError(result.error);
-                          else onClose();
-                        })
-                      }
-                    >
-                      Mark no-show
-                    </Button>
-                  </>
-                ) : null}
               </div>
+              {event.status === LeadVisitRequestStatus.CONFIRMED ? (
+                <div className="space-y-3 border-t border-border pt-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={visitCompletionMode === "complete" ? "default" : "muted"}
+                      onClick={() => {
+                        setVisitCompletionMode("complete");
+                        setVisitOutcome("");
+                        setVisitNextAction("");
+                      }}
+                    >
+                      Complete
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={visitCompletionMode === "no_show" ? "default" : "muted"}
+                      onClick={() => {
+                        setVisitCompletionMode("no_show");
+                        setVisitOutcome(LeadVisitOutcome.CUSTOMER_NO_SHOW);
+                        setVisitNextAction(LeadVisitNextAction.SCHEDULE_ANOTHER_VISIT);
+                      }}
+                    >
+                      No-show
+                    </Button>
+                  </div>
+                  <LeadVisitOutcomeFields
+                    mode={visitCompletionMode}
+                    outcome={visitOutcome}
+                    nextAction={visitNextAction}
+                    onOutcomeChange={setVisitOutcome}
+                    onNextActionChange={setVisitNextAction}
+                  />
+                  <input
+                    type="text"
+                    className="w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-foreground"
+                    placeholder="Completion notes"
+                    value={eventReason}
+                    onChange={(e) => setEventReason(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="muted"
+                    disabled={isPending || !visitOutcome || !visitNextAction}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const payload = {
+                          outcome: visitOutcome as LeadVisitOutcome,
+                          nextAction: visitNextAction as LeadVisitNextAction,
+                          completionNotes: eventReason.trim() || undefined,
+                          sourceSurface: "calendar" as const,
+                        };
+                        const result =
+                          visitCompletionMode === "no_show"
+                            ? await markLeadVisitNoShowAction(event.recordId, payload)
+                            : await completeLeadVisitRequestAction(event.recordId, payload);
+                        if (result.error) setError(result.error);
+                        else onClose();
+                      })
+                    }
+                  >
+                    Save visit outcome
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

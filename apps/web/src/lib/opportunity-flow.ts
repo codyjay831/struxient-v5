@@ -1,10 +1,13 @@
 import type {
   JobStatus,
   LeadStatus,
+  LeadVisitNextAction,
+  LeadVisitOutcome,
   LeadVisitRequestStatus,
   QuoteStatus,
 } from "@prisma/client";
 import { evaluateLeadReadiness } from "@/lib/lead-readiness-heuristics";
+import { resolveLeadVisitScheduledStart } from "@/lib/scheduling/lead-visit-schedule-service";
 
 export type OpportunityPhase =
   | "INTAKE"
@@ -105,7 +108,13 @@ export type OpportunityFlowVisitInput = {
   requestedDate?: Date | null;
   requestedWindow?: string | null;
   confirmedDate?: Date | null;
+  scheduledStartAt?: Date | null;
+  scheduledEndAt?: Date | null;
+  assignedUserId?: string | null;
   completedAt?: Date | null;
+  outcome?: LeadVisitOutcome | null;
+  nextAction?: LeadVisitNextAction | null;
+  hasAccessDetails?: boolean;
   createdAt: Date;
 };
 
@@ -185,6 +194,35 @@ function isVisitScheduled(status: OpportunityFlowVisitInput["status"]): boolean 
 
 function isVisitCompleted(status: OpportunityFlowVisitInput["status"]): boolean {
   return status === "COMPLETED";
+}
+
+function isVisitNoShow(status: OpportunityFlowVisitInput["status"]): boolean {
+  return status === "NO_SHOW";
+}
+
+function visitScheduledAt(visit: OpportunityFlowVisitInput): Date | null {
+  return resolveLeadVisitScheduledStart(visit);
+}
+
+function completedVisitSupportsQuoteReady(visit: OpportunityFlowVisitInput | null): boolean {
+  if (!visit || !isVisitCompleted(visit.status)) return false;
+  return visit.outcome === "QUOTE_READY";
+}
+
+function completedVisitNeedsFollowUp(visit: OpportunityFlowVisitInput | null): boolean {
+  if (!visit) return false;
+  if (isVisitNoShow(visit.status)) return true;
+  if (!isVisitCompleted(visit.status)) return false;
+  if (!visit.outcome || !visit.nextAction) return true;
+  return (
+    visit.outcome === "MISSING_INFORMATION" ||
+    visit.outcome === "FOLLOW_UP_NEEDED" ||
+    visit.outcome === "RESCHEDULE_NEEDED" ||
+    visit.outcome === "QUOTE_NEEDS_REVISION" ||
+    visit.nextAction === "FOLLOW_UP_CUSTOMER" ||
+    visit.nextAction === "COLLECT_MISSING_INFO" ||
+    visit.nextAction === "SCHEDULE_ANOTHER_VISIT"
+  );
 }
 
 function isOpenChangeRequest(change: OpportunityFlowChangeRequestInput): boolean {
@@ -301,11 +339,15 @@ export function getOpportunityFlow(input: OpportunityFlowInput): OpportunityFlow
   );
   const scheduledVisit = latestByDate(
     visits.filter((v) => isVisitScheduled(v.status)),
-    (v) => v.confirmedDate ?? v.createdAt,
+    (v) => visitScheduledAt(v) ?? v.createdAt,
   );
   const completedVisit = latestByDate(
     visits.filter((v) => isVisitCompleted(v.status)),
-    (v) => v.completedAt ?? v.confirmedDate ?? v.createdAt,
+    (v) => v.completedAt ?? visitScheduledAt(v) ?? v.createdAt,
+  );
+  const noShowVisit = latestByDate(
+    visits.filter((v) => isVisitNoShow(v.status)),
+    (v) => v.completedAt ?? visitScheduledAt(v) ?? v.createdAt,
   );
 
   const openChangeRequests = input.changeRequests.filter(isOpenChangeRequest);
@@ -317,15 +359,22 @@ export function getOpportunityFlow(input: OpportunityFlowInput): OpportunityFlow
     keyFacts.push({
       label: "Sales visit",
       value: `Completed ${new Date(
-        completedVisit.completedAt ?? completedVisit.confirmedDate ?? completedVisit.createdAt,
+        completedVisit.completedAt ?? visitScheduledAt(completedVisit) ?? completedVisit.createdAt,
+      ).toLocaleDateString()}${completedVisit.outcome ? ` · ${completedVisit.outcome.replaceAll("_", " ").toLowerCase()}` : ""}`,
+    });
+  } else if (noShowVisit) {
+    keyFacts.push({
+      label: "Sales visit",
+      value: `No-show ${new Date(
+        noShowVisit.completedAt ?? visitScheduledAt(noShowVisit) ?? noShowVisit.createdAt,
       ).toLocaleDateString()}`,
     });
   } else if (scheduledVisit) {
     keyFacts.push({
       label: "Sales visit",
       value: `Scheduled ${new Date(
-        scheduledVisit.confirmedDate ?? scheduledVisit.createdAt,
-      ).toLocaleString()}`,
+        visitScheduledAt(scheduledVisit) ?? scheduledVisit.createdAt,
+      ).toLocaleString()}${scheduledVisit.hasAccessDetails === false ? " · missing access" : ""}`,
     });
   } else if (pendingVisit) {
     keyFacts.push({ label: "Sales visit", value: "Requested, not scheduled" });
@@ -367,13 +416,19 @@ export function getOpportunityFlow(input: OpportunityFlowInput): OpportunityFlow
   if (completedVisit) {
     recentEvents.push({
       label: "Sales visit completed",
-      at: iso(completedVisit.completedAt ?? completedVisit.confirmedDate ?? completedVisit.createdAt),
+      at: iso(completedVisit.completedAt ?? visitScheduledAt(completedVisit) ?? completedVisit.createdAt),
+    });
+  }
+  if (noShowVisit) {
+    recentEvents.push({
+      label: "Sales visit no-show",
+      at: iso(noShowVisit.completedAt ?? visitScheduledAt(noShowVisit) ?? noShowVisit.createdAt),
     });
   }
   if (scheduledVisit) {
     recentEvents.push({
       label: "Sales visit scheduled",
-      at: iso(scheduledVisit.confirmedDate ?? scheduledVisit.createdAt),
+      at: iso(visitScheduledAt(scheduledVisit) ?? scheduledVisit.createdAt),
     });
   }
 
@@ -581,20 +636,160 @@ export function getOpportunityFlow(input: OpportunityFlowInput): OpportunityFlow
   }
 
   if (scheduledVisit) {
-    const conditionStartedAt = iso(scheduledVisit.confirmedDate ?? scheduledVisit.createdAt);
+    const conditionStartedAt = iso(visitScheduledAt(scheduledVisit) ?? scheduledVisit.createdAt);
     return {
       phase: "DISCOVERY",
       conditionCode: "SALES_VISIT_SCHEDULED",
       conditionLabel: "Sales visit scheduled",
       conditionStartedAt,
       ageLabel: formatAge(conditionStartedAt, now),
-      summary: "Visit is on the calendar.",
-      requirements: ["Complete site visit"],
+      summary: scheduledVisit.hasAccessDetails === false
+        ? "Visit is scheduled but access details are still missing."
+        : "Visit is on the calendar.",
+      requirements: [
+        ...(scheduledVisit.hasAccessDetails === false ? ["Add access details"] : []),
+        "Complete site visit",
+      ],
       secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
       primaryAction: {
         kind: "COMPLETE_SALES_VISIT",
         label: "Complete site visit",
         targetVisitRequestId: scheduledVisit.id,
+        targetLeadId: lead.id,
+      },
+      ...resultBase,
+    };
+  }
+
+  if (noShowVisit && completedVisitNeedsFollowUp(noShowVisit)) {
+    const conditionStartedAt = iso(noShowVisit.completedAt ?? visitScheduledAt(noShowVisit) ?? noShowVisit.createdAt);
+    return {
+      phase: "DISCOVERY",
+      conditionCode: "NEEDS_SALES_VISIT",
+      conditionLabel: "No-show recovery",
+      conditionStartedAt,
+      ageLabel: formatAge(conditionStartedAt, now),
+      summary: "Previous visit was a no-show and needs follow-up.",
+      requirements: ["Reschedule visit or follow up with customer"],
+      secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
+      primaryAction: {
+        kind: "SCHEDULE_SALES_VISIT",
+        label: "Schedule another visit",
+        targetLeadId: lead.id,
+      },
+      ...resultBase,
+    };
+  }
+
+  if (completedVisit && completedVisitNeedsFollowUp(completedVisit)) {
+    const conditionStartedAt = iso(completedVisit.completedAt ?? visitScheduledAt(completedVisit) ?? completedVisit.createdAt);
+    if (completedVisit.outcome === "RESCHEDULE_NEEDED" || completedVisit.nextAction === "SCHEDULE_ANOTHER_VISIT") {
+      return {
+        phase: "DISCOVERY",
+        conditionCode: "NEEDS_SALES_VISIT",
+        conditionLabel: "Reschedule visit",
+        conditionStartedAt,
+        ageLabel: formatAge(conditionStartedAt, now),
+        summary: "Completed visit outcome requires another site visit.",
+        requirements: ["Schedule follow-up visit"],
+        secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
+        primaryAction: {
+          kind: "SCHEDULE_SALES_VISIT",
+          label: "Schedule site visit",
+          targetLeadId: lead.id,
+        },
+        ...resultBase,
+      };
+    }
+    if (completedVisit.outcome === "MISSING_INFORMATION" || completedVisit.nextAction === "COLLECT_MISSING_INFO") {
+      return {
+        phase: "DISCOVERY",
+        conditionCode: "NEEDS_INTAKE_DETAILS",
+        conditionLabel: "Missing visit information",
+        conditionStartedAt,
+        ageLabel: formatAge(conditionStartedAt, now),
+        summary: "Site visit completed but more information is needed before quoting.",
+        requirements: ["Collect missing information"],
+        secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
+        primaryAction: {
+          kind: "EDIT_CONTACT_INFO",
+          label: "Add details",
+          targetLeadId: lead.id,
+        },
+        ...resultBase,
+      };
+    }
+    if (completedVisit.outcome === "FOLLOW_UP_NEEDED" || completedVisit.nextAction === "FOLLOW_UP_CUSTOMER") {
+      return {
+        phase: "DISCOVERY",
+        conditionCode: "NEEDS_SALES_VISIT",
+        conditionLabel: "Follow-up needed",
+        conditionStartedAt,
+        ageLabel: formatAge(conditionStartedAt, now),
+        summary: "Site visit completed and customer follow-up is required.",
+        requirements: ["Follow up with customer"],
+        secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
+        primaryAction: {
+          kind: "FOLLOW_UP_CUSTOMER",
+          label: "Follow up",
+          targetLeadId: lead.id,
+        },
+        ...resultBase,
+      };
+    }
+    if (completedVisit.outcome === "QUOTE_NEEDS_REVISION" || completedVisit.nextAction === "OPEN_OR_REVISE_QUOTE") {
+      const working = pickMostRecentNonArchivedQuote(input.quotes);
+      return {
+        phase: "ESTIMATING",
+        conditionCode: "QUOTE_DRAFT_IN_PROGRESS",
+        conditionLabel: "Revise quote after visit",
+        conditionStartedAt,
+        ageLabel: formatAge(conditionStartedAt, now),
+        summary: "Site visit outcome requires quote revision.",
+        requirements: ["Open or revise quote"],
+        secondaryActions: [],
+        primaryAction: working
+          ? { kind: "OPEN_QUOTE", label: "Open quote", targetQuoteId: working.id }
+          : { kind: "START_QUOTE", label: "Start quote", targetLeadId: lead.id },
+        ...resultBase,
+      };
+    }
+    if (completedVisit.outcome === "DISQUALIFIED") {
+      return {
+        phase: "LOST",
+        conditionCode: "LOST",
+        conditionLabel: "Disqualified after visit",
+        conditionStartedAt,
+        ageLabel: formatAge(conditionStartedAt, now),
+        summary: "Site visit outcome marked this lead as disqualified.",
+        requirements: ["Close or disqualify lead"],
+        secondaryActions: [],
+        primaryAction: {
+          kind: "EDIT_CONTACT_INFO",
+          label: "Review lead",
+          targetLeadId: lead.id,
+        },
+        ...resultBase,
+      };
+    }
+  }
+
+  if (completedVisit && !completedVisit.outcome) {
+    const conditionStartedAt = iso(completedVisit.completedAt ?? visitScheduledAt(completedVisit) ?? completedVisit.createdAt);
+    return {
+      phase: "DISCOVERY",
+      conditionCode: "SALES_VISIT_SCHEDULED",
+      conditionLabel: "Visit completed — outcome needed",
+      conditionStartedAt,
+      ageLabel: formatAge(conditionStartedAt, now),
+      summary: "Site visit is completed but outcome and next action are missing.",
+      requirements: ["Record visit outcome"],
+      secondaryActions: buildDiscoverySecondaryActions(input.quotes, lead.id),
+      primaryAction: {
+        kind: "COMPLETE_SALES_VISIT",
+        label: "Record visit outcome",
+        targetVisitRequestId: completedVisit.id,
+        targetLeadId: lead.id,
       },
       ...resultBase,
     };
@@ -668,6 +863,21 @@ export function getOpportunityFlow(input: OpportunityFlowInput): OpportunityFlow
 
   const conditionStartedAt = iso(completedVisit?.completedAt ?? completedVisit?.createdAt ?? now);
 
+  if (completedVisit && completedVisitSupportsQuoteReady(completedVisit)) {
+    return {
+      phase: "ESTIMATING",
+      conditionCode: "READY_TO_QUOTE",
+      conditionLabel: "Ready to quote",
+      conditionStartedAt,
+      ageLabel: formatAge(conditionStartedAt, now),
+      summary: "Site visit completed and quote can start.",
+      requirements: [],
+      secondaryActions: [],
+      primaryAction: { kind: "START_QUOTE", label: "Build quote", targetLeadId: lead.id },
+      ...resultBase,
+    };
+  }
+
   if (!lead.customerId && input.hasExistingCustomerMatch) {
     return {
       phase: "INTAKE",
@@ -722,8 +932,13 @@ export function resolveOpportunityActionHref(
         ? `/quotes/${action.targetQuoteId}#commercial-send-acceptance`
         : `/leads/${ctx.leadId}`;
     case "SCHEDULE_SALES_VISIT":
+      return action.targetLeadId ? `/leads/${action.targetLeadId}` : `/leads/${ctx.leadId}`;
     case "COMPLETE_SALES_VISIT":
-      return "/schedule";
+      return action.targetLeadId
+        ? `/leads/${action.targetLeadId}`
+        : action.targetVisitRequestId
+          ? `/leads/${ctx.leadId}`
+          : `/leads/${ctx.leadId}`;
     case "OPEN_EXECUTION_REVIEW":
       return action.targetQuoteId
         ? `/quotes/${action.targetQuoteId}/execution-review`

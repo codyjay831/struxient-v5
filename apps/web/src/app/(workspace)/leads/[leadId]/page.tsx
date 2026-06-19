@@ -2,8 +2,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
-import { loadLeadCommercialSurface } from "@/lib/lead-commercial-surface/loader";
+import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { loadLeadSurface } from "@/lib/lead-commercial-surface/loader";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
 import { Users } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
@@ -19,8 +19,10 @@ export default async function LeadDetailPage({
   params: Promise<{ leadId: string }>;
 }) {
   const { leadId } = await params;
-  const ctx = await getCommercialRequestContextOrNull();
-  if (!ctx) {
+  let ctx;
+  try {
+    ctx = await getRequestContextOrThrow();
+  } catch {
     return (
       <div className="mx-auto max-w-5xl">
         <PageHeader
@@ -37,7 +39,7 @@ export default async function LeadDetailPage({
     );
   }
 
-  const payload = await loadLeadCommercialSurface(leadId, ctx);
+  const payload = await loadLeadSurface(leadId, ctx);
   if (!payload) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -46,8 +48,8 @@ export default async function LeadDetailPage({
           title="Lead not found"
           description="No record exists for this id in your organization. Links only resolve within your tenant scope."
           actions={
-            <Link href="/leads" className={listLinkClass}>
-              ← Sales
+            <Link href="/workstation" className={listLinkClass}>
+              ← Workstation
             </Link>
           }
         />
@@ -60,26 +62,42 @@ export default async function LeadDetailPage({
         <EmptyState
           icon={Users}
           title="Opportunity not found"
-          description="This id is not a valid sales record in your organization, or it belongs to another tenant."
+          description="This id is not a valid sales record in your organization, or you do not have access to it."
         >
-          <Link href="/leads" className={listLinkClass}>
-            Back to sales pipeline
+          <Link href="/workstation" className={listLinkClass}>
+            Back to workstation
           </Link>
         </EmptyState>
       </div>
     );
   }
 
+  const isAssignedVisit = payload.surfaceMode === "assigned_visit";
+
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
-        eyebrow={payload.reviewDisplay.pageEyebrow}
-        title={payload.reviewDisplay.primaryName}
-        description={payload.reviewDisplay.contextLine}
+        eyebrow={isAssignedVisit ? "Site visit" : payload.reviewDisplay.pageEyebrow}
+        title={
+          isAssignedVisit
+            ? payload.lead.contactName || payload.lead.jobsiteAddressLine || payload.lead.title
+            : payload.reviewDisplay.primaryName
+        }
+        description={
+          isAssignedVisit
+            ? payload.lead.jobsiteAddressLine || "Assigned sales site visit"
+            : payload.reviewDisplay.contextLine
+        }
         actions={
-          <Link href="/leads" className={listLinkClass}>
-            ← Sales
-          </Link>
+          isAssignedVisit ? (
+            <Link href="/workstation" className={listLinkClass}>
+              ← Workstation
+            </Link>
+          ) : (
+            <Link href="/leads" className={listLinkClass}>
+              ← Sales
+            </Link>
+          )
         }
       />
       <LeadCommercialSurface payload={payload} entryPoint="record" />
