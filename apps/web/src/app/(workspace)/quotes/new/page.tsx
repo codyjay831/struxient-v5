@@ -6,9 +6,7 @@ import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
-import { performCreateQuoteDraftFromLead } from "../quote-form-actions";
 import { QuoteDraftForm } from "../quote-draft-form";
-import { parseIntakeNotes } from "@/lib/lead-display";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
@@ -64,8 +62,6 @@ export default async function NewQuotePage({
   const rawCustomer = firstString(sp.customerId);
 
   let paramWarning: string | null = null;
-  let leadOnlyPromoteError: string | null = null;
-  let validatedLeadId: string | null = null;
   let validatedCustomerId: string | null = null;
   const contextLines: { label: string; value: string }[] = [];
   let defaultTitle = "";
@@ -73,7 +69,7 @@ export default async function NewQuotePage({
   const lead = rawLead
     ? await db.lead.findFirst({
         where: { id: rawLead, organizationId: ctx.organizationId },
-        select: { id: true, title: true, customerId: true, notes: true },
+        select: { id: true, title: true, customerId: true },
       })
     : null;
   if (rawLead && !lead) {
@@ -82,11 +78,8 @@ export default async function NewQuotePage({
   }
 
   if (lead && !rawCustomer) {
-    const promoted = await performCreateQuoteDraftFromLead(lead.id);
-    if (promoted.ok) {
-      redirect(`/quotes/${promoted.quoteId}`);
-    }
-    leadOnlyPromoteError = promoted.error;
+    // Canonical handoff lives on the lead surface.
+    redirect(`/leads/${lead.id}`);
   }
 
   const customer = rawCustomer
@@ -102,70 +95,16 @@ export default async function NewQuotePage({
   }
 
   if (lead && customer) {
+    paramWarning =
+      "Lead-linked quote start is now routed from Lead Review. Customer context was kept so you can still create an unlinked draft from this page.";
     if (lead.customerId != null && lead.customerId !== customer.id) {
       paramWarning =
         "This opportunity is linked to a different customer than the one in the URL. Context was cleared—open Create quote from the record that should anchor the quote.";
     } else {
-      validatedLeadId = lead.id;
       validatedCustomerId = customer.id;
-      contextLines.push({ label: "Opportunity", value: lead.title });
       contextLines.push({ label: "Customer", value: customer.displayName });
-      
-      const { parsedFields } = parseIntakeNotes(lead.notes);
-      const requestType = parsedFields.find(f => f.label === "Request Type")?.value;
-      
-      if (requestType) {
-        contextLines.push({ label: "Request Type", value: requestType });
-        defaultTitle = `${requestType} — ${customer.displayName}`;
-      } else {
-        defaultTitle = customer.displayName;
-      }
-
-      parsedFields.filter(f => f.label !== "Request Type").forEach(field => {
-        contextLines.push({ label: field.label, value: field.value });
-      });
+      defaultTitle = customer.displayName;
     }
-  } else if (lead && !rawCustomer && !leadOnlyPromoteError) {
-    validatedLeadId = lead.id;
-    contextLines.push({ label: "Opportunity", value: lead.title });
-    
-    const { parsedFields } = parseIntakeNotes(lead.notes);
-    const requestType = parsedFields.find(f => f.label === "Request Type")?.value;
-
-    if (lead.customerId) {
-      const linked = await db.customer.findFirst({
-        where: { id: lead.customerId, organizationId: ctx.organizationId },
-        select: { id: true, displayName: true },
-      });
-      if (linked) {
-        validatedCustomerId = linked.id;
-        contextLines.push({
-          label: "Customer (from opportunity)",
-          value: linked.displayName,
-        });
-        
-        if (requestType) {
-          contextLines.push({ label: "Request Type", value: requestType });
-          defaultTitle = `${requestType} — ${linked.displayName}`;
-        } else {
-          defaultTitle = linked.displayName;
-        }
-      } else {
-        defaultTitle = lead.title;
-      }
-    } else {
-      if (requestType) {
-        contextLines.push({ label: "Request Type", value: requestType });
-        // If no customer yet, use lead title (which might be contact name)
-        defaultTitle = `${requestType} — ${lead.title}`;
-      } else {
-        defaultTitle = lead.title;
-      }
-    }
-
-    parsedFields.filter(f => f.label !== "Request Type").forEach(field => {
-      contextLines.push({ label: field.label, value: field.value });
-    });
   } else if (customer && !rawLead) {
     validatedCustomerId = customer.id;
     contextLines.push({ label: "Customer", value: customer.displayName });
@@ -191,32 +130,17 @@ export default async function NewQuotePage({
       />
 
       <WorkspacePanel className="mb-6">
-        {leadOnlyPromoteError && lead ? (
-          <div className="space-y-4">
-            <SectionHeading title="Could not start quote" />
-            <p
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
-              role="alert"
-            >
-              {leadOnlyPromoteError}
-            </p>
-            <Link href={`/leads/${lead.id}`} className={listLinkClass}>
-              ← Back to lead review
-            </Link>
-          </div>
-        ) : (
-          <>
-            <SectionHeading title="Draft quote" />
-            <QuoteDraftForm
-              cancelHref="/leads"
-              defaultTitle={defaultTitle}
-              validatedLeadId={validatedLeadId}
-              validatedCustomerId={validatedCustomerId}
-              contextLines={contextLines}
-              paramWarning={paramWarning}
-            />
-          </>
-        )}
+        <>
+          <SectionHeading title="Draft quote" />
+          <QuoteDraftForm
+            cancelHref="/leads"
+            defaultTitle={defaultTitle}
+            validatedLeadId={null}
+            validatedCustomerId={validatedCustomerId}
+            contextLines={contextLines}
+            paramWarning={paramWarning}
+          />
+        </>
       </WorkspacePanel>
     </div>
   );

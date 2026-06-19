@@ -97,6 +97,7 @@ export function QuoteLineDraftExecutionSummary({
   draftTasks,
   reusableOptions,
   stages,
+  hideAiButton = false,
 }: {
   quoteId: string;
   line: QuoteLineItemPayload;
@@ -104,6 +105,7 @@ export function QuoteLineDraftExecutionSummary({
   draftTasks: readonly QuoteLineDraftExecutionTaskRow[];
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
+  hideAiButton?: boolean;
 }) {
   const planningSeed = buildQuoteLineExecutionPlanningContextSeed(line.internalNotes);
   const text = buildQuoteLineExecutionPlanningSummaryLine({
@@ -128,6 +130,7 @@ export function QuoteLineDraftExecutionSummary({
             stages={stages}
             initialPlanningContext={planningSeed}
             panelLayout="fullWidth"
+            hideAiButton={hideAiButton}
           />
         </div>
       ) : null}

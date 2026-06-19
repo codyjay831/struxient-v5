@@ -290,9 +290,6 @@ function OpportunityActionControl({
     case "SCHEDULE_SALES_VISIT":
       title = "Schedule a site visit for this lead.";
       break;
-    case "COMPLETE_SALES_VISIT":
-      title = "Record visit outcome and next sales action.";
-      break;
   }
 
   return (

@@ -111,6 +111,11 @@ import { parseIntakeNotes } from "@/lib/lead-display";
 import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
 import { deriveNeedsForQuoteLines } from "@/lib/derived-needs/derive-needs";
 import type { DerivedNeed } from "@/lib/derived-needs/types";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
+import {
+  QuoteScopeDecisionsLinePanel,
+  QuoteScopeDecisionsQuoteWidePanel,
+} from "@/components/quotes/quote-scope-decisions-panel";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -120,6 +125,7 @@ const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
 const aiExecutionContextPreflightEnabled =
   process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
+const lineExecutionAiRetired = true;
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -686,6 +692,8 @@ export type QuoteAuthoringSurfaceProps = {
   reusableTaskOptions: ReusableTaskPickerOption[];
   /** Available stages for inline draft-execution editing. */
   stages: { id: string; name: string }[];
+  /** Open/deferred scope decisions loaded with the quote workspace. */
+  scopeDecisions?: readonly QuoteScopeDecisionPayload[];
   /**
    * When true, the editor mounts with the add-line form open and focuses
    * the first field. The editor calls `onAddOpenConsumed` once it has
@@ -717,6 +725,7 @@ export function QuoteAuthoringSurface({
   draftTasksByLineId,
   reusableTaskOptions,
   stages,
+  scopeDecisions = [],
   shouldFocusAddForm = false,
   onAddOpenConsumed,
   shouldOpenScopeLibraryPicker = false,
@@ -1377,6 +1386,12 @@ export function QuoteAuthoringSurface({
 
             <DerivedNeedsPreview needs={derivedNeeds} />
 
+            <QuoteScopeDecisionsQuoteWidePanel
+              quoteId={quoteId}
+              decisions={scopeDecisions}
+              onUpdated={onMutated}
+            />
+
             {isAddOpen && (
               <div className="mb-6">
                 <AddLineItemForm
@@ -1477,19 +1492,21 @@ export function QuoteAuthoringSurface({
                               ) : null}
                               Clarify scope
                             </button>
-                            <button
-                              type="button"
-                              disabled={isGenerating === line.id}
-                              onClick={() => openAiPanelForLine(line.id)}
-                              className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                            >
-                              {isGenerating === line.id ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <Sparkles className="size-3" />
-                              )}
-                              {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
-                            </button>
+                            {!lineExecutionAiRetired ? (
+                              <button
+                                type="button"
+                                disabled={isGenerating === line.id}
+                                onClick={() => openAiPanelForLine(line.id)}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                              >
+                                {isGenerating === line.id ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Sparkles className="size-3" />
+                                )}
+                                {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
+                              </button>
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -1501,6 +1518,15 @@ export function QuoteAuthoringSurface({
                           draftTasks={draftTasksByLineId[line.id] ?? []}
                           reusableOptions={reusableTaskOptions}
                           stages={stages}
+                          hideAiButton={lineExecutionAiRetired}
+                        />
+                      ) : null}
+                      {!isEditing ? (
+                        <QuoteScopeDecisionsLinePanel
+                          quoteId={quoteId}
+                          lineId={line.id}
+                          decisions={scopeDecisions}
+                          onUpdated={onMutated}
                         />
                       ) : null}
                       {isEditing && (
@@ -1638,7 +1664,7 @@ export function QuoteAuthoringSurface({
         </div>
       </div>
 
-      {activeAiLineId ? (
+      {activeAiLineId && !lineExecutionAiRetired ? (
         <AILibraryProposalReviewPanel
           proposal={aiProposal}
           generation={aiProposalGeneration ?? undefined}

@@ -533,10 +533,12 @@ export async function updateLeadVisitAccessDetails(
   }
 
   let accessSnapshotJson: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull;
+  let auditNewAccessSnapshot: Prisma.InputJsonValue | null = null;
   if (input.accessSnapshot != null) {
     const parsed = parseLeadVisitAccessSnapshot(input.accessSnapshot);
     if ("error" in parsed) return { error: parsed.error };
     accessSnapshotJson = parsed;
+    auditNewAccessSnapshot = parsed;
   }
 
   let siteContactSnapshotJson: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull;
@@ -564,7 +566,7 @@ export async function updateLeadVisitAccessDetails(
         requestId: input.requestId,
         sourceSurface: input.sourceSurface,
         oldAccessSnapshot: request.accessSnapshotJson ?? null,
-        newAccessSnapshot: accessSnapshotJson === Prisma.DbNull ? null : accessSnapshotJson,
+        newAccessSnapshot: auditNewAccessSnapshot,
       },
     },
     tx,

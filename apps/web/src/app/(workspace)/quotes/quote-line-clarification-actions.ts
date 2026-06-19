@@ -35,6 +35,10 @@ import {
 } from "@/lib/clarification/clarification-scope-merge";
 import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
+import {
+  buildCommercialContextLineText,
+  loadCommercialContextForQuote,
+} from "@/lib/ai/commercial-context";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
 import {
@@ -353,9 +357,14 @@ export async function suggestLineClarificationAnswersAction(
       return { error: "That question set is not available." };
     }
 
-    const lineText = [line.description, line.internalNotes ?? "", line.customerIncludedNotes ?? ""]
-      .filter(Boolean)
-      .join("\n");
+    const commercialContext = await loadCommercialContextForQuote({
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+    });
+    if (!commercialContext) {
+      return { error: LINE_LOCKED_ERROR };
+    }
+    const lineText = buildCommercialContextLineText(commercialContext, { lineId: lid });
 
     const metered = await runMeteredAiFeature({
       ctx: buildAiMeteringContext({
@@ -451,14 +460,17 @@ export async function generateClarificationQuestionSetForLineAction(
     if (!line) return { error: LINE_LOCKED_ERROR };
 
     const tagNames = line.sourceLineItemTemplate?.tags.map((tag) => tag.name) ?? [];
-    const lineText = [
-      line.description,
-      line.internalNotes ?? "",
-      line.customerIncludedNotes ?? "",
-      tagNames.length > 0 ? `Tags: ${tagNames.join(", ")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const commercialContext = await loadCommercialContextForQuote({
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+    });
+    if (!commercialContext) {
+      return { error: LINE_LOCKED_ERROR };
+    }
+    const lineText = buildCommercialContextLineText(commercialContext, {
+      lineId: lid,
+      includeTemplateTags: tagNames,
+    });
     const profile = await getBusinessProfileForAi(ctx.organizationId);
     const selectedProfileContext = selectBusinessProfileAiContext(
       "CLARIFICATION_QUESTION_GENERATION",

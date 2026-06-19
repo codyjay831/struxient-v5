@@ -544,6 +544,7 @@ model Quote {
   executionPlan         QuoteExecutionPlan?
   executionPlanRevisions ExecutionPlanRevision[]
   changeOrders         ChangeOrder[]
+  scopeDecisions       QuoteScopeDecision[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -813,9 +814,39 @@ model QuoteLineItem {
   sourceLineItemTemplate    LineItemTemplate?        @relation(fields: [sourceLineItemTemplateId], references: [id])
   quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
   jobScopeItems             JobScopeItem[]
+  scopeDecisions            QuoteScopeDecision[]
 
   @@index([quoteId])
   @@index([sourceLineItemTemplateId])
+}
+
+/// Open scope decision — durable missing-info / unresolved scope question on a quote.
+model QuoteScopeDecision {
+  id                        String                              @id @default(cuid())
+  organizationId            String
+  quoteId                   String
+  quoteLineItemId           String?
+  sourceType                QuoteScopeDecisionSourceType
+  title                     String
+  detail                    String?
+  status                    QuoteScopeDecisionStatus            @default(OPEN)
+  resolutionTiming          QuoteScopeDecisionResolutionTiming?
+  quoteImpact               QuoteScopeDecisionQuoteImpact       @default(NONE)
+  sourceRefType             String?
+  sourceRefId               String?
+  resolvedByClarificationId String?
+  createdByUserId           String?
+  resolvedByUserId          String?
+  createdAt                 DateTime                            @default(now())
+  updatedAt                 DateTime                            @updatedAt
+  resolvedAt                DateTime?
+  quote                     Quote                               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteLineItem             QuoteLineItem?                      @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, quoteId])
+  @@index([quoteId, status])
+  @@index([quoteLineItemId])
+  @@index([organizationId, quoteId, quoteLineItemId, sourceType])
 }
 
 /// Org-scoped reusable scope clarification set with versioned questions/options.
@@ -2060,6 +2091,36 @@ enum QuoteStatus {
   ARCHIVED
   SENT
   APPROVED
+}
+
+enum QuoteScopeDecisionSourceType {
+  QUICK_SCOPE
+  CLARIFICATION
+  SITE_VISIT
+  MANUAL
+  AI
+}
+
+enum QuoteScopeDecisionStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+  DEFERRED
+}
+
+enum QuoteScopeDecisionResolutionTiming {
+  BEFORE_QUOTE
+  ASK_CUSTOMER
+  SITE_VISIT
+  EXECUTION
+  ASSUMPTION
+  NOT_NEEDED
+}
+
+enum QuoteScopeDecisionQuoteImpact {
+  NONE
+  POSSIBLE
+  REQUIRED
 }
 
 /// Hidden proof records at commitment moments — not a user-managed version system.

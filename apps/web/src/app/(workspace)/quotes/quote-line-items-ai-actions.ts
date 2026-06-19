@@ -9,6 +9,7 @@ import {
   runMeteredAiFeature,
 } from "@/lib/billing/run-metered-ai-feature";
 import { AIService } from "@/lib/ai/ai-service";
+import { loadCommercialContextForQuote } from "@/lib/ai/commercial-context";
 import { buildQuoteScopeCaptureContext } from "@/lib/ai/quote-scope-capture-context";
 import {
   recommendLineItemTemplates,
@@ -24,7 +25,6 @@ import {
   performApplyQuoteScopeSuggestionsInTx,
   QuoteScopeApplyTxError,
 } from "@/lib/quote-scope-suggestions-apply-tx";
-import { readRequest } from "@/lib/lead/lead-projection";
 import {
   appendBusinessProfileContext,
   selectBusinessProfileAiContext,
@@ -72,14 +72,7 @@ export async function generateQuoteScopeSuggestionsAction(
       },
       select: {
         id: true,
-        internalNotes: true,
         lineItems: { select: { description: true } },
-        lead: {
-          select: {
-            notes: true,
-            request: true,
-          },
-        },
       },
     });
 
@@ -87,15 +80,18 @@ export async function generateQuoteScopeSuggestionsAction(
       return { error: QUOTE_SCOPE_LOCKED_ERROR };
     }
 
-    const leadRequest = quote.lead ? readRequest(quote.lead.request) : null;
-    const leadScopeSummary = leadRequest?.scope ?? null;
+    const commercialContext = await loadCommercialContextForQuote({
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+    });
+    if (!commercialContext) {
+      return { error: QUOTE_SCOPE_LOCKED_ERROR };
+    }
 
     const contextText = buildQuoteScopeCaptureContext({
       captureText: options?.captureText,
       additionalInstructions: options?.additionalInstructions,
-      quoteInternalNotes: quote.internalNotes,
-      leadNotes: quote.lead?.notes ?? null,
-      leadScopeSummary,
+      commercialContext,
       sources: options?.sources,
       priorMissingInfo: options?.priorMissingInfo,
     });
@@ -241,6 +237,8 @@ export async function applyQuoteScopeSuggestionsAction(
           selectedCommercialLineItems: approved.selectedCommercialLineItems,
           selectedOptionalAddOns,
           selectedQuoteJobContext: approved.selectedQuoteJobContext,
+          quoteMissingInfo: parsedProposal.quoteMissingInfo,
+          createdByUserId: ctx.userId ?? null,
         }),
       );
     } catch (e) {

@@ -34,6 +34,7 @@ import { projectLead } from "@/lib/lead/lead-projection";
 import { LineClarificationAnswersSchema } from "@/lib/clarification/clarification-answer-schema";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
+import { listQuoteScopeDecisionsForQuote } from "@/lib/quote-scope-decision-service";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -153,6 +154,7 @@ export async function loadQuoteWorkSurface(
       executionPlan: {
         select: {
           id: true,
+          status: true,
           tasks: {
             orderBy: [{ sortOrder: "asc" }],
             select: {
@@ -330,6 +332,36 @@ export async function loadQuoteWorkSurface(
   const latestApproval =
     approvalCheckpointRows[approvalCheckpointRows.length - 1] ?? null;
   const stageById = new Map(stages.map((stage) => [stage.id, stage] as const));
+  const acceptedPlanTasksByLineId = new Map<
+    string,
+    Array<{
+      id: string;
+      title: string;
+      stageId: string | null;
+      providesSignals: string[];
+      requiresSignals: string[];
+      hardSignal: boolean;
+    }>
+  >();
+  for (const line of row.lineItems) {
+    acceptedPlanTasksByLineId.set(line.id, []);
+  }
+  if (row.executionPlan?.status === "ACCEPTED") {
+    for (const task of row.executionPlan.tasks) {
+      for (const scope of task.scopes) {
+        const scoped = acceptedPlanTasksByLineId.get(scope.quoteLineItemId);
+        if (!scoped) continue;
+        scoped.push({
+          id: task.id,
+          title: task.title,
+          stageId: task.stageId,
+          providesSignals: task.providesSignals,
+          requiresSignals: task.requiresSignals,
+          hardSignal: task.hardSignal,
+        });
+      }
+    }
+  }
 
   const activationReadiness = evaluateQuoteJobActivationReadiness({
     status: row.status,
@@ -337,14 +369,7 @@ export async function loadQuoteWorkSurface(
     lines: row.lineItems.map((l) => ({
       id: l.id,
       description: l.description,
-      tasks: l.draftExecutionTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        stageId: t.stageId,
-        providesSignals: t.providesSignals,
-        requiresSignals: t.requiresSignals,
-        hardSignal: t.hardSignal,
-      })),
+      tasks: acceptedPlanTasksByLineId.get(l.id) ?? [],
     })),
     quoteTotalCents: row.totalCents,
     paymentSchedule: row.paymentSchedule.map((item) => ({
@@ -473,6 +498,8 @@ export async function loadQuoteWorkSurface(
       requirementsJson: t.requirementsJson,
       partsRequiredJson: t.partsRequiredJson,
     }));
+    // Inline line-level execution editing still uses draft line tasks as an advisory
+    // authoring surface before the whole-quote plan is accepted.
     draftTasksByLineId[line.id] = planTasksByLineId[line.id]?.length
       ? planTasksByLineId[line.id]
       : fallbackTasks;
@@ -626,6 +653,11 @@ export async function loadQuoteWorkSurface(
       }
     : null;
 
+  const scopeDecisions = await listQuoteScopeDecisionsForQuote(db, {
+    organizationId: orgId,
+    quoteId: row.id,
+  });
+
   const workspaceTabs: QuoteWorkspaceTabData = {
     isCommercialEditable,
     isExecutionEditable,
@@ -640,6 +672,7 @@ export async function loadQuoteWorkSurface(
     draftTasksByLineId,
     reusableTaskOptions,
     stages,
+    scopeDecisions,
     paymentSchedule: row.paymentSchedule.map(item => ({
       ...item,
       percentage: item.percentage?.toString() ?? null,

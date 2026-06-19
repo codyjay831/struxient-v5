@@ -110,7 +110,10 @@ test("smoke: unassigned FIELD is denied lead surface access", async () => {
     {
       userId: "field-unassigned",
       organizationId: "org-1",
+      organizationName: "Org 1",
+      organizationSlug: "org-1",
       role: StaffRole.FIELD,
+      authSource: "session",
     },
     "lead-unrelated",
   );

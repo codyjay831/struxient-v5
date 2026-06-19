@@ -1328,6 +1328,7 @@ function ScopeTab({
     draftTasksByLineId,
     reusableTaskOptions,
     stages,
+    scopeDecisions,
   } = workspaceTabs;
   const lineCount = lineItems.length;
 
@@ -1348,6 +1349,7 @@ function ScopeTab({
         draftTasksByLineId={draftTasksByLineId}
         reusableTaskOptions={reusableTaskOptions}
         stages={stages}
+        scopeDecisions={scopeDecisions}
         shouldFocusAddForm={shouldFocusAddForm}
         onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}

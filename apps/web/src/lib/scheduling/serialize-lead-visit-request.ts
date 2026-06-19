@@ -33,6 +33,23 @@ type LeadVisitRequestRow = Pick<
   assignedUser?: { name: string | null; email: string | null } | null;
 };
 
+type OpportunityFlowVisitRow = {
+  id: LeadVisitRequestRow["id"];
+  status: LeadVisitRequestRow["status"];
+  requestedDate?: LeadVisitRequestRow["requestedDate"];
+  requestedWindow?: LeadVisitRequestRow["requestedWindow"];
+  confirmedDate?: LeadVisitRequestRow["confirmedDate"];
+  scheduledStartAt?: LeadVisitRequestRow["scheduledStartAt"];
+  scheduledEndAt?: LeadVisitRequestRow["scheduledEndAt"];
+  assignedUserId?: LeadVisitRequestRow["assignedUserId"];
+  completedAt?: LeadVisitRequestRow["completedAt"];
+  outcome?: LeadVisitRequestRow["outcome"];
+  nextAction?: LeadVisitRequestRow["nextAction"];
+  accessSnapshotJson?: LeadVisitRequestRow["accessSnapshotJson"];
+  createdAt: LeadVisitRequestRow["createdAt"];
+  hasAccessDetails?: boolean;
+};
+
 export function serializeLeadVisitRequest(
   visit: LeadVisitRequestRow,
   options: { canViewAccessDetails: boolean; canEditAccessDetails?: boolean },
@@ -73,21 +90,21 @@ export function serializeLeadVisitRequest(
 }
 
 export function toOpportunityFlowVisitInput(
-  visit: LeadVisitRequestRow & { hasAccessDetails?: boolean },
+  visit: OpportunityFlowVisitRow,
 ) {
-  const accessParsed = LeadVisitAccessSnapshotSchema.safeParse(visit.accessSnapshotJson);
+  const accessParsed = LeadVisitAccessSnapshotSchema.safeParse(visit.accessSnapshotJson ?? null);
   return {
     id: visit.id,
     status: visit.status,
-    requestedDate: visit.requestedDate,
-    requestedWindow: visit.requestedWindow,
-    confirmedDate: visit.confirmedDate,
-    scheduledStartAt: visit.scheduledStartAt,
-    scheduledEndAt: visit.scheduledEndAt,
-    assignedUserId: visit.assignedUserId,
-    completedAt: visit.completedAt,
-    outcome: visit.outcome,
-    nextAction: visit.nextAction,
+    requestedDate: visit.requestedDate ?? null,
+    requestedWindow: visit.requestedWindow ?? null,
+    confirmedDate: visit.confirmedDate ?? null,
+    scheduledStartAt: visit.scheduledStartAt ?? null,
+    scheduledEndAt: visit.scheduledEndAt ?? null,
+    assignedUserId: visit.assignedUserId ?? null,
+    completedAt: visit.completedAt ?? null,
+    outcome: visit.outcome ?? null,
+    nextAction: visit.nextAction ?? null,
     hasAccessDetails:
       visit.hasAccessDetails ??
       (accessParsed.success && hasAccessSnapshotContent(accessParsed.data)),

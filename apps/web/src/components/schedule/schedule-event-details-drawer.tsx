@@ -352,7 +352,7 @@ function ScheduleEventDetailsForm({
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
-                      variant={visitCompletionMode === "complete" ? "default" : "muted"}
+                      variant={visitCompletionMode === "complete" ? "primary" : "muted"}
                       onClick={() => {
                         setVisitCompletionMode("complete");
                         setVisitOutcome("");
@@ -363,7 +363,7 @@ function ScheduleEventDetailsForm({
                     </Button>
                     <Button
                       size="sm"
-                      variant={visitCompletionMode === "no_show" ? "default" : "muted"}
+                      variant={visitCompletionMode === "no_show" ? "primary" : "muted"}
                       onClick={() => {
                         setVisitCompletionMode("no_show");
                         setVisitOutcome(LeadVisitOutcome.CUSTOMER_NO_SHOW);

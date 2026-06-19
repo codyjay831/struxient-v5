@@ -1,5 +1,10 @@
 import { parseIntakeNotes } from "@/lib/lead-display";
 
+/**
+ * Execution-planning context is intentionally separate from CommercialContext.
+ * CommercialContext powers pre-approval quote assistance, while execution planning
+ * should treat lead notes as advisory only and rely on accepted quote scope.
+ */
 export type ExecutionPlanningContextBucket =
   | "sold_scope"
   | "reusable_execution_guidance"

@@ -6,6 +6,7 @@ import type { QuoteLineItemPayload, PaymentScheduleItemPayload } from "@/lib/quo
 import type { LineItemTemplatePickerRow } from "@/lib/line-item-template-display";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 
 /** Send / Approval checkpoint summary (serialized — no `Date`). */
 export type QuoteWorkspaceCheckpointPayload = {
@@ -55,6 +56,8 @@ export type QuoteWorkspaceTabData = {
   draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]>;
   reusableTaskOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
+  /** Open/deferred scope decisions for this quote (quote-wide and line-level). */
+  scopeDecisions: QuoteScopeDecisionPayload[];
 
   /* Payments tab */
   paymentSchedule: PaymentScheduleItemPayload[];

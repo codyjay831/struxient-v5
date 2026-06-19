@@ -50,7 +50,7 @@ export function LeadVisitCompletionDialog({
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            variant={mode === "complete" ? "default" : "muted"}
+            variant={mode === "complete" ? "primary" : "muted"}
             onClick={() => {
               setMode("complete");
               setOutcome("");
@@ -61,7 +61,7 @@ export function LeadVisitCompletionDialog({
           </Button>
           <Button
             size="sm"
-            variant={mode === "no_show" ? "default" : "muted"}
+            variant={mode === "no_show" ? "primary" : "muted"}
             onClick={() => {
               setMode("no_show");
               setOutcome(LeadVisitOutcome.CUSTOMER_NO_SHOW);
@@ -151,6 +151,7 @@ export function findVisitForCompletionAction(
     status: LeadVisitRequestStatus;
     outcome?: LeadVisitOutcome | null;
     nextAction?: LeadVisitNextAction | null;
+    updatedAt?: Date;
   }>,
   targetVisitRequestId?: string | null,
 ) {

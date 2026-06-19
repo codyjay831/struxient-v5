@@ -475,9 +475,21 @@ export async function queryWorkstationWorkItems(
         orderBy: { createdAt: "desc" },
         take: 1,
       },
-      lineItems: {
-        include: {
-          draftExecutionTasks: true,
+      lineItems: true,
+      executionPlan: {
+        select: {
+          status: true,
+          tasks: {
+            select: {
+              id: true,
+              title: true,
+              stageId: true,
+              providesSignals: true,
+              requiresSignals: true,
+              hardSignal: true,
+              scopes: { select: { quoteLineItemId: true } },
+            },
+          },
         },
       },
       paymentSchedule: {
@@ -518,20 +530,44 @@ export async function queryWorkstationWorkItems(
     const latestApproval = quote.checkpoints[0];
     const isCustomerAccepted = latestApproval?.source === QuoteCheckpointSource.CUSTOMER_PORTAL;
 
+    const acceptedPlanTasksByLineId = new Map<
+      string,
+      Array<{
+        id: string;
+        title: string;
+        stageId: string | null;
+        providesSignals: string[];
+        requiresSignals: string[];
+        hardSignal: boolean;
+      }>
+    >();
+    for (const line of quote.lineItems) {
+      acceptedPlanTasksByLineId.set(line.id, []);
+    }
+    if (quote.executionPlan?.status === "ACCEPTED") {
+      for (const task of quote.executionPlan.tasks) {
+        for (const scope of task.scopes) {
+          const scoped = acceptedPlanTasksByLineId.get(scope.quoteLineItemId);
+          if (!scoped) continue;
+          scoped.push({
+            id: task.id,
+            title: task.title,
+            stageId: task.stageId,
+            providesSignals: task.providesSignals,
+            requiresSignals: task.requiresSignals,
+            hardSignal: task.hardSignal,
+          });
+        }
+      }
+    }
+
     const activationReadiness = evaluateQuoteJobActivationReadiness({
       status: quote.status,
       hasApprovalCheckpoint: quote.checkpoints.length > 0,
       lines: quote.lineItems.map((l) => ({
         id: l.id,
         description: l.description,
-        tasks: l.draftExecutionTasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          stageId: t.stageId,
-          providesSignals: t.providesSignals,
-          requiresSignals: t.requiresSignals,
-          hardSignal: t.hardSignal,
-        })),
+        tasks: acceptedPlanTasksByLineId.get(l.id) ?? [],
       })),
       quoteTotalCents: quote.totalCents,
       paymentSchedule: quote.paymentSchedule.map((item) => ({

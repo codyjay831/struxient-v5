@@ -17,7 +17,6 @@ import {
 import { QuoteExecutionDependencyGapsPanel } from "@/components/quotes/quote-execution-dependency-gaps-panel";
 import { QuoteExecutionReviewFocusProvider } from "@/components/quotes/quote-execution-review-focus";
 import { QuoteLineDraftExecutionInlineToggle } from "@/components/quotes/quote-line-draft-execution-inline-toggle";
-import { QuoteLineExecutionAiDrawerButton } from "@/components/quotes/quote-line-execution-ai-drawer";
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -308,7 +307,6 @@ export function QuoteExecutionReviewPreviewView({
               {lineReadiness.map((row) => {
                 const draftTasks = draftTasksByLineId[row.lineId] ?? [];
                 const planningContext = planningContextByLineId[row.lineId] ?? "";
-                const aiTaskChoices = draftTasks.map((task) => ({ id: task.id, title: task.title }));
                 return (
                   <li
                     key={row.lineId}
@@ -362,15 +360,6 @@ export function QuoteExecutionReviewPreviewView({
                     </div>
                     {executionPlanningEditable ? (
                       <div className="mt-4 flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
-                        <QuoteLineExecutionAiDrawerButton
-                          quoteId={quoteId}
-                          lineItemId={row.lineId}
-                          lineLabel={row.description}
-                          tasks={aiTaskChoices}
-                          stages={stages}
-                          revalidateScope="execution-review"
-                          initialPlanningContext={planningContext}
-                        />
                         <QuoteLineDraftExecutionInlineToggle
                           quoteId={quoteId}
                           lineItemId={row.lineId}
