@@ -1,9 +1,11 @@
 "use client";
 
-import { LeadCommercialSurfacePayload } from "@/lib/lead-commercial-surface/loader";
+import {
+  buildReviewDisplayForPayload,
+  type LeadCommercialSurfacePayload,
+} from "@/lib/lead-commercial-surface/loader";
 import {
   formatAttachmentFileSize,
-  formatLeadChannel,
 } from "@/lib/lead-display";
 import { QuoteStatus } from "@prisma/client";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
@@ -28,7 +30,7 @@ import {
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { closeOrPauseLeadWorkspaceAction, resumeOpportunityWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { createRevisionDraftForQuoteChangeRequestAction } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import { useRouter } from "next/navigation";
@@ -297,24 +299,13 @@ export function LeadCommercialSurface({
   };
   const isTerminalPhase =
     opportunityFlow.phase === "PAUSED" || opportunityFlow.phase === "LOST";
-  const showAddressResolvePanel =
-    !customer &&
-    !lead.isAddressQuoteReady &&
-    lead.jobsiteAddressLine.trim().length > 0 &&
-    serviceAddressContext?.customer == null;
 
   const isModalContext = Boolean(onClose);
 
-  const scopeField = reviewViewModel.requestFields.find((f) => f.label === "What they need");
-  const timingField = reviewViewModel.requestFields.find((f) => f.label === "Timing");
-
-  const headerSubtitle = [
-    scopeField?.value ?? reviewViewModel.scopeText,
-    timingField?.value,
-    lead.jobsiteAddressLine.trim() || null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const reviewDisplay = useMemo(
+    () => buildReviewDisplayForPayload(payload, entryPoint),
+    [payload, entryPoint],
+  );
 
   const visibleRequirements = opportunityFlow.requirements.filter(
     (req) => req !== "Review customer match",
@@ -328,25 +319,48 @@ export function LeadCommercialSurface({
       <div className="flex-1 overflow-y-auto">
         <div className={`flex flex-col gap-6 ${isModalContext ? "p-4" : "p-4 sm:p-6"}`}>
           <header className="space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <h2 className="text-lg font-semibold tracking-tight text-foreground truncate">
-                  {lead.title}
-                </h2>
-                {headerSubtitle ? (
-                  <p className="text-sm text-foreground-muted">{headerSubtitle}</p>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
-                  <span>{formatLeadChannel(lead.channel)}</span>
-                  {lead.contactName ? (
-                    <>
-                      <span>·</span>
-                      <span>{lead.contactName}</span>
-                    </>
+            {reviewDisplay.showSurfaceHeader && reviewDisplay.compactHeader ? (
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground truncate">
+                    {reviewDisplay.compactHeader.title}
+                  </h2>
+                  {reviewDisplay.compactHeader.subtitle ? (
+                    <p className="text-sm text-foreground-muted">
+                      {reviewDisplay.compactHeader.subtitle}
+                    </p>
+                  ) : null}
+                  {reviewDisplay.compactHeader.metaLine ? (
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
+                      <span>{reviewDisplay.compactHeader.metaLine}</span>
+                    </div>
                   ) : null}
                 </div>
+                {onClose || entryPoint === "sales_modal" ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {entryPoint === "sales_modal" ? (
+                      <Link
+                        href={`/leads/${lead.id}`}
+                        className="rounded-md px-2 py-1.5 text-xs font-medium text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+                      >
+                        Full record
+                      </Link>
+                    ) : null}
+                    {onClose ? (
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="rounded-md p-2 text-foreground-subtle hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+                      >
+                        <X className="w-5 h-5" strokeWidth={1.5} />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-              {onClose || entryPoint === "sales_modal" ? (
+            ) : onClose || entryPoint === "sales_modal" ? (
+              <div className="flex justify-end">
                 <div className="flex shrink-0 items-center gap-1">
                   {entryPoint === "sales_modal" ? (
                     <Link
@@ -367,8 +381,8 @@ export function LeadCommercialSurface({
                     </button>
                   ) : null}
                 </div>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <LeadReviewQuickActions
               phone={lead.phone}
               email={lead.email}
@@ -439,7 +453,7 @@ export function LeadCommercialSurface({
             ) : null}
           </div>
 
-            {showAddressResolvePanel ? (
+            {reviewDisplay.addressResolve.show ? (
               <div ref={addressVerifyRef}>
                 <LeadAddressResolvePanel
                   leadId={lead.id}
@@ -465,6 +479,7 @@ export function LeadCommercialSurface({
                 jobsiteAddressLine: lead.jobsiteAddressLine,
               }}
               linkedCustomer={customer}
+              customerReachabilityLine={reviewDisplay.customerReachabilityLine}
               hasBlockingCustomerMatch={hasBlockingCustomerMatch}
               suggestedMatches={matches}
               onSuccess={notifyMutationSuccess}
@@ -499,9 +514,9 @@ export function LeadCommercialSurface({
                 What they need
               </h3>
               <div className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
-                {reviewViewModel.requestFields.length > 0 ? (
+                {reviewDisplay.requestDetailFields.length > 0 ? (
                   <dl className="grid gap-4 sm:grid-cols-2">
-                    {reviewViewModel.requestFields.map((field) => (
+                    {reviewDisplay.requestDetailFields.map((field) => (
                       <div key={field.label} className="space-y-1">
                         <dt className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
                           {field.label}
@@ -516,8 +531,7 @@ export function LeadCommercialSurface({
                   <p className="text-sm text-foreground-muted">No request details captured yet.</p>
                 )}
 
-                {reviewViewModel.scopeText &&
-                !reviewViewModel.requestFields.some((f) => f.label === "What they need") ? (
+                {reviewDisplay.showScopeFallback ? (
                   <p className="text-sm leading-relaxed text-foreground border-t border-border pt-3">
                     {reviewViewModel.scopeText}
                   </p>
@@ -561,11 +575,47 @@ export function LeadCommercialSurface({
               </div>
             </section>
 
-            {/* Contact + location */}
-            <section className="space-y-3" aria-labelledby="lead-review-contact">
-              <div className="flex items-center justify-between">
+            {/* Contact — unlinked leads only */}
+            {reviewDisplay.contactSection.show ? (
+              <section className="space-y-3" aria-labelledby="lead-review-contact">
                 <h3 id="lead-review-contact" className={sectionTitleClass}>
-                  Who &amp; where
+                  Contact
+                </h3>
+                <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1 rounded-full bg-foreground/5 p-2">
+                      <User className="size-4 text-foreground-subtle" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold">{reviewDisplay.contactSection.name}</h4>
+                      {reviewDisplay.contactSection.companyName ? (
+                        <p className="text-sm text-foreground-muted">
+                          {reviewDisplay.contactSection.companyName}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Mail className="size-4 text-foreground-subtle shrink-0" />
+                      <span className="truncate">
+                        {reviewDisplay.contactSection.email || "No email"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="size-4 text-foreground-subtle shrink-0" />
+                      <span>{reviewDisplay.contactSection.phone || "No phone"}</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {/* Jobsite — where work happens */}
+            <section className="space-y-3" aria-labelledby="lead-review-jobsite">
+              <div className="flex items-center justify-between">
+                <h3 id="lead-review-jobsite" className={sectionTitleClass}>
+                  Jobsite
                 </h3>
                 <Link
                   href={editHref}
@@ -576,51 +626,53 @@ export function LeadCommercialSurface({
               </div>
 
               <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 rounded-full bg-foreground/5 p-2">
-                    <User className="size-4 text-foreground-subtle" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-bold">{lead.contactName || "Unknown contact"}</h4>
-                    {lead.companyName ? (
-                      <p className="text-sm text-foreground-muted">{lead.companyName}</p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="size-4 text-foreground-subtle shrink-0" />
-                    <span className="truncate">{lead.email || "No email"}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="size-4 text-foreground-subtle shrink-0" />
-                    <span>{lead.phone || "No phone"}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2 border-t border-border pt-4 text-sm">
+                <div className="flex items-start gap-2 text-sm">
                   <MapPin className="size-4 shrink-0 mt-0.5 text-foreground-subtle" />
-                  <div>
-                    <p className="font-medium">{lead.jobsiteAddressLine || "No address provided"}</p>
-                    {lead.isAddressVerified ? (
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium">
+                      {reviewDisplay.jobsiteSection.jobsiteLine || "No address provided"}
+                    </p>
+                    {reviewDisplay.jobsiteSection.verificationLabel === "verified" ? (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-success">
                         Verified
                       </span>
-                    ) : lead.jobsiteAddressLine.trim() ? (
+                    ) : reviewDisplay.jobsiteSection.verificationLabel === "needs_review" ? (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-warning">
                         Address needs review
                       </span>
                     ) : null}
+                    {reviewDisplay.jobsiteSection.differsFromCustomerPrimary ? (
+                      <p className="text-xs text-foreground-muted">
+                        Different from customer&apos;s primary jobsite
+                        {reviewDisplay.jobsiteSection.primaryJobsiteLine
+                          ? `: ${reviewDisplay.jobsiteSection.primaryJobsiteLine}`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
-                <SiteDetailsRow data={siteData} onOpen={() => setSiteDrawerOpen(true)} />
+
+                {reviewDisplay.siteDetails.showPlaceholder ? (
+                  <p className="text-sm text-foreground-muted border-t border-border pt-4">
+                    Property details unlock after the jobsite address is verified and linked.
+                  </p>
+                ) : null}
+
+                {reviewDisplay.siteDetails.showRow ? (
+                  <>
+                    <SiteDetailsRow
+                      data={siteData}
+                      onOpen={() => setSiteDrawerOpen(true)}
+                      showAddressLine={reviewDisplay.siteDetails.showAddressLine}
+                    />
+                    <SiteDetailsDrawer
+                      open={siteDrawerOpen}
+                      onClose={() => setSiteDrawerOpen(false)}
+                      data={siteData}
+                    />
+                  </>
+                ) : null}
               </div>
-              <SiteDetailsDrawer
-                open={siteDrawerOpen}
-                onClose={() => setSiteDrawerOpen(false)}
-                data={siteData}
-              />
             </section>
 
             {/* Files */}

@@ -73,9 +73,9 @@ export default async function LeadDetailPage({
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
-        eyebrow="Lead review"
-        title="Lead review"
-        description={payload.lead.title}
+        eyebrow={payload.reviewDisplay.pageEyebrow}
+        title={payload.reviewDisplay.primaryName}
+        description={payload.reviewDisplay.contextLine}
         actions={
           <Link href="/leads" className={listLinkClass}>
             ← Sales

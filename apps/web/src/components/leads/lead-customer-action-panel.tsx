@@ -56,6 +56,7 @@ function ExistingCustomerCard({
 export function LeadCustomerActionPanel({
   lead,
   linkedCustomer,
+  customerReachabilityLine,
   hasBlockingCustomerMatch,
   suggestedMatches,
   onSuccess,
@@ -65,6 +66,7 @@ export function LeadCustomerActionPanel({
 }: {
   lead: LeadWorkspaceCustomerCreateLeadInput;
   linkedCustomer?: { displayName: string; href: string } | null;
+  customerReachabilityLine?: string | null;
   hasBlockingCustomerMatch: boolean;
   suggestedMatches: CustomerMatchHint[];
   onSuccess: () => void;
@@ -116,9 +118,15 @@ export function LeadCustomerActionPanel({
                 <p className="text-sm font-medium text-foreground">
                   Linked to {linkedCustomer.displayName}
                 </p>
-                <p className="mt-0.5 text-sm text-foreground-muted">
-                  This request is attached to an existing customer record.
-                </p>
+                {customerReachabilityLine ? (
+                  <p className="mt-0.5 text-sm text-foreground-muted truncate">
+                    {customerReachabilityLine}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-sm text-foreground-muted">
+                    This request is attached to an existing customer record.
+                  </p>
+                )}
               </div>
               <Link
                 href={linkedCustomer.href}

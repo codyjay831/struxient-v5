@@ -54,11 +54,19 @@ const statusLabel: Record<SiteDetailsRowData["detailsStatus"], string> = {
 export function SiteDetailsRow({
   data,
   onOpen,
+  showAddressLine = true,
 }: {
   data: SiteDetailsRowData;
   onOpen: () => void;
+  /** When false, omit the street line (already shown above in parent). */
+  showAddressLine?: boolean;
 }) {
   const hasAny = Boolean(data.apn || data.utilityName || data.jurisdictionName);
+  const summaryLine = showAddressLine
+    ? data.line?.trim() || "No service location linked yet"
+    : hasAny
+      ? null
+      : "No details stored yet";
   return (
     <button
       type="button"
@@ -71,9 +79,9 @@ export function SiteDetailsRow({
             <MapPin className="size-3.5" />
             Site details
           </div>
-          <p className="mt-1 truncate text-sm font-medium text-foreground">
-            {data.line?.trim() || "No service location linked yet"}
-          </p>
+          {summaryLine ? (
+            <p className="mt-1 truncate text-sm font-medium text-foreground">{summaryLine}</p>
+          ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground-muted">
             <span>{statusLabel[data.detailsStatus]}</span>
             {hasAny ? (

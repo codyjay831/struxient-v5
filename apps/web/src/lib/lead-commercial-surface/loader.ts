@@ -16,6 +16,11 @@ import {
   leadReviewFactsFromLeadJson,
   type LeadReviewViewModel,
 } from "@/lib/lead-review-view-model";
+import {
+  buildLeadReviewDisplay,
+  type LeadReviewDisplay,
+  type LeadReviewEntryPoint,
+} from "@/lib/lead-review-display";
 import { readRequest } from "@/lib/lead/lead-projection";
 import {
   buildLeadIntakeProjection,
@@ -113,8 +118,39 @@ export interface LeadCommercialSurfacePayload {
   serviceAddressContext: LeadServiceAddressContext;
   visitRequests: LeadVisitRequestPayload[];
   reviewViewModel: LeadReviewViewModel;
+  /** Display allocation for review chrome — derived, not persisted. */
+  reviewDisplay: LeadReviewDisplay;
   /** Derived DTO for future AI prompts — not persisted. */
   intakeProjection: LeadIntakeProjection;
+}
+
+export function buildReviewDisplayForPayload(
+  payload: Pick<
+    LeadCommercialSurfacePayload,
+    "lead" | "customer" | "reviewViewModel" | "serviceAddressContext"
+  >,
+  entryPoint: LeadReviewEntryPoint,
+): LeadReviewDisplay {
+  return buildLeadReviewDisplay({
+    entryPoint,
+    lead: {
+      title: payload.lead.title,
+      contactName: payload.lead.contactName,
+      companyName: payload.lead.companyName,
+      email: payload.lead.email,
+      phone: payload.lead.phone,
+      channel: payload.lead.channel,
+      jobsiteAddressLine: payload.lead.jobsiteAddressLine,
+      scopeSummary: payload.lead.scopeSummary,
+      requestType: payload.lead.requestType,
+      serviceLocationId: payload.lead.serviceLocationId,
+      isAddressVerified: payload.lead.isAddressVerified,
+      isAddressQuoteReady: payload.lead.isAddressQuoteReady,
+    },
+    customer: payload.customer,
+    reviewViewModel: payload.reviewViewModel,
+    serviceAddressContext: payload.serviceAddressContext,
+  });
 }
 
 export async function loadLeadCommercialSurface(
@@ -487,41 +523,45 @@ export async function loadLeadCommercialSurface(
     events: leadEvents,
   });
 
+  const leadPayload: LeadCommercialSurfacePayload["lead"] = {
+    id: lead.id,
+    title: projected.title,
+    contactName: projected.contactName || "",
+    email: projected.email || "",
+    phone: projected.phone || "",
+    notes: projected.notes || "",
+    companyName: projected.companyName || "",
+    status: lead.status,
+    closeReason: lead.closeReason,
+    channel: lead.channel,
+    followUpAt: lead.followUpAt,
+    closedAt: lead.closedAt,
+    createdAt: lead.createdAt,
+    updatedAt: lead.updatedAt,
+    address: lead.address,
+    signals: lead.signals,
+    jobsiteAddressLine: jobsiteAddressLine || "",
+    isAddressVerified: isLeadAddressVerified(lead),
+    isAddressQuoteReady,
+    requestType: requestJson.type ?? projected.requestType,
+    scopeSummary: requestJson.scope,
+    neededByBucket: requestJson.neededByBucket,
+    neededByDate,
+    serviceLocationId: lead.serviceLocationId,
+    siteDetails,
+  };
+
+  const customerPayload: LeadCommercialSurfacePayload["customer"] = lead.customer
+    ? {
+        id: lead.customer.id,
+        displayName: lead.customer.displayName,
+        href: `/customers/${lead.customer.id}`,
+      }
+    : null;
+
   return {
-    lead: {
-      id: lead.id,
-      title: projected.title,
-      contactName: projected.contactName || "",
-      email: projected.email || "",
-      phone: projected.phone || "",
-      notes: projected.notes || "",
-      companyName: projected.companyName || "",
-      status: lead.status,
-      closeReason: lead.closeReason,
-      channel: lead.channel,
-      followUpAt: lead.followUpAt,
-      closedAt: lead.closedAt,
-      createdAt: lead.createdAt,
-      updatedAt: lead.updatedAt,
-      address: lead.address,
-      signals: lead.signals,
-      jobsiteAddressLine: jobsiteAddressLine || "",
-      isAddressVerified: isLeadAddressVerified(lead),
-      isAddressQuoteReady,
-      requestType: requestJson.type ?? projected.requestType,
-      scopeSummary: requestJson.scope,
-      neededByBucket: requestJson.neededByBucket,
-      neededByDate,
-      serviceLocationId: lead.serviceLocationId,
-      siteDetails,
-    },
-    customer: lead.customer
-      ? {
-          id: lead.customer.id,
-          displayName: lead.customer.displayName,
-          href: `/customers/${lead.customer.id}`,
-        }
-      : null,
+    lead: leadPayload,
+    customer: customerPayload,
     matchHints,
     linkedQuotes,
     hasBlockingCustomerMatch: blockingCustomerMatch,
@@ -529,6 +569,15 @@ export async function loadLeadCommercialSurface(
     serviceAddressContext,
     visitRequests,
     reviewViewModel,
+    reviewDisplay: buildReviewDisplayForPayload(
+      {
+        lead: leadPayload,
+        customer: customerPayload,
+        reviewViewModel,
+        serviceAddressContext,
+      },
+      "record",
+    ),
     intakeProjection,
   };
 }
