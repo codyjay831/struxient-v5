@@ -1819,6 +1819,8 @@ OUTPUT JSON ONLY:
     };
     lineText: string;
     organizationName?: string;
+    /** Open scope decisions — gaps to address, not approved facts. */
+    unresolvedScopeDetails?: string[];
   }): Promise<ClarificationAnswerGenerationResult> {
     const { set } = params;
     const questionKeySet = new Set(set.questions.map((q) => q.key));
@@ -1851,6 +1853,14 @@ OUTPUT JSON ONLY:
       })
       .join("\n");
 
+    const unresolvedScopeDetails = (params.unresolvedScopeDetails ?? [])
+      .map((detail) => detail.trim())
+      .filter(Boolean);
+    const unresolvedScopeBlock =
+      unresolvedScopeDetails.length > 0
+        ? unresolvedScopeDetails.map((detail) => `- ${detail}`).join("\n")
+        : "None";
+
     const prompt = `
 You help a contractor pre-fill scope clarification answers for a quote line.
 Read the LINE TEXT and suggest the most likely answer for each QUESTION.
@@ -1862,10 +1872,14 @@ STRICT RULES:
 - If the text does not clearly indicate an answer, set "unknown": true (do not guess wildly).
 - Never invent new questions or options.
 - Put a value in "text" only for short_text/notes questions, or as an "other" value when no option fits and the question allows other.
+- UNRESOLVED SCOPE DETAILS are missing gaps — not facts or approved scope. Prioritize questions that would resolve those gaps when possible.
 
 ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
 
 QUESTION SET: ${set.label} (${set.key})
+
+UNRESOLVED SCOPE DETAILS (gaps to address — not approved scope):
+${unresolvedScopeBlock}
 
 QUESTIONS:
 ${catalog}
@@ -2005,14 +2019,15 @@ RULES:
 - Include aliases/keywords for vocabulary normalization.
 - Suggest tag names (display names) in suggestedTags.
 - Do not include execution tasks.
+- MISSING CONTEXT lists unresolved scope gaps — prioritize questions that would resolve them. Do not treat missing context as facts or approved scope.
 
 ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
 LINE TEXT:
 """
 ${params.lineText.slice(0, 4000)}
 """
-MISSING CONTEXT:
-${(params.missingContext ?? []).join("\n") || "None"}
+UNRESOLVED SCOPE DETAILS (gaps to address — not approved scope):
+${(params.missingContext ?? []).map((detail) => `- ${detail}`).join("\n") || "None"}
 
 OUTPUT JSON ONLY:
 {

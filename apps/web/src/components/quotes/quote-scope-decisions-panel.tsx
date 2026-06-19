@@ -1,17 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { updateQuoteScopeDecisionAction } from "@/app/(workspace)/quotes/quote-scope-decision-actions";
+import {
+  buildScopeDecisionPreviewChips,
+  filterLineScopeDecisions,
+  filterQuoteWideScopeDecisions,
+} from "@/lib/quote-scope-decision-display";
 import {
   formatQuoteScopeDecisionResolutionTiming,
   formatQuoteScopeDecisionStatus,
   type QuoteScopeDecisionManualAction,
   type QuoteScopeDecisionPayload,
 } from "@/lib/quote-scope-decision-types";
-import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
+import {
+  workspaceFormPrimaryButtonClass,
+  workspaceFormSecondaryButtonClass,
+} from "@/components/line-item-templates/line-item-template-form-fields";
 
 const actionButtonClass = `${workspaceFormSecondaryButtonClass} px-2 py-0.5 text-[10px]`;
+const chipClass =
+  "inline-flex items-center rounded-full border border-border bg-foreground/[0.03] px-2 py-0.5 text-[10px] text-foreground-muted";
 
 type ManualActionOption = {
   action: QuoteScopeDecisionManualAction;
@@ -115,70 +125,157 @@ function ScopeDecisionRow({
   );
 }
 
-export function QuoteScopeDecisionsQuoteWidePanel({
-  quoteId,
+function ScopeDecisionPreviewChips({
   decisions,
-  onUpdated,
 }: {
-  quoteId: string;
   decisions: readonly QuoteScopeDecisionPayload[];
-  onUpdated: () => void;
 }) {
-  const quoteWide = decisions.filter((d) => d.quoteLineItemId == null);
-  if (quoteWide.length === 0) return null;
+  const chips = buildScopeDecisionPreviewChips(decisions);
+  if (chips.length === 0) return null;
 
   return (
-    <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] p-3">
-      <div className="mb-2">
-        <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-          Open scope decisions (quote-wide)
-        </p>
-        <p className="mt-1 text-xs text-foreground-subtle">
-          Unresolved scope questions that apply to the whole quote.
-        </p>
-      </div>
-      <div className="space-y-2">
-        {quoteWide.map((decision) => (
-          <ScopeDecisionRow
-            key={decision.id}
-            quoteId={quoteId}
-            decision={decision}
-            onUpdated={onUpdated}
-          />
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-1">
+      {chips.map((chip) => (
+        <span key={chip} className={chipClass}>
+          {chip}
+        </span>
+      ))}
     </div>
   );
 }
 
-export function QuoteScopeDecisionsLinePanel({
+function ScopeDecisionManageHandling({
   quoteId,
-  lineId,
+  decisions,
+  onUpdated,
+  compact = false,
+}: {
+  quoteId: string;
+  decisions: readonly QuoteScopeDecisionPayload[];
+  onUpdated: () => void;
+  compact?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (decisions.length === 0) return null;
+
+  return (
+    <div className={compact ? "mt-2" : "mt-3"}>
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="inline-flex items-center gap-1 text-[10px] font-medium text-foreground-subtle underline-offset-2 hover:text-foreground hover:underline"
+        aria-expanded={expanded}
+      >
+        Manage handling
+        {expanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+      </button>
+      {expanded ? (
+        <div className="mt-2 space-y-2 rounded-md border border-dashed border-border bg-foreground/[0.01] p-2">
+          <p className="text-[10px] text-foreground-subtle">
+            Admin triage only — use Clarify scope to capture structured answers.
+          </p>
+          {decisions.map((decision) => (
+            <ScopeDecisionRow
+              key={decision.id}
+              quoteId={quoteId}
+              decision={decision}
+              compact
+              onUpdated={onUpdated}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Compact quote-wide summary — raw decision rows hidden unless Manage handling is opened. */
+export function QuoteScopeDetailsNeededQuoteSummary({
+  quoteId,
   decisions,
   onUpdated,
 }: {
   quoteId: string;
-  lineId: string;
   decisions: readonly QuoteScopeDecisionPayload[];
   onUpdated: () => void;
 }) {
-  const lineDecisions = decisions.filter((d) => d.quoteLineItemId === lineId);
+  const quoteWide = filterQuoteWideScopeDecisions(decisions);
+  if (quoteWide.length === 0) return null;
+
+  return (
+    <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-foreground">
+          Scope details needed: {quoteWide.length}
+        </p>
+        <p className="text-[10px] text-foreground-subtle">Quote-wide gaps</p>
+      </div>
+      <div className="mt-2">
+        <ScopeDecisionPreviewChips decisions={quoteWide} />
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-foreground-subtle">
+        Use Clarify scope on affected line items to capture answers. These records track unresolved
+        gaps until answered.
+      </p>
+      <ScopeDecisionManageHandling
+        quoteId={quoteId}
+        decisions={quoteWide}
+        onUpdated={onUpdated}
+      />
+    </div>
+  );
+}
+
+/** Compact line summary with Clarify scope as the primary action. */
+export function QuoteScopeDetailsNeededLineSummary({
+  quoteId,
+  lineId,
+  decisions,
+  onClarifyScope,
+  onUpdated,
+  isClarifyLoading = false,
+}: {
+  quoteId: string;
+  lineId: string;
+  decisions: readonly QuoteScopeDecisionPayload[];
+  onClarifyScope: () => void;
+  onUpdated: () => void;
+  isClarifyLoading?: boolean;
+}) {
+  const lineDecisions = filterLineScopeDecisions(decisions, lineId);
   if (lineDecisions.length === 0) return null;
 
   return (
-    <div className="mt-2 space-y-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">
-        Open scope decisions ({lineDecisions.length})
-      </p>
-      {lineDecisions.map((decision) => (
-        <ScopeDecisionRow
-          key={decision.id}
-          quoteId={quoteId}
-          decision={decision}
-          compact
-          onUpdated={onUpdated}
-        />
-      ))}
+    <div className="mt-2 rounded-md border border-border bg-foreground/[0.02] px-2.5 py-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-foreground">
+            Scope details needed: {lineDecisions.length}
+          </p>
+          <div className="mt-1.5">
+            <ScopeDecisionPreviewChips decisions={lineDecisions} />
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={isClarifyLoading}
+          onClick={onClarifyScope}
+          className={`${workspaceFormPrimaryButtonClass} shrink-0 px-2.5 py-1 text-[10px]`}
+        >
+          {isClarifyLoading ? (
+            <Loader2 className="inline size-3 animate-spin" />
+          ) : (
+            "Clarify scope"
+          )}
+        </button>
+      </div>
+      <ScopeDecisionManageHandling
+        quoteId={quoteId}
+        decisions={lineDecisions}
+        onUpdated={onUpdated}
+        compact
+      />
     </div>
   );
 }

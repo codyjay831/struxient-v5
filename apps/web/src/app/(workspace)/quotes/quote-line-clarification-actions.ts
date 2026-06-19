@@ -46,6 +46,7 @@ import {
   selectBusinessProfileAiContext,
 } from "@/lib/business-profile/business-profile-ai-context";
 import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile-service";
+import { listScopeDecisionContextStringsForLine } from "@/lib/quote-scope-decision-service";
 import { QUOTE_PROPOSAL_FIELD_LIMITS, QUOTE_LINE_FIELD_LIMITS } from "./quote-field-limits";
 import type {
   ApplyLineClarificationResult,
@@ -365,6 +366,11 @@ export async function suggestLineClarificationAnswersAction(
       return { error: LINE_LOCKED_ERROR };
     }
     const lineText = buildCommercialContextLineText(commercialContext, { lineId: lid });
+    const unresolvedScopeDetails = await listScopeDecisionContextStringsForLine(db, {
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+      lineId: lid,
+    });
 
     const metered = await runMeteredAiFeature({
       ctx: buildAiMeteringContext({
@@ -390,6 +396,7 @@ export async function suggestLineClarificationAnswersAction(
           },
           lineText,
           organizationName: ctx.organizationName,
+          unresolvedScopeDetails,
         });
         if (!result.metering) {
           throw new Error("AI metering metadata missing from clarification answers.");
@@ -477,19 +484,24 @@ export async function generateClarificationQuestionSetForLineAction(
       profile,
     );
     const lineTextWithProfile = appendBusinessProfileContext(lineText, selectedProfileContext);
+    const unresolvedScopeDetails = await listScopeDecisionContextStringsForLine(db, {
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+      lineId: lid,
+    });
 
     const metered = await runMeteredAiFeature({
       ctx: buildAiMeteringContext({
         organizationId: ctx.organizationId,
         feature: "clarification_question_set",
         requestKind: "generate",
-        promptChars: (lineTextWithProfile ?? lineText).length,
+        promptChars: (lineTextWithProfile ?? lineText).length + unresolvedScopeDetails.join("").length,
       }),
       run: async () => {
         const result = await AIService.generateClarificationQuestionSet({
           lineText: lineTextWithProfile ?? lineText,
           organizationName: ctx.organizationName,
-          missingContext: [],
+          missingContext: unresolvedScopeDetails,
         });
         if (!result.metering) {
           throw new Error("AI metering metadata missing from clarification question set.");

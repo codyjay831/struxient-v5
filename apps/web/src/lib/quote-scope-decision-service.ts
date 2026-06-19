@@ -8,6 +8,7 @@ export {
   type QuoteScopeDecisionTx,
 } from "@/lib/quote-scope-decision-core";
 
+import { formatScopeDecisionForAiContext } from "@/lib/quote-scope-decision-display";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import type { QuoteScopeDecisionTx } from "@/lib/quote-scope-decision-core";
 
@@ -69,4 +70,34 @@ export async function listQuoteScopeDecisionsForQuote(
     },
   });
   return rows.map(toPayload);
+}
+
+/**
+ * Unresolved scope decision titles for Clarify Scope AI context.
+ * Includes line-level decisions plus quote-wide gaps that may apply to the line.
+ */
+export async function listScopeDecisionContextStringsForLine(
+  tx: QuoteScopeDecisionTx,
+  params: {
+    organizationId: string;
+    quoteId: string;
+    lineId: string;
+  },
+): Promise<string[]> {
+  const rows = await tx.quoteScopeDecision.findMany({
+    where: {
+      organizationId: params.organizationId,
+      quoteId: params.quoteId,
+      status: { in: ["OPEN", "DEFERRED"] },
+      OR: [{ quoteLineItemId: params.lineId }, { quoteLineItemId: null }],
+    },
+    orderBy: [{ quoteLineItemId: "asc" }, { createdAt: "asc" }],
+    select: { title: true, detail: true },
+  });
+
+  const formatted = rows
+    .map((row) => formatScopeDecisionForAiContext(row))
+    .filter((value) => value.length > 0);
+
+  return [...new Set(formatted)];
 }

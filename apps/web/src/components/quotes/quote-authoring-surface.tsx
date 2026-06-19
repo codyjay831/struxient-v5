@@ -113,9 +113,10 @@ import { deriveNeedsForQuoteLines } from "@/lib/derived-needs/derive-needs";
 import type { DerivedNeed } from "@/lib/derived-needs/types";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import {
-  QuoteScopeDecisionsLinePanel,
-  QuoteScopeDecisionsQuoteWidePanel,
+  QuoteScopeDetailsNeededLineSummary,
+  QuoteScopeDetailsNeededQuoteSummary,
 } from "@/components/quotes/quote-scope-decisions-panel";
+import { filterLineScopeDecisions } from "@/lib/quote-scope-decision-display";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -1386,7 +1387,7 @@ export function QuoteAuthoringSurface({
 
             <DerivedNeedsPreview needs={derivedNeeds} />
 
-            <QuoteScopeDecisionsQuoteWidePanel
+            <QuoteScopeDetailsNeededQuoteSummary
               quoteId={quoteId}
               decisions={scopeDecisions}
               onUpdated={onMutated}
@@ -1450,6 +1451,10 @@ export function QuoteAuthoringSurface({
               <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-surface">
                 {lineItems.map((line) => {
                   const isEditing = editingLineId === line.id;
+                  const lineScopeDecisionCount = filterLineScopeDecisions(
+                    scopeDecisions,
+                    line.id,
+                  ).length;
                   return (
                     <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1481,17 +1486,19 @@ export function QuoteAuthoringSurface({
                                 onSuccess={onMutated}
                               />
                             </div>
-                            <button
-                              type="button"
-                              disabled={isClarifyLoading && clarifyLineId === line.id}
-                              onClick={() => void openClarifyScope(line.id)}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted hover:text-foreground hover:border-border-strong transition-colors disabled:opacity-50"
-                            >
-                              {isClarifyLoading && clarifyLineId === line.id ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : null}
-                              Clarify scope
-                            </button>
+                            {lineScopeDecisionCount === 0 ? (
+                              <button
+                                type="button"
+                                disabled={isClarifyLoading && clarifyLineId === line.id}
+                                onClick={() => void openClarifyScope(line.id)}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted hover:text-foreground hover:border-border-strong transition-colors disabled:opacity-50"
+                              >
+                                {isClarifyLoading && clarifyLineId === line.id ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : null}
+                                Clarify scope
+                              </button>
+                            ) : null}
                             {!lineExecutionAiRetired ? (
                               <button
                                 type="button"
@@ -1522,11 +1529,13 @@ export function QuoteAuthoringSurface({
                         />
                       ) : null}
                       {!isEditing ? (
-                        <QuoteScopeDecisionsLinePanel
+                        <QuoteScopeDetailsNeededLineSummary
                           quoteId={quoteId}
                           lineId={line.id}
                           decisions={scopeDecisions}
+                          onClarifyScope={() => void openClarifyScope(line.id)}
                           onUpdated={onMutated}
+                          isClarifyLoading={isClarifyLoading && clarifyLineId === line.id}
                         />
                       ) : null}
                       {isEditing && (
