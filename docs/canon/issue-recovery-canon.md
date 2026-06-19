@@ -6,17 +6,19 @@ Status: Locked for v5 BLOCKS_WORK handling.
 
 When a `JobIssue` has `severity = BLOCKS_WORK`, mitigation is **RecoveryFlow-only**.
 
+- The durable remediation model is `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows.
 - Create recovery path on the issue (`JobRecoveryFlow`)
 - Add one or more recovery tasks
 - Complete recovery tasks
 - Resolve via `resume` (preferred) or `force` (audited exception)
 
-Recovery tasks are normal `JobTask` rows and must carry `recoveryFlowId`.
+Recovery tasks are normal `JobTask` rows and must carry `recoveryFlowId`. Non-blocking coordination tasks are allowed outside recovery, but they do not bypass issue blockers, resolve issues, or replace recovery/resume semantics.
 
 ## What is not canonical
 
 - `createFollowUpTaskFromIssueAction` is deprecated for blocker mitigation.
 - A single issue-linked task (`sourceJobIssueId`) is not equivalent to a recovery path and does not participate in blocker bypass/resume semantics.
+- Random spawned follow-up tasks are not canonical remediation for `BLOCKS_WORK` issues, even if they look operationally useful.
 - Do not introduce alternate blocker-fix paths without canon review.
 
 ## Guardrails
@@ -38,3 +40,7 @@ This canon decision does not change schema by itself and does not redesign works
 - Use Issue Recovery when there is a problem, correction, failed work, failed inspection, field condition, customer change, material issue, or any multi-step recovery.
 - Field Event has activity audit (`EVENT_CREATED` / `EVENT_RESOLVED`), but it does not carry recovery lifecycle semantics.
 - Recovery-shaped events must funnel into `JobIssue` / `JobRecoveryFlow`, not `EVENT:` tasks.
+
+---
+
+*Canon update (2026-06-19): Repeated durable `BLOCKS_WORK` remediation rule explicitly: `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; non-blocking coordination tasks cannot bypass blockers, resolve issues, or replace recovery/resume semantics.*

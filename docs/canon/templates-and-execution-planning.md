@@ -121,7 +121,9 @@ The MVP ships with a default set of stages stored in an org-scoped **Stage** tab
 4. **Installation**
 5. **Final Inspection & Closeout**
 
-This preset is the default **on quote-line draft execution and on post-activation jobs** in MVP. Adding a task is a per-stage action. Users can rename, reorder, or add stages to fit their trade.
+This preset is the default **planning affordance** in MVP, not a required permanent job shape. Adding a task is a per-stage action. Users can rename, reorder, or add stages to fit their trade.
+
+Activation materializes the stages actually used by the accepted execution plan, plus any explicit starter/planning path when no tasks exist. Code must route through stage preset/library abstractions and must not depend on the five default labels.
 
 ### Future possible preset — **Service Work** (not in MVP)
 
@@ -146,6 +148,7 @@ Features that would push expressive depth into stages (custom workflow designers
 
 - **Do** ship the **Standard Project** preset as the default container set so users don't design stages before they can quote or plan work.
 - **Do** make adding tasks a **per-stage** action so the stage stays a lightweight container, not a dropdown the user has to reason about per task.
+- **Do** treat Standard Project as a planning affordance whose labels can be replaced by preset/library choices without changing the execution model.
 - **Do not** introduce **kanban** language anywhere in stage UX or canon.
 - **Do not** introduce **placement** language (stages do not “place” line items or tasks).
 - **Do not** force users to design workflows before they can **quote** or **plan** work.
@@ -178,3 +181,4 @@ Features that would push expressive depth into stages (custom workflow designers
 *Canon update (2026-05-06): §6 — MVP stage-preset stance. Canon phrase: **“Stages are presets and containers. Tasks are the execution power layer.”** Default MVP preset **Standard Project** (Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout). Reserved future preset **Service Work** for smaller service execution (same core model; no separate task engine). Architecture must stay preset-flexible; no kanban or placement language; no workflow designer before users can quote or plan.*  
 *Canon update (2026-05-25): §7 — field-informed plan adjustment post-activation; cross-ref [product-philosophy.md](./product-philosophy.md) and [execution-engine-canon.md](./execution-engine-canon.md) §12.*  
 *Canon update (2026-06-13): Locked whole-quote execution planning: immutable issued quote versions after send, revise-by-clone before activation, quote-wide coordinated plan semantics, and controlled post-activation change-order reconciliation.*
+*Canon update (2026-06-19): Clarified Standard Project as the default planning affordance, not permanent job architecture; activation materializes stages used by the accepted plan plus explicit starter/planning paths, and code must not depend on the five default labels.*

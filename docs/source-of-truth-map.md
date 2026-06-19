@@ -37,7 +37,7 @@
 
 ## Scheduling & task timing
 
-> **Canon:** [scheduling-canon.md](./canon/scheduling-canon.md) · **Plan:** [scheduling-implementation-plan.md](./plans/scheduling-implementation-plan.md)
+> **Canon:** [scheduling-canon.md](./canon/scheduling-canon.md) · [sales-site-visit-canon.md](./canon/sales-site-visit-canon.md) · **Plan:** [scheduling-implementation-plan.md](./plans/scheduling-implementation-plan.md)
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
@@ -58,7 +58,10 @@
 | Assignment completeness warning | **Derived** | Scheduling derivation/policy checks (kind + assignment expectation) | Forcing fake worker assignments as stored truth |
 | Return-work candidate set | **Derived** | Open linked tasks + completion outcome + event status | Auto-copying closed/canceled tasks into return event |
 | Employee unavailability | **Stored** | `ScheduleBlock` | Mixing into job event lifecycle |
-| Lead estimate visit | **Stored** | `LeadVisitRequest` | Conflating with job execution events |
+| Lead estimate / sales site visit | **Stored** | `LeadVisitRequest`; canon in [sales-site-visit-canon.md](./canon/sales-site-visit-canon.md) | Conflating with job execution events, `JobVisit`, or quote workflow state |
+| Sales visit customer confirmation | **Stored** | Future `LeadVisitRequest` confirmation fields/token records + `LeadEvent` audit | Treating scheduled as customer-confirmed or notification delivery as lifecycle truth |
+| Sales visit access snapshot | **Stored** | Future visit-specific access snapshot on/adjacent to `LeadVisitRequest` | Losing what was known for the appointment, or leaking sensitive access details |
+| Sales visit outcome / next action | **Stored facts + derived attention** | Future required outcome on `LeadVisitRequest`; Workstation/Sales derived from outcome + quote/follow-up facts | Completed visits falling through to quote-ready or disappearing with no next action |
 | Schedule mutation audit | **Stored** | `JobActivity` + mutation metadata envelope | Split audit paths (panel vs calendar) |
 | Notification delivery records | **Stored** | Notification/outbox domain (separate from schedule lifecycle) | Notification success/failure treated as schedule truth |
 | Schedule attention/warnings | **Derived** | Shared scheduling derivation helpers (Calendar + Workstation) | Editable warning rows competing with canonical timing truth |
@@ -101,6 +104,7 @@
 | Lead commercial progress | **Derived (legacy)** | `getLeadCommercialProgress()` in `lead-commercial-progress.ts` — superseded by `getOpportunityFlow()` for new Sales surfaces | Persisting progress enum on Lead |
 | Lead intake projection (AI-ready DTO) | **Derived** | `buildLeadIntakeProjection()` in `lead-intake-projection.ts` | Duplicating readiness/progress in prompt strings |
 | Lead→Quote handoff | **Stored writes via canonical promotion** | `promoteLeadToQuote()` in `promote-to-quote.ts` | `createQuoteDraft` bypass for lead-origin flows |
+| Sales site visit display state | **Derived** | `getOpportunityFlow()`, Sales list/board serializers, `schedule-query.ts`, `workstation-query.ts` reading `LeadVisitRequest` | Duplicated appointment/status state on `Lead`, `Quote`, calendar DTOs, or Workstation cards |
 | Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
 | Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` (accepted plan + hash/version + coverage + blockers) | One-off checks in activation action |
 | Quote plan staleness (`isStale`) | **Derived** | `currentPlanningInputHash !== QuoteExecutionPlan.planningInputHash` | Stored stale status drift |
@@ -118,6 +122,7 @@
 | Recovery flow status | **Stored** | `JobRecoveryFlow.status` | Resolving issue while recovery incomplete |
 | Recovery progress | **Derived** | Recovery `JobTask` completion; enforced in `resolve-job-issue-core.ts` | Generic resolve hiding incomplete recovery |
 | Issue resolve (standard / resume / force) | **Stored writes + activity** | `resolveJobIssueWithRecoveryHandling()` | Force-resolve without audit trail |
+| Non-blocking issue coordination | **Stored work, not blocker truth** | Ordinary `JobTask` / activity where product allows; not `BLOCKS_WORK` remediation | Random follow-up tasks bypassing blockers, resolving issues, or replacing recovery/resume semantics |
 
 ## Addresses, activity, logs
 
@@ -158,3 +163,4 @@
 *Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*  
 *Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*  
 *Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
+*Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*

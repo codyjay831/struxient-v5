@@ -29,6 +29,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [execution-engine-canon.md](./execution-engine-canon.md) | **Runtime execution engine**: line items → draft tasks → activation → stages/tasks/signals → issues/recovery → payments → Workstation attention |
 | [lineage-and-prior-art.md](./lineage-and-prior-art.md) | Full_Cursor (genesis) + v2–v4: what to salvage; failure modes; Jobber-simple + execution-strong positioning |
 | [lead-intake-canon.md](./lead-intake-canon.md) | **Lead intake / public intake / Lead Review / Lead→Quote handoff** — source-of-truth, 5 slices, future intake chain guardrail |
+| [sales-site-visit-canon.md](./sales-site-visit-canon.md) | **Sales site visit workflow** — `LeadVisitRequest` ownership, lifecycle, access snapshots, permissions, audit, surface behavior, MVP split |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | Full experience requirements: lead → workstation |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
 | [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |
@@ -46,13 +47,14 @@ Struxient v5 is a **construction management** product for **trades and service**
 When scheduling docs conflict, use this precedence:
 
 1. [scheduling-canon.md](./scheduling-canon.md) (domain authority)
-2. [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md) (implementation order and phase gates)
-3. Historical snapshots/audits/legacy decision notes (context only)
+2. [sales-site-visit-canon.md](./sales-site-visit-canon.md) for pre-job sales/estimate visits
+3. [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md) (implementation order and phase gates)
+4. Historical snapshots/audits/legacy decision notes (context only)
 
 ## Reading order (suggested)
 
 1. `overview.md` + [product-philosophy.md](./product-philosophy.md) + `lineage-and-prior-art.md` (context from earlier repos)  
 2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `quote-truth-and-checkpoints.md`  
 3. `conceptual-model.md` + `domains-and-boundaries.md` + [business-profile-and-ai-context-canon.md](./business-profile-and-ai-context-canon.md) + `templates-and-execution-planning.md` + `execution-engine-canon.md`  
-4. `experience-canon-lead-to-workstation.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  
+4. `experience-canon-lead-to-workstation.md` + `sales-site-visit-canon.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  
 5. `glossary.md` as reference  

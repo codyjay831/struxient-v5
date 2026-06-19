@@ -101,9 +101,7 @@ import {
   type QuoteReadinessActionKind,
 } from "@/lib/quote-readiness";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
-import { AddOrEditServiceLocationDialog } from "@/components/customers/add-or-edit-service-location-dialog";
-import { SiteDetailsRow } from "@/components/site-details/site-details-row";
-import { SiteDetailsDrawer } from "@/components/site-details/site-details-drawer";
+import { JobsiteCard } from "@/components/site-details/jobsite-card";
 import type {
   QuoteWorkspaceCheckpointPayload,
   QuoteWorkspaceTabData,
@@ -954,39 +952,7 @@ function QuoteJobsiteCallout({
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [siteOpen, setSiteOpen] = useState(false);
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
-  const siteData = {
-    serviceLocationId: quote.serviceLocationId,
-    line: quote.jobsiteAddressLine,
-    apn: quote.siteDetails?.apn ?? null,
-    apnSourceTitle: quote.siteDetails?.apnSourceTitle ?? null,
-    apnSourceUrl: quote.siteDetails?.apnSourceUrl ?? null,
-    apnVerificationUrl: quote.siteDetails?.apnVerificationUrl ?? null,
-    apnConflict: quote.siteDetails?.apnConflict ?? null,
-    utilityName: quote.siteDetails?.utilityName ?? null,
-    utilityOfficialWebsite: quote.siteDetails?.utilityOfficialWebsite ?? null,
-    utilityServiceUpgradeUrl: quote.siteDetails?.utilityServiceUpgradeUrl ?? null,
-    utilityCoverageSourceTitle: quote.siteDetails?.utilityCoverageSourceTitle ?? null,
-    utilityCoverageSourceUrl: quote.siteDetails?.utilityCoverageSourceUrl ?? null,
-    jurisdictionName: quote.siteDetails?.jurisdictionName ?? null,
-    jurisdictionBuildingDepartmentName:
-      quote.siteDetails?.jurisdictionBuildingDepartmentName ?? null,
-    jurisdictionOfficialWebsite: quote.siteDetails?.jurisdictionOfficialWebsite ?? null,
-    jurisdictionBuildingDepartmentUrl:
-      quote.siteDetails?.jurisdictionBuildingDepartmentUrl ?? null,
-    jurisdictionPermitPortalUrl: quote.siteDetails?.jurisdictionPermitPortalUrl ?? null,
-    jurisdictionFormsUrl: quote.siteDetails?.jurisdictionFormsUrl ?? null,
-    jurisdictionInspectionsUrl: quote.siteDetails?.jurisdictionInspectionsUrl ?? null,
-    assessorCounty: quote.siteDetails?.assessorCounty ?? null,
-    assessorState: quote.siteDetails?.assessorState ?? null,
-    assessorSearchUrl: quote.siteDetails?.assessorSearchUrl ?? null,
-    assessorParcelGisUrl: quote.siteDetails?.assessorParcelGisUrl ?? null,
-    detailsStatus: quote.siteDetails?.detailsStatus ?? "UNVERIFIED",
-    missingScopes: quote.siteDetails?.missingScopes ?? ["APN", "UTILITY", "JURISDICTION"],
-  } as const;
 
   /* When the Quote is embedded inside the Lead workspace AND the Lead
    * shell already shows the address prominently, suppress the present-
@@ -1024,58 +990,15 @@ function QuoteJobsiteCallout({
   }
 
   return (
-    <>
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <div className="flex gap-3">
-          <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className={sectionLabelClass}>
-              {hasLine ? "Jobsite address" : "Jobsite address needed"}
-            </p>
-            {hasLine ? (
-              <p className="mt-1 text-sm leading-relaxed text-foreground">{quote.jobsiteAddressLine}</p>
-            ) : (
-              <>
-                <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
-                  Add the project address before scheduling or creating a job.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {quote.canAddServiceAddress && quote.customerId ? (
-                    <button type="button" onClick={() => setOpen(true)} className={primaryBtnClass}>
-                      Add jobsite address
-                    </button>
-                  ) : null}
-                  {quote.leadHref && !quote.canAddServiceAddress ? (
-                    <Link href={`${quote.leadHref}/edit`} className={primaryBtnClass}>
-                      Add on request
-                    </Link>
-                  ) : null}
-                  {quote.leadHref && quote.canAddServiceAddress ? (
-                    <Link href={`${quote.leadHref}/edit`} className={secondaryBtnClass}>
-                      Edit request record
-                    </Link>
-                  ) : null}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="mt-2">
-        <SiteDetailsRow data={siteData} onOpen={() => setSiteOpen(true)} />
-      </div>
-      {quote.customerId && quote.canAddServiceAddress ? (
-        <AddOrEditServiceLocationDialog
-          open={open}
-          onOpenChange={setOpen}
-          googleMapsApiKey={apiKey}
-          customerId={quote.customerId}
-          mode="create"
-          onSaved={onMutated}
-        />
-      ) : null}
-      <SiteDetailsDrawer open={siteOpen} onClose={() => setSiteOpen(false)} data={siteData} />
-    </>
+    <JobsiteCard
+      jobsiteAddressLine={quote.jobsiteAddressLine}
+      customerId={quote.canAddServiceAddress ? quote.customerId : null}
+      leadEditHref={quote.leadHref ? `${quote.leadHref}/edit` : null}
+      siteDetails={quote.siteDetails}
+      serviceLocationId={quote.serviceLocationId}
+      missingDescription="Add the project address before scheduling or creating a job."
+      onSaved={onMutated}
+    />
   );
 }
 
@@ -1167,8 +1090,6 @@ function OverviewTab({
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
 }) {
-  const canSendFromOverview = readiness.primaryAction?.kind === "SEND_QUOTE";
-
   return (
     <div className="space-y-4">
       <NextStepCard
@@ -1181,25 +1102,6 @@ function OverviewTab({
       />
 
       <QuoteChangeRequestsCard quote={quote} onMutated={onMutated} />
-
-      {canSendFromOverview ? (
-        <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
-          <p className={sectionLabelClass}>Ready to send</p>
-          <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
-            This quote is ready for customers. Open the send panel to choose recipients and deliver the proposal.
-          </p>
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => onSwitchToTab("sendaccept", "send")}
-              className={primaryBtnClass}
-            >
-              <Send className="size-3.5 opacity-80" strokeWidth={2} />
-              Send quote
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       <FactsGrid
         quote={quote}

@@ -101,6 +101,14 @@ Decision surface; must answer in one view:
 - Quote action
 - Activity trail
 
+### Sales site visits
+
+Pre-job sales site visits / estimate visits belong to `LeadVisitRequest`, not `Lead.status`, `Quote.status`, `JobScheduleEvent`, `JobVisit`, or a duplicate sales-visit entity.
+
+Lead Review is the primary sales surface for visit context and outcome. It should support schedule/reschedule/complete/no-show, access snapshot review, outcome selection, and next-action capture through shared visit actions or a shared visit work surface.
+
+The lead remains the commercial/request context. If a quote exists, the quote may display linked visit state through the lead relationship, but visit notes must not silently mutate quote scope, quote lines, customer-facing text, pricing, or checkpoints. See [sales-site-visit-canon.md](./sales-site-visit-canon.md).
+
 ### Quote handoff
 
 - **One canonical path** for all lead-origin quote starts: `promoteLeadToQuote` (via `performCreateQuoteDraftFromLead` or equivalent wrapper).
@@ -125,6 +133,7 @@ Decision surface; must answer in one view:
 | Category | Examples | Storage |
 |----------|----------|---------|
 | **Customer-submitted truth** | Contact, jobsite/address, request type/description, timing/access inputs, attachment refs | `Lead.contact`, `Lead.request`, `Lead.address`, `Attachment` |
+| **Sales site visit facts** | Visit request, scheduled time, assigned rep, arrival window, access snapshot, confirmation state, completion outcome, next action | `LeadVisitRequest` + `LeadEvent` audit |
 | **Staff-reviewed truth** | Qualification, customer link/create, quote start, explicit overrides | `Lead.status`, `Lead.customerId`, staff notes, quote rows |
 | **Derived** | Missing info, commercial progress, quote readiness, workstation next action, future intake/scope signals | Helpers only — **never** new competing status columns |
 | **AI may suggest** | Classification, missing-info candidates, follow-ups, line starters, template filter candidates | Ephemeral until review/apply |
@@ -178,9 +187,11 @@ The current condition shown in list/workstation/record surfaces must be derived 
 | **Consolidate** | `default-intake-form.ts`, `public-lead-actions.ts`, `intake-form-renderer.tsx`, settings split (`intake-forms` vs `public-request-settings`) |
 | **Reframe** | UX copy: “intake paths/templates”, “Lead Review”, instant-quote as future guarded automation |
 | **Deprecate** | Lead-origin `createQuoteDraft` bypass; conflicting lifecycle semantics |
-| **Do not touch yet** | Schema redesign, workstation-wide redesign, form-builder expansion, instant pricing |
+| **Do not touch yet** | Lead/quote spine redesign, competing intake systems, workstation-wide redesign, form-builder expansion, instant pricing |
 
 Canonical code map also in [`docs/source-of-truth-map.md`](../source-of-truth-map.md) (Commercial pipeline).
+
+Schema posture: do not redesign the lead/quote spine or create a competing intake system. Additive schema work is allowed when it supports approved canon-owned facts, such as `LeadVisitRequest` lifecycle, access snapshot, outcome, next action, and audit, with explicit approval.
 
 ---
 
@@ -227,6 +238,7 @@ Future product context only (service/trade/complex depth, detail packs, signals)
 3. Source-of-truth contract above (customer / staff / derived / AI).
 4. Contractor-type paths as UX policy, not separate systems.
 5. No instant pricing expansion until Slices 1–3 are stable.
+6. Sales site visits use `LeadVisitRequest` as the pre-job source of truth; no duplicate intake app or sales visit workflow model.
 
 ---
 
@@ -238,4 +250,6 @@ Slice 1 implementation must reference this document and the Slice 1 guardrails i
 
 ---
 
-*Last updated: 2026-05-20 — Lead Intake Canon Target planning implementation.*
+*Last updated: 2026-05-20 — Lead Intake Canon Target planning implementation.*  
+*Updated 2026-06-19 — Added Sales Site Visit ownership and Lead Review surface boundary.*
+*Updated 2026-06-19 — Reframed “do not touch schema redesign” so it blocks lead/quote spine rewrites and competing intake systems, not approved additive schema for canon-owned `LeadVisitRequest` facts.*

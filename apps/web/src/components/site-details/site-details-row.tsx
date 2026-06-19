@@ -1,45 +1,7 @@
 "use client";
 
 import { MapPin, Search, ShieldCheck } from "lucide-react";
-
-export type SiteDetailsRowData = {
-  serviceLocationId: string | null;
-  line: string | null;
-  apn: string | null;
-  apnSourceTitle?: string | null;
-  apnSourceUrl?: string | null;
-  apnVerificationUrl?: string | null;
-  apnConflict?: {
-    value: string;
-    sourceTitle: string | null;
-    sourceUrl: string | null;
-  } | null;
-  utilityName: string | null;
-  utilityOfficialWebsite?: string | null;
-  utilityServiceUpgradeUrl?: string | null;
-  utilityCoverageSourceTitle?: string | null;
-  utilityCoverageSourceUrl?: string | null;
-  jurisdictionName: string | null;
-  jurisdictionBuildingDepartmentName?: string | null;
-  jurisdictionOfficialWebsite?: string | null;
-  jurisdictionBuildingDepartmentUrl?: string | null;
-  jurisdictionPermitPortalUrl?: string | null;
-  jurisdictionFormsUrl?: string | null;
-  jurisdictionInspectionsUrl?: string | null;
-  assessorCounty?: string | null;
-  assessorState?: string | null;
-  assessorSearchUrl?: string | null;
-  assessorParcelGisUrl?: string | null;
-  detailsStatus:
-    | "DATABASE_MATCH"
-    | "AI_FOUND"
-    | "USER_REVIEWED"
-    | "USER_CORRECTED"
-    | "UNVERIFIED"
-    | "CONFLICT"
-    | "STALE";
-  missingScopes: string[];
-};
+import type { SiteDetailsRowData } from "@/lib/site-details/presentation";
 
 const statusLabel: Record<SiteDetailsRowData["detailsStatus"], string> = {
   DATABASE_MATCH: "Database match",

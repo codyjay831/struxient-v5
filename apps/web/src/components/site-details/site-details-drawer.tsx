@@ -14,7 +14,7 @@ import {
   saveSiteDetailsJurisdictionAction,
   saveSiteDetailsUtilityAction,
 } from "@/app/(workspace)/site-details/site-details-actions";
-import type { SiteDetailsRowData } from "@/components/site-details/site-details-row";
+import type { SiteDetailsRowData } from "@/lib/site-details/presentation";
 
 const statusLabel: Record<SiteDetailsRowData["detailsStatus"], string> = {
   DATABASE_MATCH: "Database match",

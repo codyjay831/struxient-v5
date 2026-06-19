@@ -33,6 +33,7 @@ import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import { projectLead } from "@/lib/lead/lead-projection";
 import { LineClarificationAnswersSchema } from "@/lib/clarification/clarification-answer-schema";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -212,38 +213,7 @@ export async function loadQuoteWorkSurface(
       )
     : null;
   const siteDetails = resolvedSiteDetails
-    ? {
-        apn: resolvedSiteDetails.apn,
-        apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
-        apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
-        apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
-        apnConflict: resolvedSiteDetails.apnConflict
-          ? {
-              value: resolvedSiteDetails.apnConflict.value,
-              sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
-              sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
-            }
-          : null,
-        utilityName: resolvedSiteDetails.utility?.name ?? null,
-        utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
-        utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
-        utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
-        utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
-        jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
-        jurisdictionBuildingDepartmentName:
-          resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
-        jurisdictionOfficialWebsite: resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
-        jurisdictionBuildingDepartmentUrl: resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
-        jurisdictionPermitPortalUrl: resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
-        jurisdictionFormsUrl: null,
-        jurisdictionInspectionsUrl: null,
-        assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
-        assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
-        assessorSearchUrl: resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
-        assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
-        detailsStatus: resolvedSiteDetails.detailsStatus,
-        missingScopes: resolvedSiteDetails.missingScopes,
-      }
+    ? siteDetailsPayloadFromResolved(resolvedSiteDetails)
     : null;
   const leadProjection = rawLead
     ? projectLead({

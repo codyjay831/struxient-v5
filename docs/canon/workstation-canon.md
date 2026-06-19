@@ -31,6 +31,21 @@ It is **not**:
 
 Sales shares derivation helpers with Workstation (`getOpportunityFlow`) but must **not** fork a second priority/ranking engine.
 
+### Sales site visit attention
+
+Workstation surfaces sales site visits as attention and action discovery, not as a standalone visit editor. Visit truth comes from `LeadVisitRequest`; Workstation cards are derived from visit status, customer confirmation state, assignment, timing, access completeness, outcome, lead/quote context, and age.
+
+Workstation should surface:
+
+- Assigned sales visits today/tomorrow.
+- Unconfirmed visits needing internal or customer action.
+- Missing access details.
+- Reschedule requests.
+- No-show recovery.
+- Visit completed but quote/follow-up missing.
+
+Assigned Sales/Field estimators must be able to see and act on their assigned visits even if they do not have broad commercial pipeline access. Viewer/subcontractor access to sensitive access details must remain restricted unless explicitly designed. See [sales-site-visit-canon.md](./sales-site-visit-canon.md).
+
 ## Role, permissions, and assignment
 
 What appears in the Workstation **depends on** the user’s **role**, **permissions**, and **assigned work** (and related rules such as crew membership). Illustrative intent:
@@ -137,3 +152,4 @@ Analytics informs management; it must not **replace** the truth of tasks. If ana
 ---
 
 *Canon update (2026-05-05): Authoritative positioning; record-based nav; role-based intent; lenses as views inside the concept; MVP role slices (default feeds by Field / Office / Owner–Admin).*
+*Canon update (2026-06-19): Added Sales site visit attention and assigned-estimator visibility rules.*

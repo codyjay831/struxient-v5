@@ -1,5 +1,6 @@
-import type { QuoteStatus, JobStatus, SiteDetailsStatus } from "@prisma/client";
+import type { QuoteStatus, JobStatus } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import type { SiteDetailsPayload } from "@/lib/site-details/presentation";
 
 export type QuoteChangeRequestSummary = {
   id: string;
@@ -49,35 +50,7 @@ export type QuoteWorkSurfaceData = {
   /** Jobsite / project address: customer profile first, else linked lead. */
   jobsiteAddressLine: string | null;
   serviceLocationId: string | null;
-  siteDetails: {
-    apn: string | null;
-    apnSourceTitle?: string | null;
-    apnSourceUrl?: string | null;
-    apnVerificationUrl?: string | null;
-    apnConflict?: {
-      value: string;
-      sourceTitle: string | null;
-      sourceUrl: string | null;
-    } | null;
-    utilityName: string | null;
-    utilityOfficialWebsite?: string | null;
-    utilityServiceUpgradeUrl?: string | null;
-    utilityCoverageSourceTitle?: string | null;
-    utilityCoverageSourceUrl?: string | null;
-    jurisdictionName: string | null;
-    jurisdictionBuildingDepartmentName?: string | null;
-    jurisdictionOfficialWebsite?: string | null;
-    jurisdictionBuildingDepartmentUrl?: string | null;
-    jurisdictionPermitPortalUrl?: string | null;
-    jurisdictionFormsUrl?: string | null;
-    jurisdictionInspectionsUrl?: string | null;
-    assessorCounty?: string | null;
-    assessorState?: string | null;
-    assessorSearchUrl?: string | null;
-    assessorParcelGisUrl?: string | null;
-    detailsStatus: SiteDetailsStatus;
-    missingScopes: string[];
-  } | null;
+  siteDetails: SiteDetailsPayload | null;
   /** True when no resolved jobsite line exists for this quote. */
   jobsiteMissing: boolean;
   /** Customer exists — staff can add a saved service address on the customer profile. */

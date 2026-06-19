@@ -56,6 +56,7 @@ import {
 } from "@/lib/job-execution-view-model";
 import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { jobChangeOrdersPath } from "@/lib/change-order-flow";
 
 export const dynamic = "force-dynamic";
@@ -532,45 +533,7 @@ export default async function JobDetailPage({
         customerId={jobCustomerId}
         leadEditHref={jobLeadEditHref}
         siteDetails={
-          resolvedSiteDetails
-            ? {
-                serviceLocationId: resolvedSiteDetails.serviceLocationId,
-                apn: resolvedSiteDetails.apn,
-                apnSourceTitle: resolvedSiteDetails.apnSourceTitle,
-                apnSourceUrl: resolvedSiteDetails.apnSourceUrl,
-                apnVerificationUrl: resolvedSiteDetails.apnVerificationUrl,
-                apnConflict: resolvedSiteDetails.apnConflict
-                  ? {
-                      value: resolvedSiteDetails.apnConflict.value,
-                      sourceTitle: resolvedSiteDetails.apnConflict.sourceTitle,
-                      sourceUrl: resolvedSiteDetails.apnConflict.sourceUrl,
-                    }
-                  : null,
-                utilityName: resolvedSiteDetails.utility?.name ?? null,
-                utilityOfficialWebsite: resolvedSiteDetails.utility?.officialWebsite ?? null,
-                utilityServiceUpgradeUrl: resolvedSiteDetails.utility?.serviceUpgradeUrl ?? null,
-                utilityCoverageSourceTitle: resolvedSiteDetails.utility?.coverageSourceTitle ?? null,
-                utilityCoverageSourceUrl: resolvedSiteDetails.utility?.coverageSourceUrl ?? null,
-                jurisdictionName: resolvedSiteDetails.jurisdiction?.name ?? null,
-                jurisdictionBuildingDepartmentName:
-                  resolvedSiteDetails.jurisdiction?.buildingDepartmentName ?? null,
-                jurisdictionOfficialWebsite:
-                  resolvedSiteDetails.jurisdiction?.officialWebsite ?? null,
-                jurisdictionBuildingDepartmentUrl:
-                  resolvedSiteDetails.jurisdiction?.buildingDepartmentUrl ?? null,
-                jurisdictionPermitPortalUrl:
-                  resolvedSiteDetails.jurisdiction?.permitPortalUrl ?? null,
-                jurisdictionFormsUrl: null,
-                jurisdictionInspectionsUrl: null,
-                assessorCounty: resolvedSiteDetails.assessorResource?.county ?? null,
-                assessorState: resolvedSiteDetails.assessorResource?.state ?? null,
-                assessorSearchUrl:
-                  resolvedSiteDetails.assessorResource?.assessorSearchUrl ?? null,
-                assessorParcelGisUrl: resolvedSiteDetails.assessorResource?.parcelGisUrl ?? null,
-                detailsStatus: resolvedSiteDetails.detailsStatus,
-                missingScopes: resolvedSiteDetails.missingScopes,
-              }
-            : null
+          resolvedSiteDetails ? siteDetailsPayloadFromResolved(resolvedSiteDetails) : null
         }
       />
 

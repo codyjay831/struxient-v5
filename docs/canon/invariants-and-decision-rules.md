@@ -165,10 +165,12 @@ Struxient v5 supports both light and dark appearance modes. The design system sh
 
 MVP execution planning ships **default stage containers** so users do not have to design stages from scratch. The real operational power in v5 lives in **line items, tasks, signals, activity history, and customer / job changes**—not in stage architecture.
 
-The **default MVP stage preset** is **Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. These are stored in an org-scoped **Stage** table, not a hardcoded enum.
+The **default MVP stage preset** is **Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. This preset is a planning affordance, not a required permanent job shape. These are stored in an org-scoped **Stage** table, not a hardcoded enum.
 
 - **Must:** treat stages as **lightweight default containers / presets** that group tasks for legibility; depth and ordering live on **tasks** (via signals), not on stages.  
 - **Must:** keep the implementation **preset-flexible**—presets must be able to be **renamed, hidden, merged, specialized, or selected** per real contractor usage.
+- **Must:** materialize the stages actually used by the accepted execution plan at activation, plus any explicit starter/planning path when no tasks exist.
+- **Must:** route code through stage preset/library abstractions; implementation must not depend on the five Standard Project labels.
 - **Must:** keep runtime signal dependencies **task-scoped** in v5 MVP; stage-level signal gates are deferred and not runtime canon.
 - **Must not:** introduce **kanban** language (no “board / column / swimlane” framing for stages).  
 - **Must not:** introduce **placement** language (stages do not “place” line items or tasks).  
@@ -176,6 +178,10 @@ The **default MVP stage preset** is **Standard Project**: **Pre-Construction →
 - **Must not:** push expressive depth (custom workflow design, kanban-style operations, placement semantics) into stages in MVP.
 
 Detailed product framing and the do/do-not list live in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
+
+## I25 — MVP constraints must preserve source-of-truth integrity
+
+MVP constraints limit UX depth and implementation scope; they must not collapse distinct sources of truth. A simple first version may hide advanced controls, but it must not store derived labels as facts, duplicate workflows, encode temporary UI assumptions as schema, or use notes/tasks as substitutes for canonical domain records.
 
 ---
 
@@ -190,7 +196,8 @@ These are **defaults** for builders when canon does not specify a finer rule:
 5. **Prefer progressive disclosure** in the Workstation over forcing all users into advanced views.  
 6. **Prefer separating sold scope from internal execution drafts** when UX ambiguity would otherwise trap users between “messy quote graph” and “can’t fix after sign.”  
 7. **Prefer a guided “log issue” flow** over expecting users to manually rebuild graphs when reality goes sideways.  
-8. **Prefer [locked-decisions-v1.md](./locked-decisions-v1.md)** for v1 product constants (roles, states, payments, portal) when other prose is silent or ambiguous.
+8. **Prefer honest MVP constraints** that hide advanced UX before choosing weak data models, duplicated workflows, or notes/tasks as substitutes for canonical records.
+9. **Prefer [locked-decisions-v1.md](./locked-decisions-v1.md)** for v1 product constants (roles, states, payments, portal) when other prose is silent or ambiguous.
 
 ---
 
@@ -209,3 +216,4 @@ When product decisions contradict prior canon:
 *Canon update (2026-05-06): Added I23 — light and dark appearance (shell / design system).*  
 *Canon update (2026-05-06): I2 + I20 — **working quote** vs **checkpoint** / approved baseline wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
 *Canon update (2026-05-06): Added I24 — Stages are presets and containers; tasks are the execution power layer. Default MVP preset **Standard Project**; reserved future preset **Service Work**. Architecture must stay preset-flexible. Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*
+*Canon update (2026-06-19): I24 clarified Standard Project as a planning affordance, not permanent job architecture; added I25 requiring MVP constraints to preserve source-of-truth integrity instead of collapsing concepts or encoding temporary UI assumptions as schema.*

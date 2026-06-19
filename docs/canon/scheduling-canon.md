@@ -3,7 +3,7 @@
 > **Status:** Locked for MVP implementation (revised 2026-06-11).  
 > **Scope:** Job execution timing — deadlines, calendar commitments, availability, and scheduling attention.  
 > **Supersedes:** Informal use of `JobVisit` and `JobTask.scheduledStartAt/scheduledEndAt` as parallel calendar truth.  
-> **Related:** [execution-engine-canon.md](./execution-engine-canon.md), [workstation-canon.md](./workstation-canon.md), [locked-decisions-v1.md](./locked-decisions-v1.md) §5 (superseded for scheduling domain by this document).
+> **Related:** [execution-engine-canon.md](./execution-engine-canon.md), [sales-site-visit-canon.md](./sales-site-visit-canon.md), [workstation-canon.md](./workstation-canon.md), [locked-decisions-v1.md](./locked-decisions-v1.md) §5 (superseded for scheduling domain by this document).
 
 ---
 
@@ -12,6 +12,8 @@
 Struxient is **task-first**. Tasks are execution truth. **Deadlines** and **calendar commitments** are separate concepts. A task may have neither, one, or both. Empty timing is **valid** unless scheduling is explicitly **REQUIRED**.
 
 Calendar commitments for jobs live on a **single canonical entity**: `JobScheduleEvent`. Do not stretch `JobVisit` into the permanent generic model. Do not treat `JobTask.scheduledStartAt/scheduledEndAt` as a second calendar.
+
+Pre-job sales site visits live on `LeadVisitRequest`. Do not use `JobScheduleEvent` for pre-job sales visits while `jobId` is required, and do not reuse `JobVisit` for estimate/sales visits. See [sales-site-visit-canon.md](./sales-site-visit-canon.md).
 
 **Payment schedule** (commercial milestones) is a **different domain** — not workforce calendar.
 
@@ -62,6 +64,10 @@ Lead visit facts should support these operational outcomes:
 - canceled visit outcome
 
 Do not encode “second site visit” as a separate workflow status; represent it as another lead-visit record with purpose/context.
+
+Sales visit scheduling must distinguish internal schedule commitment from customer confirmation. “Scheduled” means the contractor has placed the visit on the internal calendar; “customer confirmed” means the customer accepted or confirmed the appointment through an auditable action. Customer confirmation, notification delivery, access details, completion outcome, and post-visit next action are part of the sales visit contract, not `Lead.status`, `Quote.status`, or calendar DTO truth.
+
+The detailed pre-job lifecycle, required concepts, access snapshot rules, permissions, audit events, surface behavior, and MVP split are owned by [sales-site-visit-canon.md](./sales-site-visit-canon.md).
 
 ---
 
@@ -396,6 +402,7 @@ Do not ship in MVP:
 - Capacity planning, route optimization, recurrence
 - Equipment reservations
 - Customer self-rescheduling portal
+- Customer self-scheduling / confirmation links for sales visits in internal MVP
 - Business-day/holiday deadline math (calendar days only for derived offsets)
 - Advanced deadline anchors (task complete, signal, payment, inspection fail)
 - Automatic schedule optimization
@@ -407,9 +414,11 @@ Do not ship in MVP:
 ## Related documents
 
 - Implementation plan, matrices, migration: [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md)
+- Sales site visit workflow: [`sales-site-visit-canon.md`](./sales-site-visit-canon.md)
 - Code SoT map: [`../source-of-truth-map.md`](../source-of-truth-map.md) § Scheduling
 - Workstation attention: [`workstation-canon.md`](./workstation-canon.md)
 
 ---
 
-*Canon locked 2026-06-08; revised lock 2026-06-11 for final first-class scheduling model.*
+*Canon locked 2026-06-08; revised lock 2026-06-11 for final first-class scheduling model.*  
+*Updated 2026-06-19 — Cross-linked Sales Site Visit canon and clarified `LeadVisitRequest` vs `JobScheduleEvent` boundary.*

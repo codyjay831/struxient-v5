@@ -60,15 +60,15 @@ A **stage** is a lightweight **preset / container** that groups tasks under a li
 
 > **Canon phrase (I24):** *Stages are presets and containers. Tasks are the execution power layer.*
 
-In MVP, v5 ships a single **default stage preset — Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. A reserved future preset, **Service Work**, will support smaller service execution using the **same** core line-item / stage / task model (no separate task engine). Detailed product framing lives in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
+In MVP, v5 ships a single **default stage preset — Standard Project**: **Pre-Construction → Engineering & Permits → Materials → Installation → Final Inspection & Closeout**. This preset is a planning affordance, not a required permanent job shape. Activation materializes the stages actually used by the accepted execution plan, plus any explicit starter/planning path when no tasks exist. A reserved future preset, **Service Work**, will support smaller service execution using the **same** core line-item / stage / task model (no separate task engine). Detailed product framing lives in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.
 
-**Responsibility:** organize execution **without** replacing the **line item** as the commercial anchor and **without** becoming the operational power layer themselves. Depth (ownership, ordering, dependencies, blockers, completion truth) lives on **tasks** (and downstream models like payments, approvals, daily logs, and execution records). Stage architecture must remain **preset-flexible** — presets can later be renamed, hidden, merged, specialized, or selected per real contractor usage; **kanban** and **placement** framings are out of bounds.
+**Responsibility:** organize execution **without** replacing the **line item** as the commercial anchor and **without** becoming the operational power layer themselves. Depth (ownership, ordering, dependencies, blockers, completion truth) lives on **tasks** (and downstream models like payments, approvals, daily logs, and execution records). Stage architecture must remain **preset-flexible** — presets can later be renamed, hidden, merged, specialized, or selected per real contractor usage; code must route through preset/library abstractions and must not depend on the five Standard Project labels. **Kanban** and **placement** framings are out of bounds.
 
 ### Event / interruption (conceptual)
 
 An **event** is something that changes reality relative to plan: customer change, weather, failed inspection, missing info, payment block, crew discovery, internal error, etc.
 
-Events may spawn **new line items**, **new tasks**, **correction paths**, **pauses**, or **detours**, and must support a **return** to the prior path when appropriate.
+Events may create **new line items**, non-blocking coordination work, **recovery paths**, **pauses**, or **detours**, and must support a **return** to the prior path when appropriate. For `BLOCKS_WORK` issues, remediation is `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; random spawned follow-up tasks do not clear blockers or replace recovery/resume semantics.
 
 **Responsibility:** preserve **causality** (what happened), **ownership** (who fixes), and **narrative continuity** (paused vs parallel vs abandoned steps).
 
@@ -207,3 +207,4 @@ Canon expects implementations to **avoid duplicate conflicting sources of truth*
 *Canon update (2026-05-06): Quote section — **working record** vs **checkpoints** pointer to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
 *Canon update (2026-05-06): Stage entry rewritten as **preset / container** per **I24** canon phrase; default MVP preset **Standard Project** named; reserved future preset **Service Work** noted (same core model, no separate task engine). Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*
 *Canon update (2026-06-14): Auth/permissions section clarified stale-session fail-closed checks, selected-org validation, and role-surfacing vs permission-enforcement split.*
+*Canon update (2026-06-19): Clarified Standard Project as a planning affordance, not permanent job architecture; event/interruption language now routes `BLOCKS_WORK` remediation through `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows.*

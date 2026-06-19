@@ -163,6 +163,21 @@ The five orientation phases (`Intake → Discovery → Estimating → Customer R
 - **Drag-to-advance** boards where column placement mutates lifecycle state.
 - Using broad phase columns (`Discovery`, `Estimating`) as the primary Sales board structure when actionable condition lanes are available.
 
+### Sales site visit experience
+
+Pre-job sales site visits are scheduled discovery records connected to the lead and, when present, the quote. They must help the contractor move naturally from customer request to quote readiness, quote revision, follow-up, reschedule, no-show recovery, or disqualification without becoming a second quote workflow.
+
+Surface rules:
+
+- **Workstation** shows assigned visits today/tomorrow, unconfirmed visits, missing access details, reschedule requests, no-show recovery, and completed visits missing quote/follow-up. It does not become the full visit editor.
+- **Calendar** shows the sales visit badge, assigned rep, arrival window, confirmation state, and quick actions. It does not own visit state.
+- **Sales** shows lead/opportunity state derived from visit facts, upcoming visit, and post-visit next action. No drag-to-advance unless backed by an explicit audited service transition.
+- **Lead Review** is the primary place for visit context and outcome capture.
+- **Quote workspace** may show linked visit state if a quote exists. Visit notes may inform drafting, but must not silently mutate quote scope.
+- **Customer confirmation link** is later-phase token-scoped access to one visit only; it must not expose internal notes, pricing logic, staff comments, quote internals, or unrelated customer/job data.
+
+The full entity, lifecycle, access, permission, audit, and MVP boundaries are canonized in [sales-site-visit-canon.md](./sales-site-visit-canon.md).
+
 ---
 
 ## 4. Quote authoring experience
@@ -292,10 +307,12 @@ Customer change requests, material issues, failed inspections, site discoveries,
 
 An event may create or trigger:
 
-- New tasks that **publish signals** to unblock work.
-- New tasks that **require signals** to pause work.
-- A temporary detour that "hijacks" the signal bus.
+- New non-blocking coordination work that helps people act.
+- New recovery tasks inside a `JobRecoveryFlow` when a `BLOCKS_WORK` issue requires remediation.
+- Signal requirements or muted signals that pause affected work.
 - A defined return point to the prior path.
+
+For `BLOCKS_WORK` issues, the blocker-clearing path is not a random spawned task or ad hoc detour. It is `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows, followed by explicit recovery/resume or audited force resolution.
 
 ### Transparency requirements
 
@@ -319,7 +336,7 @@ Field construction is **issue-prone by nature**. The product must offer a **prim
 - **Guided capture** — logging an issue should **not** depend on users understanding internal workflow theory. Prefer a small number of **clear choices** (what happened, severity, who is affected, does this stop work) over a blank text box as the only structure.  
 - **Always produces actionable state** — a meaningful issue should **mute signals** of the affected task/stage, automatically pausing downstream work and appearing in the **Workstation** as a blocker.
 - **Ownership and causality by default** — every recorded issue should support answering: **what changed**, **who owns the next step**, **what is blocked**, without hunting through unrelated notes.  
-- **Forgiving edits** — users should be able to **correct a mis-filed issue** or **re-scope follow-up tasks** without orphaning the job or breaking sold scope; commercial changes still flow through **explicit** change paths when needed.
+- **Forgiving edits** — users should be able to **correct a mis-filed issue** or adjust non-blocking coordination work without orphaning the job or breaking sold scope. For `BLOCKS_WORK` issues, remediation scope lives in the recovery flow; commercial changes still flow through **explicit** change paths when needed.
 
 This is the experiential counterpart to “flexible execution”: **events are first-class**, not a side channel where important work goes to die.
 
@@ -328,13 +345,13 @@ This is the experiential counterpart to “flexible execution”: **events are f
 Use a **small** default lifecycle so implementation stays predictable:
 
 1. **open** — recorded, not yet triaged to a clear next operational posture.  
-2. **triaged** or **in_progress** — owned next steps exist (may include spawned tasks).  
+2. **triaged** or **in_progress** — owned next steps exist. Non-blocking coordination tasks may exist; `BLOCKS_WORK` remediation must use a recovery flow.  
 3. **resolved** — the issue’s driving concern is handled for operational purposes (may still leave follow-up history).  
 4. **cancelled** or **misfiled** (optional) — duplicate, mistake, or withdrawn without implying the original problem was “fixed.”
 
-**Anchoring:** an issue may block a **job**, **task**, **stage**, or **line item** by **muting** its signals. If the anchor is **unclear**, default to a **job-level** issue plus a **triage task** so ownership lands somewhere visible.
+**Anchoring:** an issue may block a **job**, **task**, **stage**, or **line item** by **muting** its signals. If the anchor is **unclear**, default to a **job-level** issue plus explicit triage ownership so responsibility lands somewhere visible. If the issue blocks work, any blocker-clearing remediation still uses `JobRecoveryFlow`.
 
-**Tasks vs issue closure:** completing a **spawned task** may **suggest** resolution but must **not silently close** the construction issue unless the product **explicitly** defines auto-close rules. Otherwise humans keep explicit control over issue lifecycle.
+**Tasks vs issue closure:** completing a non-blocking coordination task must **not silently close** a construction issue. Completing recovery tasks may make a `BLOCKS_WORK` issue eligible for explicit **resume** resolution, but it does not replace issue resolution or bypass recovery/resume semantics.
 
 ---
 
@@ -478,3 +495,5 @@ See [overview.md](./overview.md). This experience canon exists to keep planning 
 *Canon update (2026-05-06): §10 activation — checkpoint proof vs CO / activity wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*
 *Canon update (2026-05-13): Signals recast as the primary readiness engine; AI Secretary introduced; Detours renamed to Events; Stages moved to org-scoped table.*  
 *Canon update (2026-05-25): §6 — flow keeper (forgiving capture, enforced flow); cross-ref [product-philosophy.md](./product-philosophy.md).*
+*Canon update (2026-06-19): Added Sales site visit experience rules and linked [sales-site-visit-canon.md](./sales-site-visit-canon.md).*
+*Canon update (2026-06-19): §7 tightened issue/event language so `BLOCKS_WORK` remediation uses `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; non-blocking coordination tasks cannot bypass blockers, resolve issues, or replace recovery/resume semantics.*

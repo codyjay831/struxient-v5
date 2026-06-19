@@ -21,6 +21,7 @@ import { CustomerServiceLocationsPanel } from "@/components/customers/customer-s
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { Phone, UserRound, Mail, History, Briefcase, FileText, ChevronRight, ArrowUpRight } from "lucide-react";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
+import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
@@ -374,38 +375,14 @@ export default async function CustomerDetailPage({
             locations={serviceLocations.map((loc) => ({
               ...(() => {
                 const resolved = resolvedSiteDetailsByLocationId.get(loc.id) ?? null;
-                return {
-                  apn: resolved?.apn ?? loc.apn ?? null,
-                  apnSourceTitle: resolved?.apnSourceTitle ?? null,
-                  apnSourceUrl: resolved?.apnSourceUrl ?? null,
-                  apnVerificationUrl: resolved?.apnVerificationUrl ?? null,
-                  apnConflict: resolved?.apnConflict
-                    ? {
-                        value: resolved.apnConflict.value,
-                        sourceTitle: resolved.apnConflict.sourceTitle,
-                        sourceUrl: resolved.apnConflict.sourceUrl,
-                      }
-                    : null,
-                  utilityName: resolved?.utility?.name ?? null,
-                  utilityOfficialWebsite: resolved?.utility?.officialWebsite ?? null,
-                  utilityServiceUpgradeUrl: resolved?.utility?.serviceUpgradeUrl ?? null,
-                  utilityCoverageSourceTitle: resolved?.utility?.coverageSourceTitle ?? null,
-                  utilityCoverageSourceUrl: resolved?.utility?.coverageSourceUrl ?? null,
-                  jurisdictionName: resolved?.jurisdiction?.name ?? null,
-                  jurisdictionBuildingDepartmentName:
-                    resolved?.jurisdiction?.buildingDepartmentName ?? null,
-                  jurisdictionOfficialWebsite: resolved?.jurisdiction?.officialWebsite ?? null,
-                  jurisdictionBuildingDepartmentUrl:
-                    resolved?.jurisdiction?.buildingDepartmentUrl ?? null,
-                  jurisdictionPermitPortalUrl: resolved?.jurisdiction?.permitPortalUrl ?? null,
-                  jurisdictionFormsUrl: null,
-                  jurisdictionInspectionsUrl: null,
-                  assessorCounty: resolved?.assessorResource?.county ?? null,
-                  assessorState: resolved?.assessorResource?.state ?? null,
-                  assessorSearchUrl: resolved?.assessorResource?.assessorSearchUrl ?? null,
-                  assessorParcelGisUrl: resolved?.assessorResource?.parcelGisUrl ?? null,
-                  detailsStatus: resolved?.detailsStatus ?? loc.detailsStatus,
-                };
+                return resolved
+                  ? siteDetailsPayloadFromResolved(resolved)
+                  : {
+                      apn: loc.apn ?? null,
+                      utilityName: null,
+                      jurisdictionName: null,
+                      detailsStatus: loc.detailsStatus,
+                    };
               })(),
               id: loc.id,
               formattedAddress: loc.formattedAddress,
