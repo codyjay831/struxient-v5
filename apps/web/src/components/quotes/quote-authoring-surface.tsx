@@ -1235,6 +1235,7 @@ export function QuoteAuthoringSurface({
                 lineItems.find((line) => line.id === clarifyLineId)?.description ?? "",
               matchedSet,
               alternatives: [],
+              recommendedConfidence: null,
               savedAnswers: null,
             },
       );
@@ -1752,6 +1753,7 @@ export function QuoteAuthoringSurface({
         setPickerRows={clarifySetOptions}
         pickerQueryFromParent={clarifySetOptionsQuery}
         autoMatchedSetKey={clarifyAutoMatchedSetKey}
+        recommendedConfidence={clarifyModel?.recommendedConfidence ?? null}
         isSetPickerLoading={isClarifySetSearchLoading}
         onSearchSets={(query) =>
           clarifyLineId ? handleSearchClarificationSets(clarifyLineId, query) : Promise.resolve()

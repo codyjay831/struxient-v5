@@ -220,11 +220,15 @@ export async function getClarificationLineModelAction(
     const tagNames = line.sourceLineItemTemplate?.tags.map((t) => t.name) ?? [];
     const tagAliases = line.sourceLineItemTemplate?.tags.flatMap((t) => t.aliases) ?? [];
 
-    const matches = await selectClarificationQuestionSetsForLine(ctx.organizationId, {
-      description: line.description,
-      tagKeys: toTagKeys([...tagNames, ...tagAliases]),
-      extraText: [...tagNames, line.internalNotes ?? ""].join(" "),
-    });
+    const matches = await selectClarificationQuestionSetsForLine(
+      ctx.organizationId,
+      {
+        description: line.description,
+        tagKeys: toTagKeys([...tagNames, ...tagAliases]),
+        extraText: [...tagNames, line.internalNotes ?? ""].join(" "),
+      },
+      { minScore: 0.3 },
+    );
 
     const top = matches[0] ?? null;
     const topSet = top
@@ -255,6 +259,7 @@ export async function getClarificationLineModelAction(
         alternatives: matches
           .slice(top ? 1 : 0)
           .map((m) => ({ key: m.questionSetKey, label: m.label, confidence: m.confidence })),
+        recommendedConfidence: top?.confidence ?? null,
         savedAnswers,
       },
     };
@@ -301,6 +306,7 @@ export async function getClarificationSetByKeyAction(
         questions: set.questions,
       },
       alternatives: [],
+      recommendedConfidence: null,
       savedAnswers,
     },
   };

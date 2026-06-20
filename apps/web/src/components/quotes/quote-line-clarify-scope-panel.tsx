@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Check, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { Check, Library, Loader2, Plus, Sparkles, X } from "lucide-react";
 import type {
   ClarificationAnswer,
   ClarificationAnswerValue,
@@ -32,6 +32,7 @@ import type {
   ClarificationQuestionSetPickerRow,
   ClarificationSetOption,
 } from "@/app/(workspace)/quotes/quote-line-clarification-types";
+import type { ClarificationMatchConfidence } from "@/lib/clarification/clarification-matching";
 import {
   workspaceFormControlClass,
   workspaceFormFieldLabelClass,
@@ -104,6 +105,7 @@ export type ClarifyScopePanelProps = {
   setPickerRows: ClarificationQuestionSetPickerRow[];
   pickerQueryFromParent: string;
   autoMatchedSetKey: string | null;
+  recommendedConfidence: ClarificationMatchConfidence | null;
   isSetPickerLoading: boolean;
   onSearchSets: (query?: string) => Promise<void>;
   isLoading: boolean;
@@ -131,6 +133,21 @@ export type ClarifyScopePanelProps = {
 
 type AnswerMap = Record<string, ClarificationAnswerValue>;
 
+type PanelMode = "start" | "answer" | "choose" | "create";
+type ActiveSetSource = "recommended" | "selected" | "created";
+
+function confidenceLabel(confidence: ClarificationMatchConfidence): string {
+  if (confidence === "high") return "Strong recommendation";
+  if (confidence === "medium") return "Possible recommendation";
+  return "Weak recommendation";
+}
+
+function setSourceBadge(source: ActiveSetSource): string {
+  if (source === "recommended") return "Recommended";
+  if (source === "created") return "Created";
+  return "Selected";
+}
+
 function chipClass(active: boolean): string {
   return [
     "rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[40px]",
@@ -151,6 +168,7 @@ export function ClarifyScopePanel({
   setPickerRows,
   pickerQueryFromParent,
   autoMatchedSetKey,
+  recommendedConfidence,
   isSetPickerLoading,
   onSearchSets,
   isLoading,
@@ -180,7 +198,10 @@ export function ClarifyScopePanel({
     latestVersion: number;
   } | null>(null);
   const [isEditingExistingSet, setIsEditingExistingSet] = useState(false);
-  const [panelMode, setPanelMode] = useState<"answer" | "choose" | "create">("answer");
+  const [panelMode, setPanelMode] = useState<PanelMode>("start");
+  const [activeSetSource, setActiveSetSource] = useState<ActiveSetSource | null>(null);
+  const [recommendedSetSnapshot, setRecommendedSetSnapshot] =
+    useState<ClarifyScopeQuestionSet | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const prevSetIdentityRef = useRef<string | null>(null);
   const prevLineIdRef = useRef<string | null>(null);
@@ -206,7 +227,9 @@ export function ClarifyScopePanel({
       setDraftSet(null);
       setExistingSetKey(null);
       setIsEditingExistingSet(false);
-      setPanelMode("answer");
+      setPanelMode("start");
+      setActiveSetSource(null);
+      setRecommendedSetSnapshot(null);
       prevSetIdentityRef.current = null;
       prevLineIdRef.current = null;
       prevProposalRef.current = null;
@@ -214,7 +237,9 @@ export function ClarifyScopePanel({
     }
     const lineChanged = prevLineIdRef.current !== lineId;
     if (lineChanged) {
-      setPanelMode(questionSet ? "answer" : "create");
+      setPanelMode("start");
+      setActiveSetSource(null);
+      setRecommendedSetSnapshot(null);
       setSetDraftError(null);
       setDraftSet(null);
       setExistingSetKey(null);
@@ -311,6 +336,12 @@ export function ClarifyScopePanel({
     if (!open) return;
     setPickerQuery(pickerQueryFromParent);
   }, [open, pickerQueryFromParent]);
+
+  useEffect(() => {
+    if (!open || isLoading) return;
+    if (!autoMatchedSetKey || !questionSet || questionSet.key !== autoMatchedSetKey) return;
+    setRecommendedSetSnapshot(questionSet);
+  }, [open, isLoading, autoMatchedSetKey, questionSet]);
 
 
 
@@ -622,7 +653,7 @@ export function ClarifyScopePanel({
     setIsEditingExistingSet(false);
     setDraftSet(null);
     setSetDraftError(null);
-    setPanelMode(questionSet ? "answer" : "create");
+    setPanelMode(activeSetSource ? "answer" : "start");
   };
 
   const handleUpdateSet = async () => {
@@ -660,6 +691,7 @@ export function ClarifyScopePanel({
     const ok = await onCreateSet(normalizedDraftPayload);
     if (ok) {
       setDraftSet(null);
+      setActiveSetSource("created");
       setPanelMode("answer");
     }
   };
@@ -694,6 +726,14 @@ export function ClarifyScopePanel({
     });
   };
 
+  const goBackToStart = () => {
+    setPanelMode("start");
+    setSetDraftError(null);
+    if (!isEditingExistingSet) {
+      setDraftSet(null);
+    }
+  };
+
   const openSetPicker = () => {
     setPanelMode("choose");
     void onSearchSets(pickerQuery.trim() || undefined);
@@ -707,8 +747,20 @@ export function ClarifyScopePanel({
     setExistingSetKey(null);
   };
 
+  const acceptRecommendation = async () => {
+    if (!autoMatchedSetKey || !recommendedSetSnapshot) return;
+    if (questionSet?.key !== autoMatchedSetKey) {
+      await Promise.resolve(onSelectAlternative(autoMatchedSetKey));
+    }
+    setActiveSetSource("recommended");
+    setPanelMode("answer");
+  };
+
   const selectQuestionSet = async (setKey: string) => {
     await Promise.resolve(onSelectAlternative(setKey));
+    setActiveSetSource(
+      setKey === autoMatchedSetKey ? "recommended" : "selected",
+    );
     setPanelMode("answer");
   };
 
@@ -844,7 +896,7 @@ export function ClarifyScopePanel({
       data-workspace-child-dialog="true"
       aria-labelledby="clarify-scope-title"
       aria-busy={isApplying}
-      className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl outline-none [&::backdrop]:bg-black/40 [&:not([open])]:hidden"
+      className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl outline-none [&::backdrop]:bg-black/40 [&:not([open])]:hidden"
       onClick={(e) => {
         if (!canClose) return;
         if (e.target === e.currentTarget) onClose();
@@ -870,65 +922,109 @@ export function ClarifyScopePanel({
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div className="rounded-lg border border-border bg-foreground/[0.02] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className={workspaceFormFieldLabelClass}>Question set</p>
-                {questionSet ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-foreground">{questionSet.label}</p>
-                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-foreground-subtle">
-                      {questionSet.key === autoMatchedSetKey ? "Auto matched" : "Selected"}
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-sm text-foreground-muted">No set selected yet</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {panelMode !== "answer" ? (
-                  <button
-                    type="button"
-                    className={workspaceFormSecondaryButtonClass}
-                    disabled={isLoading || isApplying}
-                    onClick={() => setPanelMode(questionSet ? "answer" : "create")}
-                  >
-                    Back
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={workspaceFormSecondaryButtonClass}
-                  disabled={isLoading || isApplying || isUpdatingSet || isCreatingSet}
-                  onClick={openSetPicker}
-                >
-                  Choose another
-                </button>
-                <button
-                  type="button"
-                  className={workspaceFormSecondaryButtonClass}
-                  disabled={isLoading || isApplying || isUpdatingSet || isCreatingSet}
-                  onClick={startCreateSet}
-                >
-                  <Plus className="size-4" />
-                  Create new
-                </button>
-              </div>
-            </div>
-          </div>
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-foreground-muted">
               <Loader2 className="size-4 animate-spin" />
               Finding scope questions…
             </div>
+          ) : panelMode === "start" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground-muted">
+                Pick how to capture the missing scope facts for this line.
+              </p>
+              <div className="grid gap-3 md:grid-cols-3">
+                {recommendedSetSnapshot ? (
+                  <div className="flex flex-col rounded-lg border border-border bg-foreground/[0.02] p-4">
+                    <p className={workspaceFormFieldLabelClass}>Recommended question set</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {recommendedSetSnapshot.label}
+                    </p>
+                    {recommendedConfidence ? (
+                      <p className="mt-1 text-[11px] text-foreground-subtle">
+                        {confidenceLabel(recommendedConfidence)}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-foreground-muted">
+                      {recommendedSetSnapshot.questions.length} question
+                      {recommendedSetSnapshot.questions.length === 1 ? "" : "s"}
+                    </p>
+                    {alternatives.length > 0 ? (
+                      <div className="mt-3 space-y-1">
+                        <p className="text-[10px] uppercase tracking-wide text-foreground-subtle">
+                          Other options
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {alternatives.slice(0, 3).map((alt) => (
+                            <span
+                              key={alt.key}
+                              className="rounded-full border border-border px-2 py-0.5 text-[10px] text-foreground-muted"
+                            >
+                              {alt.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`${workspaceFormPrimaryButtonClass} mt-auto pt-4`}
+                      disabled={isApplying}
+                      onClick={() => void acceptRecommendation()}
+                    >
+                      Use recommendation
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4 md:col-span-1">
+                    <p className={workspaceFormFieldLabelClass}>Recommended question set</p>
+                    <p className="mt-2 text-sm text-foreground-muted">
+                      No good recommendation yet. Choose from the library or create questions for
+                      this line.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-col rounded-lg border border-border bg-foreground/[0.02] p-4">
+                  <p className={workspaceFormFieldLabelClass}>Choose from library</p>
+                  <p className="mt-2 flex-1 text-sm text-foreground-muted">
+                    Search active question sets and pick the one that fits this line.
+                  </p>
+                  <button
+                    type="button"
+                    className={`${workspaceFormSecondaryButtonClass} mt-auto pt-4`}
+                    disabled={isSetPickerLoading}
+                    onClick={openSetPicker}
+                  >
+                    <Library className="size-4" />
+                    Choose from library
+                  </button>
+                </div>
+
+                <div className="flex flex-col rounded-lg border border-border bg-foreground/[0.02] p-4">
+                  <p className={workspaceFormFieldLabelClass}>Create questions</p>
+                  <p className="mt-2 flex-1 text-sm text-foreground-muted">
+                    Start from a trade template, AI draft, or build questions manually.
+                  </p>
+                  <button
+                    type="button"
+                    className={`${workspaceFormSecondaryButtonClass} mt-auto pt-4`}
+                    disabled={isGeneratingSet || isCreatingSet}
+                    onClick={startCreateSet}
+                  >
+                    <Plus className="size-4" />
+                    Create questions
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : panelMode === "choose" ? (
             <div className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium text-foreground">Choose question set</p>
+                <p className="text-sm font-medium text-foreground">Choose from library</p>
                 <button
                   type="button"
                   className={workspaceFormSecondaryButtonClass}
-                  onClick={() => setPanelMode(questionSet ? "answer" : "create")}
+                  onClick={goBackToStart}
                 >
                   Back
                 </button>
@@ -1006,6 +1102,20 @@ export function ClarifyScopePanel({
             </div>
           ) : panelMode === "create" && showDraftEditor && draftSet ? (
             <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">
+                  {isUpdatingExisting ? "Edit questions" : "Create question set"}
+                </p>
+                {!isUpdatingExisting ? (
+                  <button
+                    type="button"
+                    className={workspaceFormSecondaryButtonClass}
+                    onClick={goBackToStart}
+                  >
+                    Back
+                  </button>
+                ) : null}
+              </div>
               {isUpdatingExisting ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm text-foreground-muted">
@@ -1425,20 +1535,19 @@ export function ClarifyScopePanel({
             </div>
           ) : panelMode === "create" ? (
             <div className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-3">
-              <p className="text-sm text-foreground-muted">
-                No scope question set matched this line yet. Create one here, then answer it right
-                away.
-              </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">Create questions</p>
                 <button
                   type="button"
                   className={workspaceFormSecondaryButtonClass}
-                  disabled={isSetPickerLoading}
-                  onClick={openSetPicker}
+                  onClick={goBackToStart}
                 >
-                  Choose existing set
+                  Back
                 </button>
               </div>
+              <p className="text-sm text-foreground-muted">
+                Build reusable questions for this line, then answer and apply them.
+              </p>
               <div className="space-y-2">
                 <p className={workspaceFormFieldLabelClass}>Start from a trade template</p>
                 <div className="flex flex-wrap gap-2">
@@ -1487,19 +1596,35 @@ export function ClarifyScopePanel({
             </div>
           ) : panelMode === "answer" && questionSet ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
                 <div>
                   <p className={workspaceFormFieldLabelClass}>Question set</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-medium text-foreground">{questionSet.label}</p>
-                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-foreground-subtle">
-                      {questionSet.key === autoMatchedSetKey ? "Auto matched" : "Selected"}
-                    </span>
+                    {activeSetSource ? (
+                      <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-foreground-subtle">
+                        {setSourceBadge(activeSetSource)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-
-
+                  <button
+                    type="button"
+                    className={workspaceFormSecondaryButtonClass}
+                    disabled={isLoading || isApplying}
+                    onClick={goBackToStart}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className={workspaceFormSecondaryButtonClass}
+                    disabled={isLoading || isApplying || isUpdatingSet || isCreatingSet}
+                    onClick={openSetPicker}
+                  >
+                    Choose another
+                  </button>
                   <button
                     type="button"
                     className={workspaceFormSecondaryButtonClass}
@@ -1573,12 +1698,12 @@ export function ClarifyScopePanel({
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-4">
           <p className="text-xs text-foreground-subtle">
-            {panelMode === "choose"
-              ? "Select an existing set or create a new one for this line."
+            {panelMode === "start"
+              ? "Pick how to capture the missing scope facts for this line."
+              : panelMode === "choose"
+              ? "Select an existing question set from the library."
               : panelMode === "create"
-              ? "Create a matching question set, then answer and apply it to this line."
-              : !questionSet
-              ? "Create a matching question set, then answer it for this line."
+              ? "Create reusable questions, then answer them for this line."
               : answeredCount > 0
               ? `${answeredCount} answered — applies to this line's scope notes`
               : "Tap answers — customer-facing facts feed the proposal, internal facts stay staff-only"}

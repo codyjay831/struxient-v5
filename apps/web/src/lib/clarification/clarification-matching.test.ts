@@ -160,3 +160,59 @@ test("matchQuestionSetsForLine ignores non-active sets", () => {
   );
   assert.deepEqual(matches, []);
 });
+
+test("weak label overlap is excluded from promoted recommendations at minScore 0.3", () => {
+  const sets: ClarificationQuestionSet[] = [
+    {
+      key: "window.replacement",
+      version: 1,
+      label: "Window Replacement",
+      status: "active",
+      aliases: [],
+      questions: [],
+    },
+    {
+      key: "window.whole_home",
+      version: 1,
+      label: "Whole Home Window Package",
+      status: "active",
+      aliases: ["whole residential window replacement"],
+      questions: [],
+    },
+  ];
+  const weakMatches = matchQuestionSetsForLine(
+    { description: "Whole Residential Window Replacement" },
+    sets,
+    [],
+    { minScore: 0.15 },
+  );
+  assert.equal(weakMatches.some((m) => m.questionSetKey === "window.replacement"), true);
+  assert.equal(
+    weakMatches.some((m) => m.questionSetKey === "window.whole_home"),
+    true,
+  );
+
+  const promotedMatches = matchQuestionSetsForLine(
+    { description: "Whole Residential Window Replacement" },
+    sets,
+    [],
+    { minScore: 0.3 },
+  );
+  assert.equal(
+    promotedMatches.some((m) => m.questionSetKey === "window.replacement"),
+    false,
+  );
+  assert.equal(promotedMatches[0]?.questionSetKey, "window.whole_home");
+});
+
+test("strong tag match still promotes at minScore 0.3", () => {
+  const matches = selectSeedQuestionSetsForLine(
+    {
+      description: "MSP swap",
+      tagKeys: ["service-upgrade"],
+    },
+    { minScore: 0.3 },
+  );
+  assert.equal(matches.length >= 1, true);
+  assert.equal(matches[0].questionSetKey, "electrical.service_upgrade");
+});

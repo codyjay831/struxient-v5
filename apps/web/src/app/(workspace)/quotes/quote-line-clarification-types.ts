@@ -33,6 +33,8 @@ export type ClarificationLineModel = {
   } | null;
   /** Alternative sets the user can switch to. */
   alternatives: ClarificationSetOption[];
+  /** Confidence of the top recommendation, when one exists. */
+  recommendedConfidence: ClarificationMatchConfidence | null;
   /** Previously saved answers for the matched set on this line, if any. */
   savedAnswers: LineClarificationAnswers | null;
 };
