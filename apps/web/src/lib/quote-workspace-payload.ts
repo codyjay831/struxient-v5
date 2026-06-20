@@ -67,7 +67,7 @@ export type QuoteWorkspaceTabData = {
   customerHref: string | null;
   lead: QuoteWorkspaceLead | null;
 
-  /* Send & Accept tab */
+  /* Approval tab */
   sendCheckpoints: QuoteWorkspaceCheckpointPayload[];
   approvalCheckpoints: QuoteWorkspaceCheckpointPayload[];
 

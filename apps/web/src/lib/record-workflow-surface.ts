@@ -115,12 +115,12 @@ export function buildQuoteRecordActionState(input: {
 
   if (readiness.state === "APPROVED_NEEDS_EXECUTION_REVIEW") {
     requiredItems.push(
-      "Execution planning needs review on one or more lines before activation.",
+      "Execution plan needed — add tasks and resolve dependency gaps before activation.",
     );
   }
 
   if (readiness.state === "APPROVED_READY_TO_ACTIVATE") {
-    satisfiedItems.push("Execution review is clear enough to activate a job.");
+    satisfiedItems.push("Execution plan is ready — you can activate the job.");
   }
 
   const primary = readiness.primaryAction;

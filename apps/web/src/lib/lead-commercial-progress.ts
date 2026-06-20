@@ -358,10 +358,10 @@ export function getLeadCommercialProgress(
       return {
         state: "APPROVED_READY_TO_ACTIVATE",
         label: STATE_LABEL.APPROVED_READY_TO_ACTIVATE,
-        description: "The customer approved this quote. Review the job plan to schedule work.",
+        description: "The customer approved this quote. Build the execution plan, then activate the job.",
         primaryAction: {
           kind: "OPEN_EXECUTION_REVIEW",
-          label: "Review job plan",
+          label: "Build execution plan",
           targetQuoteId: activeQuote.id,
         },
         secondaryAction: {

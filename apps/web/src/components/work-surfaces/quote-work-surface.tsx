@@ -15,7 +15,7 @@
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
  *   - Payments        — payment schedule
- *   - Send & Accept   — inline Send/Approve + checkpoint history + preview link
+ *   - Approval        — customer approval, proposal link, history
  *
  * Secondary views (muted Details row — reference / admin):
  *   - Customer & Intake — customer card + intake context
@@ -69,7 +69,6 @@ import {
   Library,
   ListOrdered,
   MapPin,
-  MessageSquare,
   Send,
   ThumbsUp,
   UserRound,
@@ -100,6 +99,7 @@ import {
   type QuoteReadinessAction,
   type QuoteReadinessActionKind,
 } from "@/lib/quote-readiness";
+import type { QuoteWorkflowPresentation } from "@/lib/quote-workflow-presenter";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import { JobsiteCard } from "@/components/site-details/jobsite-card";
 import type {
@@ -137,7 +137,7 @@ export type QuoteWorkSurfaceTab =
 
 export type QuoteWorkSurfaceProps = {
   quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   workspaceTabs: QuoteWorkspaceTabData;
   /**
    * Suppress the internal identity row when the container
@@ -189,7 +189,7 @@ const PRIMARY_TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
   { id: "payments", label: "Payments" },
-  { id: "sendaccept", label: "Send & Accept" },
+  { id: "sendaccept", label: "Approval" },
 ];
 
 const SECONDARY_VIEWS: { id: QuoteWorkSurfaceTab; label: string }[] = [
@@ -274,7 +274,7 @@ function externalActionLabel(
   }
 }
 
-/* ─── Embedded Previews (Send & Accept tab) ────────────────────────────── */
+/* ─── Embedded Previews (Approval tab) ─────────────────────────────────── */
 
 function QuoteProposalPreviewEmbedded({
   quote,
@@ -365,10 +365,28 @@ function QuoteExecutionPreviewEmbedded({
   const { summary, handshakes, orphans, lineReadiness } = model;
 
   if (summary.totalTasks === 0) {
+    if (quote.status === "APPROVED") {
+      return (
+        <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-8 text-center">
+          <p className="text-base font-semibold text-foreground">Execution plan needed</p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-foreground-muted">
+            This quote is approved, but no work plan exists yet. Build the execution plan
+            before activating the job.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <Link href={quote.executionReviewHref} className={primaryBtnClass}>
+              <Wrench className="size-3.5 opacity-80" strokeWidth={2} />
+              Build execution plan
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-8 text-center">
         <p className="text-sm text-foreground-muted">
-          No planned tasks have been added to this quote yet.
+          No planned tasks yet. Add scope lines first, then build the execution plan after
+          approval.
         </p>
       </div>
     );
@@ -882,33 +900,81 @@ function StandardIdentityRow({ quote }: { quote: QuoteWorkSurfaceData }) {
 
 /* ─── Tab: Overview ────────────────────────────────────────────────────── */
 
-function NextStepCard({
+function WorkflowHeroCard({
   quote,
-  readiness,
+  workflow,
   onSwitchToTab,
   onRequestAddLineItem,
   onRequestScopeLibraryPicker,
   onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   onRequestAddLineItem: () => void;
   onRequestScopeLibraryPicker: () => void;
   onMutated?: () => void;
 }) {
-  const { primaryAction, secondaryAction, label, description, showsRevisionDrift } =
-    readiness;
+  const { readiness } = workflow;
+  const { showsRevisionDrift } = readiness;
 
   return (
-    <div className="rounded-xl border border-border bg-background p-5">
-      <p className={sectionLabelClass}>Next step</p>
-      <h3 className="mt-1.5 text-base font-semibold leading-snug text-foreground">
-        {label}
-      </h3>
-      <p className="mt-1 text-sm leading-relaxed text-foreground-muted">
-        {description}
+    <div className="rounded-xl border border-border border-l-4 border-l-accent bg-surface p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={sectionLabelClass}>Quote workflow</p>
+          <h2 className="mt-1 text-xl font-semibold leading-snug tracking-tight text-foreground">
+            {workflow.primaryHeadline}
+          </h2>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <StatusBadge label={workflow.statusLabel} tone={readiness.badgeTone} />
+          <span
+            className={[
+              "rounded-md border px-2 py-0.5 text-[0.65rem] font-medium",
+              workflow.isCommercialLocked
+                ? "border-border bg-foreground/[0.03] text-foreground-muted"
+                : "border-accent/30 bg-accent/5 text-foreground",
+            ].join(" ")}
+          >
+            {workflow.isCommercialLocked
+              ? "Commercial terms locked"
+              : "Commercial terms editable"}
+          </span>
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+        {workflow.primaryMessage}
       </p>
+
+      {workflow.blockers.length > 0 ? (
+        <ul className="mt-4 space-y-1.5">
+          {workflow.blockers.map((blocker) => (
+            <li
+              key={blocker.message}
+              className="flex items-start gap-2 text-xs text-foreground-muted"
+            >
+              <span className="mt-1 size-1.5 shrink-0 rounded-full bg-danger" aria-hidden />
+              <span>
+                {blocker.message}
+                {blocker.fixTab ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => onSwitchToTab(blocker.fixTab!)}
+                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                    >
+                      Fix
+                    </button>
+                  </>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {showsRevisionDrift ? (
         <p className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-foreground/[0.04] px-2 py-1 text-[0.7rem] font-medium text-foreground">
@@ -917,9 +983,9 @@ function NextStepCard({
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-5 flex flex-wrap items-center gap-2">
         {renderAction({
-          action: primaryAction,
+          action: workflow.primaryAction,
           variant: "primary",
           quote,
           onSwitchToTab,
@@ -927,19 +993,22 @@ function NextStepCard({
           onRequestScopeLibraryPicker,
           onMutated,
         })}
-        {renderAction({
-          action: secondaryAction,
-          variant: "secondary",
-          quote,
-          onSwitchToTab,
-          onRequestAddLineItem,
-          onRequestScopeLibraryPicker,
-          onMutated,
-        })}
+        {workflow.secondaryActions.map((action) =>
+          renderAction({
+            action,
+            variant: "secondary",
+            quote,
+            onSwitchToTab,
+            onRequestAddLineItem,
+            onRequestScopeLibraryPicker,
+            onMutated,
+          }),
+        )}
       </div>
     </div>
   );
 }
+
 
 function QuoteJobsiteCallout({
   quote,
@@ -999,6 +1068,93 @@ function QuoteJobsiteCallout({
       missingDescription="Add the project address before scheduling or creating a job."
       onSaved={onMutated}
     />
+  );
+}
+
+function ReadinessGrid({
+  workflow,
+  onSwitchToTab,
+}: {
+  workflow: QuoteWorkflowPresentation;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 @4xl:grid-cols-3">
+      {workflow.readinessItems.map((item) => {
+        const content = (
+          <>
+            <p className={`${sectionLabelClass} mb-0.5`}>{item.label}</p>
+            <p
+              className={[
+                "text-sm font-medium",
+                item.satisfied ? "text-foreground" : "text-foreground-muted",
+              ].join(" ")}
+            >
+              {item.satisfied ? "Complete" : "Needed"}
+            </p>
+          </>
+        );
+        if (item.fixTab && !item.satisfied) {
+          return (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => onSwitchToTab(item.fixTab!)}
+              className="rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-border-strong hover:bg-surface"
+            >
+              {content}
+            </button>
+          );
+        }
+        return (
+          <div
+            key={item.label}
+            className="rounded-lg border border-border bg-background p-3"
+          >
+            {content}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RecentActivityList({
+  workflow,
+  showWhenEmpty = false,
+}: {
+  workflow: QuoteWorkflowPresentation;
+  /** When true, render an empty-state panel instead of hiding the section. */
+  showWhenEmpty?: boolean;
+}) {
+  const items = workflow.activityItems.slice(0, 5);
+
+  if (items.length === 0) {
+    if (!showWhenEmpty) return null;
+    return (
+      <div className="rounded-xl border border-border bg-background p-4">
+        <p className={`${sectionLabelClass} mb-1`}>Recent activity</p>
+        <p className="text-xs text-foreground-muted">
+          No proposal sends or customer approvals recorded yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <p className={`${sectionLabelClass} mb-3`}>Recent activity</p>
+      <ul className="space-y-2 text-xs text-foreground-muted">
+        {items.map((item) => (
+          <li key={`${item.kind}-${item.atIso}-${item.label}`} className="flex justify-between gap-2">
+            <span className="text-foreground">{item.label}</span>
+            <time dateTime={item.atIso} className="shrink-0 text-foreground-subtle">
+              {item.atLabel}
+            </time>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -1071,7 +1227,7 @@ function FactsGrid({
 
 function OverviewTab({
   quote,
-  readiness,
+  workflow,
   workspaceTabs,
   onSwitchToTab,
   onRequestAddLineItem,
@@ -1079,9 +1235,10 @@ function OverviewTab({
   onMutated,
   embeddedInLead,
   onRequestServiceAddress,
+  suppressIdentityRow,
 }: {
   quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   workspaceTabs: QuoteWorkspaceTabData;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   onRequestAddLineItem: () => void;
@@ -1089,12 +1246,13 @@ function OverviewTab({
   onMutated?: () => void;
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
+  suppressIdentityRow?: boolean;
 }) {
   return (
     <div className="space-y-4">
-      <NextStepCard
+      <WorkflowHeroCard
         quote={quote}
-        readiness={readiness}
+        workflow={workflow}
         onSwitchToTab={onSwitchToTab}
         onRequestAddLineItem={onRequestAddLineItem}
         onRequestScopeLibraryPicker={onRequestScopeLibraryPicker}
@@ -1103,11 +1261,19 @@ function OverviewTab({
 
       <QuoteChangeRequestsCard quote={quote} onMutated={onMutated} />
 
-      <FactsGrid
-        quote={quote}
-        readiness={readiness}
-        onSwitchToTab={onSwitchToTab}
-      />
+      <div>
+        <p className={`${sectionLabelClass} mb-2`}>Readiness</p>
+        <ReadinessGrid workflow={workflow} onSwitchToTab={onSwitchToTab} />
+      </div>
+
+      <div>
+        <p className={`${sectionLabelClass} mb-2`}>Details</p>
+        <FactsGrid
+          quote={quote}
+          readiness={workflow.readiness}
+          onSwitchToTab={onSwitchToTab}
+        />
+      </div>
 
       <QuoteJobsiteCallout
         quote={quote}
@@ -1115,6 +1281,8 @@ function OverviewTab({
         embeddedInLead={embeddedInLead}
         onRequestServiceAddress={onRequestServiceAddress}
       />
+
+      <RecentActivityList workflow={workflow} />
 
       {/* Active job link — visible on Overview when activated. */}
       {quote.activatedJobId ? (
@@ -1130,20 +1298,6 @@ function OverviewTab({
           </div>
           <ArrowUpRight className="size-4 text-foreground-subtle" strokeWidth={1.5} />
         </Link>
-      ) : null}
-
-      {/* Revision-drift hint (also surfaces from NextStepCard but kept here so
-          the Overview tab is self-contained when scrolled). */}
-      {readiness.showsRevisionDrift ? (
-        <div className="rounded-xl border border-border bg-foreground/[0.02] px-4 py-3">
-          <p className="text-sm font-medium text-foreground">
-            Quote revised since last send
-          </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
-            The quote record has been updated after the most recent send checkpoint.
-            The customer may not have seen the latest scope and pricing.
-          </p>
-        </div>
       ) : null}
 
       {/* Record details disclosure — handy on Overview, full content lives on Record tab. */}
@@ -1184,13 +1338,14 @@ function OverviewTab({
         </details>
       </div>
 
-      {/* Footer escape hatch — only when not on full page. */}
-      <div className="pt-1 @[768px]:hidden">
-        <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
-          Open full quote page
-          <ArrowUpRight className="size-3" strokeWidth={1.5} />
-        </Link>
-      </div>
+      {suppressIdentityRow ? (
+        <div className="pt-1">
+          <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
+            Open full quote page
+            <ArrowUpRight className="size-3" strokeWidth={1.5} />
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1298,21 +1453,25 @@ function QuoteChangeRequestsCard({
 function ScopeTab({
   quote,
   workspaceTabs,
+  workflow,
   onSwitchToTab,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
   shouldOpenScopeLibraryPicker,
   onScopeLibraryPickerOpenConsumed,
   onMutated,
+  suppressIdentityRow,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
+  workflow: QuoteWorkflowPresentation;
   onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
   shouldOpenScopeLibraryPicker: boolean;
   onScopeLibraryPickerOpenConsumed: () => void;
   onMutated?: () => void;
+  suppressIdentityRow?: boolean;
 }) {
   const {
     isCommercialEditable,
@@ -1354,6 +1513,7 @@ function ScopeTab({
         onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
         onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
+        showFullPageEscapeLink={suppressIdentityRow}
         onMutated={onMutated ?? (() => {})}
       />
     );
@@ -1362,6 +1522,23 @@ function ScopeTab({
   /* non-DRAFT — read-only line list with execution-edit summaries. */
   return (
     <div className="space-y-4">
+      {workflow.canBuildExecutionPlan ? (
+        <div className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
+          <p className="text-sm font-medium text-foreground">Execution planning</p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            {workflow.workflowState === "APPROVED_EXECUTION_NEEDED"
+              ? "Build the work plan before activating the job."
+              : "Review planned tasks and dependencies before job activation."}
+          </p>
+          <div className="mt-3">
+            <Link href={quote.executionReviewHref} className={primaryBtnClass}>
+              <Wrench className="size-3.5 opacity-80" strokeWidth={2} />
+              Build execution plan
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       <WorkspacePanel
         id="line-items"
         className="border-border-strong shadow-md ring-1 ring-ring/30"
@@ -1420,17 +1597,17 @@ function ScopeTab({
         )}
       </WorkspacePanel>
 
-      <div className="pt-1 @[768px]:hidden">
-        <Link
-          href={`${quote.quoteHref}#line-items`}
-          className={mutedFooterLinkClass}
-        >
-          {isArchived
-            ? "Restore on full quote page to edit lines"
-            : "Open lines on full quote page"}
-          <ArrowUpRight className="size-3" strokeWidth={1.5} />
-        </Link>
-      </div>
+      {suppressIdentityRow ? (
+        <div className="pt-1">
+          <Link
+            href={`${quote.quoteHref}#line-items`}
+            className={mutedFooterLinkClass}
+          >
+            Open lines on full quote page
+            <ArrowUpRight className="size-3" strokeWidth={1.5} />
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1440,15 +1617,38 @@ function ScopeTab({
 function PaymentsTab({
   quote,
   workspaceTabs,
+  workflow,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
+  workflow: QuoteWorkflowPresentation;
 }) {
+  const paymentBlockers = workflow.blockers.filter((b) => b.fixTab === "payments");
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {workflow.isCommercialLocked ? (
+        <p className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs text-foreground-muted">
+          Commercial terms are locked after send. Payment milestones reflect the issued
+          proposal.
+        </p>
+      ) : (
+        <p className="text-sm text-foreground-muted">
+          Define deposit, progress, and final milestones before sending the proposal.
+        </p>
+      )}
+
+      {paymentBlockers.length > 0 ? (
+        <ul className="space-y-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground-muted">
+          {paymentBlockers.map((b) => (
+            <li key={b.message}>{b.message}</li>
+          ))}
+        </ul>
+      ) : null}
+
       <SectionHeading
-        title="Payment Schedule"
-        description="Define milestones and deposits. Tying milestones to stages creates execution gates."
+        title="Payment schedule"
+        description="Milestones tied to stages can gate job execution after activation."
       />
 
       <QuotePaymentScheduleEditor
@@ -1660,7 +1860,7 @@ function ContextTab({
   );
 }
 
-/* ─── Tab: Send & Accept ───────────────────────────────────────────────── */
+/* ─── Tab: Approval ────────────────────────────────────────────────────── */
 
 function CheckpointList({
   checkpoints,
@@ -1819,7 +2019,7 @@ function EmbeddedActivateJobButton({
 
 function SendAcceptTab({
   quote,
-  readiness,
+  workflow,
   workspaceTabs,
   activePreview,
   onPreviewChange,
@@ -1827,7 +2027,7 @@ function SendAcceptTab({
   embeddedInLead,
 }: {
   quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   workspaceTabs: QuoteWorkspaceTabData;
   activePreview: "none" | "proposal" | "execution" | "send";
   onPreviewChange: (preview: "none" | "proposal" | "execution" | "send") => void;
@@ -1842,10 +2042,9 @@ function SendAcceptTab({
     shareUrl: string;
   } | null>(null);
 
-  const canSend = readiness.primaryAction?.kind === "SEND_QUOTE";
-  const canApprove = readiness.primaryAction?.kind === "MARK_APPROVED";
+  const canSend = workflow.canSend;
+  const canApprove = workflow.canApprove;
   const isApproved = quote.status === "APPROVED";
-  const latestSend = sendCheckpoints[sendCheckpoints.length - 1] ?? null;
   const latestApproval =
     approvalCheckpoints[approvalCheckpoints.length - 1] ?? null;
 
@@ -1879,13 +2078,13 @@ function SendAcceptTab({
             onClick={() => onPreviewChange("none")}
             className="text-xs font-medium text-foreground-subtle hover:text-foreground"
           >
-            ← Back to Send & Accept
+            ← Back to Approval
           </button>
           <Link
             href={quote.proposalPreviewHref}
             className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
           >
-            Open full proposal preview
+            View customer proposal
             <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
           </Link>
         </div>
@@ -1903,13 +2102,13 @@ function SendAcceptTab({
             onClick={() => onPreviewChange("none")}
             className="text-xs font-medium text-foreground-subtle hover:text-foreground"
           >
-            ← Back to Send & Accept
+            ← Back to Approval
           </button>
           <Link
             href={quote.executionReviewHref}
             className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
           >
-            Open full quote page for advanced review
+            Build execution plan
             <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
           </Link>
         </div>
@@ -1944,22 +2143,30 @@ function SendAcceptTab({
         </div>
       ) : null}
 
-      {/* Inline action panel — workspace-safe in every mode. */}
+      {/* Primary approval actions */}
       <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-1`}>Commercial send & acceptance</p>
-        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
-          Internal records only — not email, not a customer portal, and not job
-          activation. Send captures the proposal as sent; approval captures
-          commercial acceptance.
+        <p className={`${sectionLabelClass} mb-1`}>Customer approval</p>
+        <p className="mb-4 text-sm leading-relaxed text-foreground-muted">
+          Send the proposal link to the customer. Once they agree to the scope and price,
+          record approval here.
         </p>
+
+        <details className="mb-4 text-xs text-foreground-subtle">
+          <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground">
+            How approval records work
+          </summary>
+          <p className="mt-2 leading-relaxed">
+            Send and approval checkpoints are internal proof records — not email delivery
+            and not job activation. They preserve what was sent and accepted commercially.
+          </p>
+        </details>
 
         {!isArchived && canSend ? (
           <div className="mb-4 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
-            <p className="text-xs font-medium text-foreground">Send this quote</p>
+            <p className="text-xs font-medium text-foreground">Send to customer</p>
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              When you are ready to treat this proposal as sent to the customer,
-              use Send to customer. Commercial fields stay editable only while Draft —
-              after send, scope and pricing lock.
+              Scope and pricing lock after send. Make sure jobsite and payment terms are
+              complete first.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -1976,9 +2183,9 @@ function SendAcceptTab({
 
         {quote.shareToken && (
           <div className="mb-4 rounded-lg border border-border bg-background px-3 py-3 shadow-sm">
-            <p className={sectionLabelClass}>Public proposal link</p>
+            <p className={sectionLabelClass}>Proposal link</p>
             <p className="mt-1 text-xs text-foreground-muted leading-relaxed">
-              Share this secure link with the customer to view and accept the proposal.
+              Share this secure link with the customer to view the proposal.
             </p>
             <div className="mt-3 flex items-center gap-2">
               <div className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-[10px] font-mono text-foreground truncate">
@@ -2033,12 +2240,9 @@ function SendAcceptTab({
 
         {!isArchived && canApprove ? (
           <div className="mb-4 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
-            <p className="text-xs font-medium text-foreground">
-              Customer accepted commercially
-            </p>
+            <p className="text-xs font-medium text-foreground">Record customer approval</p>
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              This quote is Sent. When the customer has agreed to scope and
-              price, record approval here.
+              When the customer has agreed to scope and price, mark the quote approved.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <ApproveQuoteInlineButton
@@ -2054,27 +2258,27 @@ function SendAcceptTab({
         {!isArchived && isApproved ? (
           <div className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
             <p className="text-xs font-medium text-foreground">
-              Next: review job plan before creation
+              {workflow.workflowState === "APPROVED_EXECUTION_NEEDED"
+                ? "Execution plan needed"
+                : "Ready for job activation"}
             </p>
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              Commercial terms are approved. Review the job plan and create the job when the work setup is ready.
+              {workflow.workflowState === "APPROVED_EXECUTION_NEEDED"
+                ? "The customer accepted the quote. Build the work plan before activating the job."
+                : "Commercial terms are approved and the work plan is ready."}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link href={quote.executionReviewHref} className={primaryBtnClass}>
+                <Wrench className="size-3.5 mr-1.5" strokeWidth={1.5} />
+                Build execution plan
+              </Link>
               <button
                 type="button"
                 onClick={() => onPreviewChange("execution")}
                 className={secondaryBtnClass}
               >
-                <Wrench className="size-3.5 mr-1.5" strokeWidth={1.5} />
-                Review job plan
+                Preview plan
               </button>
-              <Link
-                href={quote.executionReviewHref}
-                className={mutedFooterLinkClass}
-              >
-                Open full job-plan review page
-                <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
-              </Link>
             </div>
           </div>
         ) : null}
@@ -2085,7 +2289,7 @@ function SendAcceptTab({
             when the readiness story says activation is the next step. */}
         {embeddedInLead &&
         !isArchived &&
-        readiness.state === "APPROVED_READY_TO_ACTIVATE" ? (
+        workflow.workflowState === "READY_FOR_JOB_ACTIVATION" ? (
           <div className="mb-4">
             <EmbeddedActivateJobButton quoteId={quote.id} onMutated={onMutated} />
           </div>
@@ -2093,56 +2297,12 @@ function SendAcceptTab({
 
         {isArchived ? (
           <p className="text-xs leading-relaxed text-foreground-muted">
-            This quote is archived and read-only. Existing checkpoints below stay
-            historical; restore to draft on the full quote page to change status
-            again.
+            This quote is archived and read-only. Restore to draft on the Record tab to
+            change status again.
           </p>
         ) : null}
 
-        {latestSend ? (
-          <p className="mt-2 text-xs font-medium text-foreground">
-            Last send record:{" "}
-            <time dateTime={latestSend.createdAtIso}>
-              {latestSend.createdAtLabel}
-            </time>
-          </p>
-        ) : null}
-      </div>
-
-      {/* Send checkpoints */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-3`}>Send records</p>
-        <CheckpointList
-          checkpoints={sendCheckpoints}
-          emptyText="No send records yet — use Mark as sent while the quote is still a draft."
-        />
-      </div>
-
-      {/* Approval checkpoints */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-3`}>Acceptance records</p>
-        {latestApproval ? (
-          <p className="mb-2 text-xs font-medium text-foreground">
-            Last acceptance record:{" "}
-            <time dateTime={latestApproval.createdAtIso}>
-              {latestApproval.createdAtLabel}
-            </time>
-          </p>
-        ) : null}
-        <CheckpointList
-          checkpoints={approvalCheckpoints}
-          emptyText="No acceptance records yet."
-        />
-      </div>
-
-      {/* Proposal preview */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-1`}>Proposal preview</p>
-        <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
-          Internal preview from the current saved quote — not a customer portal.
-          We&apos;ll email the customer a secure link they can review, sign, and download. E-sign vendor (DocuSign / Adobe Sign) integration is optional and not enabled.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
           <button
             type="button"
             onClick={() => onPreviewChange("proposal")}
@@ -2151,26 +2311,49 @@ function SendAcceptTab({
             <Eye className="size-3.5 mr-1.5" strokeWidth={1.5} />
             Preview proposal
           </button>
-          <button
-            type="button"
-            onClick={() => onPreviewChange("execution")}
-            className={secondaryBtnClass}
-          >
-            <Wrench className="size-3.5 mr-1.5" strokeWidth={1.5} />
-            Review execution
-          </button>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-3">
           <Link href={quote.proposalPreviewHref} className={mutedFooterLinkClass}>
-            Open full proposal preview
-            <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
-          </Link>
-          <Link href={quote.executionReviewHref} className={mutedFooterLinkClass}>
-            Open full quote page
+            View customer proposal
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>
       </div>
+
+      {/* History — secondary */}
+      <details className="rounded-xl border border-border bg-background p-4">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <span className={`${sectionLabelClass} inline-flex items-center gap-2`}>
+            <ChevronRight className="size-3.5" aria-hidden />
+            History
+          </span>
+          <p className="mt-1 text-xs text-foreground-subtle">
+            Proposal and approval checkpoints
+          </p>
+        </summary>
+        <div className="mt-4 space-y-4 border-t border-border pt-4">
+          <div>
+            <p className={`${sectionLabelClass} mb-3`}>Proposal history</p>
+            <CheckpointList
+              checkpoints={sendCheckpoints}
+              emptyText="No proposals sent yet."
+            />
+          </div>
+          <div>
+            <p className={`${sectionLabelClass} mb-3`}>Approval history</p>
+            {latestApproval ? (
+              <p className="mb-2 text-xs font-medium text-foreground">
+                Last approval:{" "}
+                <time dateTime={latestApproval.createdAtIso}>
+                  {latestApproval.createdAtLabel}
+                </time>
+              </p>
+            ) : null}
+            <CheckpointList
+              checkpoints={approvalCheckpoints}
+              emptyText="No approvals recorded yet."
+            />
+          </div>
+        </div>
+      </details>
 
       {/* Active job link */}
       {quote.activatedJobId ? (
@@ -2196,9 +2379,13 @@ function SendAcceptTab({
 function RecordTab({
   quote,
   workspaceTabs,
+  workflow,
+  suppressIdentityRow,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
+  workflow: QuoteWorkflowPresentation;
+  suppressIdentityRow?: boolean;
 }) {
   const { isCommercialEditable, isArchived, internalNotes } = workspaceTabs;
   const isIssued = quote.status === "SENT" || quote.status === "APPROVED";
@@ -2225,20 +2412,20 @@ function RecordTab({
           </p>
           <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
             {isArchived
-              ? "Returns this quote to Draft so commercial editing is possible again. Open the full quote page to apply."
+              ? "Returns this quote to Draft so commercial editing is possible again."
               : isIssued
                 ? "Issued quotes are immutable. Create a new DRAFT revision clone for pre-activation changes."
-                : "Sets status to Archived; commercial fields and line items lock until restored. Open the full quote page to apply."}
+                : "Sets status to Archived; commercial fields and line items lock until restored."}
           </p>
           <Link
             href={`${quote.quoteHref}#archive-restore`}
             className={listLinkClass}
           >
             {isArchived
-              ? "Restore on full quote page"
+              ? "Restore to draft"
               : isIssued
-                ? "Revise by clone on full quote page"
-                : "Archive on full quote page"}
+                ? "Revise by clone"
+                : "Archive quote"}
             <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
           </Link>
         </div>
@@ -2264,18 +2451,7 @@ function RecordTab({
         </div>
       ) : null}
 
-      {/* Activity placeholder */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-1`}>Notes & activity</p>
-        <p className="mb-3 text-xs leading-relaxed text-foreground-muted">
-          Changes and checkpoints for this quote will appear here.
-        </p>
-        <EmptyState
-          icon={MessageSquare}
-          title="No activity yet"
-          description="Nothing logged on this quote yet."
-        />
-      </div>
+      <RecentActivityList workflow={workflow} showWhenEmpty />
 
       {/* Record details */}
       <div className="rounded-xl border border-border bg-surface p-4">
@@ -2304,13 +2480,15 @@ function RecordTab({
         </dl>
       </div>
 
-      {/* Footer escape hatch — only when not on full page. */}
-      <div className="pt-1 @[768px]:hidden">
-        <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
-          Open full quote page
-          <ArrowUpRight className="size-3" strokeWidth={1.5} />
-        </Link>
-      </div>
+      {/* Footer escape hatch — embedded containers only. */}
+      {suppressIdentityRow ? (
+        <div className="pt-1">
+          <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
+            Open full quote page
+            <ArrowUpRight className="size-3" strokeWidth={1.5} />
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2319,7 +2497,7 @@ function RecordTab({
 
 export function QuoteWorkSurface({
   quote,
-  readiness,
+  workflow,
   workspaceTabs,
   suppressIdentityRow = false,
   initialTab = "overview",
@@ -2457,7 +2635,7 @@ export function QuoteWorkSurface({
       {activeTab === "overview" && (
         <OverviewTab
           quote={quote}
-          readiness={readiness}
+          workflow={workflow}
           workspaceTabs={workspaceTabs}
           onSwitchToTab={handleSwitchToTab}
           onRequestAddLineItem={handleRequestAddLineItem}
@@ -2465,24 +2643,28 @@ export function QuoteWorkSurface({
           onMutated={handleSurfaceMutated}
           embeddedInLead={embeddedInLead}
           onRequestServiceAddress={onRequestServiceAddress}
+          suppressIdentityRow={suppressIdentityRow}
         />
       )}
       {activeTab === "scope" && (
         <ScopeTab
           quote={quote}
           workspaceTabs={workspaceTabs}
+          workflow={workflow}
           onSwitchToTab={handleSwitchToTab}
           shouldFocusAddForm={shouldFocusAddForm}
           onAddFormFocusConsumed={handleAddFormFocusConsumed}
           shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
           onScopeLibraryPickerOpenConsumed={handleScopeLibraryPickerOpenConsumed}
           onMutated={handleSurfaceMutated}
+          suppressIdentityRow={suppressIdentityRow}
         />
       )}
       {activeTab === "payments" && (
         <PaymentsTab
           quote={quote}
           workspaceTabs={workspaceTabs}
+          workflow={workflow}
         />
       )}
       {activeTab === "context" && (
@@ -2497,7 +2679,7 @@ export function QuoteWorkSurface({
       {activeTab === "sendaccept" && (
         <SendAcceptTab
           quote={quote}
-          readiness={readiness}
+          workflow={workflow}
           workspaceTabs={workspaceTabs}
           activePreview={activePreview}
           onPreviewChange={setActivePreview}
@@ -2506,7 +2688,12 @@ export function QuoteWorkSurface({
         />
       )}
       {activeTab === "record" && (
-        <RecordTab quote={quote} workspaceTabs={workspaceTabs} />
+        <RecordTab
+          quote={quote}
+          workspaceTabs={workspaceTabs}
+          workflow={workflow}
+          suppressIdentityRow={suppressIdentityRow}
+        />
       )}
     </div>
   );

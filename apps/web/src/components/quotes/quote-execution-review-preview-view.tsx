@@ -107,8 +107,8 @@ export function QuoteExecutionReviewPreviewView({
         <WorkspacePanel>
           <EmptyState
             icon={ClipboardList}
-            title="Add line items before reviewing the job plan"
-            description="This quote does not have any scope rows yet. Return to the quote, add line items, then review the job plan again."
+            title="Add line items before building the execution plan"
+            description="This quote does not have any scope rows yet. Return to the quote, add line items, then build the execution plan."
           >
             <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
               ← Back to quote
@@ -387,7 +387,7 @@ export function QuoteExecutionReviewPreviewView({
         <div className="flex gap-2">
           <Info className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
           <p className="text-xs leading-relaxed text-foreground-muted">
-            Review this work plan before creating the job from the approved quote.
+            Review this execution plan before creating the job from the approved quote.
             Planned tasks, dependencies, and payment requirements move into the active job at creation.
             Required dependency gaps must be resolved before job creation.
           </p>
@@ -489,7 +489,7 @@ function ActivationPanel({
       <WorkspacePanel className="border-l-[3px] border-l-success/60 bg-success/[0.04]">
         <SectionHeading
           title="Job created from approved quote"
-          description="An active job already exists for this quote. Changes made here do not update the existing job plan."
+          description="An active job already exists for this quote. Changes made here do not update the existing job."
         />
         <div className="flex flex-wrap items-center gap-3">
           <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden />

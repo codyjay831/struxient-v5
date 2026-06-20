@@ -209,7 +209,7 @@ export function QuoteWorkspaceDialogBody({
         {state.kind === "loaded" ? (
           <QuoteWorkSurface
             quote={state.payload.quote}
-            readiness={state.payload.readiness}
+            workflow={state.payload.workflow}
             workspaceTabs={state.payload.workspaceTabs}
             suppressIdentityRow
             initialAction={display.initialAction}

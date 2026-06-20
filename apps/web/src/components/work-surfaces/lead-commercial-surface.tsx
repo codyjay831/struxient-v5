@@ -946,7 +946,7 @@ export function LeadCommercialSurface({
                           : quote.status === "SENT"
                             ? "Follow up on this sent quote"
                             : quote.status === "APPROVED"
-                              ? "Review job plan for this approved quote"
+                              ? "Build execution plan for this approved quote"
                               : "Open quote"}
                       </p>
                     </Link>

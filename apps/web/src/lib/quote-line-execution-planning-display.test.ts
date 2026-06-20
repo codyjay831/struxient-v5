@@ -8,7 +8,7 @@ test("buildQuoteLineExecutionPlanningSummaryLine returns needs review when no ta
     executionSummaryLine: null,
   });
 
-  assert.equal(line, "Needs job plan review");
+  assert.equal(line, "Execution plan needed");
 });
 
 test("buildQuoteLineExecutionPlanningSummaryLine uses execution summary without duplicating task count", () => {

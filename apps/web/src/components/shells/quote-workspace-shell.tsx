@@ -2,7 +2,7 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import { formatMoneyCents } from "@/lib/quote-display";
-import type { QuoteReadiness } from "@/lib/quote-readiness";
+import type { QuoteWorkflowPresentation } from "@/lib/quote-workflow-presenter";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type { QuoteWorkspaceTabData } from "@/lib/quote-workspace-payload";
 
@@ -11,7 +11,7 @@ const listLinkClass =
 
 export type QuoteWorkspaceShellProps = {
   quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   workspaceTabs: QuoteWorkspaceTabData;
   /** Optional return-context link shown when arrived from Workstation. */
   returnHref?: string;
@@ -24,7 +24,7 @@ export type QuoteWorkspaceShellProps = {
  */
 export function QuoteWorkspaceShell({
   quote,
-  readiness,
+  workflow,
   workspaceTabs,
   returnHref,
 }: QuoteWorkspaceShellProps) {
@@ -34,6 +34,11 @@ export function QuoteWorkspaceShell({
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <StatusBadge label={quote.statusLabel} tone={quote.statusTone} />
+            <StatusBadge
+              label={workflow.statusLabel}
+              tone={workflow.readiness.badgeTone}
+              className="px-1.5 py-0.5 text-[0.65rem]"
+            />
             <span className="text-xs text-foreground-subtle">
               Commercial quote
               {quote.createdAtLabel ? ` · ${quote.createdAtLabel}` : ""}
@@ -71,7 +76,7 @@ export function QuoteWorkspaceShell({
 
       <QuoteWorkSurface
         quote={quote}
-        readiness={readiness}
+        workflow={workflow}
         workspaceTabs={workspaceTabs}
       />
     </div>

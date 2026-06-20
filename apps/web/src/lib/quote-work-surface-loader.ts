@@ -28,6 +28,11 @@ import type {
   QuoteWorkspaceLead,
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
+import { isActiveQuoteScopeDecisionStatus } from "@/lib/quote-scope-decision-types";
+import {
+  getQuoteWorkflowPresentation,
+  type QuoteWorkflowPresentation,
+} from "@/lib/quote-workflow-presenter";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import { projectLead } from "@/lib/lead/lead-projection";
@@ -45,6 +50,7 @@ const dateOpts: Intl.DateTimeFormatOptions = {
 export type QuoteWorkSurfaceLoaderResult = {
   quote: QuoteWorkSurfaceData;
   readiness: QuoteReadiness;
+  workflow: QuoteWorkflowPresentation;
   workspaceTabs: QuoteWorkspaceTabData;
 };
 
@@ -658,6 +664,44 @@ export async function loadQuoteWorkSurface(
     quoteId: row.id,
   });
 
+  const openScopeDecisionCount = scopeDecisions.filter((d) =>
+    isActiveQuoteScopeDecisionStatus(d.status),
+  ).length;
+
+  const activityItems = [
+    ...sendCheckpoints.map((cp) => ({
+      kind: "send" as const,
+      label: `Proposal sent (#${cp.sequence})`,
+      atIso: cp.createdAtIso,
+      atLabel: cp.createdAtLabel,
+    })),
+    ...approvalCheckpoints.map((cp) => ({
+      kind: "approval" as const,
+      label: `Approval recorded (#${cp.sequence})`,
+      atIso: cp.createdAtIso,
+      atLabel: cp.createdAtLabel,
+    })),
+  ].sort((a, b) => b.atIso.localeCompare(a.atIso));
+
+  const workflow = getQuoteWorkflowPresentation({
+    quote: {
+      status: row.status,
+      lineItemCount: row.lineItems.length,
+      subtotalCents: row.subtotalCents,
+      totalCents: row.totalCents,
+      jobsiteMissing,
+    },
+    job,
+    activationReadiness,
+    isCommercialEditable,
+    paymentScheduleItemCount: row.paymentSchedule.length,
+    openScopeDecisionCount,
+    latestSendAt: latestSend?.createdAt ?? undefined,
+    latestApprovalAt: latestApproval?.createdAt ?? undefined,
+    revisionDriftSinceLastProof,
+    activityItems,
+  });
+
   const workspaceTabs: QuoteWorkspaceTabData = {
     isCommercialEditable,
     isExecutionEditable,
@@ -688,5 +732,5 @@ export async function loadQuoteWorkSurface(
     updatedAtLabel: row.updatedAt.toLocaleDateString("en-US", dateOpts),
   };
 
-  return { quote, readiness, workspaceTabs };
+  return { quote, readiness, workflow, workspaceTabs };
 }

@@ -83,7 +83,7 @@ export default async function QuoteDetailPage({
   return (
     <QuoteWorkspaceShell
       quote={result.quote}
-      readiness={result.readiness}
+      workflow={result.workflow}
       workspaceTabs={result.workspaceTabs}
       returnHref={returnHref}
     />

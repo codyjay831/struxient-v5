@@ -270,7 +270,12 @@ function isQuoteJobSetupHandoff(item: WorkstationWorkItem): boolean {
   }
 
   const rawAction = (item.actionLabel ?? item.nextStep ?? "").trim();
-  return /^Review job plan\.?$/i.test(rawAction) || /^Create job\.?$/i.test(rawAction);
+  return (
+    /^Build execution plan\.?$/i.test(rawAction) ||
+    /^Review job plan\.?$/i.test(rawAction) ||
+    /^Activate job\.?$/i.test(rawAction) ||
+    /^Create job\.?$/i.test(rawAction)
+  );
 }
 
 function normalizeActionLabel(item: WorkstationWorkItem): string {

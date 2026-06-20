@@ -709,6 +709,11 @@ export type QuoteAuthoringSurfaceProps = {
    * Called after a successful add / update / delete / template-apply so
    * the container can re-fetch its `QuoteWorkSurfaceData` payload.
    */
+  /**
+   * When true, show a link to open the full quote page (embedded popup/drawer only).
+   * Hidden on the full quote page itself.
+   */
+  showFullPageEscapeLink?: boolean;
   onMutated: () => void;
 };
 
@@ -731,6 +736,7 @@ export function QuoteAuthoringSurface({
   onAddOpenConsumed,
   shouldOpenScopeLibraryPicker = false,
   onScopeLibraryPickerOpenConsumed,
+  showFullPageEscapeLink = false,
   onMutated,
 }: QuoteAuthoringSurfaceProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
@@ -1568,15 +1574,17 @@ export function QuoteAuthoringSurface({
             )}
           </WorkspacePanel>
 
-          <div className="mt-4 pt-1">
-            <Link
-              href={`${quoteHref}#line-items`}
-              className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
-            >
-              Open full quote page for advanced editing
-              <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
-            </Link>
-          </div>
+          {showFullPageEscapeLink ? (
+            <div className="mt-4 pt-1">
+              <Link
+                href={`${quoteHref}#line-items`}
+                className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
+              >
+                Open full quote page
+                <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         {/* Sidebar: Intake Reference & Internal Notes */}

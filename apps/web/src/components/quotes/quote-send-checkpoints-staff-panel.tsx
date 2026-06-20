@@ -76,13 +76,13 @@ export function QuoteSendCheckpointsStaffPanel({
 
       {!isArchived && isApproved ? (
         <div className="mb-6 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
-          <p className="text-xs font-medium text-foreground">Next: review job plan before creation</p>
+          <p className="text-xs font-medium text-foreground">Next: build execution plan before activation</p>
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            Commercial terms are approved. Review the job plan on this quote, then create the job when setup is ready.
+            Commercial terms are approved. Build the execution plan on this quote, then activate the job when setup is ready.
           </p>
           <div className="mt-3">
             <Link href={quoteExecutionReviewPreviewPath(quoteId)} className={listLinkClass}>
-              Review job plan
+              Build execution plan
             </Link>
           </div>
         </div>

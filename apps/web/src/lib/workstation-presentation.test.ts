@@ -240,7 +240,7 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
     filterCategory: "quotes",
     title: "Estimate / Quote - Cody Barbour",
     parentLabel: "Cody Barbour",
-    nextStep: "Review job plan.",
+    nextStep: "Build execution plan.",
     recordId: "quote-1",
   });
 
@@ -254,7 +254,7 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
 
   assert.equal(result.overviewNextActions[0]?.identity, "Cody Barbour");
   assert.equal(result.overviewNextActions[0]?.workItem, "Estimate / Quote - Cody Barbour");
-  assert.equal(result.overviewNextActions[0]?.nextAction, "Review job plan");
+  assert.equal(result.overviewNextActions[0]?.nextAction, "Build execution plan");
   assert.equal(result.overviewNextActions[0]?.categoryLabel, "Sales to Production");
   assert.equal(
     result.overviewCriticalGroups.find((group) => group.category === "sales_handoffs")?.items[0]

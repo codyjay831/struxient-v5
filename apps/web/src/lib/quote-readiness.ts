@@ -116,7 +116,7 @@ const STATE_LABEL: Record<QuoteReadinessState, string> = {
   EMPTY_DRAFT: "Empty draft",
   DRAFT_IN_PROGRESS: "Draft in progress",
   SENT_AWAITING_CUSTOMER: "Sent — awaiting customer",
-  APPROVED_NEEDS_EXECUTION_REVIEW: "Needs job plan review",
+  APPROVED_NEEDS_EXECUTION_REVIEW: "Execution plan needed",
   APPROVED_READY_TO_ACTIVATE: "Approved — ready to schedule",
   JOB_ACTIVE: "Awarded",
   ARCHIVED: "Archived",
@@ -147,7 +147,7 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
       label: STATE_LABEL.JOB_ACTIVE,
       description: "Sold work is on the job board.",
       primaryAction: { kind: "OPEN_JOB", label: "Open job", targetJobId: job.id },
-      secondaryAction: { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
+      secondaryAction: { kind: "OPEN_EXECUTION_REVIEW", label: "Build execution plan" },
       stepIndex: STATE_STEP_INDEX.JOB_ACTIVE,
       totalSteps: TOTAL_STEPS,
       isTerminal: false,
@@ -169,14 +169,14 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
         ? driftDescription
         : isReady
           ? "Commercial terms are approved and the work plan is ready. Create the job to schedule work."
-          : "Commercial terms are approved. Resolve planning gaps in the job-plan review before scheduling the job.",
+          : "The customer accepted the quote. Build the work plan before activating the job.",
       primaryAction: isReady
-        ? { kind: "ACTIVATE_JOB", label: "Create job" }
-        : { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" },
+        ? { kind: "ACTIVATE_JOB", label: "Activate job" }
+        : { kind: "OPEN_EXECUTION_REVIEW", label: "Build execution plan" },
       secondaryAction: input.revisionDriftSinceLastProof
         ? { kind: "RESTORE_TO_DRAFT", label: "Revise by clone" }
         : isReady
-          ? { kind: "OPEN_EXECUTION_REVIEW", label: "Review job plan" }
+          ? { kind: "OPEN_EXECUTION_REVIEW", label: "Build execution plan" }
           : null,
       stepIndex: STATE_STEP_INDEX[state],
       totalSteps: TOTAL_STEPS,

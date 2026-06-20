@@ -47,10 +47,10 @@ export default async function QuoteExecutionReviewPreviewPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales", href: "/leads" },
-            { label: "Execution review" },
+            { label: "Build execution plan" },
           ]}
         />
-        <PageHeader title="Execution review" description="Review execution plan before activation." />
+        <PageHeader title="Build execution plan" description="Prepare the work plan before job activation." />
         <AccessDeniedPanel description="This role cannot review quote execution plans." />
       </div>
     );
@@ -333,18 +333,18 @@ export default async function QuoteExecutionReviewPreviewPage({
         items={[
           { label: "Sales", href: "/leads" },
           { label: row.title, href: `/quotes/${qid}` },
-          { label: "Review job plan" },
+          { label: "Build execution plan" },
         ]}
       />
       <PageHeader
         eyebrow="Sales to production handoff"
-        title="Review job plan"
+        title="Build execution plan"
         description={
           activation.state === "activated"
             ? `Job already exists for “${row.title}”. Changes on this quote no longer update the active job plan.`
             : row.status === QuoteStatus.APPROVED
-              ? `Review the work plan for “${row.title}” before creating the job. Commercial terms are approved; creating the job copies planned stages, tasks, payments, and readiness checks into the active job.`
-              : `Review how this quote's work plan for “${row.title}” will become an active job after approval.`
+              ? `Build the work plan for “${row.title}” before activating the job. Commercial terms are approved; activation copies planned stages, tasks, payments, and readiness checks into the job.`
+              : `Plan how “${row.title}” will execute after customer approval.`
         }
         actions={
           <Link href={`/quotes/${qid}`} className={listLinkClass}>
