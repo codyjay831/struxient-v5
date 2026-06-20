@@ -6,16 +6,18 @@ import {
   QuoteExecutionReviewPreviewView,
   type QuoteActivationStatus,
 } from "@/components/quotes/quote-execution-review-preview-view";
-import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
-import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
-import { buildQuoteLineExecutionPlanningContextSeed } from "@/lib/ai/quote-execution-planning-context";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import {
+  buildQuoteActivationReadinessInput,
+  buildQuoteExecutionReviewModelInputFromPlan,
+  hasQuoteWidePlanTasks,
+  type QuotePlanSurfaceTask,
+} from "@/lib/quote-execution-plan-surface";
 import {
   QUOTE_PLAN_INPUT_SCHEMA_VERSION,
   buildQuotePlanPlanningInput,
@@ -56,7 +58,7 @@ export default async function QuoteExecutionReviewPreviewPage({
     );
   }
 
-  const [row, stages, approvalCheckpoint] = await Promise.all([
+  const [row, approvalCheckpoint, stages] = await Promise.all([
     db.quote.findFirst({
       where: { id: qid, organizationId: ctx.organizationId },
       select: {
@@ -82,26 +84,8 @@ export default async function QuoteExecutionReviewPreviewPage({
             description: true,
             sortOrder: true,
             executionRelevant: true,
-            internalNotes: true,
             draftExecutionTasks: {
-              orderBy: [{ sortOrder: "asc" }],
-              select: {
-                id: true,
-                title: true,
-                stageId: true,
-                stage: { select: { name: true } },
-                category: true,
-                instructions: true,
-                sortOrder: true,
-                sourceType: true,
-                sourceTaskTemplateId: true,
-                sourceLineItemTemplateTaskId: true,
-                providesSignals: true,
-                requiresSignals: true,
-                hardSignal: true,
-                requirementsJson: true,
-                partsRequiredJson: true,
-              },
+              select: { id: true },
             },
           },
         },
@@ -138,11 +122,6 @@ export default async function QuoteExecutionReviewPreviewPage({
         },
       },
     }),
-    db.stage.findMany({
-      where: { organizationId: ctx.organizationId, archivedAt: null },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
-    }),
     db.quoteCheckpoint.findFirst({
       where: {
         organizationId: ctx.organizationId,
@@ -152,11 +131,17 @@ export default async function QuoteExecutionReviewPreviewPage({
       orderBy: { sequence: "desc" },
       select: { id: true },
     }),
+    db.stage.findMany({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   if (!row) {
     notFound();
   }
+
   const planContext = await loadQuotePlanContext(qid, ctx.organizationId);
   const currentPlanningInputHash =
     planContext && row.executionPlan
@@ -171,153 +156,100 @@ export default async function QuoteExecutionReviewPreviewPage({
     Boolean(row.job),
   );
 
-  const draftTasksByLineId: Record<string, QuoteLineDraftExecutionTaskRow[]> = {};
-  const planningContextByLineId: Record<string, string> = {};
-  for (const line of row.lineItems) {
-    draftTasksByLineId[line.id] = line.draftExecutionTasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      stageId: t.stageId,
-      stageName: t.stage?.name,
-      category: t.category,
-      instructions: t.instructions,
-      sortOrder: t.sortOrder,
-      sourceType: t.sourceType,
-      sourceTaskTemplateId: t.sourceTaskTemplateId,
-      sourceLineItemTemplateTaskId: t.sourceLineItemTemplateTaskId,
-      providesSignals: t.providesSignals,
-      requiresSignals: t.requiresSignals,
-      hardSignal: t.hardSignal,
-      requirementsJson: t.requirementsJson,
-      partsRequiredJson: t.partsRequiredJson,
-    }));
-    planningContextByLineId[line.id] = buildQuoteLineExecutionPlanningContextSeed(line.internalNotes);
-  }
+  const surfaceLines = row.lineItems.map((line) => ({
+    id: line.id,
+    description: line.description,
+    sortOrder: line.sortOrder,
+    executionRelevant: line.executionRelevant,
+  }));
 
-  const reusableTaskOptions: ReusableTaskPickerOption[] = executionPlanningEditable
-    ? (
-        await db.taskTemplate.findMany({
-          where: { organizationId: ctx.organizationId, archivedAt: null },
-          orderBy: { title: "asc" },
-          select: { id: true, title: true, stage: { select: { name: true } }, category: true },
-        })
-      ).map((r) => ({
-        id: r.id,
-        title: r.title,
-        stageLabel: r.stage?.name ?? "No stage",
-        categoryLabel: getTaskTemplateCategoryLabel(r.category),
-      }))
-    : [];
-
-  const model = buildQuoteExecutionReviewPreviewModel({
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    lines: row.lineItems.map((l) => {
-      const planTasks =
-        row.executionPlan?.tasks
-          .filter((task) => task.scopes.some((scope) => scope.quoteLineItemId === l.id))
-          .map((t) => ({
-            id: t.id,
-            title: t.title,
-            stageId: t.stageId,
-            stageName: t.stage?.name,
-            category: t.category,
-            providesSignals: t.providesSignals,
-            requiresSignals: t.requiresSignals,
-            hardSignal: t.hardSignal,
-            sortOrder: t.sortOrder,
-            requirementsJson: t.requirementsJson,
-            partsRequiredJson: t.partsRequiredJson,
-          })) ?? [];
-      const fallbackLineTasks = l.draftExecutionTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        stageId: t.stageId,
-        stageName: t.stage?.name,
-        category: t.category,
-        providesSignals: t.providesSignals,
-        requiresSignals: t.requiresSignals,
-        hardSignal: t.hardSignal,
-        sortOrder: t.sortOrder,
-        requirementsJson: t.requirementsJson,
-        partsRequiredJson: t.partsRequiredJson,
-      }));
-      return {
-        id: l.id,
-        description: l.description,
-        sortOrder: l.sortOrder,
-        tasks: planTasks.length > 0 ? planTasks : fallbackLineTasks,
-      };
-    }),
-  });
-  const executionPlanTasks =
+  const planTasks: QuotePlanSurfaceTask[] =
     row.executionPlan?.tasks.map((task) => ({
       id: task.id,
       title: task.title,
-      stageName: task.stage?.name ?? "No stage",
+      stageId: task.stageId,
+      stageName: task.stage?.name ?? null,
+      category: task.category,
+      instructions: task.instructions,
+      sortOrder: task.sortOrder,
       protectedAt: task.protectedAt,
       humanEditedAt: task.humanEditedAt,
       providesSignals: task.providesSignals,
       requiresSignals: task.requiresSignals,
+      hardSignal: task.hardSignal,
+      requirementsJson: task.requirementsJson,
+      partsRequiredJson: task.partsRequiredJson,
       scopeLineIds: task.scopes.map((scope) => scope.quoteLineItemId),
     })) ?? [];
+
+  const hasPlanTasks = hasQuoteWidePlanTasks(planTasks);
   const lineLabelById = Object.fromEntries(row.lineItems.map((line) => [line.id, line.description]));
+  const draftTaskCount = row.lineItems.reduce(
+    (count, line) => count + line.draftExecutionTasks.length,
+    0,
+  );
+  const scopeLines = row.lineItems.map((line) => ({
+    id: line.id,
+    description: line.description,
+    executionRelevant: line.executionRelevant,
+  }));
+
+  const model = buildQuoteExecutionReviewPreviewModel(
+    buildQuoteExecutionReviewModelInputFromPlan(
+      { id: row.id, title: row.title, status: row.status },
+      surfaceLines,
+      planTasks,
+    ),
+  );
+
+  const executionPlanTasks = planTasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    stageName: task.stageName ?? "No stage",
+    sortOrder: task.sortOrder,
+    protectedAt: task.protectedAt ?? null,
+    humanEditedAt: task.humanEditedAt ?? null,
+    providesSignals: task.providesSignals,
+    requiresSignals: task.requiresSignals,
+    scopeLineIds: task.scopeLineIds,
+  }));
+
+  const planTasksForGaps = planTasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    stageId: task.stageId,
+    category: task.category,
+  }));
 
   let activation: QuoteActivationStatus;
   if (row.job) {
     activation = { state: "activated", jobId: row.job.id };
   } else {
-    const readinessLines = row.lineItems.map((line) => {
-      const planTasks =
-        row.executionPlan?.tasks
-          .filter((task) => task.scopes.some((scope) => scope.quoteLineItemId === line.id))
-          .map((task) => ({
-            id: task.id,
-            title: task.title,
-            stageId: task.stageId,
-            providesSignals: task.providesSignals,
-            requiresSignals: task.requiresSignals,
-            hardSignal: task.hardSignal,
-          })) ?? [];
-      const fallbackTasks = line.draftExecutionTasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        stageId: task.stageId,
-        providesSignals: task.providesSignals,
-        requiresSignals: task.requiresSignals,
-        hardSignal: task.hardSignal,
-      }));
-      return {
-        id: line.id,
-        description: line.description,
-        executionRelevant: line.executionRelevant,
-        tasks: planTasks.length > 0 ? planTasks : fallbackTasks,
-      };
-    });
-
-    const readiness = evaluateQuoteJobActivationReadiness({
-      status: row.status,
-      hasApprovalCheckpoint: Boolean(approvalCheckpoint),
-      executionPlan: row.executionPlan
-        ? {
-            status: row.executionPlan.status,
-            planVersion: row.executionPlan.planVersion,
-            acceptedPlanningInputHash: row.executionPlan.planningInputHash,
-            currentPlanningInputHash:
-              currentPlanningInputHash ?? row.executionPlan.planningInputHash ?? "",
-          }
-        : null,
-      lines: readinessLines,
-      quoteTotalCents: row.totalCents,
-      paymentSchedule: row.paymentSchedule.map((item) => ({
-        id: item.id,
-        title: item.title,
-        anchorType: item.anchorType,
-        amountCents: item.amountCents,
-        percentage: item.percentage,
-      })),
-    });
+    const readiness = evaluateQuoteJobActivationReadiness(
+      buildQuoteActivationReadinessInput({
+        status: row.status,
+        hasApprovalCheckpoint: Boolean(approvalCheckpoint),
+        executionPlan: row.executionPlan
+          ? {
+              status: row.executionPlan.status,
+              planVersion: row.executionPlan.planVersion,
+              planningInputHash: row.executionPlan.planningInputHash,
+              planningInputSchemaVersion: row.executionPlan.planningInputSchemaVersion,
+            }
+          : null,
+        currentPlanningInputHash,
+        lines: surfaceLines,
+        planTasks,
+        quoteTotalCents: row.totalCents,
+        paymentSchedule: row.paymentSchedule.map((item) => ({
+          id: item.id,
+          title: item.title,
+          anchorType: item.anchorType,
+          amountCents: item.amountCents,
+          percentage: item.percentage,
+        })),
+      }),
+    );
     activation = readiness.ready
       ? { state: "ready_to_activate", readiness }
       : {
@@ -326,6 +258,11 @@ export default async function QuoteExecutionReviewPreviewPage({
           quoteIsApproved: row.status === QuoteStatus.APPROVED,
         };
   }
+
+  const isStale =
+    currentPlanningInputHash !== null &&
+    row.executionPlan !== null &&
+    currentPlanningInputHash !== row.executionPlan.planningInputHash;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -359,10 +296,8 @@ export default async function QuoteExecutionReviewPreviewPage({
         executionPlanningEditable={executionPlanningEditable}
         model={model}
         activation={activation}
-        draftTasksByLineId={draftTasksByLineId}
-        planningContextByLineId={planningContextByLineId}
-        reusableTaskOptions={reusableTaskOptions}
-        stages={stages}
+        hasPlanTasks={hasPlanTasks}
+        planTasksForGaps={planTasksForGaps}
         executionPlanTasks={executionPlanTasks}
         lineLabelById={lineLabelById}
         executionPlanState={
@@ -374,11 +309,10 @@ export default async function QuoteExecutionReviewPreviewPage({
               }
             : null
         }
-        isStale={
-          currentPlanningInputHash !== null &&
-          row.executionPlan !== null &&
-          currentPlanningInputHash !== row.executionPlan.planningInputHash
-        }
+        isStale={isStale}
+        stages={stages}
+        scopeLines={scopeLines}
+        draftTaskCount={draftTaskCount}
       />
     </div>
   );

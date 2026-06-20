@@ -307,6 +307,50 @@ export async function reorderQuoteExecutionTasksBySourceTaskIdInTx(
   return { ok: true as const };
 }
 
+export async function patchQuoteExecutionPlanTaskSignalsInTx(
+  tx: ExtendedTransactionClient,
+  params: {
+    quoteId: string;
+    organizationId: string;
+    planTaskId: string;
+    providesSignals?: string[];
+    requiresSignals?: string[];
+    hardSignal?: boolean;
+  },
+) {
+  const planTask = await tx.quoteExecutionTask.findFirst({
+    where: {
+      id: params.planTaskId.trim(),
+      quoteExecutionPlan: {
+        quoteId: params.quoteId,
+        organizationId: params.organizationId,
+      },
+    },
+    select: { id: true, quoteExecutionPlanId: true },
+  });
+  if (!planTask) {
+    return { ok: false as const, error: "PLAN_TASK_NOT_FOUND" as const };
+  }
+  const plan = await tx.quoteExecutionPlan.findUnique({
+    where: { id: planTask.quoteExecutionPlanId },
+    select: { status: true },
+  });
+  if (!plan) {
+    return { ok: false as const, error: "PLAN_NOT_FOUND" as const };
+  }
+  await tx.quoteExecutionTask.update({
+    where: { id: planTask.id },
+    data: {
+      ...(params.providesSignals !== undefined ? { providesSignals: params.providesSignals } : {}),
+      ...(params.requiresSignals !== undefined ? { requiresSignals: params.requiresSignals } : {}),
+      ...(params.hardSignal !== undefined ? { hardSignal: params.hardSignal } : {}),
+      humanEditedAt: new Date(),
+    },
+  });
+  await markQuotePlanNeedsReviewInTx(tx, planTask.quoteExecutionPlanId, plan.status);
+  return { ok: true as const };
+}
+
 export async function deleteQuoteExecutionTasksBySourceTaskIdInTx(
   tx: ExtendedTransactionClient,
   params: {

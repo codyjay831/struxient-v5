@@ -62,6 +62,7 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 - **`QuoteCheckpointKind.SEND`:** hidden staff proof of **commercial proposal projection** at send; does not include internal execution planning.
 - **`QuoteCheckpointKind.APPROVAL`:** hidden staff proof of **commercial acceptance** (same projection shape as send in v1; no e-sign provider yet—staff-recorded acceptance).
 - **Execution Review** remains an **internal** pre-activation step; **Job** runtime is still separate materialization.
+- **Accepted whole-quote execution plan** is the v1 internal gate before job activation (`QuoteExecutionPlan.status = ACCEPTED` with matching planning-input hash).
 
 ## v5 app slice: Job runtime activation (minimal V1)
 

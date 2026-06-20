@@ -19,11 +19,21 @@ import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-h
 import { type QuotePlanProposal, QuotePlanProposalSchema } from "@/lib/quote-plan/quote-plan-proposal-schema";
 import { validateQuotePlanProposalForApply } from "@/lib/quote-plan/quote-plan-validation";
 import { buildUncoordinatedDraftProposal } from "@/lib/quote-plan/uncoordinated-draft";
-import { createQuoteExecutionTaskInTx } from "@/lib/quote-plan-mutations";
+import {
+  createQuoteExecutionTaskInTx,
+  patchQuoteExecutionPlanTaskSignalsInTx,
+} from "@/lib/quote-plan-mutations";
+import { parseTaskTemplateCategory } from "@/lib/task-template-category";
+import { TASK_TEMPLATE_FIELD_LIMITS } from "@/app/(workspace)/settings/scope-library/task-template-field-limits";
 import { ensureQuoteExecutionPlanInTx } from "@/lib/quote-line-item-template-apply-tx";
 import { QUOTE_STATUSES_EXECUTION_EDITABLE } from "@/lib/quote-status-workflow";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
+import { normalizeSignalKey } from "@/lib/signal-key";
+import {
+  buildProviderTaskTitle,
+  signalLooksSchedulingOrAccessRelated,
+} from "@/lib/signal-display-copy";
 
 type QuotePlanGenerateResult =
   | {
@@ -44,12 +54,75 @@ type QuotePlanSeedResult =
   | { ok: true; proposal: QuotePlanProposal; appliedOperationIds: string[]; resultingPlanVersion: number }
   | { ok: false; error: string };
 
+type QuotePlanPreviewResult =
+  | { ok: true; proposal: QuotePlanProposal; generatedAgainstInputHash: string }
+  | { ok: false; error: string };
+
+type QuotePlanManualTaskResult = { ok: true } | { ok: false; error: string };
+
 type AcceptQuotePlanResult =
   | { ok: true; acceptedPlanVersion: number; planningInputHash: string }
   | { ok: false; error: string };
 type ToggleQuoteExecutionTaskProtectionResult =
   | { ok: true; protected: boolean }
   | { ok: false; error: string };
+
+type QuotePlanGapActionResult = { ok: true } | { ok: false; error: string };
+
+const QUOTE_PLAN_LOCKED_ERROR = "Quote execution plan is not editable.";
+
+function addSignalByEquivalence(existing: string[], signal: string): string[] {
+  const trimmed = signal.trim();
+  if (!trimmed) return existing;
+  const normalized = normalizeSignalKey(trimmed);
+  if (existing.some((entry) => normalizeSignalKey(entry) === normalized)) {
+    return existing;
+  }
+  return [...existing, trimmed];
+}
+
+function removeSignalByEquivalence(existing: string[], signal: string): string[] {
+  const normalized = normalizeSignalKey(signal);
+  return existing.filter((entry) => normalizeSignalKey(entry) !== normalized);
+}
+
+async function loadEditableQuotePlanTask(
+  tx: ExtendedTransactionClient,
+  taskId: string,
+  quoteId: string,
+  organizationId: string,
+) {
+  const task = await tx.quoteExecutionTask.findFirst({
+    where: {
+      id: taskId,
+      quoteExecutionPlan: {
+        quoteId,
+        organizationId,
+        quote: {
+          status: { in: [...QUOTE_STATUSES_EXECUTION_EDITABLE] },
+          job: { is: null },
+        },
+      },
+    },
+    select: {
+      id: true,
+      title: true,
+      stageId: true,
+      category: true,
+      instructions: true,
+      providesSignals: true,
+      requiresSignals: true,
+      hardSignal: true,
+      scopes: { select: { quoteLineItemId: true } },
+    },
+  });
+  return task;
+}
+
+function revalidateQuotePlanSurfaces(quoteId: string) {
+  revalidatePath(`/quotes/${quoteId}`);
+  revalidatePath(`/quotes/${quoteId}/execution-review`);
+}
 
 type EditableQuoteWithDraftTasks = {
   id: string;
@@ -612,13 +685,13 @@ export async function applyQuoteExecutionPlanProposalAction(
   return result;
 }
 
-export async function seedUncoordinatedDraftAction(quoteId: string): Promise<QuotePlanSeedResult> {
-  const qid = quoteId.trim();
-  if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+async function buildUncoordinatedDraftProposalForQuote(
+  quoteId: string,
+  organizationId: string,
+): Promise<QuotePlanPreviewResult> {
   const [quote, planContext] = await Promise.all([
-    loadEditableQuoteWithDraftTasks(db, qid, ctx.organizationId),
-    loadQuotePlanContext(qid, ctx.organizationId),
+    loadEditableQuoteWithDraftTasks(db, quoteId, organizationId),
+    loadQuotePlanContext(quoteId, organizationId),
   ]);
   if (!quote || !planContext) {
     return { ok: false, error: "Quote is not editable for execution planning." };
@@ -628,7 +701,7 @@ export async function seedUncoordinatedDraftAction(quoteId: string): Promise<Quo
     QUOTE_PLAN_INPUT_SCHEMA_VERSION,
   );
   const proposal = buildUncoordinatedDraftProposal({
-    quoteId: qid,
+    quoteId,
     generatedAgainstInputHash,
     basePlanVersion: quote.executionPlan?.planVersion ?? 1,
     lines: quote.lineItems.map((line) => ({
@@ -637,7 +710,32 @@ export async function seedUncoordinatedDraftAction(quoteId: string): Promise<Quo
       tasks: line.draftExecutionTasks,
     })),
   });
-  const applied = await applyQuoteExecutionPlanProposalAction(qid, proposal, {
+  if (proposal.operations.length === 0) {
+    return {
+      ok: false,
+      error:
+        "No per-line draft tasks found. Add tasks on the quote page first, or add tasks manually below.",
+    };
+  }
+  return { ok: true, proposal, generatedAgainstInputHash };
+}
+
+export async function previewUncoordinatedDraftProposalAction(
+  quoteId: string,
+): Promise<QuotePlanPreviewResult> {
+  const qid = quoteId.trim();
+  if (!qid) return { ok: false, error: "Missing quote id." };
+  const ctx = await getMutableRequestContextOrThrow();
+  return buildUncoordinatedDraftProposalForQuote(qid, ctx.organizationId);
+}
+
+export async function seedUncoordinatedDraftAction(quoteId: string): Promise<QuotePlanSeedResult> {
+  const qid = quoteId.trim();
+  if (!qid) return { ok: false, error: "Missing quote id." };
+  const ctx = await getMutableRequestContextOrThrow();
+  const built = await buildUncoordinatedDraftProposalForQuote(qid, ctx.organizationId);
+  if (!built.ok) return built;
+  const applied = await applyQuoteExecutionPlanProposalAction(qid, built.proposal, {
     modelProviderMeta: {
       isFallback: true,
       reason: "Manual uncoordinated draft seed request",
@@ -647,10 +745,81 @@ export async function seedUncoordinatedDraftAction(quoteId: string): Promise<Quo
   if (!applied.ok) return applied;
   return {
     ok: true,
-    proposal,
+    proposal: built.proposal,
     appliedOperationIds: applied.appliedOperationIds,
     resultingPlanVersion: applied.resultingPlanVersion,
   };
+}
+
+export async function addQuotePlanTaskManualAction(params: {
+  quoteId: string;
+  title: string;
+  category: string;
+  stageId: string | null;
+  lineItemIds: string[];
+  instructions?: string | null;
+}): Promise<QuotePlanManualTaskResult> {
+  const qid = params.quoteId.trim();
+  const title = params.title.trim();
+  if (!qid) return { ok: false, error: "Missing quote id." };
+  if (!title) return { ok: false, error: "Task title is required." };
+  if (title.length > TASK_TEMPLATE_FIELD_LIMITS.title) {
+    return { ok: false, error: `Title is too long (max ${TASK_TEMPLATE_FIELD_LIMITS.title} characters).` };
+  }
+  const category = parseTaskTemplateCategory(params.category);
+  if (!category) return { ok: false, error: "Select a valid task category." };
+  const instructions = params.instructions?.trim() || null;
+  if (instructions && instructions.length > TASK_TEMPLATE_FIELD_LIMITS.instructions) {
+    return {
+      ok: false,
+      error: `Instructions are too long (max ${TASK_TEMPLATE_FIELD_LIMITS.instructions} characters).`,
+    };
+  }
+  const lineItemIds = [...new Set(params.lineItemIds.map((id) => id.trim()).filter(Boolean))];
+  if (lineItemIds.length === 0) {
+    return { ok: false, error: "Select at least one scope line for this task." };
+  }
+
+  const ctx = await getMutableRequestContextOrThrow();
+  const result = await db.$transaction(async (tx) => {
+    const created = await createQuoteExecutionTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      input: {
+        title,
+        category,
+        stageId: params.stageId?.trim() || null,
+        instructions,
+        providesSignals: [],
+        requiresSignals: [],
+        hardSignal: false,
+        requirementsJson: {} as Prisma.InputJsonValue,
+        partsRequiredJson: {} as Prisma.InputJsonValue,
+        sourceType: "CUSTOM",
+        sourceTaskTemplateId: null,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: null,
+        origin: "MANUAL",
+        relatedLineItemIds: lineItemIds,
+        humanEditedAt: new Date(),
+      },
+    });
+    if (!created.ok) {
+      if (created.error === "QUOTE_NOT_EDITABLE") {
+        return { ok: false as const, error: "Quote is not editable for execution planning." };
+      }
+      if (created.error === "TASK_SCOPE_REQUIRED" || created.error === "INVALID_TASK_SCOPE") {
+        return { ok: false as const, error: "Invalid scope lines for this task." };
+      }
+      return { ok: false as const, error: "Could not add task to the execution plan." };
+    }
+    return { ok: true as const };
+  });
+
+  if (result.ok) {
+    revalidateQuotePlanSurfaces(qid);
+  }
+  return result;
 }
 
 export async function acceptQuoteExecutionPlanAction(
@@ -910,9 +1079,255 @@ export async function toggleQuoteExecutionTaskProtectionAction(
   });
 
   if (result.ok) {
-    revalidatePath(`/quotes/${qid}`);
-    revalidatePath(`/quotes/${qid}/execution-review`);
+    revalidateQuotePlanSurfaces(qid);
   }
   return result;
+}
+
+export async function addQuotePlanDependencyProviderTaskAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  signal: string;
+}): Promise<QuotePlanGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+
+  const ctx = await getMutableRequestContextOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuotePlanTask(
+      tx,
+      consumerTaskId,
+      qid,
+      ctx.organizationId,
+    );
+    if (!consumerTask) {
+      return { ok: false as const, error: QUOTE_PLAN_LOCKED_ERROR };
+    }
+
+    const normalizedSignal = normalizeSignalKey(signal);
+    const existingProviders = await tx.quoteExecutionTask.findMany({
+      where: {
+        quoteExecutionPlan: { quoteId: qid, organizationId: ctx.organizationId },
+      },
+      select: { providesSignals: true },
+    });
+    if (
+      existingProviders.some((task) =>
+        task.providesSignals.some((entry) => normalizeSignalKey(entry) === normalizedSignal),
+      )
+    ) {
+      return { ok: true as const };
+    }
+
+    const fallbackStage = await tx.stage.findFirst({
+      where: { organizationId: ctx.organizationId, archivedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true },
+    });
+    const stageId = consumerTask.stageId ?? fallbackStage?.id ?? null;
+    if (!stageId) {
+      return {
+        ok: false as const,
+        error:
+          "No active stages are available. Add a stage in Scope Library before adding provider tasks.",
+      };
+    }
+
+    const category = signalLooksSchedulingOrAccessRelated(signal)
+      ? TaskTemplateCategory.SCHEDULING
+      : TaskTemplateCategory.GENERAL;
+    const title = buildProviderTaskTitle(signal, consumerTask.title);
+    const scopeLineIds = consumerTask.scopes.map((scope) => scope.quoteLineItemId);
+
+    const created = await createQuoteExecutionTaskInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      input: {
+        title,
+        stageId,
+        category,
+        instructions: null,
+        providesSignals: [signal],
+        requiresSignals: [],
+        hardSignal: false,
+        requirementsJson: {} as Prisma.InputJsonValue,
+        partsRequiredJson: {} as Prisma.InputJsonValue,
+        sourceType: "CUSTOM",
+        sourceTaskTemplateId: null,
+        sourceLineItemTemplateTaskId: null,
+        sourceQuoteLineExecutionTaskId: null,
+        origin: "MANUAL",
+        relatedLineItemIds: scopeLineIds.length > 0 ? scopeLineIds : [],
+      },
+    });
+    if (!created.ok) {
+      return { ok: false as const, error: "Could not add provider task to the execution plan." };
+    }
+
+    await tx.$executeRaw`
+      UPDATE "Quote"
+      SET "updatedAt" = NOW()
+      WHERE "id" = ${qid} AND "organizationId" = ${ctx.organizationId}
+    `;
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error ?? QUOTE_PLAN_LOCKED_ERROR };
+  }
+  revalidateQuotePlanSurfaces(qid);
+  return { ok: true };
+}
+
+export async function connectQuotePlanDependencyGapToTaskAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  providerTaskId: string;
+  signal: string;
+}): Promise<QuotePlanGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const providerTaskId = params.providerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !providerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+  if (consumerTaskId === providerTaskId) {
+    return { ok: false, error: "Selected task cannot provide its own missing dependency." };
+  }
+
+  const ctx = await getMutableRequestContextOrThrow();
+
+  const ok = await db.$transaction(async (tx) => {
+    const [, providerTask] = await Promise.all([
+      loadEditableQuotePlanTask(tx, consumerTaskId, qid, ctx.organizationId),
+      loadEditableQuotePlanTask(tx, providerTaskId, qid, ctx.organizationId),
+    ]);
+    if (!providerTask) {
+      return false;
+    }
+
+    const patched = await patchQuoteExecutionPlanTaskSignalsInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      planTaskId: providerTask.id,
+      providesSignals: addSignalByEquivalence(providerTask.providesSignals, signal),
+    });
+    if (!patched.ok) return false;
+
+    await tx.$executeRaw`
+      UPDATE "Quote"
+      SET "updatedAt" = NOW()
+      WHERE "id" = ${qid} AND "organizationId" = ${ctx.organizationId}
+    `;
+    return true;
+  });
+
+  if (!ok) {
+    return { ok: false, error: QUOTE_PLAN_LOCKED_ERROR };
+  }
+  revalidateQuotePlanSurfaces(qid);
+  return { ok: true };
+}
+
+export async function removeQuotePlanDependencyRequirementAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+  signal: string;
+}): Promise<QuotePlanGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  const signal = params.signal.trim();
+  if (!qid || !consumerTaskId || !signal) {
+    return { ok: false, error: "Missing quote, task, or signal." };
+  }
+
+  const ctx = await getMutableRequestContextOrThrow();
+
+  const ok = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuotePlanTask(
+      tx,
+      consumerTaskId,
+      qid,
+      ctx.organizationId,
+    );
+    if (!consumerTask) {
+      return false;
+    }
+
+    const patched = await patchQuoteExecutionPlanTaskSignalsInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      planTaskId: consumerTask.id,
+      requiresSignals: removeSignalByEquivalence(consumerTask.requiresSignals, signal),
+    });
+    if (!patched.ok) return false;
+
+    await tx.$executeRaw`
+      UPDATE "Quote"
+      SET "updatedAt" = NOW()
+      WHERE "id" = ${qid} AND "organizationId" = ${ctx.organizationId}
+    `;
+    return true;
+  });
+
+  if (!ok) {
+    return { ok: false, error: QUOTE_PLAN_LOCKED_ERROR };
+  }
+  revalidateQuotePlanSurfaces(qid);
+  return { ok: true };
+}
+
+export async function relaxQuotePlanDependencyHardSignalAction(params: {
+  quoteId: string;
+  consumerTaskId: string;
+}): Promise<QuotePlanGapActionResult> {
+  const qid = params.quoteId.trim();
+  const consumerTaskId = params.consumerTaskId.trim();
+  if (!qid || !consumerTaskId) {
+    return { ok: false, error: "Missing quote or task." };
+  }
+
+  const ctx = await getMutableRequestContextOrThrow();
+
+  const outcome = await db.$transaction(async (tx) => {
+    const consumerTask = await loadEditableQuotePlanTask(
+      tx,
+      consumerTaskId,
+      qid,
+      ctx.organizationId,
+    );
+    if (!consumerTask) {
+      return { ok: false as const, error: QUOTE_PLAN_LOCKED_ERROR };
+    }
+
+    const patched = await patchQuoteExecutionPlanTaskSignalsInTx(tx, {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      planTaskId: consumerTask.id,
+      hardSignal: false,
+    });
+    if (!patched.ok) {
+      return { ok: false as const, error: "Could not relax activation blocking for this task." };
+    }
+
+    await tx.$executeRaw`
+      UPDATE "Quote"
+      SET "updatedAt" = NOW()
+      WHERE "id" = ${qid} AND "organizationId" = ${ctx.organizationId}
+    `;
+    return { ok: true as const };
+  });
+
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error ?? QUOTE_PLAN_LOCKED_ERROR };
+  }
+  revalidateQuotePlanSurfaces(qid);
+  return { ok: true };
 }
 

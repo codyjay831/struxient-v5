@@ -63,7 +63,7 @@ When **tasks and stages** are attached **during quoting**, systems often blur:
 
 4. **Post-sign refinement uses controlled paths; post-activation ops edits are normal** — For `SENT` / `APPROVED` quotes, commercial scope refinements happen through quote revision cloning (pre-activation) or approved change-order flows (post-activation). Operational planning edits remain normal through Execution Review and active-job operations.
 
-5. **Execution Review is quote-wide assembly** — The quote execution plan is quote-owned, coordinated work across the full scope (not a per-line pile). Shared tasks may cover multiple scope lines. AI remains review-then-apply; no silent persistence.
+5. **Execution Review is quote-wide assembly** — The quote execution plan is quote-owned, coordinated work across the full scope (not a per-line pile). Shared tasks may cover multiple scope lines. AI remains review-then-apply; no silent persistence. Per-line `QuoteLineExecutionTask` rows may remain as pre-plan authoring/seed input, but Execution Review and activation use `QuoteExecutionPlan` / `QuoteExecutionTask` as the reviewed plan.
 
 *(Exact UX mechanics—e.g., explicit “draft” toggles, separate tabs, copy-on-activate behaviors—are implementation; **canon** requires the **outcomes** above.)*
 

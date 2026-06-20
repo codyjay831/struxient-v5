@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Check, Library, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Library, Loader2, Plus, Sparkles, X } from "lucide-react";
+import type { ClarificationDraftValidationIssue } from "@/lib/clarification/clarification-draft-validation";
 import type {
   ClarificationAnswer,
   ClarificationAnswerValue,
@@ -157,6 +158,61 @@ function chipClass(active: boolean): string {
   ].join(" ");
 }
 
+const DRAFT_INPUT_TYPE_LABELS: Record<DraftInputType, string> = {
+  single_choice: "Single choice",
+  multi_choice: "Multi choice",
+  yes_no_unknown: "Yes / No / Unknown",
+  short_text: "Short text",
+  number: "Number",
+  notes: "Notes",
+};
+
+function draftInputTypeLabel(inputType: DraftInputType): string {
+  return DRAFT_INPUT_TYPE_LABELS[inputType];
+}
+
+function draftQuestionOptionCountLabel(question: DraftQuestion): string | null {
+  if (question.inputType !== "single_choice" && question.inputType !== "multi_choice") {
+    return null;
+  }
+  const count = question.options.length;
+  if (count === 0) return "No options";
+  return count === 1 ? "1 option" : `${count} options`;
+}
+
+function draftQuestionVisibilityLabel(customerFacing: boolean): string {
+  return customerFacing ? "Customer" : "Internal";
+}
+
+function issuesForQuestionIndex(
+  issues: ClarificationDraftValidationIssue[],
+  qIndex: number,
+): ClarificationDraftValidationIssue[] {
+  const prefix = `questions[${qIndex}]`;
+  return issues.filter(
+    (issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`),
+  );
+}
+
+function hasQuestionValidationError(
+  issues: ClarificationDraftValidationIssue[],
+  qIndex: number,
+): boolean {
+  return issuesForQuestionIndex(issues, qIndex).some((issue) => issue.severity === "error");
+}
+
+function shiftExpandedIndicesAfterRemove(
+  expanded: Set<number>,
+  removedIndex: number,
+): Set<number> {
+  const next = new Set<number>();
+  for (const index of expanded) {
+    if (index < removedIndex) next.add(index);
+    else if (index > removedIndex) next.add(index - 1);
+  }
+  return next;
+}
+
 export function ClarifyScopePanel({
   open,
   onClose,
@@ -198,6 +254,9 @@ export function ClarifyScopePanel({
     latestVersion: number;
   } | null>(null);
   const [isEditingExistingSet, setIsEditingExistingSet] = useState(false);
+  const [expandedDraftQuestionIndices, setExpandedDraftQuestionIndices] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [panelMode, setPanelMode] = useState<PanelMode>("start");
   const [activeSetSource, setActiveSetSource] = useState<ActiveSetSource | null>(null);
   const [recommendedSetSnapshot, setRecommendedSetSnapshot] =
@@ -227,6 +286,7 @@ export function ClarifyScopePanel({
       setDraftSet(null);
       setExistingSetKey(null);
       setIsEditingExistingSet(false);
+      setExpandedDraftQuestionIndices(new Set());
       setPanelMode("start");
       setActiveSetSource(null);
       setRecommendedSetSnapshot(null);
@@ -244,6 +304,7 @@ export function ClarifyScopePanel({
       setDraftSet(null);
       setExistingSetKey(null);
       setIsEditingExistingSet(false);
+      setExpandedDraftQuestionIndices(new Set());
       setError(null);
       prevProposalRef.current = null;
     }
@@ -467,8 +528,64 @@ export function ClarifyScopePanel({
       .replace(/[^a-z0-9._-]+/g, "_")
       .replace(/_{2,}/g, "_");
 
+  const collapseAllDraftQuestions = () => {
+    setExpandedDraftQuestionIndices(new Set());
+  };
+
+  const expandDraftQuestion = (qIndex: number) => {
+    setExpandedDraftQuestionIndices((prev) => new Set(prev).add(qIndex));
+  };
+
+  const toggleDraftQuestionExpanded = (qIndex: number) => {
+    setExpandedDraftQuestionIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(qIndex)) next.delete(qIndex);
+      else next.add(qIndex);
+      return next;
+    });
+  };
+
+  const removeDraftQuestion = (qIndex: number) => {
+    setDraftSet((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: prev.questions.filter((_, idx) => idx !== qIndex),
+          }
+        : prev,
+    );
+    setExpandedDraftQuestionIndices((prev) =>
+      shiftExpandedIndicesAfterRemove(prev, qIndex),
+    );
+  };
+
+  const blankDraftQuestion = (): DraftQuestion => ({
+    key: "",
+    label: "",
+    inputType: "short_text",
+    helpText: "",
+    allowOther: false,
+    unit: "",
+    customerFacing: true,
+    aliases: [],
+    options: [],
+  });
+
+  const addDraftQuestion = () => {
+    setDraftSet((prev) => {
+      if (!prev) return prev;
+      const nextIndex = prev.questions.length;
+      expandDraftQuestion(nextIndex);
+      return {
+        ...prev,
+        questions: [...prev.questions, blankDraftQuestion()],
+      };
+    });
+  };
+
   const applyProposalToDraft = (proposal: ClarificationQuestionSetProposal) => {
     setExistingSetKey(null);
+    collapseAllDraftQuestions();
     setDraftSet({
       key: proposal.key,
       label: proposal.label,
@@ -498,6 +615,7 @@ export function ClarifyScopePanel({
   const applyTradePreset = (preset: ClarificationTradePreset) => {
     setSetDraftError(null);
     setExistingSetKey(null);
+    collapseAllDraftQuestions();
     setDraftSet({
       key: preset.draft.key,
       label: preset.draft.label,
@@ -601,58 +719,54 @@ export function ClarifyScopePanel({
         activateNow: true,
       },
     );
+    collapseAllDraftQuestions();
   };
-
-  const blankDraftQuestion = (): DraftQuestion => ({
-    key: "",
-    label: "",
-    inputType: "short_text",
-    helpText: "",
-    allowOther: false,
-    unit: "",
-    customerFacing: true,
-    aliases: [],
-    options: [],
-  });
 
   const beginEditingExistingSet = (appendBlank = false) => {
     if (!questionSet) return;
     setSetDraftError(null);
     setPanelMode("create");
     setIsEditingExistingSet(true);
+    const questions = [
+      ...questionSet.questions.map((question) => ({
+        key: question.key,
+        label: question.label,
+        inputType: question.inputType as DraftInputType,
+        helpText: question.helpText ?? "",
+        allowOther: question.allowOther ?? false,
+        unit: question.unit ?? "",
+        customerFacing: question.customerFacing ?? false,
+        aliases: question.aliases ?? [],
+        options: (question.options ?? []).map((option) => ({
+          key: option.key,
+          label: option.label,
+          aliases: option.aliases ?? [],
+        })),
+      })),
+      ...(appendBlank ? [blankDraftQuestion()] : []),
+    ];
     setDraftSet({
       key: questionSet.key,
       label: questionSet.label,
       description: questionSet.description ?? "",
       aliases: [],
       keywords: [],
-      questions: [
-        ...questionSet.questions.map((question) => ({
-          key: question.key,
-          label: question.label,
-          inputType: question.inputType as DraftInputType,
-          helpText: question.helpText ?? "",
-          allowOther: question.allowOther ?? false,
-          unit: question.unit ?? "",
-          customerFacing: question.customerFacing ?? false,
-          aliases: question.aliases ?? [],
-          options: (question.options ?? []).map((option) => ({
-            key: option.key,
-            label: option.label,
-            aliases: option.aliases ?? [],
-          })),
-        })),
-        ...(appendBlank ? [blankDraftQuestion()] : []),
-      ],
+      questions,
       attachToTemplateTags: false,
       activateNow: true,
     });
+    if (appendBlank) {
+      setExpandedDraftQuestionIndices(new Set([questions.length - 1]));
+    } else {
+      collapseAllDraftQuestions();
+    }
   };
 
   const cancelEditingExistingSet = () => {
     setIsEditingExistingSet(false);
     setDraftSet(null);
     setSetDraftError(null);
+    collapseAllDraftQuestions();
     setPanelMode(activeSetSource ? "answer" : "start");
   };
 
@@ -745,6 +859,7 @@ export function ClarifyScopePanel({
     setDraftSet(null);
     setSetDraftError(null);
     setExistingSetKey(null);
+    collapseAllDraftQuestions();
   };
 
   const acceptRecommendation = async () => {
@@ -762,6 +877,300 @@ export function ClarifyScopePanel({
       setKey === autoMatchedSetKey ? "recommended" : "selected",
     );
     setPanelMode("answer");
+  };
+
+  const draftQuestionSummaryBadgeClass =
+    "rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] text-foreground-muted";
+
+  const renderDraftQuestionCard = (question: DraftQuestion, qIndex: number) => {
+    const expanded = expandedDraftQuestionIndices.has(qIndex);
+    const questionIssues = issuesForQuestionIndex(draftValidationIssues, qIndex);
+    const hasError = hasQuestionValidationError(draftValidationIssues, qIndex);
+    const optionCountLabel = draftQuestionOptionCountLabel(question);
+    const summaryLabel = question.label.trim() || `Question ${qIndex + 1}`;
+
+    return (
+      <div
+        key={`draft-q-${qIndex}`}
+        className={[
+          "overflow-hidden rounded-lg border bg-surface",
+          hasError ? "border-danger/40" : "border-border",
+        ].join(" ")}
+      >
+        <button
+          type="button"
+          className="flex w-full items-start gap-2 p-3 text-left transition-colors hover:bg-foreground/[0.02]"
+          aria-expanded={expanded}
+          onClick={() => toggleDraftQuestionExpanded(qIndex)}
+        >
+          {expanded ? (
+            <ChevronDown className="mt-0.5 size-4 shrink-0 text-foreground-subtle" />
+          ) : (
+            <ChevronRight className="mt-0.5 size-4 shrink-0 text-foreground-subtle" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p
+              className={[
+                "text-sm font-medium",
+                question.label.trim() ? "text-foreground" : "text-foreground-muted",
+              ].join(" ")}
+            >
+              {summaryLabel}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className={draftQuestionSummaryBadgeClass}>
+                {draftInputTypeLabel(question.inputType)}
+              </span>
+              <span className={draftQuestionSummaryBadgeClass}>
+                {draftQuestionVisibilityLabel(question.customerFacing)}
+              </span>
+              {optionCountLabel ? (
+                <span className={draftQuestionSummaryBadgeClass}>{optionCountLabel}</span>
+              ) : null}
+              {hasError ? (
+                <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] text-danger">
+                  Needs fix
+                </span>
+              ) : null}
+            </div>
+            {!expanded && questionIssues.length > 0 ? (
+              <ul className="mt-1.5 space-y-0.5">
+                {questionIssues.map((issue) => (
+                  <li
+                    key={`${issue.path}-${issue.message}`}
+                    className={
+                      issue.severity === "error"
+                        ? "text-[11px] text-danger"
+                        : "text-[11px] text-foreground-muted"
+                    }
+                  >
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </button>
+
+        {expanded ? (
+          <div className="space-y-2 border-t border-border px-3 pb-3 pt-2">
+            <label className="space-y-1">
+              <span className={workspaceFormFieldLabelClass}>Question text</span>
+              <input
+                value={question.label}
+                onChange={(event) =>
+                  setDraftSet((prev) => {
+                    if (!prev) return prev;
+                    const questions = [...prev.questions];
+                    questions[qIndex] = { ...question, label: event.target.value };
+                    return { ...prev, questions };
+                  })
+                }
+                className={workspaceFormControlClass}
+                placeholder="How many windows need replacing?"
+              />
+            </label>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className={workspaceFormFieldLabelClass}>Answer type</span>
+                <select
+                  value={question.inputType}
+                  onChange={(event) =>
+                    setDraftSet((prev) => {
+                      if (!prev) return prev;
+                      const questions = [...prev.questions];
+                      questions[qIndex] = {
+                        ...question,
+                        inputType: event.target.value as DraftInputType,
+                      };
+                      return { ...prev, questions };
+                    })
+                  }
+                  className={workspaceFormControlClass}
+                >
+                  <option value="single_choice">Single choice</option>
+                  <option value="multi_choice">Multi choice</option>
+                  <option value="yes_no_unknown">Yes / No / Unknown</option>
+                  <option value="short_text">Short text</option>
+                  <option value="number">Number</option>
+                  <option value="notes">Notes</option>
+                </select>
+              </label>
+              <label className="flex items-end gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
+                <input
+                  type="checkbox"
+                  checked={question.customerFacing}
+                  onChange={(event) =>
+                    setDraftSet((prev) => {
+                      if (!prev) return prev;
+                      const questions = [...prev.questions];
+                      questions[qIndex] = {
+                        ...question,
+                        customerFacing: event.target.checked,
+                      };
+                      return { ...prev, questions };
+                    })
+                  }
+                />
+                Customer facing
+              </label>
+            </div>
+
+            <label className="space-y-1">
+              <span className={workspaceFormFieldLabelClass}>Question key</span>
+              <input
+                value={question.key}
+                onChange={(event) =>
+                  setDraftSet((prev) => {
+                    if (!prev) return prev;
+                    const questions = [...prev.questions];
+                    questions[qIndex] = { ...question, key: event.target.value };
+                    return { ...prev, questions };
+                  })
+                }
+                className={workspaceFormControlClass}
+                placeholder="windows.count"
+              />
+            </label>
+
+            {(question.inputType === "single_choice" ||
+              question.inputType === "multi_choice") && (
+              <div className="space-y-2 rounded-md border border-dashed border-border bg-foreground/[0.01] p-2">
+                <p className={workspaceFormFieldLabelClass}>Answer options</p>
+                {(question.options ?? []).map((option, optionIndex) => (
+                  <div
+                    key={`${option.key}-${optionIndex}`}
+                    className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"
+                  >
+                    <input
+                      value={option.label}
+                      onChange={(event) =>
+                        setDraftSet((prev) => {
+                          if (!prev) return prev;
+                          const questions = [...prev.questions];
+                          const options = [...questions[qIndex].options];
+                          options[optionIndex] = {
+                            ...option,
+                            label: event.target.value,
+                          };
+                          questions[qIndex] = { ...questions[qIndex], options };
+                          return { ...prev, questions };
+                        })
+                      }
+                      className={workspaceFormControlClass}
+                      placeholder="Option label"
+                    />
+                    <input
+                      value={option.key}
+                      onChange={(event) =>
+                        setDraftSet((prev) => {
+                          if (!prev) return prev;
+                          const questions = [...prev.questions];
+                          const options = [...questions[qIndex].options];
+                          options[optionIndex] = {
+                            ...option,
+                            key: event.target.value,
+                          };
+                          questions[qIndex] = { ...questions[qIndex], options };
+                          return { ...prev, questions };
+                        })
+                      }
+                      className={workspaceFormControlClass}
+                      placeholder="option.key"
+                    />
+                    <button
+                      type="button"
+                      className={workspaceFormSecondaryButtonClass}
+                      onClick={() =>
+                        setDraftSet((prev) => {
+                          if (!prev) return prev;
+                          const questions = [...prev.questions];
+                          questions[qIndex] = {
+                            ...questions[qIndex],
+                            options: questions[qIndex].options.filter(
+                              (_, idx) => idx !== optionIndex,
+                            ),
+                          };
+                          return { ...prev, questions };
+                        })
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={workspaceFormSecondaryButtonClass}
+                    onClick={() =>
+                      setDraftSet((prev) => {
+                        if (!prev) return prev;
+                        const questions = [...prev.questions];
+                        questions[qIndex] = {
+                          ...questions[qIndex],
+                          options: [
+                            ...questions[qIndex].options,
+                            { key: "", label: "", aliases: [] },
+                          ],
+                        };
+                        return { ...prev, questions };
+                      })
+                    }
+                  >
+                    Add option
+                  </button>
+                  <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
+                    <input
+                      type="checkbox"
+                      checked={question.allowOther}
+                      onChange={(event) =>
+                        setDraftSet((prev) => {
+                          if (!prev) return prev;
+                          const questions = [...prev.questions];
+                          questions[qIndex] = {
+                            ...question,
+                            allowOther: event.target.checked,
+                          };
+                          return { ...prev, questions };
+                        })
+                      }
+                    />
+                    Allow &quot;Other&quot;
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {questionIssues.length > 0 ? (
+              <ul className="space-y-0.5 rounded-md border border-border bg-foreground/[0.02] px-2 py-1.5 text-[11px]">
+                {questionIssues.map((issue) => (
+                  <li
+                    key={`expanded-${issue.path}-${issue.message}`}
+                    className={
+                      issue.severity === "error" ? "text-danger" : "text-foreground-muted"
+                    }
+                  >
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className={workspaceFormSecondaryButtonClass}
+                onClick={() => removeDraftQuestion(qIndex)}
+              >
+                Remove question
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   const renderQuestion = (question: ClarificationQuestion) => {
@@ -1101,11 +1510,17 @@ export function ClarifyScopePanel({
               </button>
             </div>
           ) : panelMode === "create" && showDraftEditor && draftSet ? (
-            <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium text-foreground">
-                  {isUpdatingExisting ? "Edit questions" : "Create question set"}
-                </p>
+            <div className="space-y-4 rounded-lg border border-border bg-surface p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    {isUpdatingExisting ? "Edit questions" : "Create question set"}
+                  </p>
+                  <p className="mt-1 text-xs text-foreground-muted">
+                    Review what you&apos;ll ask first. Expand a question to edit answer type, options,
+                    and visibility.
+                  </p>
+                </div>
                 {!isUpdatingExisting ? (
                   <button
                     type="button"
@@ -1116,10 +1531,12 @@ export function ClarifyScopePanel({
                   </button>
                 ) : null}
               </div>
+
               {isUpdatingExisting ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2">
                   <p className="text-sm text-foreground-muted">
-                    Add or edit questions for <span className="font-medium text-foreground">{questionSet?.label}</span>.
+                    Add or edit questions for{" "}
+                    <span className="font-medium text-foreground">{questionSet?.label}</span>.
                     Saving updates the library for future lines too.
                   </p>
                   <button
@@ -1132,406 +1549,237 @@ export function ClarifyScopePanel({
                   </button>
                 </div>
               ) : null}
-              {!isUpdatingExisting ? (
-                <>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <label className="space-y-1">
-                      <span className={workspaceFormFieldLabelClass}>Set label</span>
-                      <input
-                        value={draftSet.label}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, label: event.target.value } : prev,
-                          )
-                        }
-                        className={workspaceFormControlClass}
-                        placeholder="Roof replacement clarifications"
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className={workspaceFormFieldLabelClass}>Set key</span>
-                      <input
-                        value={draftSet.key}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, key: event.target.value } : prev,
-                          )
-                        }
-                        className={workspaceFormControlClass}
-                        placeholder="roof.replacement"
-                      />
-                      {draftValidationIssues
-                        .filter((issue) => issue.path === "key")
-                        .map((issue) => (
-                          <p
-                            key={`${issue.severity}-${issue.message}`}
-                            className={
-                              issue.severity === "error"
-                                ? "text-xs text-danger"
-                                : "text-xs text-foreground-muted"
-                            }
-                          >
-                            {issue.message}
-                          </p>
-                        ))}
-                    </label>
-                  </div>
 
+              {!isUpdatingExisting ? (
+                <div className="space-y-2">
                   <label className="space-y-1">
-                    <span className={workspaceFormFieldLabelClass}>Description</span>
-                    <textarea
-                      rows={2}
-                      value={draftSet.description}
+                    <span className={workspaceFormFieldLabelClass}>Set label</span>
+                    <input
+                      value={draftSet.label}
                       onChange={(event) =>
                         setDraftSet((prev) =>
-                          prev ? { ...prev, description: event.target.value } : prev,
+                          prev ? { ...prev, label: event.target.value } : prev,
                         )
                       }
                       className={workspaceFormControlClass}
+                      placeholder="Residential window replacement details"
                     />
+                    {draftValidationIssues
+                      .filter((issue) => issue.path === "label")
+                      .map((issue) => (
+                        <p
+                          key={`${issue.severity}-${issue.message}`}
+                          className={
+                            issue.severity === "error"
+                              ? "text-xs text-danger"
+                              : "text-xs text-foreground-muted"
+                          }
+                        >
+                          {issue.message}
+                        </p>
+                      ))}
                   </label>
 
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <label className="space-y-1">
-                      <span className={workspaceFormFieldLabelClass}>Aliases (comma separated)</span>
-                      <input
-                        value={listToCsv(draftSet.aliases)}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, aliases: csvToList(event.target.value) } : prev,
-                          )
-                        }
-                        className={workspaceFormControlClass}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className={workspaceFormFieldLabelClass}>Keywords (comma separated)</span>
-                      <input
-                        value={listToCsv(draftSet.keywords)}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, keywords: csvToList(event.target.value) } : prev,
-                          )
-                        }
-                        className={workspaceFormControlClass}
-                      />
-                    </label>
-                  </div>
-                </>
-              ) : null}
-
-                  <div className="space-y-2">
-                    {draftSet.questions.map((question, qIndex) => (
-                      <div key={`${question.key}-${qIndex}`} className="space-y-2 rounded-md border border-border p-2">
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input
-                            value={question.label}
-                            onChange={(event) =>
-                              setDraftSet((prev) => {
-                                if (!prev) return prev;
-                                const questions = [...prev.questions];
-                                questions[qIndex] = { ...question, label: event.target.value };
-                                return { ...prev, questions };
-                              })
-                            }
-                            className={workspaceFormControlClass}
-                            placeholder="Question label"
-                          />
-                          <input
-                            value={question.key}
-                            onChange={(event) =>
-                              setDraftSet((prev) => {
-                                if (!prev) return prev;
-                                const questions = [...prev.questions];
-                                questions[qIndex] = { ...question, key: event.target.value };
-                                return { ...prev, questions };
-                              })
-                            }
-                            className={workspaceFormControlClass}
-                            placeholder="question.key"
-                          />
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <select
-                            value={question.inputType}
-                            onChange={(event) =>
-                              setDraftSet((prev) => {
-                                if (!prev) return prev;
-                                const questions = [...prev.questions];
-                                questions[qIndex] = {
-                                  ...question,
-                                  inputType: event.target.value as DraftInputType,
-                                };
-                                return { ...prev, questions };
-                              })
-                            }
-                            className={workspaceFormControlClass}
-                          >
-                            <option value="single_choice">Single choice</option>
-                            <option value="multi_choice">Multi choice</option>
-                            <option value="yes_no_unknown">Yes / No / Unknown</option>
-                            <option value="short_text">Short text</option>
-                            <option value="number">Number</option>
-                            <option value="notes">Notes</option>
-                          </select>
-                          <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
-                            <input
-                              type="checkbox"
-                              checked={question.customerFacing}
-                              onChange={(event) =>
-                                setDraftSet((prev) => {
-                                  if (!prev) return prev;
-                                  const questions = [...prev.questions];
-                                  questions[qIndex] = {
-                                    ...question,
-                                    customerFacing: event.target.checked,
-                                  };
-                                  return { ...prev, questions };
-                                })
+                  <details className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-medium text-foreground-muted">
+                      Library details (key, description, tags)
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      <label className="space-y-1">
+                        <span className={workspaceFormFieldLabelClass}>Set key</span>
+                        <input
+                          value={draftSet.key}
+                          onChange={(event) =>
+                            setDraftSet((prev) =>
+                              prev ? { ...prev, key: event.target.value } : prev,
+                            )
+                          }
+                          className={workspaceFormControlClass}
+                          placeholder="windows.replacement"
+                        />
+                        {draftValidationIssues
+                          .filter((issue) => issue.path === "key")
+                          .map((issue) => (
+                            <p
+                              key={`${issue.severity}-${issue.message}`}
+                              className={
+                                issue.severity === "error"
+                                  ? "text-xs text-danger"
+                                  : "text-xs text-foreground-muted"
                               }
-                            />
-                            Customer facing
-                          </label>
-                        </div>
+                            >
+                              {issue.message}
+                            </p>
+                          ))}
+                      </label>
 
-                        {(question.inputType === "single_choice" ||
-                          question.inputType === "multi_choice") && (
-                          <div className="space-y-2">
-                            {(question.options ?? []).map((option, optionIndex) => (
-                              <div key={`${option.key}-${optionIndex}`} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                                <input
-                                  value={option.label}
-                                  onChange={(event) =>
-                                    setDraftSet((prev) => {
-                                      if (!prev) return prev;
-                                      const questions = [...prev.questions];
-                                      const options = [...questions[qIndex].options];
-                                      options[optionIndex] = {
-                                        ...option,
-                                        label: event.target.value,
-                                      };
-                                      questions[qIndex] = { ...questions[qIndex], options };
-                                      return { ...prev, questions };
-                                    })
-                                  }
-                                  className={workspaceFormControlClass}
-                                  placeholder="Option label"
-                                />
-                                <input
-                                  value={option.key}
-                                  onChange={(event) =>
-                                    setDraftSet((prev) => {
-                                      if (!prev) return prev;
-                                      const questions = [...prev.questions];
-                                      const options = [...questions[qIndex].options];
-                                      options[optionIndex] = {
-                                        ...option,
-                                        key: event.target.value,
-                                      };
-                                      questions[qIndex] = { ...questions[qIndex], options };
-                                      return { ...prev, questions };
-                                    })
-                                  }
-                                  className={workspaceFormControlClass}
-                                  placeholder="option.key"
-                                />
-                                <button
-                                  type="button"
-                                  className={workspaceFormSecondaryButtonClass}
-                                  onClick={() =>
-                                    setDraftSet((prev) => {
-                                      if (!prev) return prev;
-                                      const questions = [...prev.questions];
-                                      questions[qIndex] = {
-                                        ...questions[qIndex],
-                                        options: questions[qIndex].options.filter(
-                                          (_, idx) => idx !== optionIndex,
-                                        ),
-                                      };
-                                      return { ...prev, questions };
-                                    })
-                                  }
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            ))}
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className={workspaceFormSecondaryButtonClass}
-                                onClick={() =>
-                                  setDraftSet((prev) => {
-                                    if (!prev) return prev;
-                                    const questions = [...prev.questions];
-                                    questions[qIndex] = {
-                                      ...questions[qIndex],
-                                      options: [
-                                        ...questions[qIndex].options,
-                                        { key: "", label: "", aliases: [] },
-                                      ],
-                                    };
-                                    return { ...prev, questions };
-                                  })
-                                }
-                              >
-                                Add option
-                              </button>
-                              <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
-                                <input
-                                  type="checkbox"
-                                  checked={question.allowOther}
-                                  onChange={(event) =>
-                                    setDraftSet((prev) => {
-                                      if (!prev) return prev;
-                                      const questions = [...prev.questions];
-                                      questions[qIndex] = {
-                                        ...question,
-                                        allowOther: event.target.checked,
-                                      };
-                                      return { ...prev, questions };
-                                    })
-                                  }
-                                />
-                                Allow &quot;Other&quot;
-                              </label>
-                            </div>
-                          </div>
-                        )}
+                      <label className="space-y-1">
+                        <span className={workspaceFormFieldLabelClass}>Description</span>
+                        <textarea
+                          rows={2}
+                          value={draftSet.description}
+                          onChange={(event) =>
+                            setDraftSet((prev) =>
+                              prev ? { ...prev, description: event.target.value } : prev,
+                            )
+                          }
+                          className={workspaceFormControlClass}
+                        />
+                      </label>
 
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            className={workspaceFormSecondaryButtonClass}
-                            onClick={() =>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="space-y-1">
+                          <span className={workspaceFormFieldLabelClass}>
+                            Aliases (comma separated)
+                          </span>
+                          <input
+                            value={listToCsv(draftSet.aliases)}
+                            onChange={(event) =>
                               setDraftSet((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      questions: prev.questions.filter((_, idx) => idx !== qIndex),
-                                    }
-                                  : prev,
+                                prev ? { ...prev, aliases: csvToList(event.target.value) } : prev,
                               )
                             }
-                          >
-                            Remove question
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className={workspaceFormSecondaryButtonClass}
-                      onClick={() =>
-                        setDraftSet((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                questions: [
-                                  ...prev.questions,
-                                  {
-                                    key: "",
-                                    label: "",
-                                    inputType: "short_text",
-                                    helpText: "",
-                                    allowOther: false,
-                                    unit: "",
-                                    customerFacing: true,
-                                    aliases: [],
-                                    options: [],
-                                  },
-                                ],
-                              }
-                            : prev,
-                        )
-                      }
-                    >
-                      Add question
-                    </button>
-                    {!isUpdatingExisting ? (
-                      <>
-                    <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
-                      <input
-                        type="checkbox"
-                        checked={draftSet.attachToTemplateTags}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, attachToTemplateTags: event.target.checked } : prev,
-                          )
-                        }
-                      />
-                      Attach to this line template&apos;s tags
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground-muted">
-                      <input
-                        type="checkbox"
-                        checked={draftSet.activateNow}
-                        onChange={(event) =>
-                          setDraftSet((prev) =>
-                            prev ? { ...prev, activateNow: event.target.checked } : prev,
-                          )
-                        }
-                      />
-                      Activate now (off = save as draft library entry)
-                    </label>
-                      </>
-                    ) : null}
-                  </div>
-
-                  {draftValidationIssues.filter((issue) => issue.path !== "key").length > 0 ? (
-                    <ul className="space-y-1 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs">
-                      {draftValidationIssues
-                        .filter((issue) => issue.path !== "key")
-                        .map((issue) => (
-                          <li
-                            key={`${issue.path}-${issue.message}`}
-                            className={
-                              issue.severity === "error" ? "text-danger" : "text-foreground-muted"
+                            className={workspaceFormControlClass}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={workspaceFormFieldLabelClass}>
+                            Keywords (comma separated)
+                          </span>
+                          <input
+                            value={listToCsv(draftSet.keywords)}
+                            onChange={(event) =>
+                              setDraftSet((prev) =>
+                                prev ? { ...prev, keywords: csvToList(event.target.value) } : prev,
+                              )
                             }
-                          >
-                            {issue.message}
-                          </li>
-                        ))}
-                    </ul>
-                  ) : null}
+                            className={workspaceFormControlClass}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              ) : null}
 
-                  {setDraftError ? (
-                    <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger">
-                      {setDraftError}
-                    </p>
-                  ) : null}
-
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className={workspaceFormFieldLabelClass}>
+                    Questions ({draftSet.questions.length})
+                  </p>
                   <button
                     type="button"
-                    className={workspaceFormPrimaryButtonClass}
-                    disabled={
-                      (isUpdatingExisting ? isUpdatingSet : isCreatingSet) || draftBlockingErrors
-                    }
-                    onClick={() =>
-                      void (isUpdatingExisting ? handleUpdateSet() : handleCreateSet())
-                    }
+                    className={workspaceFormSecondaryButtonClass}
+                    onClick={addDraftQuestion}
                   >
-                    {isUpdatingExisting ? (
-                      isUpdatingSet ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" />
-                          Saving questions…
-                        </>
-                      ) : (
-                        "Save questions"
-                      )
-                    ) : isCreatingSet ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Creating question set…
-                      </>
-                    ) : (
-                      "Save and use these questions"
-                    )}
+                    <Plus className="size-4" />
+                    Add question
                   </button>
+                </div>
+
+                {draftSet.questions.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-foreground-muted">
+                    No questions yet. Add one manually or start from a trade template or AI draft.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {draftSet.questions.map((question, qIndex) =>
+                      renderDraftQuestionCard(question, qIndex),
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!isUpdatingExisting ? (
+                <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2">
+                  <label className="flex items-center gap-2 text-xs text-foreground-muted">
+                    <input
+                      type="checkbox"
+                      checked={draftSet.attachToTemplateTags}
+                      onChange={(event) =>
+                        setDraftSet((prev) =>
+                          prev ? { ...prev, attachToTemplateTags: event.target.checked } : prev,
+                        )
+                      }
+                    />
+                    Attach to this line template&apos;s tags
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-foreground-muted">
+                    <input
+                      type="checkbox"
+                      checked={draftSet.activateNow}
+                      onChange={(event) =>
+                        setDraftSet((prev) =>
+                          prev ? { ...prev, activateNow: event.target.checked } : prev,
+                        )
+                      }
+                    />
+                    Activate now (off = save as draft library entry)
+                  </label>
+                </div>
+              ) : null}
+
+              {draftValidationIssues.filter(
+                (issue) =>
+                  issue.path !== "key" &&
+                  issue.path !== "label" &&
+                  !/^questions\[\d+\]/.test(issue.path),
+              ).length > 0 ? (
+                <ul className="space-y-1 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-xs">
+                  {draftValidationIssues
+                    .filter(
+                      (issue) =>
+                        issue.path !== "key" &&
+                        issue.path !== "label" &&
+                        !/^questions\[\d+\]/.test(issue.path),
+                    )
+                    .map((issue) => (
+                      <li
+                        key={`${issue.path}-${issue.message}`}
+                        className={
+                          issue.severity === "error" ? "text-danger" : "text-foreground-muted"
+                        }
+                      >
+                        {issue.message}
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+
+              {setDraftError ? (
+                <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger">
+                  {setDraftError}
+                </p>
+              ) : null}
+
+              <button
+                type="button"
+                className={workspaceFormPrimaryButtonClass}
+                disabled={
+                  (isUpdatingExisting ? isUpdatingSet : isCreatingSet) || draftBlockingErrors
+                }
+                onClick={() =>
+                  void (isUpdatingExisting ? handleUpdateSet() : handleCreateSet())
+                }
+              >
+                {isUpdatingExisting ? (
+                  isUpdatingSet ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Saving questions…
+                    </>
+                  ) : (
+                    "Save questions"
+                  )
+                ) : isCreatingSet ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Creating question set…
+                  </>
+                ) : (
+                  "Save and use these questions"
+                )}
+              </button>
             </div>
           ) : panelMode === "create" ? (
             <div className="space-y-3 rounded-lg border border-border bg-foreground/[0.02] p-3">

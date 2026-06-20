@@ -108,6 +108,8 @@
 | Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
 | Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` (accepted plan + hash/version + coverage + blockers) | One-off checks in activation action |
 | Quote plan staleness (`isStale`) | **Derived** | `currentPlanningInputHash !== QuoteExecutionPlan.planningInputHash` | Stored stale status drift |
+| Quote execution plan acceptance | **Stored** | `QuoteExecutionPlan.status`, `acceptedAt`, `planningInputHash` | UI-only acceptance without stamped hash |
+| Pre-plan line draft tasks | **Stored (authoring seed)** | `QuoteLineExecutionTask` — not activation truth once whole-quote plan exists | Treating per-line drafts as reviewed activation plan |
 | Quote totals | **Stored** | `Quote.totalCents`, line items | Different totals in UI vs PDF vs checkpoint |
 | Approved commercial baseline | **Stored proof** | `QuoteCheckpoint` — see [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md) | “Version browser” UX or silent sold-truth mutation |
 | Customer revision/change request intent | **Stored** | `QuoteChangeRequest` | Notes-only customer-change handling and missing revision loop context |
@@ -163,4 +165,5 @@
 *Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*  
 *Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*  
 *Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
-*Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*
+*Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*  
+*Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*

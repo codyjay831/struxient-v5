@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { QuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
-import { QuoteCrossLineWiringReviewTrigger } from "@/components/quotes/quote-cross-line-wiring-review";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { acceptQuoteExecutionPlanAction } from "@/app/(workspace)/quotes/quote-plan-actions";
@@ -18,7 +17,7 @@ function getBlockReasonAction(
 ): { href: string; label: string } | null {
   switch (code) {
     case "TASK_MISSING_STAGE":
-      return { href: `/quotes/${quoteId}`, label: "Assign stages on the quote" };
+      return { href: `#plan-preview`, label: "Review plan tasks below" };
     case "HARD_SIGNAL_NO_PROVIDER":
       return { href: "#execution-dependency-gaps", label: "Fix dependency gaps below" };
     case "APPROVAL_CHECKPOINT_MISSING":
@@ -29,7 +28,10 @@ function getBlockReasonAction(
       return { href: `/quotes/${quoteId}`, label: "Review payment schedule" };
     case "PLAN_NOT_ACCEPTED":
     case "PLAN_STALE":
-      return { href: `/quotes/${quoteId}/execution-review`, label: "Review and accept current plan" };
+    case "NO_EXECUTION_TASKS":
+      return { href: `#whole-quote-plan`, label: "Build or accept the execution plan" };
+    case "EXECUTION_SCOPE_NOT_COVERED":
+      return { href: `#plan-preview`, label: "Review scope coverage below" };
     default:
       return null;
   }
@@ -45,6 +47,7 @@ function getBlockReasonSeverity(
     case "PLAN_NOT_ACCEPTED":
     case "PLAN_STALE":
     case "PLAN_VERSION_MISMATCH":
+    case "NO_EXECUTION_TASKS":
       return "WARNING";
     default:
       return "BLOCKING";
@@ -55,13 +58,11 @@ export function QuoteBlockedActivationPanel({
   quoteId,
   readiness,
   quoteIsApproved,
-  showCrossLineReview,
   hardOrphanCount,
 }: {
   quoteId: string;
   readiness: QuoteJobActivationReadiness;
   quoteIsApproved: boolean;
-  showCrossLineReview: boolean;
   hardOrphanCount: number;
 }) {
   const [isAcceptingPlan, startAcceptPlan] = useTransition();
@@ -74,10 +75,10 @@ export function QuoteBlockedActivationPanel({
   return (
     <WorkspacePanel className="border-l-[3px] border-l-accent/70 bg-accent/[0.04]">
       <SectionHeading
-        title="Create job from this approved quote"
+        title="Cannot create job yet"
         description={
           quoteIsApproved
-            ? "Resolve the blockers below before creating the job. Job creation stays disabled until readiness checks pass."
+            ? "Resolve the required actions below. Job creation stays disabled until readiness checks pass."
             : "Job creation unlocks after quote approval. Clear planning blockers now so activation is ready as soon as approval is recorded."
         }
       />
@@ -135,7 +136,8 @@ export function QuoteBlockedActivationPanel({
       {canAcceptPlan ? (
         <div className="mt-4 rounded-md border border-border bg-background/50 p-3">
           <p className="text-xs text-foreground-muted">
-            Plan status changed or inputs drifted. Re-accepting stamps the current planning input hash.
+            Plan inputs changed or the plan has not been accepted yet. Accepting stamps the current planning context
+            and unblocks activation when all other checks pass.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
@@ -161,18 +163,6 @@ export function QuoteBlockedActivationPanel({
                 {acceptPlanError}
               </span>
             ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {showCrossLineReview ? (
-        <div className="mt-4 border-t border-border pt-4">
-          <p className="text-xs text-foreground-muted">
-            Optional: AI Secretary can suggest cross-line wiring. You can also fix gaps manually
-            using <strong>Edit task</strong> in the dependency list or line breakdown.
-          </p>
-          <div className="mt-3">
-            <QuoteCrossLineWiringReviewTrigger label="Review whole execution flow" />
           </div>
         </div>
       ) : null}

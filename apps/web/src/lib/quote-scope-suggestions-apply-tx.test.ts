@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { QuoteStatus } from "@prisma/client";
 import { mapCommercialSuggestionToLineFields } from "@/lib/ai/quote-scope-suggestion-persist";
-import { createQuoteScopeDecisionsFromMissingInfoStrings } from "@/lib/quote-scope-decision-core";
+import {
+  createQuoteScopeDecisionsFromMissingInfoStrings,
+  type QuoteScopeDecisionTx,
+} from "@/lib/quote-scope-decision-core";
 
 type DecisionRow = {
   id: string;
@@ -15,7 +18,9 @@ type DecisionRow = {
   status: "OPEN";
 };
 
-function createDecisionMockTx(initial: DecisionRow[] = []) {
+function createDecisionMockTx(initial: DecisionRow[] = []): QuoteScopeDecisionTx & {
+  _rows: DecisionRow[];
+} {
   const rows = [...initial];
   let idCounter = initial.length + 1;
 
@@ -53,7 +58,7 @@ function createDecisionMockTx(initial: DecisionRow[] = []) {
       },
     },
     _rows: rows,
-  };
+  } as unknown as QuoteScopeDecisionTx & { _rows: DecisionRow[] };
 }
 
 test("commercial missingInfo still maps to internal notes unchanged", () => {

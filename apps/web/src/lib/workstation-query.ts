@@ -18,6 +18,16 @@ import {
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
+import {
+  buildQuoteActivationReadinessInput,
+  type QuotePlanSurfaceTask,
+} from "@/lib/quote-execution-plan-surface";
+import {
+  QUOTE_PLAN_INPUT_SCHEMA_VERSION,
+  buildQuotePlanPlanningInput,
+  loadQuotePlanContext,
+} from "@/lib/quote-plan/quote-plan-context";
+import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
 import { getOpportunityFlow } from "@/lib/opportunity-flow";
 import {
   jobsiteLineFromLead,
@@ -479,11 +489,16 @@ export async function queryWorkstationWorkItems(
       executionPlan: {
         select: {
           status: true,
+          planVersion: true,
+          planningInputHash: true,
+          planningInputSchemaVersion: true,
           tasks: {
             select: {
               id: true,
               title: true,
               stageId: true,
+              category: true,
+              sortOrder: true,
               providesSignals: true,
               requiresSignals: true,
               hardSignal: true,
@@ -530,54 +545,60 @@ export async function queryWorkstationWorkItems(
     const latestApproval = quote.checkpoints[0];
     const isCustomerAccepted = latestApproval?.source === QuoteCheckpointSource.CUSTOMER_PORTAL;
 
-    const acceptedPlanTasksByLineId = new Map<
-      string,
-      Array<{
-        id: string;
-        title: string;
-        stageId: string | null;
-        providesSignals: string[];
-        requiresSignals: string[];
-        hardSignal: boolean;
-      }>
-    >();
-    for (const line of quote.lineItems) {
-      acceptedPlanTasksByLineId.set(line.id, []);
-    }
-    if (quote.executionPlan?.status === "ACCEPTED") {
-      for (const task of quote.executionPlan.tasks) {
-        for (const scope of task.scopes) {
-          const scoped = acceptedPlanTasksByLineId.get(scope.quoteLineItemId);
-          if (!scoped) continue;
-          scoped.push({
-            id: task.id,
-            title: task.title,
-            stageId: task.stageId,
-            providesSignals: task.providesSignals,
-            requiresSignals: task.requiresSignals,
-            hardSignal: task.hardSignal,
-          });
-        }
-      }
-    }
+    const planContext = await loadQuotePlanContext(quote.id, organizationId);
+    const currentPlanningInputHash =
+      planContext && quote.executionPlan
+        ? computeQuotePlanningInputHash(
+            buildQuotePlanPlanningInput(planContext),
+            quote.executionPlan.planningInputSchemaVersion ?? QUOTE_PLAN_INPUT_SCHEMA_VERSION,
+          )
+        : null;
 
-    const activationReadiness = evaluateQuoteJobActivationReadiness({
-      status: quote.status,
-      hasApprovalCheckpoint: quote.checkpoints.length > 0,
-      lines: quote.lineItems.map((l) => ({
-        id: l.id,
-        description: l.description,
-        tasks: acceptedPlanTasksByLineId.get(l.id) ?? [],
-      })),
-      quoteTotalCents: quote.totalCents,
-      paymentSchedule: quote.paymentSchedule.map((item) => ({
-        id: item.id,
-        title: item.title,
-        anchorType: item.anchorType,
-        amountCents: item.amountCents,
-        percentage: item.percentage,
-      })),
-    });
+    const surfaceLines = quote.lineItems.map((line) => ({
+      id: line.id,
+      description: line.description,
+      sortOrder: line.sortOrder,
+      executionRelevant: line.executionRelevant,
+    }));
+
+    const planTasks: QuotePlanSurfaceTask[] =
+      quote.executionPlan?.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        stageId: task.stageId,
+        category: task.category,
+        sortOrder: task.sortOrder,
+        providesSignals: task.providesSignals,
+        requiresSignals: task.requiresSignals,
+        hardSignal: task.hardSignal,
+        scopeLineIds: task.scopes.map((scope) => scope.quoteLineItemId),
+      })) ?? [];
+
+    const activationReadiness = evaluateQuoteJobActivationReadiness(
+      buildQuoteActivationReadinessInput({
+        status: quote.status,
+        hasApprovalCheckpoint: quote.checkpoints.length > 0,
+        executionPlan: quote.executionPlan
+          ? {
+              status: quote.executionPlan.status,
+              planVersion: quote.executionPlan.planVersion,
+              planningInputHash: quote.executionPlan.planningInputHash,
+              planningInputSchemaVersion: quote.executionPlan.planningInputSchemaVersion,
+            }
+          : null,
+        currentPlanningInputHash,
+        lines: surfaceLines,
+        planTasks,
+        quoteTotalCents: quote.totalCents,
+        paymentSchedule: quote.paymentSchedule.map((item) => ({
+          id: item.id,
+          title: item.title,
+          anchorType: item.anchorType,
+          amountCents: item.amountCents,
+          percentage: item.percentage,
+        })),
+      }),
+    );
 
     const readiness = getQuoteReadiness({
       quote: {

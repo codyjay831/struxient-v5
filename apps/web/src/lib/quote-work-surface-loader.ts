@@ -3,8 +3,16 @@ import "server-only";
 import { QuoteCheckpointKind, QuoteStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  evaluateQuoteJobActivationReadiness,
-} from "@/lib/quote-job-activation-readiness";
+  buildQuoteActivationReadinessInput,
+  type QuotePlanSurfaceTask,
+} from "@/lib/quote-execution-plan-surface";
+import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
+import {
+  QUOTE_PLAN_INPUT_SCHEMA_VERSION,
+  buildQuotePlanPlanningInput,
+  loadQuotePlanContext,
+} from "@/lib/quote-plan/quote-plan-context";
+import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
 import { getQuoteReadiness, type QuoteReadiness } from "@/lib/quote-readiness";
 import {
   formatQuoteStatus,
@@ -161,6 +169,9 @@ export async function loadQuoteWorkSurface(
         select: {
           id: true,
           status: true,
+          planVersion: true,
+          planningInputHash: true,
+          planningInputSchemaVersion: true,
           tasks: {
             orderBy: [{ sortOrder: "asc" }],
             select: {
@@ -338,54 +349,63 @@ export async function loadQuoteWorkSurface(
   const latestApproval =
     approvalCheckpointRows[approvalCheckpointRows.length - 1] ?? null;
   const stageById = new Map(stages.map((stage) => [stage.id, stage] as const));
-  const acceptedPlanTasksByLineId = new Map<
-    string,
-    Array<{
-      id: string;
-      title: string;
-      stageId: string | null;
-      providesSignals: string[];
-      requiresSignals: string[];
-      hardSignal: boolean;
-    }>
-  >();
-  for (const line of row.lineItems) {
-    acceptedPlanTasksByLineId.set(line.id, []);
-  }
-  if (row.executionPlan?.status === "ACCEPTED") {
-    for (const task of row.executionPlan.tasks) {
-      for (const scope of task.scopes) {
-        const scoped = acceptedPlanTasksByLineId.get(scope.quoteLineItemId);
-        if (!scoped) continue;
-        scoped.push({
-          id: task.id,
-          title: task.title,
-          stageId: task.stageId,
-          providesSignals: task.providesSignals,
-          requiresSignals: task.requiresSignals,
-          hardSignal: task.hardSignal,
-        });
-      }
-    }
-  }
 
-  const activationReadiness = evaluateQuoteJobActivationReadiness({
-    status: row.status,
-    hasApprovalCheckpoint: approvalCheckpointRows.length > 0,
-    lines: row.lineItems.map((l) => ({
-      id: l.id,
-      description: l.description,
-      tasks: acceptedPlanTasksByLineId.get(l.id) ?? [],
-    })),
-    quoteTotalCents: row.totalCents,
-    paymentSchedule: row.paymentSchedule.map((item) => ({
-      id: item.id,
-      title: item.title,
-      anchorType: item.anchorType,
-      amountCents: item.amountCents,
-      percentage: item.percentage,
-    })),
-  });
+  const planContext = await loadQuotePlanContext(row.id, orgId);
+  const currentPlanningInputHash =
+    planContext && row.executionPlan
+      ? computeQuotePlanningInputHash(
+          buildQuotePlanPlanningInput(planContext),
+          row.executionPlan.planningInputSchemaVersion ?? QUOTE_PLAN_INPUT_SCHEMA_VERSION,
+        )
+      : null;
+
+  const surfaceLines = row.lineItems.map((line) => ({
+    id: line.id,
+    description: line.description,
+    sortOrder: line.sortOrder,
+  }));
+
+  const planTasks: QuotePlanSurfaceTask[] =
+    row.executionPlan?.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      stageId: task.stageId,
+      category: task.category,
+      instructions: task.instructions,
+      sortOrder: task.sortOrder,
+      providesSignals: task.providesSignals,
+      requiresSignals: task.requiresSignals,
+      hardSignal: task.hardSignal,
+      requirementsJson: task.requirementsJson,
+      partsRequiredJson: task.partsRequiredJson,
+      scopeLineIds: task.scopes.map((scope) => scope.quoteLineItemId),
+    })) ?? [];
+
+  const activationReadiness = evaluateQuoteJobActivationReadiness(
+    buildQuoteActivationReadinessInput({
+      status: row.status,
+      hasApprovalCheckpoint: approvalCheckpointRows.length > 0,
+      executionPlan: row.executionPlan
+        ? {
+            status: row.executionPlan.status,
+            planVersion: row.executionPlan.planVersion,
+            planningInputHash: row.executionPlan.planningInputHash,
+            planningInputSchemaVersion: row.executionPlan.planningInputSchemaVersion,
+          }
+        : null,
+      currentPlanningInputHash,
+      lines: surfaceLines,
+      planTasks,
+      quoteTotalCents: row.totalCents,
+      paymentSchedule: row.paymentSchedule.map((item) => ({
+        id: item.id,
+        title: item.title,
+        anchorType: item.anchorType,
+        amountCents: item.amountCents,
+        percentage: item.percentage,
+      })),
+    }),
+  );
 
   const readiness = getQuoteReadiness({
     quote: {

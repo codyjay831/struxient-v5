@@ -5,17 +5,11 @@ import { useRouter } from "next/navigation";
 import type { QuoteExecutionReviewOrphan } from "@/lib/quote-execution-review-preview-model";
 import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
-  QuoteCrossLineWiringReviewPanel,
-  QuoteCrossLineWiringReviewTrigger,
-  useQuoteCrossLineWiringReviewContextOptional,
-} from "@/components/quotes/quote-cross-line-wiring-review";
-import { useQuoteExecutionReviewFocusOptional } from "@/components/quotes/quote-execution-review-focus";
-import {
-  addQuoteLineDependencyProviderTaskAction,
-  connectQuoteLineDependencyGapToTaskAction,
-  relaxQuoteLineDependencyHardSignalAction,
-  removeQuoteLineDependencyRequirementAction,
-} from "@/app/(workspace)/quotes/quote-line-execution-actions";
+  addQuotePlanDependencyProviderTaskAction,
+  connectQuotePlanDependencyGapToTaskAction,
+  relaxQuotePlanDependencyHardSignalAction,
+  removeQuotePlanDependencyRequirementAction,
+} from "@/app/(workspace)/quotes/quote-plan-actions";
 import { buildMissingProviderGapCopy } from "@/lib/signal-display-copy";
 import { ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -26,7 +20,7 @@ const primaryButtonClass =
 const dangerButtonClass =
   "inline-flex items-center justify-center rounded-md border border-danger/40 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-danger transition-colors hover:bg-danger/5 disabled:cursor-not-allowed disabled:opacity-60";
 
-type DraftTaskChoice = {
+type PlanTaskChoice = {
   id: string;
   title: string;
   stageId: string | null;
@@ -35,24 +29,24 @@ type DraftTaskChoice = {
 
 function gapActionErrorMessage(message: string): string {
   const lowered = message.toLowerCase();
-  if (lowered.includes("selected task")) {
+  if (lowered.includes("selected task") || lowered.includes("not found")) {
     return "Selected task is no longer available.";
   }
   if (lowered.includes("not editable") || lowered.includes("locked")) {
-    return "This task is no longer editable.";
+    return "This plan is no longer editable.";
   }
   return "Could not apply this fix. The quote may have changed. Refresh and try again.";
 }
 
 function scoreProviderCandidate(
-  candidate: DraftTaskChoice,
+  candidate: PlanTaskChoice,
   consumerLineId: string,
-  candidateLineId: string,
+  candidateLineIds: string[],
   consumerStageId: string | null,
   signal: string,
 ): number {
   let score = 0;
-  if (candidateLineId === consumerLineId) {
+  if (candidateLineIds.includes(consumerLineId)) {
     score += 100;
   }
   if (consumerStageId && candidate.stageId === consumerStageId) {
@@ -83,17 +77,17 @@ function HardDependencyGapCard({
   orphan,
   executionPlanningEditable,
   lineLabelById,
-  draftTasksByLineId,
+  planTasks,
+  taskLineIdsByTaskId,
 }: {
   quoteId: string;
   orphan: QuoteExecutionReviewOrphan;
   executionPlanningEditable: boolean;
   lineLabelById: Record<string, string>;
-  draftTasksByLineId: Record<string, readonly DraftTaskChoice[]>;
+  planTasks: readonly PlanTaskChoice[];
+  taskLineIdsByTaskId: Record<string, string[]>;
 }) {
   const router = useRouter();
-  const focusContext = useQuoteExecutionReviewFocusOptional();
-  const crossLineContext = useQuoteCrossLineWiringReviewContextOptional();
   const [isPending, startTransition] = useTransition();
   const [selectedProviderTaskId, setSelectedProviderTaskId] = useState("");
   const [isConnectOpen, setIsConnectOpen] = useState(false);
@@ -102,48 +96,49 @@ function HardDependencyGapCard({
 
   const providerCandidates = useMemo(() => {
     const candidates: Array<{
-      lineId: string;
+      lineIds: string[];
       lineLabel: string;
-      task: DraftTaskChoice;
+      task: PlanTaskChoice;
       score: number;
     }> = [];
-    for (const [lineId, tasks] of Object.entries(draftTasksByLineId)) {
-      for (const task of tasks) {
-        if (task.id === orphan.consumerTaskId) {
-          continue;
-        }
-        candidates.push({
-          lineId,
-          lineLabel: lineLabelById[lineId] ?? "Line",
-          task,
-          score: scoreProviderCandidate(
-            task,
-            orphan.consumerLineId,
-            lineId,
-            orphan.consumerStageId,
-            orphan.signal,
-          ),
-        });
+    for (const task of planTasks) {
+      if (task.id === orphan.consumerTaskId) {
+        continue;
       }
+      const lineIds = taskLineIdsByTaskId[task.id] ?? [];
+      candidates.push({
+        lineIds,
+        lineLabel: lineIds.map((id) => lineLabelById[id] ?? "Line").join(", "),
+        task,
+        score: scoreProviderCandidate(
+          task,
+          orphan.consumerLineId,
+          lineIds,
+          orphan.consumerStageId,
+          orphan.signal,
+        ),
+      });
     }
     return candidates.sort((a, b) => b.score - a.score || a.task.title.localeCompare(b.task.title));
   }, [
-    draftTasksByLineId,
     lineLabelById,
     orphan.consumerLineId,
     orphan.consumerStageId,
     orphan.consumerTaskId,
     orphan.signal,
+    planTasks,
+    taskLineIdsByTaskId,
   ]);
 
   const groupedCandidates = useMemo(() => {
     const groups = new Map<string, { lineLabel: string; options: typeof providerCandidates }>();
     for (const candidate of providerCandidates) {
-      const existing = groups.get(candidate.lineId);
+      const key = candidate.lineIds.join("|") || "unscoped";
+      const existing = groups.get(key);
       if (existing) {
         existing.options.push(candidate);
       } else {
-        groups.set(candidate.lineId, {
+        groups.set(key, {
           lineLabel: candidate.lineLabel,
           options: [candidate],
         });
@@ -170,10 +165,7 @@ function HardDependencyGapCard({
   };
 
   return (
-    <li
-      key={`${orphan.consumerTaskId}:${orphan.signal}`}
-      className="rounded-lg border border-border bg-background/50 p-3"
-    >
+    <li className="rounded-lg border border-border bg-background/50 p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-danger">
@@ -201,12 +193,12 @@ function HardDependencyGapCard({
           onClick={() =>
             runGapAction(
               () =>
-                addQuoteLineDependencyProviderTaskAction({
+                addQuotePlanDependencyProviderTaskAction({
                   quoteId,
                   consumerTaskId: orphan.consumerTaskId,
                   signal: orphan.signal,
                 }),
-              "Provider task added.",
+              "Provider task added to plan.",
             )
           }
         >
@@ -233,42 +225,23 @@ function HardDependencyGapCard({
             }
             runGapAction(
               () =>
-                removeQuoteLineDependencyRequirementAction({
+                removeQuotePlanDependencyRequirementAction({
                   quoteId,
                   consumerTaskId: orphan.consumerTaskId,
                   signal: orphan.signal,
                 }),
-              "Requirement removed.",
+              "Requirement removed from plan.",
             );
           }}
         >
           Remove requirement
         </button>
-        <button
-          type="button"
-          className={secondaryButtonClass}
-          disabled={!executionPlanningEditable || isPending}
-          onClick={() => {
-            if (!crossLineContext) {
-              toast.info("AI review is not available in this context.");
-              return;
-            }
-            toast.info(
-              "AI will propose changes for your review. Nothing is applied until you approve.",
-            );
-            void crossLineContext.startReview();
-          }}
-        >
-          Ask AI to suggest fix
-        </button>
       </div>
       {!executionPlanningEditable ? (
-        <p className="mt-2 text-[10px] text-foreground-subtle">This task is no longer editable.</p>
+        <p className="mt-2 text-[10px] text-foreground-subtle">This plan is no longer editable.</p>
       ) : null}
       {executionPlanningEditable && providerCandidates.length === 0 ? (
-        <p className="mt-2 text-[10px] text-foreground-subtle">
-          No suitable existing tasks found.
-        </p>
+        <p className="mt-2 text-[10px] text-foreground-subtle">No suitable existing plan tasks found.</p>
       ) : null}
 
       {isConnectOpen ? (
@@ -285,8 +258,8 @@ function HardDependencyGapCard({
               disabled={isPending || !executionPlanningEditable}
             >
               <option value="">Select a task</option>
-              {groupedCandidates.map(([lineId, group]) => (
-                <optgroup key={lineId} label={group.lineLabel}>
+              {groupedCandidates.map(([key, group]) => (
+                <optgroup key={key} label={group.lineLabel}>
                   {group.options.map((candidate) => (
                     <option key={candidate.task.id} value={candidate.task.id}>
                       {candidate.task.title}
@@ -296,9 +269,6 @@ function HardDependencyGapCard({
               ))}
             </select>
           </label>
-          <p className="mt-2 text-[10px] text-foreground-muted">
-            You are declaring that this task confirms: {orphan.signal}.
-          </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
@@ -307,13 +277,13 @@ function HardDependencyGapCard({
               onClick={() =>
                 runGapAction(
                   () =>
-                    connectQuoteLineDependencyGapToTaskAction({
+                    connectQuotePlanDependencyGapToTaskAction({
                       quoteId,
                       consumerTaskId: orphan.consumerTaskId,
                       providerTaskId: selectedProviderTaskId,
                       signal: orphan.signal,
                     }),
-                  "Connected to existing task.",
+                  "Connected to existing plan task.",
                 )
               }
             >
@@ -354,11 +324,11 @@ function HardDependencyGapCard({
                 }
                 runGapAction(
                   () =>
-                    relaxQuoteLineDependencyHardSignalAction({
+                    relaxQuotePlanDependencyHardSignalAction({
                       quoteId,
                       consumerTaskId: orphan.consumerTaskId,
                     }),
-                  "Relaxed activation blocking for this task.",
+                  "Relaxed activation blocking for this plan task.",
                 );
               }}
             >
@@ -368,15 +338,6 @@ function HardDependencyGapCard({
               <p className="text-[10px] text-foreground-subtle">
                 This task has multiple required signals. Relaxing would affect all of them.
               </p>
-            ) : null}
-            {executionPlanningEditable && focusContext ? (
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                onClick={() => focusContext.focusTask(orphan.consumerLineId, orphan.consumerTaskId)}
-              >
-                Edit task manually
-              </button>
             ) : null}
           </div>
         </div>
@@ -389,16 +350,16 @@ export function QuoteExecutionDependencyGapsPanel({
   quoteId,
   orphans,
   executionPlanningEditable,
-  showCrossLineReview,
   lineLabelById,
-  draftTasksByLineId,
+  planTasks,
+  taskLineIdsByTaskId,
 }: {
   quoteId: string;
   orphans: readonly QuoteExecutionReviewOrphan[];
   executionPlanningEditable: boolean;
-  showCrossLineReview: boolean;
   lineLabelById: Record<string, string>;
-  draftTasksByLineId: Record<string, readonly DraftTaskChoice[]>;
+  planTasks: readonly PlanTaskChoice[];
+  taskLineIdsByTaskId: Record<string, string[]>;
 }) {
   if (orphans.length === 0) {
     return null;
@@ -411,25 +372,12 @@ export function QuoteExecutionDependencyGapsPanel({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground">Dependency gaps</h3>
           <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-            These task dependencies are required but do not yet have an upstream task in this quote.
+            These prerequisites are required but do not yet have an upstream task in the execution plan.
             <strong> Auto-resolved gaps</strong> are handled during job creation.
             <strong> Required gaps</strong> must be resolved before creating the job.
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-            Fix required gaps directly below using guided actions. You can still edit tasks manually in
-            advanced details if needed.
-          </p>
-          {showCrossLineReview ? (
-            <div className="mt-3 space-y-3">
-              <QuoteCrossLineWiringReviewTrigger
-                compact
-                label="Optional: review whole execution flow with AI Secretary"
-              />
-              <QuoteCrossLineWiringReviewPanel />
-            </div>
-          ) : null}
           <ul className="mt-4 space-y-3">
-            {orphans.map((orphan) => (
+            {orphans.map((orphan) =>
               orphan.isHard ? (
                 <HardDependencyGapCard
                   key={`${orphan.consumerTaskId}:${orphan.signal}`}
@@ -437,7 +385,8 @@ export function QuoteExecutionDependencyGapsPanel({
                   orphan={orphan}
                   executionPlanningEditable={executionPlanningEditable}
                   lineLabelById={lineLabelById}
-                  draftTasksByLineId={draftTasksByLineId}
+                  planTasks={planTasks}
+                  taskLineIdsByTaskId={taskLineIdsByTaskId}
                 />
               ) : (
                 <li
@@ -449,13 +398,13 @@ export function QuoteExecutionDependencyGapsPanel({
                       Auto-resolved gap
                     </span>
                     <p className="text-xs text-foreground-muted">
-                      {orphan.consumerTaskTitle} can proceed because this dependency is auto-satisfied at
-                      job creation.
+                      {orphan.consumerTaskTitle} can proceed because this dependency is auto-satisfied at job
+                      creation.
                     </p>
                   </div>
                 </li>
-              )
-            ))}
+              ),
+            )}
           </ul>
         </div>
       </div>
