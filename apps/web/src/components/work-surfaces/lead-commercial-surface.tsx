@@ -27,6 +27,7 @@ import {
   type OpportunityAction,
   type OpportunityFlowView,
 } from "@/lib/opportunity-flow";
+import { opportunityActionOpensQuoteTab } from "@/lib/opportunity-tab-routing";
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -64,7 +65,9 @@ import type { LeadReviewDisplay } from "@/lib/lead-review-display";
 export interface LeadCommercialSurfaceProps {
   payload: LeadCommercialSurfacePayload;
   entryPoint?: "workstation" | "record" | "sales_modal";
+  embeddedInOpportunityWorkspace?: boolean;
   onMutationSuccess?: () => void;
+  onNavigateToQuoteTab?: (quoteId?: string) => void;
   onClose?: () => void;
 }
 
@@ -214,6 +217,7 @@ function OpportunityActionControl({
   isAssignedVisitMode = false,
   onReviewCustomerMatch,
   onMutationSuccess,
+  onNavigateToQuoteTab,
   fullWidth = false,
 }: {
   action: OpportunityAction;
@@ -224,6 +228,7 @@ function OpportunityActionControl({
   isAssignedVisitMode?: boolean;
   onReviewCustomerMatch?: () => void;
   onMutationSuccess?: () => void;
+  onNavigateToQuoteTab?: (quoteId?: string) => void;
   fullWidth?: boolean;
 }) {
   const router = useRouter();
@@ -240,7 +245,17 @@ function OpportunityActionControl({
   if (action.kind === "START_QUOTE") {
     return (
       <div className={fullWidth ? "w-full [&_button]:w-full" : undefined}>
-        <StartQuoteFromLeadButton leadId={leadId} label={action.label} variant={variant} />
+        <StartQuoteFromLeadButton
+          leadId={leadId}
+          label={action.label}
+          variant={variant}
+          skipRouterRefresh={Boolean(onNavigateToQuoteTab)}
+          onQuoteStarted={
+            onNavigateToQuoteTab
+              ? (quoteId) => onNavigateToQuoteTab(quoteId)
+              : undefined
+          }
+        />
       </div>
     );
   }
@@ -278,7 +293,11 @@ function OpportunityActionControl({
                 setError("Could not create revision draft.");
                 return;
               }
-              router.push(`/quotes/${result.revisedQuoteId}`);
+              if (onNavigateToQuoteTab) {
+                onNavigateToQuoteTab(result.revisedQuoteId);
+              } else {
+                router.push(`/leads/${leadId}?tab=quote`);
+              }
               onMutationSuccess?.();
             });
           }}
@@ -381,6 +400,18 @@ function OpportunityActionControl({
 
   const href = resolveOpportunityActionHref(action, { leadId });
 
+  if (onNavigateToQuoteTab && opportunityActionOpensQuoteTab(action.kind)) {
+    return (
+      <button
+        type="button"
+        onClick={() => onNavigateToQuoteTab(action.targetQuoteId)}
+        className={btnClass}
+      >
+        {action.label}
+      </button>
+    );
+  }
+
   return (
     <ButtonLink href={href} variant={variant === "primary" ? "primary" : "secondary"} size="sm" className={fullWidth ? "w-full justify-center" : ""}>
       {action.label}
@@ -463,7 +494,9 @@ function VisitList({
 export function LeadCommercialSurface({
   payload,
   entryPoint = "record",
+  embeddedInOpportunityWorkspace = false,
   onMutationSuccess,
+  onNavigateToQuoteTab,
   onClose,
 }: LeadCommercialSurfaceProps) {
   const {
@@ -508,7 +541,8 @@ export function LeadCommercialSurface({
 
   const editHref = `/leads/${lead.id}/edit`;
   const isModalContext = Boolean(onClose);
-  const isFullRecord = entryPoint === "record" && !isModalContext && !isAssignedVisitMode;
+  const isFullRecord =
+    entryPoint === "record" && !isModalContext && !isAssignedVisitMode && !embeddedInOpportunityWorkspace;
   const isCompact = !isFullRecord;
 
   const reviewDisplay = useMemo(
@@ -630,6 +664,7 @@ export function LeadCommercialSurface({
               isAssignedVisitMode={isAssignedVisitMode}
               onReviewCustomerMatch={scrollToCustomerMatch}
               onMutationSuccess={notifyMutationSuccess}
+              onNavigateToQuoteTab={onNavigateToQuoteTab}
               fullWidth
             />
           ) : null}
@@ -933,6 +968,7 @@ export function LeadCommercialSurface({
               isAssignedVisitMode={isAssignedVisitMode}
               onReviewCustomerMatch={scrollToCustomerMatch}
               onMutationSuccess={notifyMutationSuccess}
+              onNavigateToQuoteTab={onNavigateToQuoteTab}
               fullWidth
             />
           ))}
@@ -970,10 +1006,10 @@ export function LeadCommercialSurface({
     </section>
   ) : null;
 
-  return (
-    <div className="@container flex min-h-full flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className={`flex flex-col gap-4 ${isModalContext ? "p-4" : isFullRecord ? "" : "p-4 sm:p-6"}`}>
+  const reviewBody = (
+    <div
+      className={`flex flex-col gap-4 ${isModalContext ? "p-4" : isFullRecord ? "" : "p-4 sm:p-6"}`}
+    >
           {modalChrome ? (
             <header className="flex flex-wrap items-start justify-between gap-3">
               {reviewDisplay.showSurfaceHeader && reviewDisplay.compactHeader ? (
@@ -1060,7 +1096,7 @@ export function LeadCommercialSurface({
           {nextActionPanel}
 
           {reviewDisplay.addressResolve.show && !isAssignedVisitMode ? (
-            <div ref={addressVerifyRef}>
+            <div ref={addressVerifyRef} id="address-verify">
               <LeadAddressResolvePanel
                 leadId={lead.id}
                 leadEditHref={editHref}
@@ -1128,8 +1164,16 @@ export function LeadCommercialSurface({
               </div>
             )
           ) : null}
-        </div>
-      </div>
+    </div>
+  );
+
+  return (
+    <div className="@container flex min-h-full flex-col">
+      {embeddedInOpportunityWorkspace ? (
+        reviewBody
+      ) : (
+        <div className="flex-1 overflow-y-auto">{reviewBody}</div>
+      )}
 
       {showFooter && !isAssignedVisitMode ? (
         <footer className="shrink-0 border-t border-border bg-surface px-4 py-3 sm:px-6">

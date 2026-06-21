@@ -120,8 +120,14 @@ export const LEAD_STATUS_FORM_OPTIONS: { value: LeadStatus; label: string }[] = 
   ["NEW", "TRIAGING", "QUALIFIED", "CONVERTED", "ON_HOLD", "LOST", "ARCHIVED"] as const satisfies readonly LeadStatus[]
 ).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
-/** Counted as “open pipeline” for lightweight org metrics (excludes CONVERTED, LOST, ARCHIVED). */
-export const LEAD_PIPELINE_OPEN_STATUSES = ["NEW", "TRIAGING", "ON_HOLD"] as const satisfies readonly LeadStatus[];
+/** Counted as “open pipeline” for lightweight org metrics (excludes LOST, ARCHIVED). */
+export const LEAD_PIPELINE_OPEN_STATUSES = [
+  "NEW",
+  "TRIAGING",
+  "QUALIFIED",
+  "CONVERTED",
+  "ON_HOLD",
+] as const satisfies readonly LeadStatus[];
 
 export const LEAD_CLOSE_REASON_OPTIONS: { value: LeadCloseReason; label: string }[] = (
   ["CHOSE_ANOTHER", "BUDGET_OR_TIMING", "NO_RESPONSE", "NOT_OUR_TRADE", "OTHER"] as const satisfies readonly LeadCloseReason[]

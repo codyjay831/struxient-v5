@@ -181,6 +181,17 @@ export type QuoteWorkSurfaceProps = {
    * Customer Info tab and scroll the Service address block into view.
    */
   onRequestServiceAddress?: () => void;
+  /**
+   * When true, rendered inside the Opportunity workspace shell (Workstation drawer
+   * or compact embed). Parent owns the hero — suppress quote identity chrome and
+   * show full tab set including Customer & Intake.
+   */
+  embeddedInOpportunityWorkspace?: boolean;
+  /**
+   * When true, rendered inside the Workstation quote-only drawer. Container header
+   * owns identity — suppress escape links to the full quote page.
+   */
+  embeddedInWorkstation?: boolean;
 };
 
 /* ─── Constants ────────────────────────────────────────────────────────── */
@@ -1287,7 +1298,7 @@ function OverviewTab({
   onMutated,
   embeddedInLead,
   onRequestServiceAddress,
-  suppressIdentityRow,
+  showFullPageEscapeLink,
 }: {
   quote: QuoteWorkSurfaceData;
   workflow: QuoteWorkflowPresentation;
@@ -1298,7 +1309,7 @@ function OverviewTab({
   onMutated?: () => void;
   embeddedInLead?: boolean;
   onRequestServiceAddress?: () => void;
-  suppressIdentityRow?: boolean;
+  showFullPageEscapeLink?: boolean;
 }) {
   const showEmptyActivity =
     workflow.workflowState === "SENT_PENDING_APPROVAL" ||
@@ -1374,7 +1385,7 @@ function OverviewTab({
         </details>
       </div>
 
-      {suppressIdentityRow ? (
+      {showFullPageEscapeLink ? (
         <div className="pt-1">
           <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
             Open full quote page
@@ -1534,7 +1545,7 @@ function ScopeTab({
   shouldOpenScopeLibraryPicker,
   onScopeLibraryPickerOpenConsumed,
   onMutated,
-  suppressIdentityRow,
+  showFullPageEscapeLink,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
@@ -1544,7 +1555,7 @@ function ScopeTab({
   shouldOpenScopeLibraryPicker: boolean;
   onScopeLibraryPickerOpenConsumed: () => void;
   onMutated?: () => void;
-  suppressIdentityRow?: boolean;
+  showFullPageEscapeLink?: boolean;
 }) {
   const {
     isCommercialEditable,
@@ -1585,7 +1596,7 @@ function ScopeTab({
         onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
         onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
-        showFullPageEscapeLink={suppressIdentityRow}
+        showFullPageEscapeLink={showFullPageEscapeLink}
         onMutated={onMutated ?? (() => {})}
       />
     );
@@ -1671,7 +1682,7 @@ function ScopeTab({
         )}
       </WorkspacePanel>
 
-      {suppressIdentityRow ? (
+      {showFullPageEscapeLink ? (
         <div className="pt-1">
           <Link
             href={`${quote.quoteHref}#line-items`}
@@ -2454,12 +2465,12 @@ function RecordTab({
   quote,
   workspaceTabs,
   workflow,
-  suppressIdentityRow,
+  showFullPageEscapeLink,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   workflow: QuoteWorkflowPresentation;
-  suppressIdentityRow?: boolean;
+  showFullPageEscapeLink?: boolean;
 }) {
   const { isCommercialEditable, isArchived, internalNotes } = workspaceTabs;
   const isIssued = quote.status === "SENT" || quote.status === "APPROVED";
@@ -2555,7 +2566,7 @@ function RecordTab({
       </div>
 
       {/* Footer escape hatch — embedded containers only. */}
-      {suppressIdentityRow ? (
+      {showFullPageEscapeLink ? (
         <div className="pt-1">
           <Link href={quote.quoteHref} className={mutedFooterLinkClass}>
             Open full quote page
@@ -2579,6 +2590,8 @@ export function QuoteWorkSurface({
   onWorkSurfaceMutated,
   embeddedInLead = false,
   onRequestServiceAddress,
+  embeddedInOpportunityWorkspace = false,
+  embeddedInWorkstation = false,
 }: QuoteWorkSurfaceProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<QuoteWorkSurfaceTab>(() => {
@@ -2596,7 +2609,11 @@ export function QuoteWorkSurface({
     return initialTab;
   });
 
-  const hideContext = embeddedInLead;
+  const hideContext = embeddedInLead && !embeddedInOpportunityWorkspace;
+  const suppressHero =
+    embeddedInOpportunityWorkspace || (suppressIdentityRow && embeddedInWorkstation);
+  const showFullPageEscapeLink =
+    suppressIdentityRow && !embeddedInOpportunityWorkspace && !embeddedInWorkstation;
   const visiblePrimaryTabs = PRIMARY_TABS;
   const visibleSecondaryViews = SECONDARY_VIEWS.filter(
     (v) => !(hideContext && v.id === "context"),
@@ -2640,9 +2657,11 @@ export function QuoteWorkSurface({
    * truth for "the quote just changed inside the surface — refresh
    * everything that displays it without navigating away". */
   const handleSurfaceMutated = useCallback(() => {
-    router.refresh();
+    if (!(embeddedInLead && onWorkSurfaceMutated)) {
+      router.refresh();
+    }
     void onWorkSurfaceMutated?.();
-  }, [router, onWorkSurfaceMutated]);
+  }, [embeddedInLead, onWorkSurfaceMutated, router]);
 
   /* Tab strip styling — adapts via container width. */
   const tabStripClass =
@@ -2657,13 +2676,13 @@ export function QuoteWorkSurface({
 
   return (
     <div className="@container space-y-4 @[768px]:mb-6">
-      {!suppressIdentityRow ? (
+      {!suppressHero && !suppressIdentityRow ? (
         <QuotePageHero quote={quote} workflow={workflow} />
-      ) : (
+      ) : !suppressHero ? (
         <div className="@[768px]:hidden">
           <StandardIdentityRow quote={quote} />
         </div>
-      )}
+      ) : null}
 
       <div className="mb-4 space-y-2">
         <div className={tabStripClass}>
@@ -2719,7 +2738,7 @@ export function QuoteWorkSurface({
           onMutated={handleSurfaceMutated}
           embeddedInLead={embeddedInLead}
           onRequestServiceAddress={onRequestServiceAddress}
-          suppressIdentityRow={suppressIdentityRow}
+          showFullPageEscapeLink={showFullPageEscapeLink}
         />
       )}
       {activeTab === "scope" && (
@@ -2732,7 +2751,7 @@ export function QuoteWorkSurface({
           shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
           onScopeLibraryPickerOpenConsumed={handleScopeLibraryPickerOpenConsumed}
           onMutated={handleSurfaceMutated}
-          suppressIdentityRow={suppressIdentityRow}
+          showFullPageEscapeLink={showFullPageEscapeLink}
         />
       )}
       {activeTab === "payments" && (
@@ -2767,7 +2786,7 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           workflow={workflow}
-          suppressIdentityRow={suppressIdentityRow}
+          showFullPageEscapeLink={showFullPageEscapeLink}
         />
       )}
     </div>

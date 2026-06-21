@@ -24,7 +24,7 @@ export function WorkstationModalShell({
   footer,
 }: WorkstationModalShellProps) {
   return (
-    <div className="flex max-h-[88vh] flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-start justify-between border-b border-border px-5 py-4">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center gap-3">
@@ -53,7 +53,9 @@ export function WorkstationModalShell({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-subtle px-5 py-4">
+        {children}
+      </div>
 
       {footer ? (
         <div className="shrink-0 border-t border-border bg-foreground/[0.01] px-5 py-4">

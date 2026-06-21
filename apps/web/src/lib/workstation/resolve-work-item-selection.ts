@@ -114,5 +114,17 @@ export function resolveWorkstationSelectedItem(
     }
   }
 
+  // Lead cards disappear from the feed once a quote exists; keep the drawer open
+  // on the same opportunity via the quote card anchored to that lead.
+  if (selectedId.startsWith("lead-")) {
+    const leadId = selectedId.slice("lead-".length);
+    const quoteForLead = allItems.find(
+      (item) => item.kind === "quote" && item.leadAnchorId === leadId,
+    );
+    if (quoteForLead) {
+      return resolveExecutableWorkItem(quoteForLead, allItems);
+    }
+  }
+
   return null;
 }

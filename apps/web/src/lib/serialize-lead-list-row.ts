@@ -11,6 +11,7 @@ import {
   type OpportunityAction,
   type OpportunityFlowView,
 } from "@/lib/opportunity-flow";
+import { opportunityActionOpensQuoteTab } from "@/lib/opportunity-tab-routing";
 import {
   formatLeadChannel,
   formatLeadStatus,
@@ -139,13 +140,7 @@ function serializeOpportunityAction(
   ctx: { leadId: string },
 ): LeadWorkSurfaceProgressAction | null {
   if (!action) return null;
-  const opensQuoteTab =
-    action.kind === "START_QUOTE" ||
-    action.kind === "OPEN_DRAFT_QUOTE" ||
-    action.kind === "OPEN_QUOTE" ||
-    action.kind === "SEND_QUOTE" ||
-    action.kind === "FOLLOW_UP_CUSTOMER" ||
-    action.kind === "CREATE_REVISION_DRAFT";
+  const opensQuoteTab = opportunityActionOpensQuoteTab(action.kind);
   const opensContactTab =
     action.kind === "EDIT_CONTACT_INFO" || action.kind === "REVIEW_CUSTOMER_MATCH";
   return {
@@ -291,10 +286,10 @@ export function serializeLeadListRow(
         statusTone: quoteStatusBadgeTone(q.status),
         totalCents: q.totalCents,
         lineItemCount: q._count.lineItems,
-        href: `/quotes/${q.id}`,
+        href: `/leads/${lead.id}?tab=quote`,
       })),
     leadHref: `/leads/${lead.id}`,
-    newQuoteHref: `/leads/${lead.id}`,
+    newQuoteHref: `/leads/${lead.id}?tab=quote`,
     jobsiteAddressLine: jobsiteLineFromLead(lead),
   };
 }

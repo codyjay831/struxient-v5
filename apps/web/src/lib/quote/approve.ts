@@ -14,7 +14,7 @@ import {
   type QuoteCheckpointStaffOnlyWire,
 } from "../quote-checkpoint-snapshot";
 import { buildCustomerQuotePreviewDocument } from "../quote-customer-projection";
-import { getRequestContextOrThrow } from "../auth-context";
+import { getCommercialRequestContextOrThrow } from "../auth-context";
 
 export interface QuoteApproveResult {
   ok: boolean;
@@ -107,7 +107,7 @@ export async function transitionQuoteToApproved(
  * Main use case for approving a quote.
  */
 export async function approveQuote(quoteId: string): Promise<QuoteApproveResult> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = quoteId.trim();
 
   try {

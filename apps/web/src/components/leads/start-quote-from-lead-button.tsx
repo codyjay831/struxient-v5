@@ -14,10 +14,15 @@ export function StartQuoteFromLeadButton({
   leadId,
   label,
   variant,
+  onQuoteStarted,
+  skipRouterRefresh = false,
 }: {
   leadId: string;
   label: string;
   variant: "primary" | "secondary";
+  onQuoteStarted?: (quoteId: string) => void;
+  /** Drawer/embedded surfaces reload client-side; skip full-page refresh. */
+  skipRouterRefresh?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -31,7 +36,14 @@ export function StartQuoteFromLeadButton({
         setError(result.error ?? "Could not start the quote.");
         return;
       }
-      router.push(`/quotes/${result.quoteId}`);
+      if (onQuoteStarted) {
+        onQuoteStarted(result.quoteId);
+        if (!skipRouterRefresh) {
+          router.refresh();
+        }
+        return;
+      }
+      router.push(`/leads/${leadId}?tab=quote`);
       router.refresh();
     });
   }

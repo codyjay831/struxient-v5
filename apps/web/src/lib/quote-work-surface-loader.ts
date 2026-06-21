@@ -55,12 +55,7 @@ const dateOpts: Intl.DateTimeFormatOptions = {
   day: "numeric",
 };
 
-export type QuoteWorkSurfaceLoaderResult = {
-  quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
-  workflow: QuoteWorkflowPresentation;
-  workspaceTabs: QuoteWorkspaceTabData;
-};
+export type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader-types";
 
 export async function loadQuoteWorkSurface(
   quoteId: string,

@@ -1,7 +1,15 @@
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import { opportunityWorkspaceHref } from "@/lib/opportunity-tab-routing";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import type { QuoteReadiness } from "@/lib/quote-readiness";
 import type { QuoteWorkspaceTabData } from "@/lib/quote-workspace-payload";
+
+function hrefForAnchoredQuote(quote: QuoteWorkSurfaceData): string {
+  if (quote.leadId) {
+    return opportunityWorkspaceHref(quote.leadId, "quote");
+  }
+  return quote.quoteHref;
+}
 
 export type LeadGraduationActiveQuotePayload = {
   quote: QuoteWorkSurfaceData;
@@ -69,7 +77,7 @@ export function patchSerializedLeadRowAfterQuoteStarted<
     statusTone: quote.statusTone,
     totalCents: quote.totalCents,
     lineItemCount: quote.lineItemCount,
-    href: quote.quoteHref,
+    href: hrefForAnchoredQuote(quote),
   };
 
   const quotes = [
@@ -85,7 +93,7 @@ export function patchSerializedLeadRowAfterQuoteStarted<
     progressTone: "draft",
     progressState: "QUOTE_IN_PROGRESS",
     progressPrimaryAction: {
-      href: quote.quoteHref,
+      href: hrefForAnchoredQuote(quote),
       label: "Continue quote",
       opensQuoteTab: true,
       opensContactTab: false,

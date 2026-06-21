@@ -81,3 +81,17 @@ test("resolveWorkstationSelectedItem: resolves synthetic board schedule selectio
   assert.equal(resolved?.kind, "schedule");
   assert.equal(resolved?.recordId, "evt-1");
 });
+
+test("resolveWorkstationSelectedItem: falls back from lead selection to quote anchored on same lead", () => {
+  const quoteItem = baseWorkItem({
+    id: "quote-quote-1",
+    kind: "quote",
+    recordId: "quote-1",
+    leadAnchorId: "lead-1",
+    filterCategory: "quotes",
+  });
+  const resolved = resolveWorkstationSelectedItem("lead-lead-1", [quoteItem], []);
+  assert.equal(resolved?.kind, "quote");
+  assert.equal(resolved?.recordId, "quote-1");
+  assert.equal(resolved?.leadAnchorId, "lead-1");
+});

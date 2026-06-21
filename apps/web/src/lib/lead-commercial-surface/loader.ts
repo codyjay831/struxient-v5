@@ -291,8 +291,8 @@ export async function loadAssignedLeadVisitSurface(
       updatedAt: v.updatedAt,
     })),
   );
-  const assignedFieldStatusLine = opportunityFlow.assignedFieldStatusLine;
-  const { assignedFieldStatusLine: _strip, ...assignedOpportunityFlow } = opportunityFlow;
+  const { assignedFieldStatusLine, ...assignedOpportunityFlow } = opportunityFlow;
+  void assignedFieldStatusLine;
 
   const neededByDate =
     requestJson.neededByDate instanceof Date

@@ -279,7 +279,7 @@ test("SEND_QUOTE href opens commercial send and acceptance", () => {
     { kind: "SEND_QUOTE", label: "Send quote", targetQuoteId: "quote-1" },
     { leadId: "lead-1" },
   );
-  assert.equal(href, "/quotes/quote-1#commercial-send-acceptance");
+  assert.equal(href, "/leads/lead-1?tab=quote#commercial-send-acceptance");
 });
 
 test("unlinked lead with existing customer match blocks START_QUOTE", () => {
@@ -389,5 +389,5 @@ test("COMPLETE_SALES_VISIT routes to lead surface", () => {
     },
     { leadId: "lead-1" },
   );
-  assert.equal(href, "/leads/lead-1");
+  assert.equal(href, "/leads/lead-1?tab=review");
 });

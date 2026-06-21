@@ -392,7 +392,8 @@ export async function startQuoteFromLeadAction(leadId: string): Promise<void> {
   }
   revalidatePath("/leads");
   revalidatePath(`/quotes/${result.quoteId}`);
-  redirect(`/quotes/${result.quoteId}`);
+  revalidatePath(`/leads/${leadId}`);
+  redirect(`/leads/${leadId}?tab=quote`);
 }
 
 import { createQuoteDraft } from "@/lib/quote/create-draft";
@@ -652,9 +653,9 @@ export type PerformQuoteLineItemResult =
   | { ok: true }
   | { ok: false; error: string };
 
-export type PerformReviseQuoteResult =
-  | { ok: true; revisedQuoteId: string }
-  | { ok: false; error: string };
+import { performReviseQuoteByClone } from "@/lib/quote/revise-by-clone";
+export type { PerformReviseQuoteResult } from "@/lib/quote/revise-by-clone";
+import { opportunityWorkspaceHref } from "@/lib/opportunity-tab-routing";
 
 type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
 
@@ -1390,135 +1391,7 @@ export async function archiveQuoteAction(
   redirect(`/quotes/${id}`);
 }
 
-/**
- * Pre-activation commercial revision path for issued quotes.
- * SENT/APPROVED quotes are immutable; this creates a new DRAFT clone.
- */
-export async function performReviseQuoteByClone(
-  quoteId: string,
-): Promise<PerformReviseQuoteResult> {
-  const id = quoteId.trim();
-  if (!id) {
-    return { ok: false, error: "Missing quote record id." };
-  }
-  const ctx = await getCommercialRequestContextOrThrow();
-  const result = await db.$transaction(async (tx) => {
-    const quote = await tx.quote.findFirst({
-      where: {
-        id,
-        organizationId: ctx.organizationId,
-        status: { in: [QuoteStatus.SENT, QuoteStatus.APPROVED] },
-        job: { is: null },
-      },
-      select: {
-        id: true,
-        organizationId: true,
-        customerId: true,
-        leadId: true,
-        serviceLocationId: true,
-        title: true,
-        internalNotes: true,
-        customerDocumentTitle: true,
-        revisionOfQuoteId: true,
-        revisionNumber: true,
-        lineItems: {
-          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            sortOrder: true,
-            description: true,
-            customerScopeTitle: true,
-            customerScopeDescription: true,
-            customerIncludedNotes: true,
-            customerExcludedNotes: true,
-            customerPresentationGroup: true,
-            quantity: true,
-            unitAmountCents: true,
-            lineTotalCents: true,
-            internalNotes: true,
-            executionRelevant: true,
-            sourceLineItemTemplateId: true,
-            clarifications: {
-              orderBy: [{ questionSetKey: "asc" }, { questionSetVersion: "asc" }],
-              select: {
-                clarificationSetId: true,
-                questionSetKey: true,
-                questionSetVersion: true,
-                answersJson: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    if (!quote) {
-      return { ok: false as const, error: "Only pre-activation SENT/APPROVED quotes can be revised by clone." };
-    }
-    const rootQuoteId = quote.revisionOfQuoteId ?? quote.id;
-    const nextRevisionNumber = (quote.revisionNumber ?? 1) + 1;
-    const clonedQuote = await tx.quote.create({
-      data: {
-        organizationId: quote.organizationId,
-        customerId: quote.customerId,
-        leadId: quote.leadId,
-        serviceLocationId: quote.serviceLocationId,
-        title: quote.title,
-        status: QuoteStatus.DRAFT,
-        internalNotes: quote.internalNotes,
-        customerDocumentTitle: quote.customerDocumentTitle,
-        revisionOfQuoteId: rootQuoteId,
-        revisionNumber: nextRevisionNumber,
-      },
-      select: { id: true },
-    });
-    for (const line of quote.lineItems) {
-      const clonedLine = await tx.quoteLineItem.create({
-        data: {
-          quoteId: clonedQuote.id,
-          sortOrder: line.sortOrder,
-          description: line.description,
-          customerScopeTitle: line.customerScopeTitle,
-          customerScopeDescription: line.customerScopeDescription,
-          customerIncludedNotes: line.customerIncludedNotes,
-          customerExcludedNotes: line.customerExcludedNotes,
-          customerPresentationGroup: line.customerPresentationGroup,
-          quantity: line.quantity,
-          unitAmountCents: line.unitAmountCents,
-          lineTotalCents: line.lineTotalCents,
-          internalNotes: line.internalNotes,
-          executionRelevant: line.executionRelevant,
-          sourceLineItemTemplateId: line.sourceLineItemTemplateId,
-        },
-        select: { id: true },
-      });
-      for (const clarification of line.clarifications) {
-        await tx.quoteLineClarification.create({
-          data: {
-            quoteLineItemId: clonedLine.id,
-            clarificationSetId: clarification.clarificationSetId,
-            questionSetKey: clarification.questionSetKey,
-            questionSetVersion: clarification.questionSetVersion,
-            answersJson: clarification.answersJson as Prisma.InputJsonValue,
-          },
-        });
-      }
-    }
-    await recalculateQuoteRollupsInTx(tx, {
-      quoteId: clonedQuote.id,
-      organizationId: ctx.organizationId,
-    });
-    await tx.quoteChangeRequest.updateMany({
-      where: {
-        organizationId: ctx.organizationId,
-        quoteId: quote.id,
-        resolvedAt: null,
-      },
-      data: { resultingQuoteId: clonedQuote.id },
-    });
-    return { ok: true as const, revisedQuoteId: clonedQuote.id };
-  });
-  return result;
-}
+export { performReviseQuoteByClone };
 
 export async function reviseQuoteByCloneAction(
   quoteId: string,
@@ -1532,5 +1405,12 @@ export async function reviseQuoteByCloneAction(
   }
   revalidatePath(`/quotes/${quoteId.trim()}`);
   revalidatePath("/leads");
+  const leadRow = await db.quote.findFirst({
+    where: { id: result.revisedQuoteId, organizationId: (await getCommercialRequestContextOrThrow()).organizationId },
+    select: { leadId: true },
+  });
+  if (leadRow?.leadId) {
+    redirect(opportunityWorkspaceHref(leadRow.leadId, "quote"));
+  }
   redirect(`/quotes/${result.revisedQuoteId}`);
 }

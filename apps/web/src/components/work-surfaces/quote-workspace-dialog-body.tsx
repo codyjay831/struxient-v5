@@ -9,7 +9,7 @@ import {
   loadQuoteWorkSurfaceAction,
   type LoadQuoteWorkSurfaceResult,
 } from "@/app/(workspace)/quotes/quote-loader-actions";
-import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader";
+import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader-types";
 import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { QuoteStatus } from "@prisma/client";
 
@@ -66,9 +66,11 @@ function CompactLoading() {
 function CompactError({
   message,
   fallbackHref,
+  showFallbackLink = true,
 }: {
   message: string;
   fallbackHref: string;
+  showFallbackLink?: boolean;
 }) {
   return (
     <div
@@ -80,13 +82,15 @@ function CompactError({
         Couldn&apos;t load quote details.
       </p>
       <p className="mt-1 text-[0.7rem] text-foreground-subtle">{message}</p>
-      <Link
-        href={fallbackHref}
-        className="mt-2 inline-flex items-center gap-1 text-xs text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
-      >
-        Open full quote page
-        <ArrowUpRight className="w-3 h-3" strokeWidth={1.5} />
-      </Link>
+      {showFallbackLink ? (
+        <Link
+          href={fallbackHref}
+          className="mt-2 inline-flex items-center gap-1 text-xs text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          Open full quote page
+          <ArrowUpRight className="w-3 h-3" strokeWidth={1.5} />
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -112,6 +116,8 @@ export function quoteDisplayFromListRow(
 export type QuoteWorkspaceDialogBodyProps = {
   display: QuoteDialogDisplay;
   onClose: () => void;
+  /** Workstation selection drawer — surface is complete; no escape links. */
+  embeddedInWorkstation?: boolean;
 };
 
 function resolveDialogSubtitle(display: QuoteDialogDisplay): string | null {
@@ -125,6 +131,7 @@ function resolveDialogSubtitle(display: QuoteDialogDisplay): string | null {
 export function QuoteWorkspaceDialogBody({
   display,
   onClose,
+  embeddedInWorkstation = false,
 }: QuoteWorkspaceDialogBodyProps) {
   const [state, setState] = useState<QuoteSurfaceLazyState>({ kind: "loading" });
   const requestSeqRef = useRef(0);
@@ -163,7 +170,7 @@ export function QuoteWorkspaceDialogBody({
   const subtitle = resolveDialogSubtitle(display);
 
   return (
-    <div className="flex max-h-[88vh] flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -201,10 +208,14 @@ export function QuoteWorkspaceDialogBody({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-subtle px-5 py-4">
         {state.kind === "loading" ? <CompactLoading /> : null}
         {state.kind === "error" ? (
-          <CompactError message={state.message} fallbackHref={display.href} />
+          <CompactError
+            message={state.message}
+            fallbackHref={display.href}
+            showFallbackLink={!embeddedInWorkstation}
+          />
         ) : null}
         {state.kind === "loaded" ? (
           <QuoteWorkSurface
@@ -212,6 +223,7 @@ export function QuoteWorkspaceDialogBody({
             workflow={state.payload.workflow}
             workspaceTabs={state.payload.workspaceTabs}
             suppressIdentityRow
+            embeddedInWorkstation={embeddedInWorkstation}
             initialAction={display.initialAction}
             onWorkSurfaceMutated={handleWorkSurfaceMutated}
           />

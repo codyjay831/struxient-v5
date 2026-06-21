@@ -29,6 +29,7 @@ import {
 } from "@/lib/quote-plan/quote-plan-context";
 import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
 import { getOpportunityFlow } from "@/lib/opportunity-flow";
+import { opportunityWorkspaceHref } from "@/lib/opportunity-tab-routing";
 import {
   jobsiteLineFromLead,
   isLeadAddressQuoteReady,
@@ -167,6 +168,8 @@ export type WorkstationWorkItem = {
   parentRecordId?: string;
   parentLabel?: string;
   href?: string;
+  /** When set on quote items, Workstation opens the Opportunity workspace Quote tab. */
+  leadAnchorId?: string | null;
   updatedAt: Date;
   /** Assignee user id (tasks only) — additive exposure for "my work" filtering. */
   assignedUserId?: string | null;
@@ -833,7 +836,10 @@ export async function queryWorkstationWorkItems(
       recordId: quote.id,
       parentRecordId: quote.customerId || quote.leadId || undefined,
       parentLabel,
-      href: quote.leadId ? `/leads/${quote.leadId}` : `/quotes/${quote.id}`,
+      leadAnchorId: quote.leadId,
+      href: quote.leadId
+        ? opportunityWorkspaceHref(quote.leadId, "quote")
+        : `/quotes/${quote.id}`,
       updatedAt: quote.updatedAt,
       workflow,
     });

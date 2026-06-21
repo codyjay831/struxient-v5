@@ -8,6 +8,7 @@ import type {
 } from "@prisma/client";
 import { evaluateLeadReadiness } from "@/lib/lead-readiness-heuristics";
 import { resolveLeadVisitScheduledStart } from "@/lib/scheduling/lead-visit-schedule-service";
+import { opportunityWorkspaceHref } from "@/lib/opportunity-tab-routing";
 
 export type OpportunityPhase =
   | "INTAKE"
@@ -246,6 +247,20 @@ export function pickMostRecentNonArchivedQuote(
     }
   }
   return best;
+}
+
+/** Working draft for lead promotion — DRAFT quotes only, newest first. */
+export function pickMostRecentDraftQuote(
+  quotes: OpportunityFlowQuoteInput[],
+): OpportunityFlowQuoteInput | null {
+  return byMostRecent(quotes.filter((q) => q.status === "DRAFT"));
+}
+
+export function hasIssuedQuoteWithoutDraft(quotes: OpportunityFlowQuoteInput[]): boolean {
+  if (quotes.some((q) => q.status === "DRAFT")) return false;
+  return quotes.some(
+    (q) => q.status !== "ARCHIVED" && (q.status === "SENT" || q.status === "APPROVED"),
+  );
 }
 
 function buildDiscoverySecondaryActions(
@@ -921,24 +936,24 @@ export function resolveOpportunityActionHref(
     case "REVIEW_CUSTOMER_MATCH":
       return `/leads/${ctx.leadId}#customer-link`;
     case "START_QUOTE":
-      return `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(ctx.leadId, "quote");
     case "OPEN_DRAFT_QUOTE":
     case "OPEN_QUOTE":
     case "FOLLOW_UP_CUSTOMER":
     case "CREATE_REVISION_DRAFT":
-      return action.targetQuoteId ? `/quotes/${action.targetQuoteId}` : `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(ctx.leadId, "quote");
     case "SEND_QUOTE":
-      return action.targetQuoteId
-        ? `/quotes/${action.targetQuoteId}#commercial-send-acceptance`
-        : `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(ctx.leadId, "quote", "commercial-send-acceptance");
     case "SCHEDULE_SALES_VISIT":
-      return action.targetLeadId ? `/leads/${action.targetLeadId}` : `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(
+        action.targetLeadId ?? ctx.leadId,
+        "review",
+      );
     case "COMPLETE_SALES_VISIT":
-      return action.targetLeadId
-        ? `/leads/${action.targetLeadId}`
-        : action.targetVisitRequestId
-          ? `/leads/${ctx.leadId}`
-          : `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(
+        action.targetLeadId ?? ctx.leadId,
+        "review",
+      );
     case "OPEN_EXECUTION_REVIEW":
       return action.targetQuoteId
         ? `/quotes/${action.targetQuoteId}/execution-review`
@@ -946,6 +961,6 @@ export function resolveOpportunityActionHref(
     case "OPEN_JOB":
       return action.targetJobId ? `/jobs/${action.targetJobId}` : "/jobs";
     case "RESUME_OPPORTUNITY":
-      return `/leads/${ctx.leadId}`;
+      return opportunityWorkspaceHref(ctx.leadId, "review");
   }
 }

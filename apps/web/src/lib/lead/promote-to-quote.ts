@@ -1,9 +1,10 @@
 import { db } from "../db";
-import { Prisma, QuoteStatus } from "@prisma/client";
-import { getRequestContextOrThrow } from "../auth-context";
+import { LeadStatus, Prisma, QuoteStatus } from "@prisma/client";
+import { getCommercialRequestContextOrThrow } from "../auth-context";
 import { evaluateLeadReadiness } from "../lead-readiness-heuristics";
 import {
-  pickMostRecentNonArchivedQuote,
+  hasIssuedQuoteWithoutDraft,
+  pickMostRecentDraftQuote,
   type OpportunityFlowQuoteInput,
 } from "../opportunity-flow";
 import { prepareCustomerFromLead } from "../lead-create-customer";
@@ -31,13 +32,55 @@ export interface PromoteLeadToQuoteResult {
   error?: string;
 }
 
+import {
+  ISSUED_QUOTE_REVISION_MESSAGE,
+  leadStatusAfterQuoteWork,
+} from "./lead-promotion-semantics";
+
+async function syncLeadAfterQuoteWork(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  params: {
+    leadId: string;
+    currentStatus: LeadStatus;
+    convertedAt: Date | null;
+    customerId: string | null;
+    serviceLocationId: string | null;
+    resolvedCustomerId: string;
+    resolvedServiceLocationId: string | null;
+    actorUserId: string;
+    linkedCustomerCreated: boolean;
+  },
+) {
+  const nextStatus = leadStatusAfterQuoteWork(params.currentStatus);
+  await tx.lead.update({
+    where: { id: params.leadId },
+    data: {
+      customerId: params.resolvedCustomerId,
+      serviceLocationId: params.resolvedServiceLocationId,
+      status: nextStatus,
+      convertedAt: params.convertedAt ?? new Date(),
+    },
+  });
+
+  if (params.linkedCustomerCreated) {
+    await tx.leadEvent.create({
+      data: {
+        leadId: params.leadId,
+        type: "CONVERTED_TO_CUSTOMER",
+        payload: { customerId: params.resolvedCustomerId } as Prisma.InputJsonValue,
+        actorUserId: params.actorUserId,
+      },
+    });
+  }
+}
+
 /**
  * Promotes a lead (Lead) to a Quote.
  * Handles customer creation if necessary, links the lead to the customer,
  * and creates a draft quote with suggested templates.
  */
 export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQuoteResult> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = leadId.trim();
   if (!id) {
     return { ok: false, error: "Missing lead record id." };
@@ -69,6 +112,8 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
                 totalCents: true,
                 createdAt: true,
                 updatedAt: true,
+                customerId: true,
+                serviceLocationId: true,
                 _count: { select: { lineItems: true } },
                 job: { select: { id: true, status: true, organizationId: true } },
               },
@@ -160,22 +205,92 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           }
         }
 
-        const reusableQuote = pickMostRecentNonArchivedQuote(quoteInputs);
-        if (reusableQuote) {
-          // Ensure lead is graduated even if we reuse an existing quote
-          await tx.lead.update({
-            where: { id: lead.id },
-            data: {
-              status: "CONVERTED",
-              convertedAt: lead.convertedAt ?? new Date(),
-            },
+        const reusableDraft = pickMostRecentDraftQuote(quoteInputs);
+        if (reusableDraft) {
+          const draftRow = lead.quotes.find((q) => q.id === reusableDraft.id);
+          let resolvedCustomerId = lead.customerId ?? draftRow?.customerId ?? null;
+          let resolvedServiceLocationId =
+            lead.serviceLocationId ?? draftRow?.serviceLocationId ?? null;
+          let linkedCustomerCreated = false;
+
+          const intakeSnapshot = intakeSnapshotForCustomerFromLead(lead);
+          if (!resolvedServiceLocationId) {
+            resolvedServiceLocationId = await ensureServiceLocationForLeadFromSnapshot(tx, {
+              organizationId: ctx.organizationId,
+              leadId: lead.id,
+              leadChannel: lead.channel,
+              customerId: resolvedCustomerId,
+              snapshot: intakeSnapshot,
+            });
+          }
+
+          if (!resolvedCustomerId) {
+            const prep = prepareCustomerFromLead({
+              title: request.type || "Lead",
+              contactName: contact.name,
+              companyName: contact.companyName,
+              email: contact.email,
+              phone: contact.phone,
+              notes: signals?.notes || "",
+              channel: lead.channel,
+            });
+            if (!prep.ok) {
+              return { ok: false, error: prep.error };
+            }
+            const customer = await tx.customer.create({
+              data: {
+                organizationId: ctx.organizationId,
+                ...prep.data,
+              },
+            });
+            resolvedCustomerId = customer.id;
+            linkedCustomerCreated = true;
+
+            const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
+              organizationId: ctx.organizationId,
+              customerId: customer.id,
+              leadId: lead.id,
+              leadChannel: lead.channel,
+              snapshot: intakeSnapshot,
+            });
+            if (attached.locationId) {
+              resolvedServiceLocationId = attached.locationId;
+            }
+          }
+
+          if (resolvedCustomerId) {
+            await tx.quote.update({
+              where: { id: reusableDraft.id },
+              data: {
+                customerId: resolvedCustomerId,
+                ...(resolvedServiceLocationId
+                  ? { serviceLocationId: resolvedServiceLocationId }
+                  : {}),
+              },
+            });
+          }
+
+          await syncLeadAfterQuoteWork(tx, {
+            leadId: lead.id,
+            currentStatus: lead.status,
+            convertedAt: lead.convertedAt,
+            customerId: lead.customerId,
+            serviceLocationId: lead.serviceLocationId,
+            resolvedCustomerId: resolvedCustomerId!,
+            resolvedServiceLocationId,
+            actorUserId: ctx.userId,
+            linkedCustomerCreated,
           });
 
           return {
             ok: true,
-            quoteId: reusableQuote.id,
+            quoteId: reusableDraft.id,
             reusedExisting: true,
           };
+        }
+
+        if (hasIssuedQuoteWithoutDraft(quoteInputs)) {
+          return { ok: false, error: ISSUED_QUOTE_REVISION_MESSAGE };
         }
 
         let resolvedCustomerId = lead.customerId;
@@ -188,7 +303,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           snapshot: intakeSnapshot,
         });
 
-        // 1. Atomic Promotion: Create customer if missing
+        let linkedCustomerCreated = false;
         if (!resolvedCustomerId) {
           const prep = prepareCustomerFromLead({
             title: request.type || "Lead",
@@ -211,8 +326,8 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             },
           });
           resolvedCustomerId = customer.id;
+          linkedCustomerCreated = true;
 
-          // Carry forward service location
           const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
             organizationId: ctx.organizationId,
             customerId: customer.id,
@@ -223,19 +338,8 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           if (attached.locationId) {
             resolvedServiceLocationId = attached.locationId;
           }
-
-          // Log event
-          await tx.leadEvent.create({
-            data: {
-              leadId: lead.id,
-              type: "CONVERTED_TO_CUSTOMER",
-              payload: { customerId: customer.id } as Prisma.InputJsonValue,
-              actorUserId: ctx.userId,
-            },
-          });
         }
 
-        // 2. Create Draft Quote
         const quoteTitle = `Quote — ${contact.companyName || contact.name || "Customer"}`;
 
         const quote = await tx.quote.create({
@@ -251,18 +355,18 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           },
         });
 
-        // 3. Mark lead as CONVERTED (always graduate on quote creation)
-        await tx.lead.update({
-          where: { id: lead.id },
-          data: {
-            customerId: resolvedCustomerId,
-            serviceLocationId: resolvedServiceLocationId,
-            status: "CONVERTED",
-            convertedAt: new Date(),
-          },
+        await syncLeadAfterQuoteWork(tx, {
+          leadId: lead.id,
+          currentStatus: lead.status,
+          convertedAt: lead.convertedAt,
+          customerId: lead.customerId,
+          serviceLocationId: lead.serviceLocationId,
+          resolvedCustomerId: resolvedCustomerId!,
+          resolvedServiceLocationId,
+          actorUserId: ctx.userId,
+          linkedCustomerCreated,
         });
 
-        // 4. Apply Suggested Templates
         const suggestedTemplateIds = signals?.suggestedTemplateIds || [];
         if (suggestedTemplateIds.length > 0) {
           for (const tid of suggestedTemplateIds) {
@@ -270,7 +374,6 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           }
         }
 
-        // Log event
         await tx.leadEvent.create({
           data: {
             leadId: lead.id,

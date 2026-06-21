@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { performReviseQuoteByClone } from "@/app/(workspace)/quotes/quote-form-actions";
+import { performReviseQuoteByClone } from "@/lib/quote/revise-by-clone";
 
 export type QuoteChangeRequestActionResult =
   | { ok: true }
@@ -48,6 +48,28 @@ export async function resolveQuoteChangeRequestAction(
   });
   if (!row) return { ok: false, error: "Change request not found." };
   if (row.resolvedAt) return { ok: true };
+
+  if (resultingQuoteId) {
+    const resulting = await db.quote.findFirst({
+      where: { id: resultingQuoteId, organizationId: ctx.organizationId },
+      select: { id: true, revisionOfQuoteId: true },
+    });
+    if (!resulting) {
+      return { ok: false, error: "Resulting quote not found in your organization." };
+    }
+    const source = await db.quote.findFirst({
+      where: { id: row.quoteId, organizationId: ctx.organizationId },
+      select: { id: true, revisionOfQuoteId: true },
+    });
+    const sourceRoot = source?.revisionOfQuoteId ?? source?.id;
+    const resultingRoot = resulting.revisionOfQuoteId ?? resulting.id;
+    if (sourceRoot && resultingRoot !== sourceRoot && resulting.id !== row.quoteId) {
+      return {
+        ok: false,
+        error: "Resulting quote is not part of this quote revision lineage.",
+      };
+    }
+  }
 
   await db.quoteChangeRequest.update({
     where: { id: row.id },
@@ -132,13 +154,8 @@ export async function createRevisionDraftForQuoteChangeRequestAction(
   const revised = await performReviseQuoteByClone(row.quoteId);
   if (!revised.ok) return { ok: false, error: revised.error };
 
-  await db.quoteChangeRequest.update({
-    where: { id: row.id },
-    data: { resultingQuoteId: revised.revisedQuoteId },
-  });
-
   revalidatePath(`/quotes/${row.quoteId}`);
-  revalidatePath(`/quotes/${revised.revisedQuoteId}`);
+  if (revised.revisedQuoteId) revalidatePath(`/quotes/${revised.revisedQuoteId}`);
   if (row.quote.leadId) revalidatePath(`/leads/${row.quote.leadId}`);
   revalidatePath("/leads");
   revalidatePath("/workstation");

@@ -17,7 +17,8 @@ import {
 import { buildCustomerQuotePreviewDocument } from "../quote-customer-projection";
 import { readContact } from "../lead/lead-projection";
 import { notifyQuoteSent } from "../notifications";
-import { getRequestContextOrThrow } from "../auth-context";
+import { getCommercialRequestContextOrThrow } from "../auth-context";
+import { assertQuoteReadyToSendInTx } from "./quote-send-readiness";
 import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 
 export interface QuoteSendOptions {
@@ -201,11 +202,15 @@ export async function sendQuote(
   quoteId: string,
   options: QuoteSendOptions = {},
 ): Promise<QuoteSendResult> {
-  const ctx = await getRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const id = quoteId.trim();
 
   try {
     const { shareToken, shareExpiresAt } = await db.$transaction(async (tx) => {
+      const readiness = await assertQuoteReadyToSendInTx(tx, id, ctx.organizationId);
+      if (!readiness.ok) {
+        throw new Error(`QUOTE_SEND_NOT_READY:${readiness.error}`);
+      }
       await captureQuoteSendCheckpoint(tx, id, ctx.organizationId, ctx.organizationName, options);
       return await transitionQuoteToSent(tx, id, ctx.organizationId, options);
     });
@@ -223,6 +228,9 @@ export async function sendQuote(
   } catch (e) {
     console.error("Failed to send quote", e);
     if (e instanceof Error) {
+      if (e.message.startsWith("QUOTE_SEND_NOT_READY:")) {
+        return { ok: false, error: e.message.slice("QUOTE_SEND_NOT_READY:".length) };
+      }
       if (e.message === "QUOTE_SEND_CHECKPOINT_RACE") {
         return { ok: false, error: "This quote changed state while sending. Refresh and try again." };
       }

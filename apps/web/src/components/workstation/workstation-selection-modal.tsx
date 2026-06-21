@@ -4,7 +4,7 @@ import { useCallback, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { QuoteStatus } from "@prisma/client";
 import { Drawer } from "@/components/ui/drawer";
-import { LeadWorkspaceDialogBody } from "@/components/work-surfaces/lead-workspace-dialog-body";
+import { OpportunityWorkspaceDialogBody } from "@/components/work-surfaces/opportunity-workspace-dialog-body";
 import {
   QuoteWorkspaceDialogBody,
   type QuoteDialogDisplay,
@@ -89,9 +89,17 @@ export function WorkstationSelectionModal({
 
   const body =
     item == null ? null : item.kind === "lead" ? (
-      <LeadWorkspaceDialogBody
+      <OpportunityWorkspaceDialogBody
         key={item.id}
         leadId={item.recordId}
+        initialTab="review"
+        onClose={handleClose}
+      />
+    ) : item.kind === "quote" && item.leadAnchorId ? (
+      <OpportunityWorkspaceDialogBody
+        key={item.id}
+        leadId={item.leadAnchorId}
+        initialTab="quote"
         onClose={handleClose}
       />
     ) : item.kind === "quote" ? (
@@ -99,6 +107,7 @@ export function WorkstationSelectionModal({
         key={item.id}
         display={quoteDisplayFromWorkstationItem(item)}
         onClose={handleClose}
+        embeddedInWorkstation
       />
     ) : (
       <WorkstationModalShell
@@ -128,7 +137,7 @@ export function WorkstationSelectionModal({
       onClose={handleClose}
       ariaLabel="Work item details"
       placement="center"
-      widthClass="w-full max-w-2xl lg:max-w-3xl"
+      widthClass="w-full max-w-3xl lg:max-w-4xl"
     >
       {body}
     </Drawer>

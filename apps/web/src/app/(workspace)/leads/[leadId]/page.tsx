@@ -5,7 +5,10 @@ import { workspaceContentWidth } from "@/components/shell/shell-layout-classes";
 import { ButtonLink } from "@/components/ui/button";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { loadLeadSurface } from "@/lib/lead-commercial-surface/loader";
+import { loadOpportunityWorkspace } from "@/lib/lead-commercial-surface/opportunity-workspace-loader.server";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
+import { OpportunityWorkspaceShell } from "@/components/work-surfaces/opportunity-workspace-shell";
+import { parseOpportunityWorkspaceTab } from "@/lib/opportunity-tab-routing";
 import { Users } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
@@ -13,10 +16,15 @@ export const dynamic = "force-dynamic";
 
 export default async function LeadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ leadId: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { leadId } = await params;
+  const { tab: tabParam } = await searchParams;
+  const initialTab = parseOpportunityWorkspaceTab(tabParam);
+
   let ctx;
   try {
     ctx = await getRequestContextOrThrow();
@@ -94,14 +102,21 @@ export default async function LeadDetailPage({
     );
   }
 
-  return (
-    <div className={workspaceContentWidth.wide}>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <ButtonLink href="/leads" variant="ghost" size="sm">
-          ← Sales
-        </ButtonLink>
+  const workspace = await loadOpportunityWorkspace(leadId, ctx);
+  if (!workspace) {
+    return (
+      <div className={workspaceContentWidth.wide}>
+        <EmptyState icon={Users} title="Opportunity unavailable" />
       </div>
-      <LeadCommercialSurface payload={payload} entryPoint="record" />
-    </div>
+    );
+  }
+
+  return (
+    <OpportunityWorkspaceShell
+      key={`${leadId}:${initialTab}:${workspace.activeQuoteId ?? "none"}`}
+      payload={workspace.lead}
+      activeQuoteSurface={workspace.activeQuoteSurface}
+      initialTab={initialTab}
+    />
   );
 }
