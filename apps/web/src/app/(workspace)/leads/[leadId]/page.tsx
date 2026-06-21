@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { EmptyState } from "@/components/ui/empty-state";
+import { workspaceContentWidth } from "@/components/shell/shell-layout-classes";
+import { ButtonLink } from "@/components/ui/button";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { loadLeadSurface } from "@/lib/lead-commercial-surface/loader";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
@@ -9,9 +10,6 @@ import { Users } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 
 export const dynamic = "force-dynamic";
-
-const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 export default async function LeadDetailPage({
   params,
@@ -29,9 +27,9 @@ export default async function LeadDetailPage({
           eyebrow="Sales"
           title="Lead review"
           actions={
-            <Link href="/leads" className={listLinkClass}>
+            <ButtonLink href="/leads" variant="muted" size="sm">
               ← Sales
-            </Link>
+            </ButtonLink>
           }
         />
         <AccessDeniedPanel description="This role cannot access lead records." />
@@ -48,9 +46,9 @@ export default async function LeadDetailPage({
           title="Lead not found"
           description="No record exists for this id in your organization. Links only resolve within your tenant scope."
           actions={
-            <Link href="/workstation" className={listLinkClass}>
+            <ButtonLink href="/workstation" variant="muted" size="sm">
               ← Workstation
-            </Link>
+            </ButtonLink>
           }
         />
         <WorkspacePanel padding="compact" className="mb-6">
@@ -64,9 +62,9 @@ export default async function LeadDetailPage({
           title="Opportunity not found"
           description="This id is not a valid sales record in your organization, or you do not have access to it."
         >
-          <Link href="/workstation" className={listLinkClass}>
+          <ButtonLink href="/workstation" variant="muted" size="sm">
             Back to workstation
-          </Link>
+          </ButtonLink>
         </EmptyState>
       </div>
     );
@@ -74,32 +72,35 @@ export default async function LeadDetailPage({
 
   const isAssignedVisit = payload.surfaceMode === "assigned_visit";
 
-  return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader
-        eyebrow={isAssignedVisit ? "Site visit" : payload.reviewDisplay.pageEyebrow}
-        title={
-          isAssignedVisit
-            ? payload.lead.contactName || payload.lead.jobsiteAddressLine || payload.lead.title
-            : payload.reviewDisplay.primaryName
-        }
-        description={
-          isAssignedVisit
-            ? payload.lead.jobsiteAddressLine || "Assigned sales site visit"
-            : payload.reviewDisplay.contextLine
-        }
-        actions={
-          isAssignedVisit ? (
-            <Link href="/workstation" className={listLinkClass}>
+  if (isAssignedVisit) {
+    return (
+      <div className={workspaceContentWidth.default}>
+        <PageHeader
+          variant="compact"
+          title={
+            payload.lead.contactName ||
+            payload.lead.jobsiteAddressLine ||
+            payload.lead.title
+          }
+          description={payload.lead.jobsiteAddressLine || "Assigned sales site visit"}
+          actions={
+            <ButtonLink href="/workstation" variant="muted" size="sm">
               ← Workstation
-            </Link>
-          ) : (
-            <Link href="/leads" className={listLinkClass}>
-              ← Sales
-            </Link>
-          )
-        }
-      />
+            </ButtonLink>
+          }
+        />
+        <LeadCommercialSurface payload={payload} entryPoint="record" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={workspaceContentWidth.wide}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <ButtonLink href="/leads" variant="ghost" size="sm">
+          ← Sales
+        </ButtonLink>
+      </div>
       <LeadCommercialSurface payload={payload} entryPoint="record" />
     </div>
   );
