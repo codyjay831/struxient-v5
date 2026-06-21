@@ -12,6 +12,8 @@ import {
   updatePublicRequestSettingsAction,
   type PublicRequestSettingsFormState,
 } from "./public-request-settings-actions";
+import { PublicPageCopyPreview } from "@/components/settings/public-page-copy-preview";
+import { INTAKE_SETTINGS_HUB_PATH } from "@/lib/intake-settings-hierarchy";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -39,6 +41,11 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
   );
   const formId = useId();
   const [offerings, setOfferings] = useState<string[]>(initial.offerings);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [formTitle, setFormTitle] = useState(initial.formTitle);
+  const [introMessage, setIntroMessage] = useState(initial.introMessage);
+  const [emergencyWarningText, setEmergencyWarningText] = useState(initial.emergencyWarningText);
+  const [submitButtonText, setSubmitButtonText] = useState(initial.submitButtonText);
 
   return (
     <form action={formAction} className="space-y-8" id={formId}>
@@ -57,15 +64,23 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
           role="status"
           aria-live="polite"
         >
-          Public Request Settings saved.
+          Public page settings saved.
         </p>
       ) : null}
 
+      <PublicPageCopyPreview
+        enabled={enabled}
+        formTitle={formTitle}
+        introMessage={introMessage}
+        emergencyWarningText={emergencyWarningText}
+        submitButtonText={submitButtonText}
+      />
+
       <section className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Public request</h2>
+          <h2 className="text-sm font-semibold text-foreground">Availability</h2>
           <p className="mt-1 text-sm text-foreground-muted">
-            When turned off, your Public Request Link shows an unavailable message to customers.
+            When turned off, your customer request link shows an unavailable message.
           </p>
         </div>
         <label className="flex cursor-pointer items-start gap-3">
@@ -73,13 +88,14 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
             type="checkbox"
             name="publicRequestEnabled"
             value="on"
-            defaultChecked={initial.enabled}
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
             className="mt-1 size-4 rounded border-border text-accent focus-visible:ring-2 focus-visible:ring-ring"
           />
           <span>
-            <span className={fieldLabelClass}>Public request enabled</span>
+            <span className={fieldLabelClass}>Accept customer requests</span>
             <span className="mt-1 block text-sm text-foreground-muted">
-              Allow submissions through your Public Intake Form.
+              Allow submissions through your public customer intake page.
             </span>
           </span>
         </label>
@@ -88,14 +104,14 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       <details className="group rounded-lg border border-border bg-foreground/[0.02]">
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
-            Advanced — instant pricing & trust badges
-            <span className="text-xs font-normal text-foreground-subtle">Optional</span>
+            Optional — instant pricing & trust badges
+            <span className="text-xs font-normal text-foreground-subtle">Future</span>
           </span>
         </summary>
         <div className="space-y-6 border-t border-border px-4 py-4">
           <p className="text-sm text-foreground-muted">
             Instant pricing automation is not expanded in this release. These controls are preserved
-            for a future update and do not change canonical lead → quote handoff today.
+            for a future update and do not change lead → quote handoff today.
           </p>
           <input
             type="hidden"
@@ -144,16 +160,20 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       </details>
 
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold text-foreground">Form copy</h2>
+        <h2 className="text-sm font-semibold text-foreground">Page copy</h2>
+        <p className="text-sm text-foreground-muted">
+          These fields wrap the intake form customers fill out. They do not change intake questions.
+        </p>
         <div>
           <label className="block">
-            <span className={fieldLabelClass}>Public form title</span>
+            <span className={fieldLabelClass}>Page title</span>
             <input
               name="formTitle"
               type="text"
               required
               maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.formTitle}
-              defaultValue={initial.formTitle}
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
               placeholder={DEFAULT_PUBLIC_REQUEST_FORM_TITLE}
               className={controlClass}
             />
@@ -166,7 +186,8 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
               name="introMessage"
               rows={4}
               maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.introMessage}
-              defaultValue={initial.introMessage}
+              value={introMessage}
+              onChange={(e) => setIntroMessage(e.target.value)}
               placeholder={DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE}
               className={`${controlClass} min-h-[6rem] resize-y`}
             />
@@ -182,7 +203,8 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
               name="emergencyWarningText"
               rows={3}
               maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.emergencyWarningText}
-              defaultValue={initial.emergencyWarningText}
+              value={emergencyWarningText}
+              onChange={(e) => setEmergencyWarningText(e.target.value)}
               placeholder="Optional — e.g. dial 911 for emergencies; this form is not monitored 24/7."
               className={`${controlClass} min-h-[5rem] resize-y`}
             />
@@ -199,7 +221,8 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
               type="text"
               required
               maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.submitButtonText}
-              defaultValue={initial.submitButtonText}
+              value={submitButtonText}
+              onChange={(e) => setSubmitButtonText(e.target.value)}
               placeholder={DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT}
               className={controlClass}
             />
@@ -208,22 +231,19 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       </section>
 
       <section className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Request type options</h2>
+        <h2 className="text-sm font-semibold text-foreground">Service lines / request types</h2>
         <p className="mt-1 text-sm text-foreground-muted">
-          Managed per public intake form (default and additional slugs). Edit each form under{" "}
-          <Link href="/settings/intake-forms" className="text-accent hover:underline">
-            Public intake forms
-          </Link>
-          .
-        </p>
-        <p className="mt-1 text-xs text-foreground-subtle">
-          Legacy org-level request type settings are fallback-only and should be considered deprecated.
+          Managed per customer intake form. Edit service lines on your{" "}
+          <Link href={INTAKE_SETTINGS_HUB_PATH} className="text-accent hover:underline">
+            customer intake
+          </Link>{" "}
+          default or specialized forms.
         </p>
       </section>
 
       <div className="flex flex-wrap gap-3 border-t border-border pt-6">
         <button type="submit" className={primaryButtonClass} disabled={isPending}>
-          {isPending ? "Saving…" : "Save Public Request Settings"}
+          {isPending ? "Saving…" : "Save page settings"}
         </button>
       </div>
     </form>

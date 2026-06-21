@@ -21,6 +21,7 @@ export const PLUMBING_EMERGENCY_STARTER = {
         title: "Emergency Details",
         fields: [
           { key: "address.service" },
+          { key: "request.type" },
           { key: "scope.text" },
           { key: "scope.photos" },
         ],

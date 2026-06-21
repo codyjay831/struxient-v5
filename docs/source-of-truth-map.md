@@ -107,6 +107,7 @@
 | Sales site visit display state | **Derived** | `getOpportunityFlow()`, Sales list/board serializers, `schedule-query.ts`, `workstation-query.ts` reading `LeadVisitRequest` | Duplicated appointment/status state on `Lead`, `Quote`, calendar DTOs, or Workstation cards |
 | Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
 | Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` (accepted plan + hash/version + coverage + blockers) | One-off checks in activation action |
+| Quote plan proposal dependency apply guard | **Derived** | `validateQuotePlanProposalForApply()` in `quote-plan/quote-plan-validation.ts` (tasks-first: hard orphans block, soft orphans become review gaps) | Save-time deadlocks that block valid plans |
 | Quote plan staleness (`isStale`) | **Derived** | `currentPlanningInputHash !== QuoteExecutionPlan.planningInputHash` | Stored stale status drift |
 | Quote execution plan acceptance | **Stored** | `QuoteExecutionPlan.status`, `acceptedAt`, `planningInputHash` | UI-only acceptance without stamped hash |
 | Pre-plan line draft tasks | **Stored (authoring seed)** | `QuoteLineExecutionTask` — not activation truth once whole-quote plan exists | Treating per-line drafts as reviewed activation plan |
@@ -166,4 +167,5 @@
 *Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*  
 *Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
 *Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*  
-*Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*
+*Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*  
+*Updated 2026-06-20 — Added whole-quote proposal dependency guard row clarifying tasks-first apply policy and hard-vs-soft orphan handling.*

@@ -2,7 +2,7 @@
 
 import { LeadChannel } from "@prisma/client";
 import Link from "next/link";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
 import {
@@ -37,9 +37,13 @@ export function useLeadCustomerCreateForm(
     {},
   );
 
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+
   useEffect(() => {
-    if (state.success) onSuccess();
-  }, [state.success, onSuccess]);
+    if (!state.success) return;
+    onSuccessRef.current();
+  }, [state.success]);
 
   const prepared = prepareCustomerFromLead({
     title: lead.title,

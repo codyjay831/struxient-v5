@@ -31,20 +31,20 @@ export default function NewIntakeFormPage() {
         items={[
           { label: "Settings", href: "/settings" },
           { label: "Customer intake", href: "/settings/intake" },
-          { label: "Public intake forms", href: "/settings/intake-forms" },
+          { label: "Specialized customer forms", href: "/settings/intake-forms" },
           { label: "New" },
         ]}
       />
       <PageHeader
-        title="Create Advanced Public Form"
-        description="Create an additional public form/slug for advanced scenarios. Your default public form remains the primary customer path."
+        title="Create specialized customer form"
+        description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines. Your default customer intake remains the main path."
         actions={
           <Link
             href="/settings/intake-forms"
             className="inline-flex items-center text-xs font-bold text-foreground-subtle hover:text-foreground transition-colors"
           >
             <ChevronLeft className="mr-1 size-3" />
-            Back to Forms
+            Back to specialized forms
           </Link>
         }
       />

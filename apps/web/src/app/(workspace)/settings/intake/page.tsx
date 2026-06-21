@@ -1,11 +1,13 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { ExternalLink, Globe, Users } from "lucide-react";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
-import { IntakePathPresetsPanel } from "@/components/settings/intake-path-presets-panel";
+import { IntakeFlowMap } from "@/components/settings/intake-flow-map";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
@@ -14,50 +16,95 @@ import {
   INTAKE_PUBLIC_COPY_PATH,
 } from "@/lib/intake-settings-hierarchy";
 import { OFFICE_INTAKE_FORM_WHERE, PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
+import { buildPublicIntakeUrl } from "@/lib/public-intake-url";
+import { isSyntheticDefaultOfficeIntakeFormDefinitionId } from "@/lib/intake/default-office-intake-form";
 
 export const dynamic = "force-dynamic";
 
-const cardLinkClass =
+const primaryButtonClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
+
+const secondaryButtonClass =
+  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 const mutedLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
+function SetupNotice({
+  tone,
+  children,
+}: {
+  tone: "warning" | "info";
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "warning"
+      ? "border-warning/35 bg-warning/[0.07] text-foreground"
+      : "border-border bg-foreground/[0.02] text-foreground-muted";
+  return (
+    <p className={`mt-3 rounded-lg border px-3 py-2 text-xs leading-relaxed ${toneClass}`}>
+      {children}
+    </p>
+  );
+}
+
 export default async function IntakeSettingsHubPage() {
   const ctx = await getRequestContextOrThrow();
-  const [publicSettings, organization, publicCustomFormCount, officeDefaultForm] =
-    await Promise.all([
-      db.publicRequestSettings.findUnique({
-        where: { organizationId: ctx.organizationId },
-        select: { enabled: true, formTitle: true },
-      }),
-      db.organization.findUnique({
-        where: { id: ctx.organizationId },
-        select: { name: true, slug: true },
-      }),
-      db.intakeFormDefinition.count({
-        where: {
-          organizationId: ctx.organizationId,
-          archivedAt: null,
-          ...PUBLIC_INTAKE_FORM_WHERE,
-          isDefault: false,
-        },
-      }),
-      db.intakeFormDefinition.findFirst({
-        where: {
-          organizationId: ctx.organizationId,
-          archivedAt: null,
-          ...OFFICE_INTAKE_FORM_WHERE,
-          isDefault: true,
-        },
-        select: { id: true, name: true },
-      }),
-    ]);
+  const [
+    publicSettings,
+    organization,
+    specializedFormCount,
+    officeDefaultForm,
+    defaultPublicForm,
+  ] = await Promise.all([
+    db.publicRequestSettings.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: { enabled: true, formTitle: true, submitButtonText: true },
+    }),
+    db.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: { name: true, slug: true },
+    }),
+    db.intakeFormDefinition.count({
+      where: {
+        organizationId: ctx.organizationId,
+        archivedAt: null,
+        ...PUBLIC_INTAKE_FORM_WHERE,
+        isDefault: false,
+      },
+    }),
+    db.intakeFormDefinition.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        archivedAt: null,
+        ...OFFICE_INTAKE_FORM_WHERE,
+        isDefault: true,
+      },
+      select: { id: true, name: true },
+    }),
+    db.intakeFormDefinition.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        archivedAt: null,
+        ...PUBLIC_INTAKE_FORM_WHERE,
+        isDefault: true,
+      },
+      select: { id: true, name: true, slug: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
 
   const publicLive = publicSettings?.enabled ?? true;
+  const orgName = organization?.name ?? "your organization";
+  const slug = organization?.slug ?? null;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const publicPreviewHref =
+    slug && publicLive ? buildPublicIntakeUrl({ baseUrl, companySlug: slug }) : null;
+  const officeFormProvisioned =
+    officeDefaultForm && !isSyntheticDefaultOfficeIntakeFormDefinitionId(officeDefaultForm.id);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-4xl">
       <WorkspaceBreadcrumb
         items={[
           { label: "Settings", href: "/settings" },
@@ -66,7 +113,7 @@ export default async function IntakeSettingsHubPage() {
       />
       <PageHeader
         title="Customer intake"
-        description="Set up how customers request work and how office staff logs requests. Start with the default flow, then open advanced options only when needed."
+        description="Set up how customers request work and how your team logs leads. Every path creates structured lead data for review and quoting."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
@@ -74,90 +121,203 @@ export default async function IntakeSettingsHubPage() {
         }
       />
 
+      <div className="mb-6">
+        <IntakeFlowMap />
+      </div>
+
       <PublicRequestLinkPanel
-        organizationName={organization?.name ?? "your organization"}
-        slug={organization?.slug ?? null}
-        baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        organizationName={orgName}
+        slug={slug}
+        baseUrl={baseUrl}
         publicRequestLive={publicLive}
         className="mb-6"
       />
 
       <div className="space-y-6">
         <WorkspacePanel>
-          <SectionHeading
-            title="Public customer request"
-            description="Main customer request page. Keep this simple: one public page, clear copy, and one default request form."
-          />
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-success/10 p-2 text-success">
+              <Globe className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <SectionHeading
+                title="Default customer intake"
+                description="Your main public request page. Customers use this link to submit work requests."
+              />
+            </div>
+          </div>
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge
               label={publicLive ? "Accepting requests" : "Paused"}
               tone={publicLive ? "approved" : "warning"}
             />
+            {defaultPublicForm?.name ? (
+              <span className="text-xs text-foreground-muted truncate max-w-md">
+                Form: {defaultPublicForm.name}
+              </span>
+            ) : null}
             {publicSettings?.formTitle ? (
               <span className="text-xs text-foreground-muted truncate max-w-md">
-                Form title: {publicSettings.formTitle}
+                Page title: {publicSettings.formTitle}
               </span>
             ) : null}
           </div>
-          <p className="mt-3 text-sm text-foreground-muted">
-            Public form fields live with the form. Request-page settings control link status and customer-facing copy. This does not affect office intake at{" "}
-            <span className="font-medium text-foreground">/leads/new</span>.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={INTAKE_PUBLIC_COPY_PATH} className={cardLinkClass}>
-              Customer request page settings
-            </Link>
-            <details className="group rounded-lg border border-border px-3 py-2">
-              <summary className="cursor-pointer list-none text-xs font-medium text-foreground-muted transition-colors group-open:text-foreground [&::-webkit-details-marker]:hidden">
-                Advanced form options
-              </summary>
-              <p className="mt-2 text-xs text-foreground-muted">
-                Use only when you need extra public slugs or specialized request forms.
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
+              <p className="text-xs font-semibold text-foreground">Page copy & availability</p>
+              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                Controls whether intake is live, plus the page title, intro, warning, and submit
+                button text around the form.
               </p>
-              <div className="mt-3">
-                <Link href={INTAKE_CUSTOM_FORMS_PATH} className={mutedLinkClass}>
-                  Additional public forms ({publicCustomFormCount})
-                </Link>
-              </div>
-            </details>
+            </div>
+            <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
+              <p className="text-xs font-semibold text-foreground">Intake fields</p>
+              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                Controls what customers answer: contact, jobsite, scope, timing, service line, and
+                optional custom questions.
+              </p>
+            </div>
+          </div>
+
+          {!slug ? (
+            <SetupNotice tone="warning">
+              No company slug configured. Set one in{" "}
+              <Link href="/settings/organization" className="text-accent hover:underline">
+                Business profile
+              </Link>{" "}
+              before sharing a public customer link.
+            </SetupNotice>
+          ) : null}
+          {!publicLive ? (
+            <SetupNotice tone="warning">
+              Public intake is paused. Customers opening your link will see an unavailable message
+              until you turn intake back on under page copy & availability.
+            </SetupNotice>
+          ) : null}
+          {!defaultPublicForm ? (
+            <SetupNotice tone="info">
+              The default customer form is created automatically on first use. You can edit fields
+              once it exists.
+            </SetupNotice>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={INTAKE_PUBLIC_COPY_PATH} className={primaryButtonClass}>
+              Edit page copy & availability
+            </Link>
+            {defaultPublicForm ? (
+              <Link
+                href={`/settings/intake-forms/${defaultPublicForm.id}`}
+                className={primaryButtonClass}
+              >
+                Edit customer intake fields
+              </Link>
+            ) : (
+              <Link href={INTAKE_CUSTOM_FORMS_PATH} className={secondaryButtonClass}>
+                Open customer forms
+              </Link>
+            )}
+            {publicPreviewHref ? (
+              <a
+                href={publicPreviewHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={secondaryButtonClass}
+              >
+                <ExternalLink className="mr-1.5 size-3.5" />
+                Preview customer page
+              </a>
+            ) : (
+              <span className={`${secondaryButtonClass} cursor-not-allowed opacity-60`}>
+                Preview unavailable
+              </span>
+            )}
           </div>
         </WorkspacePanel>
 
         <WorkspacePanel>
-          <SectionHeading
-            title="Office new lead form"
-            description="Staff-only request intake at /leads/new. Keep this tuned for call/email/walk-in speed."
-          />
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-accent/10 p-2 text-accent">
+              <Users className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <SectionHeading
+                title="Default internal intake"
+                description="Staff-only form at /leads/new for phone, email, walk-in, and referral leads."
+              />
+            </div>
+          </div>
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge label="Always on" tone="approved" />
             {officeDefaultForm?.name ? (
               <span className="text-xs text-foreground-muted truncate max-w-md">
-                Default: {officeDefaultForm.name}
+                Form: {officeDefaultForm.name}
               </span>
             ) : (
               <span className="text-xs text-foreground-muted">
-                Default form is created on first office intake use
+                Form is created on first use of New intake
               </span>
             )}
           </div>
+
           <p className="mt-3 text-sm text-foreground-muted">
-            Staff-only details (source channel, internal notes, template helper) stay outside the
-            form schema. Changing public forms does not change this surface.
+            Customers never see this surface. Internal-only details like source channel and staff
+            notes stay on the new-lead page outside the form schema.
           </p>
-          <div className="mt-4">
-            <Link href={INTAKE_OFFICE_FORM_PATH} className={cardLinkClass}>
-              Edit office intake form
+
+          {!officeFormProvisioned ? (
+            <SetupNotice tone="info">
+              Open{" "}
+              <Link href="/leads/new" className="text-accent hover:underline">
+                New intake
+              </Link>{" "}
+              once to provision the stored internal form, then return here to edit fields.
+            </SetupNotice>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={INTAKE_OFFICE_FORM_PATH} className={primaryButtonClass}>
+              Manage internal intake
+            </Link>
+            {officeFormProvisioned && officeDefaultForm ? (
+              <Link
+                href={`/settings/intake-forms/${officeDefaultForm.id}`}
+                className={primaryButtonClass}
+              >
+                Edit internal intake fields
+              </Link>
+            ) : null}
+            <Link href="/leads/new" className={secondaryButtonClass}>
+              Preview on New intake
             </Link>
           </div>
         </WorkspacePanel>
 
         <WorkspacePanel>
           <SectionHeading
-            title="Intake paths"
-            description="Future modes for trade templates and complex triage — not separate systems."
+            title="Specialized customer forms"
+            description="Optional extra public links for campaigns, trade-specific landing pages, referral partners, or distinct service lines."
           />
-          <div className="mt-4">
-            <IntakePathPresetsPanel />
+          <p className="mt-3 text-sm text-foreground-muted">
+            Most contractors only need the default customer intake. Specialized forms still create
+            leads in the same Lead Review and quote flow.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <StatusBadge
+              label={`${specializedFormCount} specialized form${specializedFormCount === 1 ? "" : "s"}`}
+              tone={specializedFormCount > 0 ? "approved" : "neutral"}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={INTAKE_CUSTOM_FORMS_PATH} className={secondaryButtonClass}>
+              Manage specialized customer forms
+            </Link>
+            <Link href={`${INTAKE_CUSTOM_FORMS_PATH}/new`} className={secondaryButtonClass}>
+              Create specialized form
+            </Link>
           </div>
         </WorkspacePanel>
       </div>

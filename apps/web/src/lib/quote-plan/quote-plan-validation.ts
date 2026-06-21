@@ -2,8 +2,8 @@ import { QuoteExecutionPlanStatus } from "@prisma/client";
 import {
   QuotePlanProposalSchema,
   type QuotePlanProposal,
-  type QuotePlanProposalOperation,
 } from "@/lib/quote-plan/quote-plan-proposal-schema";
+import { analyzeExecutionSignals } from "@/lib/execution-signal-analysis";
 
 type QuotePlanValidationTaskRow = {
   id: string;
@@ -12,6 +12,7 @@ type QuotePlanValidationTaskRow = {
   lineItemIds: string[];
   requiresSignals: string[];
   providesSignals: string[];
+  hardSignal: boolean;
 };
 
 export type QuotePlanValidationContext = {
@@ -36,6 +37,7 @@ type SimTask = {
   lineItemIds: string[];
   requiresSignals: string[];
   providesSignals: string[];
+  hardSignal: boolean;
   canceled: boolean;
 };
 
@@ -51,6 +53,7 @@ function buildSimTaskMap(existingTasks: QuotePlanValidationTaskRow[]): Map<strin
       lineItemIds: [...task.lineItemIds],
       requiresSignals: [...task.requiresSignals],
       providesSignals: [...task.providesSignals],
+      hardSignal: task.hardSignal,
       canceled: false,
     });
   }
@@ -79,27 +82,26 @@ function assertCoverageInvariant(
   return { ok: true };
 }
 
-function assertNoSignalOrphans(tasks: Iterable<SimTask>): { ok: true } | { ok: false; error: string } {
+function assertNoHardSignalOrphans(tasks: Iterable<SimTask>): { ok: true } | { ok: false; error: string } {
   const liveTasks = [...tasks].filter((task) => !task.canceled);
-  const provided = new Set<string>();
-  for (const task of liveTasks) {
-    for (const signal of task.providesSignals) {
-      if (signal.trim()) provided.add(signal.trim().toLowerCase());
-    }
+  const analysis = analyzeExecutionSignals(
+    liveTasks.map((task) => ({
+      id: task.id,
+      title: task.id,
+      stageId: null,
+      requiresSignals: task.requiresSignals,
+      providesSignals: task.providesSignals,
+      hardSignal: task.hardSignal,
+    })),
+  );
+  if (analysis.hardMissingRequirements.length === 0) {
+    return { ok: true };
   }
-  for (const task of liveTasks) {
-    for (const signal of task.requiresSignals) {
-      const key = signal.trim().toLowerCase();
-      if (!key) continue;
-      if (!provided.has(key)) {
-        return {
-          ok: false,
-          error: `Dependency orphan detected: signal "${signal}" has no provider after apply.`,
-        };
-      }
-    }
-  }
-  return { ok: true };
+  const first = analysis.hardMissingRequirements[0];
+  return {
+    ok: false,
+    error: `Hard dependency orphan detected: signal "${first.signal}" has no provider after apply.`,
+  };
 }
 
 export function validateQuotePlanProposalForApply(
@@ -139,6 +141,7 @@ export function validateQuotePlanProposalForApply(
         lineItemIds: [...new Set(operation.task.lineItemIds)],
         requiresSignals: operation.task.requiresSignals,
         providesSignals: operation.task.providesSignals,
+        hardSignal: operation.task.hardSignal,
         canceled: false,
       });
       continue;
@@ -161,6 +164,7 @@ export function validateQuotePlanProposalForApply(
       }
       if (operation.task.requiresSignals) sim.requiresSignals = operation.task.requiresSignals;
       if (operation.task.providesSignals) sim.providesSignals = operation.task.providesSignals;
+      if (operation.task.hardSignal !== undefined) sim.hardSignal = operation.task.hardSignal;
       continue;
     }
     if (operation.type === "RELINK_TASK_SCOPE") {
@@ -195,7 +199,7 @@ export function validateQuotePlanProposalForApply(
   }
   const coverage = assertCoverageInvariant(simTaskById.values(), ctx.executionRelevantLineItemIds);
   if (!coverage.ok) return coverage;
-  const dependencies = assertNoSignalOrphans(simTaskById.values());
+  const dependencies = assertNoHardSignalOrphans(simTaskById.values());
   if (!dependencies.ok) return dependencies;
   return { ok: true, proposal };
 }

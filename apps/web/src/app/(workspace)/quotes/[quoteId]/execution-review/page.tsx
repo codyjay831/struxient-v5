@@ -292,7 +292,6 @@ export default async function QuoteExecutionReviewPreviewPage({
 
       <QuoteExecutionReviewPreviewView
         quoteId={qid}
-        quoteTitle={row.title}
         executionPlanningEditable={executionPlanningEditable}
         model={model}
         activation={activation}

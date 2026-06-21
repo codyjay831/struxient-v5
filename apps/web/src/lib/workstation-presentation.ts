@@ -93,10 +93,12 @@ export type NeedsActionItem = {
   selectedKind: string;
   identity: string;
   workItem: string;
+  addressLine?: string;
   reason: string;
   nextAction: string;
   tone: WorkstationPresentationTone;
   categoryLabel?: string;
+  badgeLabels?: string[];
 };
 
 export type TodayAgendaItem = {
@@ -106,9 +108,11 @@ export type TodayAgendaItem = {
   timeLabel: string;
   identity: string;
   title: string;
+  addressLine?: string;
   ownerLabel?: string;
   tone: WorkstationPresentationTone;
   categoryLabel?: string;
+  badgeLabels?: string[];
 };
 
 export type ActiveJobSignal = {
@@ -177,11 +181,13 @@ export type QueueRowItem = {
   selectedKind: string;
   title: string;
   subtitle: string;
+  addressLine?: string;
   reason: string;
   nextAction: string;
   tone: WorkstationPresentationTone;
   statusLabel?: string;
   categoryLabel?: string;
+  badgeLabels?: string[];
   /** YYYY-MM-DD local day key for calendar queue filtering. */
   calendarDay?: string;
 };
@@ -304,11 +310,54 @@ function normalizeReason(item: WorkstationWorkItem): string {
   return "Review this item and confirm the next step.";
 }
 
+function compactDetailLine(item: WorkstationWorkItem): string {
+  const segments = [normalizeReason(item), item.ageLabel, item.valueLabel]
+    .map((segment) => segment?.trim())
+    .filter((segment): segment is string => Boolean(segment));
+  return [...new Set(segments)].join(" · ");
+}
+
+function formatStatusBadgeLabel(status?: string): string | null {
+  const raw = status?.trim();
+  if (!raw) return null;
+  return raw
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function resolveBadgeLabels(item: WorkstationWorkItem): string[] {
+  const typeLabel =
+    item.typeLabel ??
+    (item.kind === "quote"
+      ? "Quote"
+      : item.kind === "lead"
+        ? "Lead"
+        : item.kind === "job"
+          ? "Job"
+          : item.kind === "task"
+            ? "Task"
+            : item.filterCategory === "payments"
+              ? "Payment"
+              : item.kind === "schedule"
+                ? "Calendar"
+                : null);
+  const statusLabel = formatStatusBadgeLabel(item.status);
+  return [typeLabel, statusLabel].filter((label): label is string => Boolean(label));
+}
+
 function resolveIdentityAndWorkItem(item: WorkstationWorkItem): {
   identity: string;
   workItem: string;
 } {
   const context = item.contextLine ?? item.parentLabel ?? item.subtitle;
+  if (item.parentLabel && item.scopeLabel) {
+    return {
+      identity: `${item.parentLabel} · ${item.scopeLabel}`,
+      workItem: item.title,
+    };
+  }
+
   if (item.parentLabel && item.parentLabel !== item.title) {
     return {
       identity: item.parentLabel,
@@ -453,10 +502,12 @@ function toNeedsAction(item: WorkstationWorkItem): NeedsActionItem {
     selectedKind: item.kind,
     identity: identityInfo.identity,
     workItem: identityInfo.workItem,
-    reason: normalizeReason(item),
+    addressLine: item.addressLine?.trim() || undefined,
+    reason: compactDetailLine(item),
     nextAction: normalizeActionLabel(item),
     tone: resolveTone(item),
     categoryLabel: resolveCategoryLabel(item),
+    badgeLabels: resolveBadgeLabels(item),
   };
 }
 
@@ -468,7 +519,7 @@ function toCriticalGroupItem(item: WorkstationWorkItem): CriticalGroupItem {
     selectedId: item.id,
     selectedKind: item.kind,
     title: identityInfo.workItem !== item.kind ? identityInfo.identity : item.title,
-    reason: normalizeReason(item),
+    reason: compactDetailLine(item),
     categoryLabel: category ? CRITICAL_CATEGORY_LABELS[category] : "Critical",
     nextAction: normalizeActionLabel(item),
     tone: resolveTone(item),
@@ -489,11 +540,13 @@ function toQueueRow(item: WorkstationWorkItem): QueueRowItem {
     selectedKind: item.kind,
     title: identityInfo.workItem,
     subtitle: identityInfo.identity,
-    reason: normalizeReason(item),
+    addressLine: item.addressLine?.trim() || undefined,
+    reason: compactDetailLine(item),
     nextAction: normalizeActionLabel(item),
     tone: resolveTone(item),
     statusLabel: item.status,
     categoryLabel: resolveCategoryLabel(item),
+    badgeLabels: resolveBadgeLabels(item),
     calendarDay: calendarDate ? formatCalendarDayKey(calendarDate) : undefined,
   };
 }
@@ -696,10 +749,12 @@ export function buildWorkstationPresentation({
         selectedKind: item.kind,
         identity: identityInfo.identity,
         title: item.title,
+        addressLine: item.addressLine?.trim() || undefined,
         timeLabel,
         ownerLabel: item.assignedUserId === viewerUserId ? "You" : undefined,
         tone: resolveTone(item),
         categoryLabel: resolveCategoryLabel(item),
+        badgeLabels: resolveBadgeLabels(item),
       };
     }),
   ).slice(0, overviewLimits.today);

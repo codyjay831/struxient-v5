@@ -21,6 +21,7 @@ export const ELECTRICAL_SERVICE_STARTER = {
         title: "Service Details",
         fields: [
           { key: "address.service" },
+          { key: "request.type" },
           { key: "scope.text" },
           { key: "preferred.contactMethod" },
         ],

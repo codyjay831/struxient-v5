@@ -58,7 +58,6 @@ type GapTaskChoice = {
 
 export function QuoteExecutionReviewPreviewView({
   quoteId,
-  quoteTitle,
   executionPlanningEditable,
   model,
   activation,
@@ -73,7 +72,6 @@ export function QuoteExecutionReviewPreviewView({
   draftTaskCount,
 }: {
   quoteId: string;
-  quoteTitle: string;
   executionPlanningEditable: boolean;
   model: QuoteExecutionReviewPreviewModel;
   activation: QuoteActivationStatus;

@@ -54,7 +54,7 @@ export const INTAKE_ATOMS: Record<string, IntakeAtom> = {
   },
   "request.type": {
     key: "request.type",
-    label: "Request type",
+    label: "Service category",
     type: "SYSTEM",
   },
   "consent.terms": {

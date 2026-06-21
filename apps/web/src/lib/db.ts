@@ -11,6 +11,7 @@ import {
   toIntakeFormDefinitionShape,
 } from "@/lib/intake/intake-form-surface";
 import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
+import { normalizePublicIntakeSchema } from "@/lib/intake/public-intake-schema-invariants";
 import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
 import {
   DEV_ORGANIZATION_ID,
@@ -343,7 +344,10 @@ export async function getPublicRequestIntakeBundle(
   let formDefinition: IntakeFormDefinitionShape;
   const shaped = published ? toIntakeFormDefinitionShape(published) : null;
   if (shaped) {
-    formDefinition = shaped;
+    formDefinition = {
+      ...shaped,
+      schema: normalizePublicIntakeSchema(shaped.schema),
+    };
   } else {
     if (formSlug) {
       return null;

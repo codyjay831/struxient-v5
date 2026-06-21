@@ -3,6 +3,7 @@ import type {
   TaskTemplateCategory,
 } from "@prisma/client";
 import { normalizeSignalKey } from "@/lib/signal-key";
+import { analyzeExecutionSignals } from "@/lib/execution-signal-analysis";
 import type { TaskCompletionRequirements } from "./task-readiness";
 import type { TaskResourceRequirement } from "./task-resource";
 
@@ -120,49 +121,26 @@ export function buildQuoteExecutionReviewPreviewModel(
   }
   const allTasks = Array.from(allTasksById.values());
 
-  const providedSignalsMap = new Map<string, typeof allTasks[number][]>();
-  for (const t of allTasks) {
-    for (const s of t.providesSignals) {
-      const normalizedSignal = normalizeSignalKey(s);
-      if (!providedSignalsMap.has(normalizedSignal)) {
-        providedSignalsMap.set(normalizedSignal, []);
-      }
-      providedSignalsMap.get(normalizedSignal)!.push(t);
-    }
-  }
-
-  const handshakes: QuoteExecutionReviewHandshake[] = [];
-  const orphans: QuoteExecutionReviewOrphan[] = [];
-
-  for (const consumer of allTasks) {
-    for (const signal of consumer.requiresSignals) {
-      const providers = providedSignalsMap.get(normalizeSignalKey(signal));
-      if (providers && providers.length > 0) {
-        for (const provider of providers) {
-          handshakes.push({
-            signal,
-            providerTaskId: provider.id,
-            providerTaskTitle: provider.title,
-            providerLineDescription: provider.lineDescription,
-            consumerTaskId: consumer.id,
-            consumerTaskTitle: consumer.title,
-            consumerLineDescription: consumer.lineDescription,
-          });
-        }
-      } else {
-        orphans.push({
-          signal,
-          isHard: consumer.hardSignal,
-          consumerLineId: consumer.lineId,
-          consumerStageId: consumer.stageId,
-          consumerTaskId: consumer.id,
-          consumerTaskTitle: consumer.title,
-          consumerTaskRequiresSignalCount: consumer.requiresSignals.length,
-          consumerLineDescription: consumer.lineDescription,
-        });
-      }
-    }
-  }
+  const signalAnalysis = analyzeExecutionSignals(allTasks);
+  const handshakes: QuoteExecutionReviewHandshake[] = signalAnalysis.handshakes.map((entry) => ({
+    signal: entry.signal,
+    providerTaskId: entry.providerTaskId,
+    providerTaskTitle: entry.providerTaskTitle,
+    providerLineDescription: entry.providerLineDescription,
+    consumerTaskId: entry.consumerTaskId,
+    consumerTaskTitle: entry.consumerTaskTitle,
+    consumerLineDescription: entry.consumerLineDescription,
+  }));
+  const orphans: QuoteExecutionReviewOrphan[] = signalAnalysis.missingRequirements.map((entry) => ({
+    signal: entry.signal,
+    isHard: entry.isHard,
+    consumerLineId: entry.consumerLineId ?? "",
+    consumerStageId: entry.consumerStageId,
+    consumerTaskId: entry.consumerTaskId,
+    consumerTaskTitle: entry.consumerTaskTitle,
+    consumerTaskRequiresSignalCount: entry.consumerTaskRequiresSignalCount,
+    consumerLineDescription: entry.consumerLineDescription,
+  }));
 
   const lineReadiness = quote.lines.map((l) => {
     const tasks = l.tasks;
@@ -231,10 +209,8 @@ export function buildQuoteExecutionReviewPreviewModel(
     summary: {
       totalLines: quote.lines.length,
       totalTasks: allTasks.length,
-      providedSignalCount: providedSignalsMap.size,
-      requiredSignalCount: new Set(
-        allTasks.flatMap((t) => t.requiresSignals.map((signal) => normalizeSignalKey(signal))),
-      ).size,
+      providedSignalCount: signalAnalysis.providedSignalCount,
+      requiredSignalCount: signalAnalysis.requiredSignalCount,
       orphanCount: orphans.length,
       hardOrphanCount: orphans.filter((o) => o.isHard).length,
     },

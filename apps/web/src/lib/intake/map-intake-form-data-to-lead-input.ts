@@ -5,6 +5,7 @@ import {
   sanitizePublicIntakeServiceLocationFromClient,
   type PublicIntakeServiceLocationV1,
 } from "@/lib/public-lead-service-location";
+import { PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE } from "@/lib/intake/public-intake-schema-invariants";
 
 export type IntakeSurfaceMode = "public" | "staff";
 
@@ -258,7 +259,7 @@ export function mapIntakeFormDataToLeadInput({
   const formDefinitionId = trimOrNull(formData.get("formDefinitionId"));
 
   if (surfaceMode === "public" && requestTypeValue.length === 0) {
-    return { ok: false, error: "Please select what you need help with." };
+    return { ok: false, error: PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE };
   }
 
   const typeMap = mapRequestType(

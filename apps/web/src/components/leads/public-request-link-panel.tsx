@@ -43,8 +43,8 @@ export function PublicRequestLinkPanel({
         </p>
       ) : null}
       <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-        Your default public request form is the main customer entry point. Additional public forms
-        are optional advanced setup.
+        Your default customer intake is the main entry point. Optional specialized customer forms
+        are separate public links for campaigns, trade pages, or distinct service lines.
       </p>
 
       {!slug ? (

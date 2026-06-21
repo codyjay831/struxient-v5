@@ -225,11 +225,21 @@ export function SettingsPageClient({
     if (section === "customer-intake") {
       return (
         <div className="space-y-8">
-          <SettingsSection title="Customer intake" description="Control public intake availability and jump to intake management pages.">
+          <SettingsSection
+            title="Customer intake"
+            description="Set up public customer intake and internal staff intake from one control center."
+          >
+            <SettingsManageRow
+              rowId="row-manage-customer-intake-hub"
+              title="Customer intake control center"
+              description="See what is live, preview paths, and jump to customer or internal intake setup."
+              href="/settings/intake"
+            />
+
             <SettingsToggleRow
               rowId="row-accept-public-requests"
               title="Accept public requests"
-              description="Allow customers to submit requests through your public request page."
+              description="Allow customers to submit requests through your public customer intake page."
               ariaLabel="Accept public requests"
               checked={publicRequestEnabled}
               onChange={(checked) => {
@@ -256,22 +266,22 @@ export function SettingsPageClient({
 
             <SettingsManageRow
               rowId="row-manage-public-request-page"
-              title="Public request page"
-              description="Manage customer-facing request page copy and details."
+              title="Public page copy & availability"
+              description="Page title, intro, warning, submit button, and live/paused status."
               href="/settings/public-request-settings"
             />
 
             <SettingsManageRow
               rowId="row-manage-office-intake-form"
-              title="Office intake form"
-              description="Manage staff intake at /leads/new."
+              title="Default internal intake"
+              description="Staff intake fields for /leads/new."
               href="/settings/intake/office"
             />
 
             <SettingsManageRow
               rowId="row-manage-custom-intake-forms"
-              title="Custom intake forms"
-              description="Manage additional public and custom intake forms."
+              title="Specialized customer forms"
+              description="Optional additional public links for campaigns, trade pages, or service lines."
               href="/settings/intake-forms"
             />
           </SettingsSection>

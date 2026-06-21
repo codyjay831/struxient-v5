@@ -82,6 +82,7 @@ type WorkstationRowProps = {
   detail?: string;
   tone?: WorkstationPresentationTone;
   badgeLabel?: string;
+  badgeLabels?: string[];
   href: string;
   selected?: boolean;
   children?: ReactNode;
@@ -93,10 +94,13 @@ export function WorkstationRow({
   detail,
   tone = "neutral",
   badgeLabel,
+  badgeLabels,
   href,
   selected = false,
   children,
 }: WorkstationRowProps) {
+  const badges = badgeLabels?.length ? badgeLabels : badgeLabel ? [badgeLabel] : [];
+
   return (
     <Link
       href={href}
@@ -118,12 +122,15 @@ export function WorkstationRow({
           {detail ? (
             <p className="mt-0.5 text-xs text-foreground-subtle">{detail}</p>
           ) : null}
-          {badgeLabel ? (
-            <div className="mt-2">
-              <StatusBadge
-                label={badgeLabel}
-                tone={presentationToneToBadge(tone)}
-              />
+          {badges.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {badges.map((label) => (
+                <StatusBadge
+                  key={label}
+                  label={label}
+                  tone={presentationToneToBadge(tone)}
+                />
+              ))}
             </div>
           ) : null}
           {children}
@@ -241,10 +248,11 @@ export function NextActionsList({
         <WorkstationRow
           key={item.id}
           primary={item.identity}
-          secondary={item.workItem}
+          secondary={item.addressLine ?? item.workItem}
           detail={item.reason}
           tone={item.tone}
           badgeLabel={item.categoryLabel}
+          badgeLabels={item.badgeLabels}
           href={buildHref(item)}
           selected={selectedId === item.id}
         />
@@ -278,10 +286,11 @@ export function TodayAgendaList({
           <WorkstationRow
             key={item.id}
             primary={item.identity}
-            secondary={item.title}
+            secondary={item.addressLine ?? item.title}
             detail={ownerDetail}
             tone={item.tone}
             badgeLabel={item.categoryLabel}
+            badgeLabels={item.badgeLabels}
             href={buildHref(item)}
             selected={selectedId === item.id}
           />
@@ -367,10 +376,11 @@ export function QueueRowList({
         <WorkstationRow
           key={item.id}
           primary={item.subtitle || item.title}
-          secondary={item.subtitle ? item.title : undefined}
+          secondary={item.addressLine ?? (item.subtitle ? item.title : undefined)}
           detail={item.reason}
           tone={item.tone}
           badgeLabel={item.statusLabel ?? item.categoryLabel}
+          badgeLabels={item.badgeLabels}
           href={buildHref(item)}
           selected={selectedId === item.id}
         />

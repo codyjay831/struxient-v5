@@ -149,6 +149,33 @@ test("evaluateQuoteJobActivationReadiness blocks when hard signal has no provide
   assert.equal(readiness.blockReasons[0]?.code, "HARD_SIGNAL_NO_PROVIDER");
 });
 
+test("evaluateQuoteJobActivationReadiness allows soft orphan signals", () => {
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      status: QuoteStatus.APPROVED,
+      lines: [
+        line({
+          tasks: [
+            {
+              id: "task-1",
+              title: "Task 1",
+              stageId: "stage-1",
+              providesSignals: [],
+              requiresSignals: ["external.confirmation"],
+              hardSignal: false,
+            },
+          ],
+        }),
+      ],
+    }),
+  );
+  assert.equal(readiness.ready, true);
+  assert.equal(
+    readiness.blockReasons.some((reason) => reason.code === "HARD_SIGNAL_NO_PROVIDER"),
+    false,
+  );
+});
+
 test("evaluateQuoteJobActivationReadiness treats equivalent signal keys as satisfied", () => {
   const readiness = evaluateQuoteJobActivationReadiness(
     readinessInput({
@@ -358,4 +385,122 @@ test("evaluateQuoteJobActivationReadiness blocks uncovered execution-relevant li
   );
   assert.equal(readiness.ready, false);
   assert.ok(readiness.blockReasons.some((r) => r.code === "EXECUTION_SCOPE_NOT_COVERED"));
+});
+
+test("evaluateQuoteJobActivationReadiness dedupes shared tasks across line coverage", () => {
+  const sharedTask = {
+    id: "task-shared",
+    title: "Shared mobilization task",
+    stageId: "stage-1",
+    providesSignals: [],
+    requiresSignals: [],
+    hardSignal: false,
+  };
+
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [
+        line({ id: "line-a", description: "Line A", tasks: [sharedTask] }),
+        line({ id: "line-b", description: "Line B", tasks: [sharedTask] }),
+      ],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.totalTasksToActivate, 1);
+});
+
+test("evaluateQuoteJobActivationReadiness counts mixed shared and line-specific tasks uniquely", () => {
+  const sharedTask = {
+    id: "task-shared",
+    title: "Shared permitting task",
+    stageId: "stage-1",
+    providesSignals: [],
+    requiresSignals: [],
+    hardSignal: false,
+  };
+
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [
+        line({ id: "line-a", description: "Line A", tasks: [sharedTask] }),
+        line({
+          id: "line-b",
+          description: "Line B",
+          tasks: [
+            sharedTask,
+            {
+              id: "task-line-b",
+              title: "Line B closeout",
+              stageId: "stage-2",
+              providesSignals: [],
+              requiresSignals: [],
+              hardSignal: false,
+            },
+          ],
+        }),
+      ],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.totalTasksToActivate, 2);
+});
+
+test("evaluateQuoteJobActivationReadiness does not duplicate signal providers from shared tasks", () => {
+  const provider = {
+    id: "task-provider",
+    title: "Shared provider",
+    stageId: "stage-1",
+    providesSignals: ["permit-approved"],
+    requiresSignals: [],
+    hardSignal: false,
+  };
+
+  const readiness = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [
+        line({ id: "line-a", description: "Line A", tasks: [provider] }),
+        line({
+          id: "line-b",
+          description: "Line B",
+          tasks: [
+            provider,
+            {
+              id: "task-consumer",
+              title: "Dependent task",
+              stageId: "stage-1",
+              providesSignals: [],
+              requiresSignals: ["permit.approved"],
+              hardSignal: true,
+            },
+          ],
+        }),
+      ],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+
+  assert.equal(readiness.ready, true);
+  assert.equal(
+    readiness.blockReasons.some((reason) => reason.code === "HARD_SIGNAL_NO_PROVIDER"),
+    false,
+  );
 });

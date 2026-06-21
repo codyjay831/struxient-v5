@@ -99,6 +99,7 @@ import {
   hasAccessSnapshotContent,
   LeadVisitAccessSnapshotSchema,
 } from "@/lib/scheduling/lead-visit-schemas";
+import { formatCompactAge } from "@/lib/compact-age";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
@@ -142,6 +143,16 @@ export type WorkstationWorkItem = {
   subtitle?: string;
   /** Compact who/what/where for list cards (no workflow stage). */
   contextLine?: string;
+  /** Short scope label for compact identity rows. */
+  scopeLabel?: string | null;
+  /** Jobsite/service address display line. */
+  addressLine?: string | null;
+  /** Human age label for commercial attention, e.g. "Age 4d". */
+  ageLabel?: string | null;
+  /** Money/value display label when useful for quick filtering. */
+  valueLabel?: string | null;
+  /** Human record type label for compact badges. */
+  typeLabel?: string;
   status?: string;
   priority: WorkstationWorkItemPriority;
   group: WorkstationWorkItemGroup;
@@ -188,6 +199,15 @@ export type WorkstationSummary = {
   scheduledTodayCount: number;
   dailyLogsToReviewCount: number;
 };
+
+function formatMoneyLabel(cents: number | null | undefined): string | null {
+  if (!cents || cents <= 0) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
 
 function formatDependencyLabel(raw: string): string {
   if (/^[A-Z0-9]{12,}$/.test(raw)) {
@@ -262,6 +282,14 @@ export async function queryWorkstationWorkItems(
 
     if (hasActiveQuote) continue;
 
+    const leadJobsiteLine = jobsiteLineFromLead(lead);
+    const leadWorkContext = resolveJobWorkContext({
+      jobTitle: lead.title,
+      customer: lead.customer,
+      lead,
+      jobsiteLine: leadJobsiteLine,
+    });
+
     const matchHints =
       lead.customerId == null
         ? evaluateCustomerMatchGate({
@@ -284,7 +312,7 @@ export async function queryWorkstationWorkItems(
         companyName: lead.companyName,
         email: lead.email,
         phone: lead.phone,
-        jobsiteAddressLine: jobsiteLineFromLead(lead),
+        jobsiteAddressLine: leadJobsiteLine,
         isAddressVerified: isLeadAddressQuoteReady(
           lead,
           lead.customer?.serviceLocations[0] ?? null,
@@ -371,8 +399,13 @@ export async function queryWorkstationWorkItems(
     items.push({
       id: `lead-${lead.id}`,
       kind: "lead",
-      title: lead.title,
+      title: leadWorkContext.scopeLabel || lead.title,
       subtitle: lead.contactName || lead.email || lead.phone || undefined,
+      contextLine: leadWorkContext.contextLine || undefined,
+      scopeLabel: leadWorkContext.scopeLabel,
+      addressLine: leadJobsiteLine,
+      ageLabel: `Age ${formatCompactAge(lead.createdAt, now)}`,
+      typeLabel: "Lead",
       status: lead.status,
       priority,
       group,
@@ -383,6 +416,7 @@ export async function queryWorkstationWorkItems(
       reason: effectiveReason,
       nextStep: effectiveNextStep,
       recordId: lead.id,
+      parentLabel: leadWorkContext.parentLabel || lead.contactName || lead.email || lead.phone || undefined,
       href: `/leads/${lead.id}`,
       updatedAt: lead.updatedAt,
       workflow,
@@ -411,6 +445,10 @@ export async function queryWorkstationWorkItems(
             contactName: true,
             email: true,
             phone: true,
+            contact: true,
+            request: true,
+            address: true,
+            signals: true,
             updatedAt: true,
           },
         },
@@ -433,6 +471,14 @@ export async function queryWorkstationWorkItems(
       });
       if (!attention.include) continue;
 
+      const visitJobsiteLine = jobsiteLineFromLead(visit.lead);
+      const visitWorkContext = resolveJobWorkContext({
+        jobTitle: visit.lead.title,
+        customer: null,
+        lead: visit.lead,
+        jobsiteLine: visitJobsiteLine,
+      });
+
       const { lane, withinLaneRank } = rank(
         { kind: "lead", priority: attention.priority, group: attention.group, updatedAt: visit.updatedAt },
         role,
@@ -442,8 +488,13 @@ export async function queryWorkstationWorkItems(
       items.push({
         id: `assigned-visit-${visit.id}`,
         kind: "lead",
-        title: visit.lead.title,
+        title: visitWorkContext.scopeLabel || visit.lead.title,
         subtitle: visit.lead.contactName || visit.lead.email || visit.lead.phone || undefined,
+        contextLine: visitWorkContext.contextLine || undefined,
+        scopeLabel: visitWorkContext.scopeLabel,
+        addressLine: visitJobsiteLine,
+        ageLabel: `Age ${formatCompactAge(visit.updatedAt, now)}`,
+        typeLabel: "Lead",
         status: visit.status,
         priority: attention.priority,
         group: attention.group,
@@ -454,6 +505,12 @@ export async function queryWorkstationWorkItems(
         reason: attention.reason,
         nextStep: attention.nextStep,
         recordId: visit.lead.id,
+        parentLabel:
+          visitWorkContext.parentLabel ||
+          visit.lead.contactName ||
+          visit.lead.email ||
+          visit.lead.phone ||
+          undefined,
         href: resolveLeadVisitWorkstationHref(visit.lead.id),
         updatedAt: visit.updatedAt,
         assignedUserId: visit.assignedUserId,
@@ -466,7 +523,16 @@ export async function queryWorkstationWorkItems(
   const quotes = commercialReadable ? await db.quote.findMany({
     where: { organizationId, status: { in: [QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.APPROVED] } },
     include: {
-      customer: true,
+      customer: {
+        include: {
+          serviceLocations: {
+            where: { organizationId },
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+            take: 1,
+          },
+        },
+      },
+      serviceLocation: true,
       lead: {
         include: {
           visitRequests: {
@@ -622,10 +688,28 @@ export async function queryWorkstationWorkItems(
 
     if (readiness.state === "JOB_ACTIVE" || readiness.state === "ARCHIVED") continue;
 
-    const primaryIdentity = quote.lead?.title || quote.customer?.displayName || quote.title;
+    const quoteJobsiteLine = resolveJobsiteLineForQuoteOrJob({
+      serviceLocation:
+        quote.serviceLocation && quote.serviceLocation.organizationId === organizationId
+          ? {
+              formattedAddress: quote.serviceLocation.formattedAddress,
+              addressLine1: quote.serviceLocation.addressLine1,
+            }
+          : null,
+      customerLocations: quote.customer?.serviceLocations ?? [],
+      leadRow: quote.lead ? { address: quote.lead.address, signals: quote.lead.signals } : null,
+    });
+    const quoteWorkContext = resolveJobWorkContext({
+      jobTitle: quote.title,
+      customer: quote.customer,
+      lead: quote.lead,
+      jobsiteLine: quoteJobsiteLine,
+    });
+    const primaryIdentity = quoteWorkContext.scopeLabel || quote.lead?.title || quote.customer?.displayName || quote.title;
     const secondaryIdentity = quote.title !== primaryIdentity ? quote.title : null;
 
-    const parentLabel = quote.customer?.displayName || quote.lead?.title || undefined;
+    const parentLabel =
+      quoteWorkContext.parentLabel || quote.customer?.displayName || quote.lead?.title || undefined;
     const subtitle = secondaryIdentity
       ? `Quote: ${secondaryIdentity}`
       : quote.customer?.displayName || undefined;
@@ -692,6 +776,12 @@ export async function queryWorkstationWorkItems(
       kind: "quote",
       title: primaryIdentity,
       subtitle,
+      contextLine: quoteWorkContext.contextLine || undefined,
+      scopeLabel: quoteWorkContext.scopeLabel,
+      addressLine: quoteJobsiteLine,
+      ageLabel: `Age ${formatCompactAge(quote.updatedAt, now)}`,
+      valueLabel: formatMoneyLabel(quote.totalCents),
+      typeLabel: "Quote",
       status: openSalesVisit
         ? openSalesVisitIsPending
           ? "Site visit requested"

@@ -2299,6 +2299,10 @@ Rules:
 - Build one coordinated plan for the full quote.
 - Shared tasks may reference multiple lineItemIds.
 - Every execution-relevant line must appear in at least one task lineItemIds list.
+- Entry tasks with empty requiresSignals are valid and expected.
+- Only add requiresSignals when a real handoff/dependency exists.
+- If you add a requiresSignals value, include at least one task that provides the same signal whenever possible.
+- Use hardSignal=true only for true activation blockers that should stop job readiness.
 - Use only stage IDs from the allowed stage list (or null if truly unknown).
 - Do not include corrections-stage tasks.
 - Keep to <= 24 tasks.

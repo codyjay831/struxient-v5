@@ -240,6 +240,13 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
     filterCategory: "quotes",
     title: "Estimate / Quote - Cody Barbour",
     parentLabel: "Cody Barbour",
+    scopeLabel: "Bathroom remodel",
+    addressLine: "123 Main St, Springfield",
+    ageLabel: "Age 4d",
+    valueLabel: "$8,450",
+    typeLabel: "Quote",
+    status: "APPROVED",
+    reason: "Approved quote is waiting for job setup.",
     nextStep: "Build execution plan.",
     recordId: "quote-1",
   });
@@ -252,10 +259,15 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
     now,
   });
 
-  assert.equal(result.overviewNextActions[0]?.identity, "Cody Barbour");
-  assert.equal(result.overviewNextActions[0]?.workItem, "Estimate / Quote - Cody Barbour");
+  assert.equal(result.overviewNextActions[0]?.identity, "Cody Barbour · Bathroom remodel");
+  assert.equal(result.overviewNextActions[0]?.addressLine, "123 Main St, Springfield");
+  assert.equal(
+    result.overviewNextActions[0]?.reason,
+    "Approved quote is waiting for job setup. · Age 4d · $8,450",
+  );
   assert.equal(result.overviewNextActions[0]?.nextAction, "Build execution plan");
   assert.equal(result.overviewNextActions[0]?.categoryLabel, "Sales to Production");
+  assert.deepEqual(result.overviewNextActions[0]?.badgeLabels, ["Quote", "Approved"]);
   assert.equal(
     result.overviewCriticalGroups.find((group) => group.category === "sales_handoffs")?.items[0]
       ?.categoryLabel,

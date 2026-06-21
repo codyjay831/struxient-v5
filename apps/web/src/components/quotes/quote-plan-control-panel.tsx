@@ -122,15 +122,19 @@ export function QuotePlanControlPanel({
     });
   }
 
-  async function handleApplyProposal(selectedOpIds: string[], _replaceConfirmed: boolean) {
-    if (!proposal) {
+  async function handleApplyProposal(
+    nextProposal: QuotePlanProposal,
+    selectedOpIds: string[],
+    _replaceConfirmed: boolean,
+  ) {
+    if (!nextProposal) {
       setError("Generate a proposal before applying.");
       return;
     }
     const selected = new Set(selectedOpIds);
     const filteredProposal: QuotePlanProposal = {
-      ...proposal,
-      operations: proposal.operations.filter((operation) => selected.has(operation.opId)),
+      ...nextProposal,
+      operations: nextProposal.operations.filter((operation) => selected.has(operation.opId)),
     };
     if (filteredProposal.operations.length === 0) {
       setError("Select at least one operation to apply.");

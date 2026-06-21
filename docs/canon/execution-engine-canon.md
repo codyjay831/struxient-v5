@@ -69,6 +69,8 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
 - `QuoteExecutionTask` is quote-owned pre-activation planned work.
 - A task may relate to multiple quote scope lines through `QuoteExecutionTaskScope`.
 - Draft tasks are the plan that materializes into `JobTask` rows at activation; not runtime truth until then.
+- Task counts in readiness and UI are **unique `QuoteExecutionTask` rows** (future `JobTask` rows), not scope-link rows.
+- `QuoteExecutionTaskScope` rows are **coverage links** and may outnumber tasks when work is shared across lines.
 - Draft tasks may come from:
   - **Templates** — `LineItemTemplateTask` copied on apply (`performApplyLineItemTemplateToQuoteTx`)
   - **Reusable library** — `TaskTemplate` via add-from-reusable actions
@@ -98,6 +100,7 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
   - Initial **Signal Bus** facts (soft orphan auto-satisfy; hard-signal orphans block)
 - **Runtime job records are execution truth** after activation.
 - **Readiness gate:** `evaluateQuoteJobActivationReadiness()` is used by both UI and server, and must be rechecked in the activation transaction. Required blockers: accepted plan, non-stale planning input hash, matching plan version, valid stages, dependency safety, and coverage for all `executionRelevant` scope.
+- Activation readiness count semantics are explicit: **task count = unique tasks**, **coverage checks = task-to-scope links**.
 - **Deterministic task ordering:** quote-plan-wide task order is canonical; activation preserves deterministic order while grouping by stage.
 - **Proof of activation:** `Job.activatedAt` in v1; no separate execution-confirmation checkpoint yet.
 
@@ -230,7 +233,8 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
 - AI **must not silently persist** execution work. Pattern: **generate → human review → apply**.
 - **Whole-quote path:**
   - Generate action returns proposal only (no DB writes) and includes the planning-input hash it was generated against.
-  - Apply action validates generated-against hash, plan version, and safety invariants in one transaction.
+  - Apply action validates generated-against hash, plan version, scope coverage, and task mutation safety invariants in one transaction.
+  - Apply validation is **tasks-first**: soft dependency gaps do not block saving a plan. Hard dependency gaps remain activation blockers.
 - **Library path:** same review-then-apply pattern via library execution review UI.
 - **Simulated / demo AI output** must not be applied unless `AI_ALLOW_APPLY_SIMULATED_EXECUTION_PLANS=1` (dev-only). Validators belt-and-brace with `resolveGenerationMetaForApply` and `isSimulatedExecutionProposal`.
 - **Corrections-stage tasks** must not appear in normal execution planning; filtered at generation and apply validation.
@@ -327,4 +331,5 @@ When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface 
 *Canon created 2026-05-19 — post execution-engine stabilization; supersedes audit §10 “recommended locked canon” as product authority.*  
 *Canon update (2026-05-25): §12 — execution plan adapts to job realities (field intelligence, human-approved adjustment); §10 AI field-intel intent; renumbered former §12 to §13.*  
 *Canon update (2026-06-13): Locked whole-quote plan ownership, task-to-scope linking, derived staleness/hash acceptance contract, stage `OPEN/COMPLETED/SKIPPED` semantics, audited cancellation, post-activation scope-revision coverage/payment invariants, and in-transaction activation/apply revalidation.*  
-*Canon update (2026-06-20): Clarified authoring vs activation truth — `QuoteLineExecutionTask` may remain pre-plan seed/authoring input; `QuoteExecutionPlan` + `QuoteExecutionTask` are pre-activation activation truth; post-activation job runtime records are updated through scope-revision/change-order paths, not by mutating the accepted quote plan.*
+*Canon update (2026-06-20): Clarified authoring vs activation truth — `QuoteLineExecutionTask` may remain pre-plan seed/authoring input; `QuoteExecutionPlan` + `QuoteExecutionTask` are pre-activation activation truth; post-activation job runtime records are updated through scope-revision/change-order paths, not by mutating the accepted quote plan.*  
+*Canon update (2026-06-20): Restored tasks-first dependency policy for whole-quote apply validation: soft missing providers are review gaps; hard missing providers block activation readiness.*

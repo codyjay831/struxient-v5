@@ -1,6 +1,14 @@
 "use client";
 
-import { useActionState, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useActionState,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import { IntakeServiceAddressField } from "@/components/intake/intake-service-address-field";
 import { NeededByBucket } from "@prisma/client";
@@ -12,6 +20,7 @@ import {
   type IntakeFormFieldRef,
   type IntakeFormSection,
 } from "@/lib/intake/default-intake-form";
+import { PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE } from "@/lib/intake/public-intake-schema-invariants";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -41,8 +50,35 @@ export type IntakeSubmitState = {
 export type IntakeSurfaceMode = "public" | "staff";
 export type IntakeLayoutMode = "progressive" | "compact";
 
-const PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE =
-  "Please select what you need help with.";
+const PUBLIC_REQUEST_TYPE_REQUIRED_MESSAGE = PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE;
+
+function buildFormDataFromElement(root: HTMLElement): FormData {
+  const fd = new FormData();
+  root.querySelectorAll("input[name], select[name], textarea[name]").forEach((node) => {
+    if (
+      !(node instanceof HTMLInputElement) &&
+      !(node instanceof HTMLSelectElement) &&
+      !(node instanceof HTMLTextAreaElement)
+    ) {
+      return;
+    }
+    const { name } = node;
+    if (!name) return;
+    if (node instanceof HTMLInputElement) {
+      if (node.type === "checkbox") {
+        if (node.checked) fd.append(name, node.value || "on");
+        return;
+      }
+      if (node.type === "radio") {
+        if (node.checked) fd.append(name, node.value);
+        return;
+      }
+      if (node.type === "file") return;
+    }
+    fd.append(name, node.value);
+  });
+  return fd;
+}
 
 export type IntakeAttachmentBinding = {
   id: string;
@@ -73,6 +109,8 @@ export type IntakeFormRendererProps = {
   surfaceMode?: IntakeSurfaceMode;
   layoutMode?: IntakeLayoutMode;
   internalDetailsSlot?: ReactNode;
+  /** When true, submit shows preview-only confirmation and never persists a lead. */
+  previewMode?: boolean;
 };
 
 export function IntakeFormRenderer({
@@ -86,12 +124,13 @@ export function IntakeFormRenderer({
   surfaceMode = "public",
   layoutMode = "progressive",
   internalDetailsSlot,
+  previewMode = false,
 }: IntakeFormRendererProps) {
   const [state, formAction, isPending] = useActionState<IntakeSubmitState, FormData>(
     submitAction,
     {},
   );
-  const formRef = useRef<HTMLFormElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
   const headingId = useId();
 
   const [step, setStep] = useState(1);
@@ -136,11 +175,14 @@ export function IntakeFormRenderer({
     if (typeof tracked === "string" && tracked.trim().length > 0) {
       return tracked.trim();
     }
-    const form = formRef.current;
-    if (!form) {
+    const root = containerRef.current;
+    if (!root) {
       return "";
     }
-    const el = form.elements.namedItem("requestType");
+    const el =
+      root instanceof HTMLFormElement
+        ? root.elements.namedItem("requestType")
+        : root.querySelector('[name="requestType"]');
     if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
       return el.value.trim();
     }
@@ -181,13 +223,13 @@ export function IntakeFormRenderer({
     const validationError = validatePublicRequestTypeForStep(step);
     if (validationError) {
       setStepError(validationError);
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     setStepError(null);
     if (step < sections.length) {
       setStep(step + 1);
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -196,7 +238,7 @@ export function IntakeFormRenderer({
     setStepError(null);
     if (step > 1) {
       setStep(step - 1);
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -215,7 +257,29 @@ export function IntakeFormRenderer({
         setStep(requestTypeStepIndex + 1);
       }
     }
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handlePreviewSubmit = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    setStepError(null);
+    const validationError = validatePublicRequestTypeBeforeSubmit();
+    if (validationError) {
+      setStepError(validationError);
+      if (isProgressive) {
+        const requestTypeStepIndex = sections.findIndex((section) =>
+          section.fields?.some((field) => field.key === "request.type"),
+        );
+        if (requestTypeStepIndex >= 0) {
+          setStep(requestTypeStepIndex + 1);
+        }
+      }
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const root = containerRef.current;
+    if (!root) return;
+    formAction(buildFormDataFromElement(root));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -259,6 +323,20 @@ export function IntakeFormRenderer({
     }
   };
 
+  if (state.success && previewMode) {
+    return (
+      <div className="rounded-xl border border-border bg-surface px-5 py-10 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-accent/10 text-accent">
+          <Check className="size-6" />
+        </div>
+        <h2 className="text-lg font-bold text-foreground tracking-tight">Preview complete</h2>
+        <p className="mt-2 text-sm leading-relaxed text-foreground-muted max-w-md mx-auto">
+          This was a settings preview only. No lead was created.
+        </p>
+      </div>
+    );
+  }
+
   if (state.success && surfaceMode === "public") {
     return (
       <div className="rounded-xl border border-border bg-surface px-5 py-12 text-center shadow-sm animate-in fade-in zoom-in-95 duration-300">
@@ -284,15 +362,8 @@ export function IntakeFormRenderer({
     );
   }
 
-  return (
-    <form
-      ref={formRef}
-      action={formAction}
-      className="space-y-6"
-      aria-labelledby={headingId}
-      onKeyDown={isProgressive ? handleKeyDown : undefined}
-      onSubmit={surfaceMode === "public" ? handleFormSubmit : undefined}
-    >
+  const fieldContent = (
+    <>
       <h2 id={headingId} className="sr-only">
         {formDefinition.name} for {organizationDisplayName}
       </h2>
@@ -542,7 +613,7 @@ export function IntakeFormRenderer({
                             onChange={(e) => updateFieldValue(field.key, e.target.value)}
                           >
                             {surfaceMode === "public" ? (
-                              <option value="">Select what you need help with</option>
+                              <option value="">Select a service category</option>
                             ) : null}
                             {requestTypeOptions.map((opt) => (
                               <option key={opt.value} value={opt.value}>
@@ -690,19 +761,57 @@ export function IntakeFormRenderer({
               <ChevronRight className="ml-2 size-4" />
             </button>
           )}
-          {(!isProgressive || step === sections.length) && (
-            <button
-              key="submit-button"
-              type="submit"
-              className={primaryButtonClass}
-              disabled={isPending || isUploading}
-            >
-              {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              {isUploading ? "Uploading..." : submitButtonLabel}
-            </button>
-          )}
+          {(!isProgressive || step === sections.length) &&
+            (previewMode ? (
+              <button
+                key="submit-button"
+                type="button"
+                onClick={handlePreviewSubmit}
+                className={primaryButtonClass}
+                disabled={isPending || isUploading}
+              >
+                {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                {isUploading ? "Uploading..." : submitButtonLabel}
+              </button>
+            ) : (
+              <button
+                key="submit-button"
+                type="submit"
+                className={primaryButtonClass}
+                disabled={isPending || isUploading}
+              >
+                {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                {isUploading ? "Uploading..." : submitButtonLabel}
+              </button>
+            ))}
         </div>
       )}
+    </>
+  );
+
+  if (previewMode) {
+    return (
+      <div
+        ref={containerRef}
+        className="space-y-6"
+        aria-labelledby={headingId}
+        onKeyDown={isProgressive ? handleKeyDown : undefined}
+      >
+        {fieldContent}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      ref={containerRef as RefObject<HTMLFormElement>}
+      action={formAction}
+      className="space-y-6"
+      aria-labelledby={headingId}
+      onKeyDown={isProgressive ? handleKeyDown : undefined}
+      onSubmit={surfaceMode === "public" ? handleFormSubmit : undefined}
+    >
+      {fieldContent}
     </form>
   );
 }

@@ -1,6 +1,6 @@
 import { PaymentScheduleAnchorType, Prisma, QuoteStatus } from "@prisma/client";
 import { validatePaymentScheduleForActivation } from "@/lib/payment-schedule-materialization";
-import { normalizeSignalKey, toNormalizedSignalSet } from "@/lib/signal-key";
+import { analyzeExecutionSignals } from "@/lib/execution-signal-analysis";
 
 /**
  * Plain input for {@link evaluateQuoteJobActivationReadiness}
@@ -106,8 +106,11 @@ export function evaluateQuoteJobActivationReadiness(
     });
   }
 
-  const allTasks = input.lines.flatMap((l) => l.tasks);
-  const totalTasksToActivate = allTasks.length;
+  const expandedLineTasks = input.lines.flatMap((line) => line.tasks);
+  const uniqueActivationTasks = [
+    ...new Map(expandedLineTasks.map((task) => [task.id, task])).values(),
+  ];
+  const totalTasksToActivate = uniqueActivationTasks.length;
 
   if (input.lines.length > 0 && totalTasksToActivate === 0) {
     reasons.push({
@@ -155,31 +158,29 @@ export function evaluateQuoteJobActivationReadiness(
     });
   }
 
-  const tasksMissingStage = allTasks.filter((t) => !t.stageId);
+  const tasksMissingStage = uniqueActivationTasks.filter((task) => !task.stageId);
   if (tasksMissingStage.length > 0) {
     reasons.push({
       code: "TASK_MISSING_STAGE",
       message:
         "Every execution task must have a stage before activation—assign a stage or remove the task.",
-      details: tasksMissingStage.map((t) => t.title),
+      details: tasksMissingStage.map((task) => task.title),
     });
   }
 
-  // 1. Check for Hard Signal Orphans
-  const allProvidedSignals = toNormalizedSignalSet(
-    allTasks.flatMap((t) => t.providesSignals),
+  const signalAnalysis = analyzeExecutionSignals(
+    uniqueActivationTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      stageId: task.stageId,
+      providesSignals: task.providesSignals,
+      requiresSignals: task.requiresSignals,
+      hardSignal: task.hardSignal,
+    })),
   );
-  const hardOrphans: string[] = [];
-
-  for (const task of allTasks) {
-    if (task.hardSignal) {
-      for (const req of task.requiresSignals) {
-        if (!allProvidedSignals.has(normalizeSignalKey(req))) {
-          hardOrphans.push(`${task.title} requires hard signal "${req}" but no task provides it.`);
-        }
-      }
-    }
-  }
+  const hardOrphans = signalAnalysis.hardMissingRequirements.map(
+    (missing) => `${missing.consumerTaskTitle} requires hard signal "${missing.signal}" but no task provides it.`,
+  );
 
   if (hardOrphans.length > 0) {
     reasons.push({
@@ -190,53 +191,9 @@ export function evaluateQuoteJobActivationReadiness(
   }
 
   // 2. Check for Circular Dependencies (Graph-based Cycle Detection)
-  const circulars: string[] = [];
-  
-  // Build a map of signal -> tasks that provide it
-  const signalProviders = new Map<string, string[]>();
-  for (const task of allTasks) {
-    for (const signal of task.providesSignals) {
-      const normalizedSignal = normalizeSignalKey(signal);
-      const providers = signalProviders.get(normalizedSignal) || [];
-      providers.push(task.id);
-      signalProviders.set(normalizedSignal, providers);
-    }
-  }
-
-  // DFS to find cycles
-  const visited = new Set<string>();
-  const recStack = new Set<string>();
-
-  function hasCycle(taskId: string, path: string[]): boolean {
-    if (recStack.has(taskId)) {
-      const cyclePath = path.slice(path.indexOf(taskId));
-      circulars.push(`Cycle detected: ${cyclePath.join(" -> ")} -> ${taskId}`);
-      return true;
-    }
-    if (visited.has(taskId)) return false;
-
-    visited.add(taskId);
-    recStack.add(taskId);
-
-    const task = allTasks.find(t => t.id === taskId);
-    if (task) {
-      for (const req of task.requiresSignals) {
-        const providers = signalProviders.get(normalizeSignalKey(req)) || [];
-        for (const providerId of providers) {
-          if (hasCycle(providerId, [...path, taskId])) return true;
-        }
-      }
-    }
-
-    recStack.delete(taskId);
-    return false;
-  }
-
-  for (const task of allTasks) {
-    if (!visited.has(task.id)) {
-      hasCycle(task.id, []);
-    }
-  }
+  const circulars = signalAnalysis.cycles.map(
+    (cycle) => `Cycle detected: ${cycle.taskIds.join(" -> ")} -> ${cycle.taskIds[0] ?? ""}`,
+  );
 
   if (circulars.length > 0) {
     reasons.push({

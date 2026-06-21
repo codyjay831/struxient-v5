@@ -263,6 +263,7 @@ test("Scenario I — protected task cannot be mutated by proposal", () => {
         lineItemIds: ["line-a"],
         requiresSignals: [],
         providesSignals: [],
+        hardSignal: false,
       },
     ],
   });

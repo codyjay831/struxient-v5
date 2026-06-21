@@ -64,6 +64,7 @@ When **tasks and stages** are attached **during quoting**, systems often blur:
 4. **Post-sign refinement uses controlled paths; post-activation ops edits are normal** — For `SENT` / `APPROVED` quotes, commercial scope refinements happen through quote revision cloning (pre-activation) or approved change-order flows (post-activation). Operational planning edits remain normal through Execution Review and active-job operations.
 
 5. **Execution Review is quote-wide assembly** — The quote execution plan is quote-owned, coordinated work across the full scope (not a per-line pile). Shared tasks may cover multiple scope lines. AI remains review-then-apply; no silent persistence. Per-line `QuoteLineExecutionTask` rows may remain as pre-plan authoring/seed input, but Execution Review and activation use `QuoteExecutionPlan` / `QuoteExecutionTask` as the reviewed plan.
+6. **Tasks-first dependency policy** — Proposal apply saves structurally valid task plans even when soft dependency providers are missing. Missing soft providers are review gaps to resolve in Execution Review. Hard dependency gaps remain activation blockers.
 
 *(Exact UX mechanics—e.g., explicit “draft” toggles, separate tabs, copy-on-activate behaviors—are implementation; **canon** requires the **outcomes** above.)*
 
@@ -182,3 +183,4 @@ Features that would push expressive depth into stages (custom workflow designers
 *Canon update (2026-05-25): §7 — field-informed plan adjustment post-activation; cross-ref [product-philosophy.md](./product-philosophy.md) and [execution-engine-canon.md](./execution-engine-canon.md) §12.*  
 *Canon update (2026-06-13): Locked whole-quote execution planning: immutable issued quote versions after send, revise-by-clone before activation, quote-wide coordinated plan semantics, and controlled post-activation change-order reconciliation.*
 *Canon update (2026-06-19): Clarified Standard Project as the default planning affordance, not permanent job architecture; activation materializes stages used by the accepted plan plus explicit starter/planning paths, and code must not depend on the five default labels.*
+*Canon update (2026-06-20): Added tasks-first dependency policy for whole-quote proposal apply: soft dependency gaps are review items, not save-time blockers; hard gaps still block activation.*

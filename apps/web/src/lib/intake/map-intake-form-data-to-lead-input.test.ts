@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { LeadChannel } from "@prisma/client";
 import { mapIntakeFormDataToLeadInput } from "./map-intake-form-data-to-lead-input";
+import { PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE } from "./public-intake-schema-invariants";
 
 test("mapIntakeFormDataToLeadInput maps public intake and request type labels", () => {
   const formData = new FormData();
@@ -82,5 +83,5 @@ test("mapIntakeFormDataToLeadInput rejects empty public request type", () => {
 
   assert.equal(mapped.ok, false);
   if (mapped.ok) return;
-  assert.equal(mapped.error, "Please select what you need help with.");
+  assert.equal(mapped.error, PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE);
 });

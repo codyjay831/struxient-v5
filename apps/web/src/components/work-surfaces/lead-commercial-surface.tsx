@@ -30,7 +30,7 @@ import {
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { closeOrPauseLeadWorkspaceAction, resumeOpportunityWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import { createRevisionDraftForQuoteChangeRequestAction } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import { useRouter } from "next/navigation";
@@ -326,7 +326,13 @@ export function LeadCommercialSurface({
     payload;
   const isAssignedVisitMode = surfaceMode === "assigned_visit";
   const router = useRouter();
-  const notifyMutationSuccess = onMutationSuccess ?? (() => router.refresh());
+  const notifyMutationSuccess = useCallback(() => {
+    if (onMutationSuccess) {
+      onMutationSuccess();
+    } else {
+      router.refresh();
+    }
+  }, [onMutationSuccess, router]);
   const [showLegacyNotes, setShowLegacyNotes] = useState(false);
   const [showSecondaryDetails, setShowSecondaryDetails] = useState(false);
   const [closePanelOpen, setClosePanelOpen] = useState(false);

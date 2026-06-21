@@ -200,6 +200,7 @@ function toQuotePlanProposalFromAi(params: {
   basePlanVersion: number;
   aiProposal: AIQuoteExecutionPlanProposal;
 }): QuotePlanProposal {
+  const normalizedTasks = sanitizeAiPlanTasks(params.aiProposal.tasks);
   return QuotePlanProposalSchema.parse({
     quoteId: params.quoteId,
     schemaVersion: 1,
@@ -209,7 +210,7 @@ function toQuotePlanProposalFromAi(params: {
     summary: params.aiProposal.summary,
     assumptions: params.aiProposal.assumptions,
     warnings: params.aiProposal.warnings,
-    operations: params.aiProposal.tasks.map((task, index) => ({
+    operations: normalizedTasks.map((task, index) => ({
       opId: `ai-add-${index + 1}`,
       type: "ADD_TASK",
       reason: "Whole-quote AI proposal",
@@ -227,6 +228,51 @@ function toQuotePlanProposalFromAi(params: {
         lineItemIds: task.lineItemIds,
       },
     })),
+  });
+}
+
+function normalizeSignalList(signals: string[]): string[] {
+  const byNormalized = new Map<string, string>();
+  for (const signal of signals) {
+    const trimmed = signal.trim();
+    if (!trimmed) continue;
+    const normalized = normalizeSignalKey(trimmed);
+    if (!normalized) continue;
+    if (!byNormalized.has(normalized)) {
+      byNormalized.set(normalized, trimmed);
+    }
+  }
+  return [...byNormalized.values()];
+}
+
+function sanitizeAiPlanTasks(tasks: AIQuoteExecutionPlanProposal["tasks"]) {
+  const normalizedTasks = tasks.map((task) => ({
+    ...task,
+    providesSignals: normalizeSignalList(task.providesSignals),
+    requiresSignals: normalizeSignalList(task.requiresSignals),
+  }));
+  const provided = new Set(
+    normalizedTasks.flatMap((task) => task.providesSignals.map((signal) => normalizeSignalKey(signal))),
+  );
+  return normalizedTasks.map((task) => {
+    const missingRequirements = task.requiresSignals.filter(
+      (signal) => !provided.has(normalizeSignalKey(signal)),
+    );
+    if (missingRequirements.length === 0) {
+      return task;
+    }
+    if (task.hardSignal) {
+      return {
+        ...task,
+        hardSignal: false,
+      };
+    }
+    return {
+      ...task,
+      requiresSignals: task.requiresSignals.filter(
+        (signal) => provided.has(normalizeSignalKey(signal)),
+      ),
+    };
   });
 }
 
@@ -266,6 +312,7 @@ async function applyQuotePlanProposalInTx(
               humanEditedAt: true,
               requiresSignals: true,
               providesSignals: true,
+              hardSignal: true,
               scopes: { select: { quoteLineItemId: true } },
             },
           },
@@ -298,6 +345,7 @@ async function applyQuotePlanProposalInTx(
           humanEditedAt: true,
           requiresSignals: true,
           providesSignals: true,
+          hardSignal: true,
           scopes: { select: { quoteLineItemId: true } },
         },
       },
@@ -333,6 +381,7 @@ async function applyQuotePlanProposalInTx(
       lineItemIds: task.scopes.map((scope) => scope.quoteLineItemId),
       requiresSignals: task.requiresSignals,
       providesSignals: task.providesSignals,
+      hardSignal: task.hardSignal,
     })),
   });
   if (!validation.ok) {

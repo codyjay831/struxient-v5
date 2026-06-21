@@ -3,11 +3,19 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Check, ClipboardList, Loader2, X } from "lucide-react";
+import { TaskTemplateCategory } from "@prisma/client";
 import type {
   QuotePlanProposal,
   QuotePlanProposalOperation,
 } from "@/lib/quote-plan/quote-plan-proposal-schema";
 import { getTaskTemplateCategoryLabel } from "@/lib/task-template-category";
+import { analyzeExecutionSignals } from "@/lib/execution-signal-analysis";
+import { normalizeSignalKey } from "@/lib/signal-key";
+import {
+  buildMissingProviderGapCopy,
+  buildProviderTaskTitle,
+  signalLooksSchedulingOrAccessRelated,
+} from "@/lib/signal-display-copy";
 import {
   workspaceFormFieldLabelClass,
   workspaceFormPrimaryButtonClass,
@@ -40,6 +48,7 @@ function operationLabel(operation: QuotePlanProposalOperation): string {
 }
 
 type AddTaskOperation = Extract<QuotePlanProposalOperation, { type: "ADD_TASK" }>;
+type StageRow = { id: string; name: string };
 
 function partitionProposalOperations(operations: QuotePlanProposalOperation[]) {
   const addTasks: AddTaskOperation[] = [];
@@ -56,7 +65,7 @@ function partitionProposalOperations(operations: QuotePlanProposalOperation[]) {
 
 function groupAddTaskOperationsByStage(
   addTasks: AddTaskOperation[],
-  stages: readonly { id: string; name: string }[],
+  stages: readonly StageRow[],
   stageNameById: Record<string, string>,
 ): Array<{ stageKey: string; stageName: string; operations: AddTaskOperation[] }> {
   const byStageKey = new Map<string, AddTaskOperation[]>();
@@ -101,6 +110,41 @@ function groupAddTaskOperationsByStage(
   }
 
   return groups;
+}
+
+function removeSignalByEquivalence(signals: string[], signal: string): string[] {
+  const target = normalizeSignalKey(signal);
+  return signals.filter((entry) => normalizeSignalKey(entry) !== target);
+}
+
+function nextProposalOpId(prefix: string): string {
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${prefix}-${Date.now()}-${random}`;
+}
+
+function withProposalSelection(proposal: QuotePlanProposal | null): Set<string> {
+  if (!proposal) return new Set();
+  return new Set(proposal.operations.map((operation) => operation.opId));
+}
+
+function buildProposalSignalAnalysis(proposal: QuotePlanProposal | null) {
+  if (!proposal) {
+    return { addTasks: [] as AddTaskOperation[], analysis: null as null | ReturnType<typeof analyzeExecutionSignals> };
+  }
+  const addTasks = proposal.operations.filter(
+    (operation): operation is AddTaskOperation => operation.type === "ADD_TASK",
+  );
+  const analysis = analyzeExecutionSignals(
+    addTasks.map((operation) => ({
+      id: operation.opId,
+      title: operation.task.title,
+      stageId: operation.task.stageId ?? null,
+      requiresSignals: operation.task.requiresSignals,
+      providesSignals: operation.task.providesSignals,
+      hardSignal: operation.task.hardSignal,
+    })),
+  );
+  return { addTasks, analysis };
 }
 
 const operationRowClass = (selected: boolean) =>
@@ -202,7 +246,7 @@ export type QuoteExecutionPlanProposalReviewPanelProps = {
   open: boolean;
   onClose: () => void;
   proposal: QuotePlanProposal | null;
-  stages: readonly { id: string; name: string }[];
+  stages: readonly StageRow[];
   stageNameById: Record<string, string>;
   lineLabelById: Record<string, string>;
   hasExistingPlan: boolean;
@@ -210,7 +254,11 @@ export type QuoteExecutionPlanProposalReviewPanelProps = {
   proposalSource?: "ai" | "drafts";
   usedFallback?: boolean;
   fallbackReason?: string | null;
-  onApply: (selectedOpIds: string[], replaceConfirmed: boolean) => Promise<void>;
+  onApply: (
+    proposal: QuotePlanProposal,
+    selectedOpIds: string[],
+    replaceConfirmed: boolean,
+  ) => Promise<void>;
 };
 
 export function QuoteExecutionPlanProposalReviewPanel({
@@ -232,19 +280,22 @@ export function QuoteExecutionPlanProposalReviewPanel({
   const [selectedOpIds, setSelectedOpIds] = useState<Set<string>>(new Set());
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [prevProposal, setPrevProposal] = useState(proposal);
+  const [workingProposal, setWorkingProposal] = useState<QuotePlanProposal | null>(proposal);
 
   const allAddOnly =
-    proposal !== null && proposal.operations.every((operation) => operation.type === "ADD_TASK");
+    workingProposal !== null &&
+    workingProposal.operations.every((operation) => operation.type === "ADD_TASK");
   const needsReplaceConfirm = hasExistingPlan && allAddOnly;
   const canClose = !isApplying;
 
   if (proposal !== prevProposal) {
     setPrevProposal(proposal);
+    setWorkingProposal(proposal);
     if (!proposal) {
       setSelectedOpIds(new Set());
       setReplaceConfirmed(false);
     } else {
-      setSelectedOpIds(new Set(proposal.operations.map((operation) => operation.opId)));
+      setSelectedOpIds(withProposalSelection(proposal));
       setReplaceConfirmed(false);
     }
   }
@@ -295,12 +346,85 @@ export function QuoteExecutionPlanProposalReviewPanel({
   const applyDisabled =
     isApplying ||
     selectedOpIds.size === 0 ||
-    (needsReplaceConfirm && !replaceConfirmed);
+    (needsReplaceConfirm && !replaceConfirmed) ||
+    !workingProposal;
 
-  const { addTasks, other } = proposal
-    ? partitionProposalOperations(proposal.operations)
+  const { addTasks, other } = workingProposal
+    ? partitionProposalOperations(workingProposal.operations)
     : { addTasks: [], other: [] };
   const tasksByStage = groupAddTaskOperationsByStage(addTasks, stages, stageNameById);
+  const signalAnalysis = buildProposalSignalAnalysis(workingProposal).analysis;
+  const hardGaps = signalAnalysis?.hardMissingRequirements ?? [];
+  const softGaps = signalAnalysis?.softMissingRequirements ?? [];
+
+  const addTaskOperationById = new Map(addTasks.map((operation) => [operation.opId, operation]));
+
+  function updateAddTaskOperation(opId: string, updater: (task: AddTaskOperation["task"]) => AddTaskOperation["task"]) {
+    setWorkingProposal((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        operations: prev.operations.map((operation) => {
+          if (operation.type !== "ADD_TASK" || operation.opId !== opId) return operation;
+          return {
+            ...operation,
+            task: updater(operation.task),
+          };
+        }),
+      };
+    });
+  }
+
+  function handleRemoveRequirement(opId: string, signal: string) {
+    updateAddTaskOperation(opId, (task) => ({
+      ...task,
+      requiresSignals: removeSignalByEquivalence(task.requiresSignals, signal),
+    }));
+  }
+
+  function handleMarkAsSoft(opId: string) {
+    updateAddTaskOperation(opId, (task) => ({
+      ...task,
+      hardSignal: false,
+    }));
+  }
+
+  function handleAddProvider(opId: string, signal: string) {
+    const consumer = addTaskOperationById.get(opId);
+    if (!consumer) return;
+    const providerOp: AddTaskOperation = {
+      opId: nextProposalOpId("manual-provider"),
+      type: "ADD_TASK",
+      reason: "Manual dependency fix in proposal review.",
+      task: {
+        title: buildProviderTaskTitle(signal, consumer.task.title),
+        category: signalLooksSchedulingOrAccessRelated(signal)
+          ? TaskTemplateCategory.SCHEDULING
+          : TaskTemplateCategory.GENERAL,
+        stageId: consumer.task.stageId,
+        instructions: null,
+        requiresSignals: [],
+        providesSignals: [signal],
+        hardSignal: false,
+        sourceTaskTemplateId: null,
+        sourceType: "CUSTOM",
+        origin: "MANUAL",
+        lineItemIds: consumer.task.lineItemIds,
+      },
+    };
+    setWorkingProposal((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        operations: [...prev.operations, providerOp],
+      };
+    });
+    setSelectedOpIds((prev) => {
+      const next = new Set(prev);
+      next.add(providerOp.opId);
+      return next;
+    });
+  }
 
   const dialogNode = (
     <dialog
@@ -345,29 +469,29 @@ export function QuoteExecutionPlanProposalReviewPanel({
             </div>
           ) : null}
 
-          {proposal?.summary ? (
+          {workingProposal?.summary ? (
             <div className="rounded-lg border border-border bg-foreground/[0.02] p-3">
               <p className={fieldLabelClass}>Summary</p>
-              <p className="mt-1 text-sm text-foreground-muted">{proposal.summary}</p>
+              <p className="mt-1 text-sm text-foreground-muted">{workingProposal.summary}</p>
             </div>
           ) : null}
 
-          {proposal?.assumptions && proposal.assumptions.length > 0 ? (
+          {workingProposal?.assumptions && workingProposal.assumptions.length > 0 ? (
             <div className="space-y-1">
               <p className={fieldLabelClass}>Assumptions</p>
               <ul className="space-y-1 text-xs text-foreground-muted">
-                {proposal.assumptions.map((item) => (
+                {workingProposal.assumptions.map((item) => (
                   <li key={item}>· {item}</li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {proposal?.warnings && proposal.warnings.length > 0 ? (
+          {workingProposal?.warnings && workingProposal.warnings.length > 0 ? (
             <div className="space-y-1">
               <p className={fieldLabelClass}>Warnings</p>
               <ul className="space-y-1 text-xs text-warning">
-                {proposal.warnings.map((item) => (
+                {workingProposal.warnings.map((item) => (
                   <li key={item} className="flex gap-2">
                     <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                     {item}
@@ -377,18 +501,95 @@ export function QuoteExecutionPlanProposalReviewPanel({
             </div>
           ) : null}
 
-          {proposal && proposal.operations.length > 0 ? (
+          {signalAnalysis && (hardGaps.length > 0 || softGaps.length > 0) ? (
+            <div className="space-y-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
+              <p className={fieldLabelClass}>Dependency review</p>
+              {hardGaps.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-danger">Hard dependency gaps</p>
+                  {hardGaps.map((gap) => {
+                    const copy = buildMissingProviderGapCopy(gap.signal, gap.consumerTaskTitle);
+                    return (
+                      <div key={`${gap.consumerTaskId}-${gap.normalizedSignal}`} className="rounded border border-danger/30 bg-danger/5 p-2">
+                        <p className="text-xs font-medium text-danger">{copy.title}</p>
+                        <p className="mt-0.5 text-xs text-foreground-muted">
+                          {copy.explanation} This must be fixed before activation.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground-muted hover:border-border-strong hover:text-foreground"
+                            onClick={() => handleAddProvider(gap.consumerTaskId, gap.signal)}
+                          >
+                            Add provider task
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground-muted hover:border-border-strong hover:text-foreground"
+                            onClick={() => handleMarkAsSoft(gap.consumerTaskId)}
+                          >
+                            Mark dependency soft
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground-muted hover:border-border-strong hover:text-foreground"
+                            onClick={() => handleRemoveRequirement(gap.consumerTaskId, gap.signal)}
+                          >
+                            Remove requirement
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {softGaps.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-warning">Soft dependency gaps</p>
+                  {softGaps.map((gap) => {
+                    const copy = buildMissingProviderGapCopy(gap.signal, gap.consumerTaskTitle);
+                    return (
+                      <div key={`${gap.consumerTaskId}-${gap.normalizedSignal}`} className="rounded border border-warning/30 bg-warning/5 p-2">
+                        <p className="text-xs font-medium text-warning">{copy.title}</p>
+                        <p className="mt-0.5 text-xs text-foreground-muted">
+                          {copy.explanation} This can be fixed after apply and does not block saving.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground-muted hover:border-border-strong hover:text-foreground"
+                            onClick={() => handleAddProvider(gap.consumerTaskId, gap.signal)}
+                          >
+                            Add provider task
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground-muted hover:border-border-strong hover:text-foreground"
+                            onClick={() => handleRemoveRequirement(gap.consumerTaskId, gap.signal)}
+                          >
+                            Remove requirement
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {workingProposal && workingProposal.operations.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className={fieldLabelClass}>
-                  Proposed changes ({selectedOpIds.size} of {proposal.operations.length} selected)
+                  Proposed changes ({selectedOpIds.size} of {workingProposal.operations.length} selected)
                 </p>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     className="text-[11px] font-medium text-accent hover:underline"
                     onClick={() =>
-                      setSelectedOpIds(new Set(proposal.operations.map((operation) => operation.opId)))
+                      setSelectedOpIds(new Set(workingProposal.operations.map((operation) => operation.opId)))
                     }
                   >
                     Select all
@@ -479,7 +680,10 @@ export function QuoteExecutionPlanProposalReviewPanel({
           </button>
           <button
             type="button"
-            onClick={() => onApply([...selectedOpIds], replaceConfirmed)}
+            onClick={() => {
+              if (!workingProposal) return;
+              onApply(workingProposal, [...selectedOpIds], replaceConfirmed);
+            }}
             disabled={applyDisabled}
             className={`${primaryButtonClass} inline-flex items-center gap-2`}
           >

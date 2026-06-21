@@ -15,6 +15,8 @@ import {
   formBelongsToIntakeSurface,
 } from "@/lib/intake/intake-form-surface";
 import { validateRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
+import { validatePublicIntakeSchema } from "@/lib/intake/public-intake-schema-invariants";
+import type { IntakeFormSchema } from "@/lib/intake/default-intake-form";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -76,6 +78,7 @@ export async function createIntakeFormAction(
               title: "Project Details",
               fields: [
                 { key: "address.service" },
+                { key: "request.type" },
                 { key: "scope.text" },
               ],
             },
@@ -134,7 +137,14 @@ export async function updateIntakeFormAction(
     };
 
     if (schemaJson) {
-      data.schema = JSON.parse(schemaJson) as Prisma.InputJsonValue;
+      const parsedSchema = JSON.parse(schemaJson) as IntakeFormSchema;
+      if (surface === "public") {
+        const schemaValidation = validatePublicIntakeSchema(parsedSchema);
+        if (!schemaValidation.ok) {
+          return { error: schemaValidation.error };
+        }
+      }
+      data.schema = parsedSchema as Prisma.InputJsonValue;
     }
 
     if (surface === "public") {

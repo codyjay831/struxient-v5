@@ -62,6 +62,12 @@ import { isSyntheticIntakeFormDefinitionId } from "@/lib/intake/default-intake-f
 import { ingestLead } from "@/lib/lead/ingest-lead";
 import { mapIntakeFormDataToLeadInput } from "@/lib/intake/map-intake-form-data-to-lead-input";
 import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
+import {
+  PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE,
+  normalizePublicIntakeSchema,
+  publicIntakeSchemaIncludesRequestType,
+} from "@/lib/intake/public-intake-schema-invariants";
+import type { IntakeFormSchema } from "@/lib/intake/default-intake-form";
 
 export async function submitPublicLeadAction(
   companySlug: string,
@@ -146,6 +152,7 @@ export async function submitPublicLeadAction(
   }
 
   let submitTriageRules: unknown = null;
+  let submitFormSchema: IntakeFormSchema | null = null;
   if (formDefinitionId && !isSyntheticIntakeFormDefinitionId(formDefinitionId)) {
     const formForTypes = await db.intakeFormDefinition.findFirst({
       where: {
@@ -155,12 +162,16 @@ export async function submitPublicLeadAction(
         channel: LeadChannel.WEB_FORM,
         isPublic: true,
       },
-      select: { triageRules: true },
+      select: { triageRules: true, schema: true },
     });
     if (!formForTypes) {
       return { error: "We could not send your request. Please check the link and try again." };
     }
     submitTriageRules = formForTypes.triageRules;
+    submitFormSchema =
+      formForTypes.schema && typeof formForTypes.schema === "object"
+        ? normalizePublicIntakeSchema(formForTypes.schema as IntakeFormSchema)
+        : null;
   }
 
   const requestTypeOptions = resolvePublicFormRequestTypeOptions(
@@ -168,9 +179,12 @@ export async function submitPublicLeadAction(
     record.publicRequestSettings?.requestTypeOptionsJson,
   );
 
+  const schemaRequiresRequestType =
+    submitFormSchema == null || publicIntakeSchemaIncludesRequestType(submitFormSchema);
+
   const requestTypeRaw = trimOrEmpty(formData.get("requestType"));
-  if (!requestTypeRaw) {
-    return { error: "Please select what you need help with." };
+  if (schemaRequiresRequestType && !requestTypeRaw) {
+    return { error: PUBLIC_SERVICE_CATEGORY_REQUIRED_MESSAGE };
   }
 
   const parsedClientKey = parsePublicIntakeClientKey(publicIntakeClientKey);

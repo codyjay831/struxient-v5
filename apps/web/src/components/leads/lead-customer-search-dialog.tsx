@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useTransition, useActionState } from "react";
+import { useState, useCallback, useEffect, useTransition, useActionState, useRef } from "react";
 import { Search, UserRound, Check, X, ArrowRight, Loader2 } from "lucide-react";
 import {
   searchCustomersForLeadAttachAction,
@@ -32,9 +32,13 @@ function LinkConfirmView({
     {},
   );
 
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+
   useEffect(() => {
-    if (linkState.success) onSuccess();
-  }, [linkState.success, onSuccess]);
+    if (!linkState.success) return;
+    onSuccessRef.current();
+  }, [linkState.success]);
 
   return (
     <div className="space-y-4">

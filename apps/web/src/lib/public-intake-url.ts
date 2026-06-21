@@ -20,3 +20,22 @@ export function buildPublicIntakeUrl({
   
   return `${base}${path}`;
 }
+
+/** Default public forms use the canonical org URL; additional forms use their slug path. */
+export function buildPublicIntakeUrlForForm({
+  baseUrl,
+  companySlug,
+  formSlug,
+  isDefault,
+}: {
+  baseUrl?: string;
+  companySlug: string;
+  formSlug: string;
+  isDefault: boolean;
+}): string {
+  return buildPublicIntakeUrl({
+    baseUrl,
+    companySlug,
+    formSlug: isDefault ? undefined : formSlug,
+  });
+}
