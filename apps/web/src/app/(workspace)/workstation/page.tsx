@@ -13,7 +13,12 @@ import {
   buildWorkstationUrl,
   serializeWorkstationUrlState,
 } from "@/lib/workstation/url-state";
-import { getSpecForRole } from "@/lib/workstation/role-feeds";
+import {
+  clampWorkstationUrlStateForRole,
+  getSpecForRole,
+} from "@/lib/workstation/role-feeds";
+import { canManageOrganizationSettings, canReadCommercial } from "@/lib/authz/capabilities";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
 import {
   resolveWorkstationSelectedItem,
@@ -56,7 +61,13 @@ export default async function WorkstationPage({
     }
   }
 
-  const urlState = parseWorkstationUrlState(sp);
+  const urlStateRaw = parseWorkstationUrlState(sp);
+  const clampedState = clampWorkstationUrlStateForRole(urlStateRaw, ctx.role);
+  if (clampedState) {
+    redirect(`/workstation${serializeWorkstationUrlState(clampedState)}`);
+  }
+
+  const urlState = urlStateRaw;
   const { tab, selected } = urlState;
   const selectedId = selected?.id;
 
@@ -80,10 +91,16 @@ export default async function WorkstationPage({
   const now = new Date();
   const weekRange = getWeekRange(now);
 
+  const commercialReadable = canReadCommercial(ctx.role);
+  const canManageSettings = canManageOrganizationSettings(ctx.role);
+  const jobVisibilityWhere = getJobVisibilityWhere(ctx.role, ctx.userId);
+
   const [schedule, recentActivity, unreviewedIntakesCount] = await Promise.all([
     queryOrganizationSchedule(ctx.organizationId, weekRange, ctx.role, ctx.userId),
     db.jobActivity.findMany({
-      where: { job: { organizationId: ctx.organizationId } },
+      where: {
+        job: { organizationId: ctx.organizationId, ...jobVisibilityWhere },
+      },
       orderBy: { createdAt: "desc" },
       take: 8,
       include: {
@@ -98,12 +115,14 @@ export default async function WorkstationPage({
         },
       },
     }),
-    db.lead.count({
-      where: {
-        organizationId: ctx.organizationId,
-        status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
-      },
-    }),
+    commercialReadable
+      ? db.lead.count({
+          where: {
+            organizationId: ctx.organizationId,
+            status: { in: [...LEAD_PIPELINE_OPEN_STATUSES] },
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   const roleSpec = getSpecForRole(ctx.role);
@@ -181,7 +200,7 @@ export default async function WorkstationPage({
         presentation.signalStrip.waitingCount > 0
           ? ("warning" as const)
           : ("neutral" as const),
-      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined })}`,
+      href: `/workstation${buildWorkstationUrl(urlState, { tab: "tasks", selected: undefined, queueFilter: "waiting" })}`,
     },
   ];
 
@@ -196,7 +215,7 @@ export default async function WorkstationPage({
 
   return (
     <div className="space-y-5">
-      <WorkstationShell tabCounts={tabCounts} />
+      <WorkstationShell tabCounts={tabCounts} allowedTabs={roleSpec.allowedTabs} />
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="min-w-0">
@@ -207,21 +226,23 @@ export default async function WorkstationPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {showQuickActions && quickActions.includes("new-intake") ? (
+          {showQuickActions && commercialReadable && quickActions.includes("new-intake") ? (
             <Link href="/leads/new" className={secondaryActionClass}>
               <Plus className="size-3.5" />
               New lead
             </Link>
           ) : null}
-          {unreviewedIntakesCount > 0 ? (
+          {commercialReadable && unreviewedIntakesCount > 0 ? (
             <Link href="/leads?pipeline=active" className={secondaryActionClass}>
               <Users className="size-3.5" />
               Sales ({unreviewedIntakesCount})
             </Link>
           ) : null}
-          <WorkstationSettingsDrawer
-            initial={{ showQuickActions, quickActions, urgentThresholdHours }}
-          />
+          {canManageSettings ? (
+            <WorkstationSettingsDrawer
+              initial={{ showQuickActions, quickActions, urgentThresholdHours }}
+            />
+          ) : null}
         </div>
       </div>
 

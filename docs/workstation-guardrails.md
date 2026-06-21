@@ -30,6 +30,35 @@ Work items carry:
 
 **Do not** invent a parallel priority system in a new component—extend `queryWorkstationWorkItems` and `rank()`.
 
+### Sort order (required)
+
+Presentation layers must sort work items by **lane first**, then **withinLaneRank**:
+
+1. `critical`
+2. `due`
+3. `upcoming`
+4. `watch`
+
+Use `LANE_ORDER` from `workstation/rank.ts`. Sorting by `withinLaneRank` alone is a bug — newer low-priority items must not outrank critical blockers.
+
+### Role feeds vs security
+
+| Concern | Owner |
+|---------|--------|
+| Default tab/lens/filter emphasis | `role-feeds.ts` |
+| What records appear in the feed | `workstation-query.ts` + `authz/resource-access.ts` + `canReadCommercial()` |
+| What actions are allowed | Server actions + capability helpers |
+
+Role feed specs adjust **emphasis and landing**; they are **not** the security boundary. Never hide unauthorized records with CSS or client-only filters alone.
+
+### Quick actions
+
+Workstation quick actions (New lead, New quote, Sales link, settings) must respect capabilities:
+
+- Commercial actions → `canReadCommercial(role)`
+- Org workstation settings → `canManageOrganizationSettings(role)`
+- Field mutations → `canMutate(role)` on the underlying server action
+
 ## What Workstation should do
 
 - Surface **ranked signals** across leads, quotes, jobs, tasks, issues, payments, visits, daily logs
@@ -71,8 +100,11 @@ These are documented risks from architecture audit—not necessarily bugs:
 - Task work items set `isBlocked` from `deriveTaskState` only; job-level payment blocking is separate
 - Job detail wrapper in Workstation counts `JobTaskStatus.TODO` without derived readiness
 - Full `QuoteWorkSurface` embedded in drawer is powerful but heavy—avoid adding more tabs/logic only in Workstation
+- **`allowedLenses` / role default tabs** may not be fully enforced on direct URL navigation — clamp in page loader when fixing
+- Some presentation outputs (`activeJobs`, `waitingBlocked`, `operationalExceptions`) are computed but not always rendered on overview
+- Visit customer-confirmation / reschedule attention requires schema not yet shipped
 
-**Do not “fix” these in guardrails v1** unless explicitly approved; document and route changes through canonical helpers.
+**Do not “fix” payment/task drift in a ranking pass** unless explicitly approved; document and route changes through canonical helpers.
 
 ## Checklist before changing Workstation
 
@@ -85,3 +117,4 @@ These are documented risks from architecture audit—not necessarily bugs:
 ---
 
 *Created 2026-05-16 — Guardrails v1 Pass 1.*
+*Updated 2026-06-21 — Lane sort requirement, role vs permission boundary, quick-action capability rules, current drift notes.*

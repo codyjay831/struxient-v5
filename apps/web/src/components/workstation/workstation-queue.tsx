@@ -22,6 +22,7 @@ const TAB_FILTERS: Partial<
   tasks: [
     { label: "All", filter: "all" },
     { label: "Blocked", filter: "blocked" },
+    { label: "Waiting", filter: "waiting" },
     { label: "Due", filter: "due" },
     { label: "Ready", filter: "ready" },
   ],

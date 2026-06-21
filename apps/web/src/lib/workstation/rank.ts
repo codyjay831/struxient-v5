@@ -64,3 +64,13 @@ export const LANE_ORDER: Record<WorkstationLane, number> = {
   upcoming: 2,
   watch: 3,
 };
+
+/** Sort work items by lane priority first, then within-lane rank (lower = higher priority). */
+export function compareWorkstationItemsByRank(
+  a: { lane: WorkstationLane; withinLaneRank: number },
+  b: { lane: WorkstationLane; withinLaneRank: number },
+): number {
+  const laneDiff = LANE_ORDER[a.lane] - LANE_ORDER[b.lane];
+  if (laneDiff !== 0) return laneDiff;
+  return a.withinLaneRank - b.withinLaneRank;
+}

@@ -177,6 +177,19 @@ Canon intent from [product-philosophy.md](./canon/product-philosophy.md) and [ex
 
 ---
 
+## 14. Workstation Now/Next/Risk hardening (2026-06-21)
+
+| ID | Topic | Concern / gap | Risk if ignored | Suggested next step |
+|----|--------|----------------|-----------------|---------------------|
+| W1 | **Lane sort integrity** | Presentation may sort by `withinLaneRank` without respecting `LANE_ORDER` | Critical blockers appear below routine work | Fix sort in `workstation-presentation.ts`; add regression tests |
+| W2 | **Role feed enforcement** | `allowedLenses` / default tabs defined but not always honored on direct URL | Field/subcontractor land in irrelevant feeds | Clamp URL state to role spec in page loader |
+| W3 | **Quick action permissions** | New lead / Sales / settings visible without capability check | Users see actions they cannot perform | Gate on `canReadCommercial`, `canManageOrganizationSettings` |
+| W4 | **Additive attention lanes** | Unassigned work, stale sweep, waiting holds partially computed | Cockpit feels incomplete | Follow-up after W1–W3; no schema required |
+
+**No schema change required** for W1–W3.
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -191,3 +204,4 @@ Canon intent from [product-philosophy.md](./canon/product-philosophy.md) and [ex
 | 2026-05-13 | Resolved P5 and P6; updated §11 for JobTaskStatus collapse. |
 | 2026-05-25 | §13 — product philosophy canon vs implementation gaps ([product-philosophy.md](./canon/product-philosophy.md), execution-engine §12). |
 | 2026-06-14 | Added A5/A6 rows for stale-session + active-org validation and role-surface vs permission-boundary decisions, marked canon-resolved. |
+| 2026-06-21 | §14 — Workstation Now/Next/Risk hardening backlog (lane sort, role feeds, quick actions). |

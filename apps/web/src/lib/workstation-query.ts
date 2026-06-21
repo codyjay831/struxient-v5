@@ -52,6 +52,7 @@ import { getLiveSignals } from "./signal-bus";
 import {
   attachScheduleAnchorsToRequirements,
   buildPaymentDueContextFromJob,
+  deriveTaskPaymentHold,
   getUnsettledEffectivelyDueRequirements,
   loadScheduleAnchorsByIds,
 } from "./job-payment-readiness";
@@ -184,6 +185,8 @@ export type WorkstationWorkItem = {
   /** Derived job execution health (Slice 5). */
   executionHealthState?: ExecutionHealthPrimaryState;
   executionHealthHeadline?: string;
+  /** Payment hold gating this task's stage (derived). */
+  paymentHoldLabel?: string;
   /** Recovery routing (Slice 7A) — panel resolves via action* fields, not work item id. */
   actionKind?: WorkstationRecoveryActionKind;
   actionLabel?: string;
@@ -1364,6 +1367,21 @@ export async function queryWorkstationWorkItems(
 
     const primaryTaskId = sortedTasks[0]?.id;
 
+    const paymentDueCtx = buildPaymentDueContextFromJob({
+      status: job.status,
+      stages: stagesForHealth.map((stage) => ({
+        id: stage.id,
+        sortOrder: stage.sortOrder,
+        stageId: stage.stageId,
+        title: stage.title,
+        tasks: stage.tasks.map((task) => ({
+          status: task.status,
+          recoveryFlowId: task.recoveryFlowId,
+        })),
+      })),
+      paymentRequirements: enrichedPaymentRequirements,
+    });
+
     for (const task of sortedTasks) {
       const isPrimary = task.id === primaryTaskId;
 
@@ -1447,6 +1465,12 @@ export async function queryWorkstationWorkItems(
           ? deriveBlockedTaskRecoveryRoute(task.id, jobStage.id, blockingIssueCandidates)
           : null;
 
+      const paymentHold = deriveTaskPaymentHold(
+        jobStage.id,
+        enrichedPaymentRequirements,
+        paymentDueCtx,
+      );
+
       items.push({
         id: `task-${task.id}`,
         kind: "task",
@@ -1513,6 +1537,7 @@ export async function queryWorkstationWorkItems(
         actionLabel: taskRecoveryRoute?.actionLabel,
         actionIssueId: taskRecoveryRoute?.actionIssueId,
         actionTaskId: taskRecoveryRoute?.actionTaskId,
+        ...(paymentHold ? { paymentHoldLabel: paymentHold.title } : {}),
       });
     }
 

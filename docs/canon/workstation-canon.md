@@ -35,24 +35,34 @@ Sales shares derivation helpers with Workstation (`getOpportunityFlow`) but must
 
 Workstation surfaces sales site visits as attention and action discovery, not as a standalone visit editor. Visit truth comes from `LeadVisitRequest`; Workstation cards are derived from visit status, customer confirmation state, assignment, timing, access completeness, outcome, lead/quote context, and age.
 
-Workstation should surface:
+Workstation should surface (when supported by stored facts):
 
 - Assigned sales visits today/tomorrow.
-- Unconfirmed visits needing internal or customer action.
 - Missing access details.
-- Reschedule requests.
 - No-show recovery.
 - Visit completed but quote/follow-up missing.
+
+**Future / schema-dependent (not MVP guarantee):** customer confirmation state, reschedule-request signals — see [sales-site-visit-canon.md](./sales-site-visit-canon.md). Do not promise these in UI copy until lifecycle fields exist.
 
 Assigned Sales/Field estimators must be able to see and act on their assigned visits even if they do not have broad commercial pipeline access. Viewer/subcontractor access to sensitive access details must remain restricted unless explicitly designed. See [sales-site-visit-canon.md](./sales-site-visit-canon.md).
 
 ## Role, permissions, and assignment
 
-What appears in the Workstation **depends on** the user’s **role**, **permissions**, and **assigned work** (and related rules such as crew membership). Illustrative intent:
+What appears in the Workstation **depends on** the user's **role**, **permissions**, and **assigned work** (and related rules such as crew membership).
+
+**Two layers — do not conflate them:**
+
+| Layer | Purpose |
+|-------|---------|
+| **Role defaults** | Which feed/tab/lens the user lands on and what the Workstation **emphasizes** (today vs company-wide vs assigned work). |
+| **Permission enforcement** | What the user is **allowed to read or act on**, enforced server-side in query builders and server actions — not client-only hiding. |
+
+Illustrative intent:
 
 - **Field workers** — Most weight on **their** assigned and **available near-term** work, readiness to execute, and blockers that stop **them**.  
 - **Office roles** — Broader **operational signals**: blocked items, quote prep and follow-ups, customer follow-ups, schedule conflicts or risk, **payment holds**, items **needing review**, jobs **needing coordination**.  
-- **Managers / owners** — Higher-level **workflow and business visibility**: bottlenecks, **stale** work, **capacity** pressure, **priority** decisions, and cross-job patterns—still grounded in **truthful task/job state**, not analytics theater.
+- **Owner / Admin / project-manager-style roles** — Company-wide **now / next / risk**: bottlenecks, **stale** work, **unassigned** work, **payment-blocked** work, cross-job patterns—still grounded in **truthful task/job state**, not analytics theater.
+- **Subcontractors** — Assigned/collaborator-visible work only; no broad commercial pipeline unless explicitly granted.
 
 ### MVP role slices (default feeds)
 
@@ -63,6 +73,24 @@ For a **first-pass Workstation**, prioritize **information presence** per person
 - **Owner / Admin** — **Company today** (cross-cutting operational picture); **stale** work; **bottlenecks**; **payment-blocked** work; **overdue** work; **unassigned** work needing ownership.
 
 Shell labels (tabs, routes, toggles) may differ; the intent is **role-appropriate default attention**, not a fixed permission wall.
+
+## First-screen contract (Now / Next / Risk)
+
+The Workstation overview must help a contractor recover operational truth quickly. The exact layout may evolve, but the **information presence** is fixed:
+
+| Slice | Question answered |
+|-------|-------------------|
+| **Critical / Risk** | What can stop work today? Blockers, payment holds, schedule risk, sales handoffs, customer decisions. |
+| **Next actions** | What can I resolve from here right now? Ranked actionable work. |
+| **Today / Now** | What is scheduled or due today? Visits, due tasks, follow-ups. |
+| **This week** | What is coming up? Week strip / calendar orientation. |
+| **Waiting / holds** | What is blocked on external input? Customer, payment, access, signals. |
+
+Ranking order is non-negotiable: **critical blockers before due/today before upcoming/this week before watch/stale**. If the feed computes lanes but displays them out of order, that is a product regression.
+
+## Canon vs code reality
+
+Canon guides product intent; **current code and contractor workflow value are the implementation truth**. If canon and the running app disagree, either update canon or consciously revert code — do not blindly implement stale canon. When adding Workstation behavior, prefer extending existing helpers (`queryWorkstationWorkItems`, `rank()`, shared work surfaces) over parallel logic.
 
 ## North-star question
 
@@ -153,3 +181,4 @@ Analytics informs management; it must not **replace** the truth of tasks. If ana
 
 *Canon update (2026-05-05): Authoritative positioning; record-based nav; role-based intent; lenses as views inside the concept; MVP role slices (default feeds by Field / Office / Owner–Admin).*
 *Canon update (2026-06-19): Added Sales site visit attention and assigned-estimator visibility rules.*
+*Canon update (2026-06-21): First-screen Now/Next/Risk contract; role defaults vs permission enforcement; canon-vs-code reality rule; visit confirmation/reschedule marked schema-dependent.*

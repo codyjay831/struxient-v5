@@ -6,12 +6,17 @@ import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { findOrBuildWorkItemForScheduleEvent } from "@/lib/workstation/resolve-work-item-selection";
 import { resolveExecutableWorkItem } from "@/lib/workstation/schedule-event-task-routing";
 import type { WorkstationOverviewLimits } from "@/lib/workstation/role-feeds";
+import { compareWorkstationItemsByRank } from "@/lib/workstation/rank";
 import type { Prisma } from "@prisma/client";
 
 const DEFAULT_OVERVIEW_LIMITS: WorkstationOverviewLimits = {
   criticalPerGroup: 2,
   nextActions: 6,
   today: 5,
+  waitingBlocked: 3,
+  activeJobs: 3,
+  unassigned: 3,
+  operationalExceptions: 2,
 };
 
 export function formatCalendarDayKey(date: Date): string {
@@ -175,6 +180,17 @@ export type ExceptionItem = {
   tone: WorkstationPresentationTone;
 };
 
+export type UnassignedItem = {
+  id: string;
+  selectedId: string;
+  selectedKind: string;
+  identity: string;
+  workItem: string;
+  stageLabel?: string;
+  reason: string;
+  tone: WorkstationPresentationTone;
+};
+
 export type QueueRowItem = {
   id: string;
   selectedId: string;
@@ -190,6 +206,8 @@ export type QueueRowItem = {
   badgeLabels?: string[];
   /** YYYY-MM-DD local day key for calendar queue filtering. */
   calendarDay?: string;
+  /** Task waiting on prerequisite signals — used by queue filters. */
+  isWaiting?: boolean;
 };
 
 export type DomainQueues = {
@@ -224,6 +242,7 @@ export type WorkstationPresentation = {
   waitingBlocked: WaitingBlockedItem[];
   recentActivity: ActivityItem[];
   operationalExceptions: ExceptionItem[];
+  overviewUnassigned: UnassignedItem[];
 };
 
 type RecentActivityRaw = {
@@ -343,7 +362,11 @@ function resolveBadgeLabels(item: WorkstationWorkItem): string[] {
                 ? "Calendar"
                 : null);
   const statusLabel = formatStatusBadgeLabel(item.status);
-  return [typeLabel, statusLabel].filter((label): label is string => Boolean(label));
+  const labels = [typeLabel, statusLabel].filter((label): label is string => Boolean(label));
+  if (item.paymentHoldLabel) {
+    labels.push("Payment hold");
+  }
+  return labels;
 }
 
 function resolveIdentityAndWorkItem(item: WorkstationWorkItem): {
@@ -484,6 +507,29 @@ function isScheduleRiskItem(item: WorkstationWorkItem): boolean {
   return item.status === "Needs schedule" || item.status === "Missed";
 }
 
+function isUnassignedTask(item: WorkstationWorkItem): boolean {
+  return (
+    item.kind === "task" &&
+    item.assignedUserId == null &&
+    item.status !== "Completed" &&
+    item.status !== "Canceled"
+  );
+}
+
+function toUnassignedItem(item: WorkstationWorkItem): UnassignedItem {
+  const identityInfo = resolveIdentityAndWorkItem(item);
+  return {
+    id: item.id,
+    selectedId: item.id,
+    selectedKind: item.kind,
+    identity: identityInfo.identity,
+    workItem: identityInfo.workItem,
+    stageLabel: item.subtitle?.trim() || undefined,
+    reason: compactDetailLine(item),
+    tone: resolveTone(item),
+  };
+}
+
 function isOperationalExceptionItem(item: WorkstationWorkItem): boolean {
   return (
     item.priority === "critical" ||
@@ -548,6 +594,7 @@ function toQueueRow(item: WorkstationWorkItem): QueueRowItem {
     categoryLabel: resolveCategoryLabel(item),
     badgeLabels: resolveBadgeLabels(item),
     calendarDay: calendarDate ? formatCalendarDayKey(calendarDate) : undefined,
+    isWaiting: Boolean(item.isWaitingOnSignals) || item.group === "waiting",
   };
 }
 
@@ -703,8 +750,12 @@ export function buildWorkstationPresentation({
   recentActivityRaw: RecentActivityRaw[];
   viewerUserId: string;
   now: Date;
-  overviewLimits?: WorkstationOverviewLimits;
+  overviewLimits?: Partial<WorkstationOverviewLimits>;
 }): WorkstationPresentation {
+  const limits: WorkstationOverviewLimits = {
+    ...DEFAULT_OVERVIEW_LIMITS,
+    ...overviewLimits,
+  };
   const synthesizedTodayItems: WorkstationWorkItem[] = scheduleEvents
     .filter((event) => isOnDay(event.startAt, now) && event.kind !== "schedule-block")
     .flatMap((event) => {
@@ -714,18 +765,18 @@ export function buildWorkstationPresentation({
     });
 
   const combinedItems = [...items, ...synthesizedTodayItems];
-  const sorted = combinedItems.sort((a, b) => a.withinLaneRank - b.withinLaneRank);
+  const sorted = combinedItems.sort(compareWorkstationItemsByRank);
 
   const needsActionRaw = [...sorted]
     .filter(isNeedsActionItem)
     .sort((a, b) => {
       const priorityDiff = getNeedsActionPriority(a) - getNeedsActionPriority(b);
       if (priorityDiff !== 0) return priorityDiff;
-      return a.withinLaneRank - b.withinLaneRank;
+      return compareWorkstationItemsByRank(a, b);
     });
   const overviewNextActions = dedupeById(needsActionRaw.map(toNeedsAction)).slice(
     0,
-    overviewLimits.nextActions,
+    limits.nextActions,
   );
   const needsActionIds = new Set(overviewNextActions.map((x) => x.id));
 
@@ -757,12 +808,12 @@ export function buildWorkstationPresentation({
         badgeLabels: resolveBadgeLabels(item),
       };
     }),
-  ).slice(0, overviewLimits.today);
+  ).slice(0, limits.today);
 
   const overviewCriticalGroups = buildCriticalGroups(
     sorted,
     needsActionIds,
-    overviewLimits.criticalPerGroup,
+    limits.criticalPerGroup,
   );
 
   const jobsMap = new Map<string, WorkstationWorkItem[]>();
@@ -779,9 +830,11 @@ export function buildWorkstationPresentation({
 
   const activeJobs: ActiveJobSignal[] = [];
   for (const [, jobItems] of jobsMap.entries()) {
-    const jobSorted = [...jobItems].sort(
-      (a, b) => getNeedsActionPriority(a) - getNeedsActionPriority(b),
-    );
+    const jobSorted = [...jobItems].sort((a, b) => {
+      const priorityDiff = getNeedsActionPriority(a) - getNeedsActionPriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+      return compareWorkstationItemsByRank(a, b);
+    });
     const primary = jobSorted[0];
     if (!primary) continue;
 
@@ -818,7 +871,7 @@ export function buildWorkstationPresentation({
       tone: jobTone,
     });
   }
-  const deduplicatedJobs = dedupeById(activeJobs).slice(0, 3);
+  const deduplicatedJobs = dedupeById(activeJobs).slice(0, limits.activeJobs);
 
   const weekEvents = scheduleEvents
     .filter((event) => !isOnDay(event.startAt, now) && event.kind !== "schedule-block")
@@ -859,7 +912,17 @@ export function buildWorkstationPresentation({
     }),
   )
     .filter((x) => !needsActionIds.has(x.id))
-    .slice(0, 3);
+    .slice(0, limits.waitingBlocked);
+
+  const overviewUnassigned: UnassignedItem[] =
+    limits.unassigned > 0
+      ? dedupeById(
+          sorted
+            .filter(isUnassignedTask)
+            .filter((x) => !needsActionIds.has(x.id))
+            .map(toUnassignedItem),
+        ).slice(0, limits.unassigned)
+      : [];
 
   const recentActivity: ActivityItem[] = recentActivityRaw.map((activity) => {
     const jobsite = resolveJobsiteLineForQuoteOrJob({
@@ -893,7 +956,7 @@ export function buildWorkstationPresentation({
   const exceptionsRaw = sorted.filter(isOperationalExceptionItem);
   const operationalExceptions: ExceptionItem[] = dedupeById(exceptionsRaw.map(toExceptionItem))
     .filter((x) => !needsActionIds.has(x.id))
-    .slice(0, 2);
+    .slice(0, limits.operationalExceptions);
 
   const scheduleRiskCount = sorted.filter(isScheduleRiskItem).length;
   const criticalCount = overviewCriticalGroups.reduce((sum, g) => sum + g.items.length, 0);
@@ -920,5 +983,6 @@ export function buildWorkstationPresentation({
     waitingBlocked,
     recentActivity,
     operationalExceptions,
+    overviewUnassigned,
   };
 }

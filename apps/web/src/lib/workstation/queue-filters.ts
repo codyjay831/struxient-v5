@@ -17,6 +17,7 @@ export function applyWorkstationQueueFilter(
       );
     if (queueFilter === "ready")
       return items.filter((i) => i.statusLabel === "Ready" || i.statusLabel === "Needs proof");
+    if (queueFilter === "waiting") return items.filter((i) => i.isWaiting);
   }
 
   if (tab === "jobs") {

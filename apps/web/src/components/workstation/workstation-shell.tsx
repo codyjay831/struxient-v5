@@ -15,10 +15,20 @@ export type WorkstationTabCounts = Partial<Record<WorkstationTab, number>>;
  * Workstation page chrome inside the existing app shell.
  * Preserves global sidebar/logo; only owns Workstation domain tabs.
  */
-export function WorkstationShell({ tabCounts }: { tabCounts?: WorkstationTabCounts }) {
+export function WorkstationShell({
+  tabCounts,
+  allowedTabs,
+}: {
+  tabCounts?: WorkstationTabCounts;
+  allowedTabs?: WorkstationTab[];
+}) {
   const searchParams = useSearchParams();
   const urlState = parseWorkstationUrlState(searchParams);
   const { tab } = urlState;
+
+  const visibleTabs = allowedTabs?.length
+    ? WORKSTATION_TABS.filter(({ tab: tabKey }) => allowedTabs.includes(tabKey))
+    : WORKSTATION_TABS;
 
   const todayLabel = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -52,7 +62,7 @@ export function WorkstationShell({ tabCounts }: { tabCounts?: WorkstationTabCoun
             aria-label="Workstation navigation"
             className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium"
           >
-            {WORKSTATION_TABS.map(({ tab: tabKey, label }) => {
+            {visibleTabs.map(({ tab: tabKey, label }) => {
               const count = tabCounts?.[tabKey];
               return (
                 <Link

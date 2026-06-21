@@ -11,6 +11,10 @@ import type {
   WeekDaySummary,
   QueueRowItem,
   ActivityItem,
+  WaitingBlockedItem,
+  ActiveJobSignal,
+  UnassignedItem,
+  ExceptionItem,
 } from "@/lib/workstation-presentation";
 
 type SelectableRow = {
@@ -296,6 +300,145 @@ export function TodayAgendaList({
           />
         );
       })}
+    </div>
+  );
+}
+
+export function WaitingBlockedList({
+  items,
+  buildHref,
+  selectedId,
+}: {
+  items: WaitingBlockedItem[];
+  buildHref: (item: SelectableRow) => string;
+  selectedId?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-foreground-muted">
+        Nothing is waiting on external input or blocked by holds.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {items.map((item) => (
+        <WorkstationRow
+          key={item.id}
+          primary={item.identity}
+          secondary={item.context}
+          detail={item.holdReason}
+          tone={item.tone}
+          href={buildHref(item)}
+          selected={selectedId === item.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function ActiveJobsList({
+  items,
+  buildHref,
+  selectedId,
+}: {
+  items: ActiveJobSignal[];
+  buildHref: (item: SelectableRow) => string;
+  selectedId?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-foreground-muted">
+        No active jobs need a second look right now.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {items.map((item) => (
+        <WorkstationRow
+          key={item.id}
+          primary={item.identity}
+          secondary={item.headline}
+          detail={item.nextAction}
+          tone={item.tone}
+          badgeLabels={item.signalChips.length > 0 ? item.signalChips : undefined}
+          href={buildHref(item)}
+          selected={selectedId === item.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function UnassignedList({
+  items,
+  buildHref,
+  selectedId,
+}: {
+  items: UnassignedItem[];
+  buildHref: (item: SelectableRow) => string;
+  selectedId?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-foreground-muted">
+        All visible tasks have an assignee.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {items.map((item) => (
+        <WorkstationRow
+          key={item.id}
+          primary={item.identity}
+          secondary={item.workItem}
+          detail={item.stageLabel ? `${item.stageLabel} · ${item.reason}` : item.reason}
+          tone={item.tone}
+          badgeLabel="Unassigned"
+          href={buildHref(item)}
+          selected={selectedId === item.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function OperationalExceptionsList({
+  items,
+  buildHref,
+  selectedId,
+}: {
+  items: ExceptionItem[];
+  buildHref: (item: SelectableRow) => string;
+  selectedId?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-foreground-muted">
+        No operational exceptions flagged.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {items.map((item) => (
+        <WorkstationRow
+          key={item.id}
+          primary={item.identity}
+          secondary={item.workItem}
+          detail={item.reason}
+          tone={item.tone}
+          badgeLabel="Exception"
+          href={buildHref(item)}
+          selected={selectedId === item.id}
+        />
+      ))}
     </div>
   );
 }

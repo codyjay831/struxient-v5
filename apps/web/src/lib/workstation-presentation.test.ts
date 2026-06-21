@@ -7,6 +7,7 @@ import {
   buildDomainQueues,
   resolveCriticalCategory,
 } from "./workstation-presentation";
+import { applyWorkstationQueueFilter } from "./workstation/queue-filters";
 import { resolveWorkstationTab } from "./workstation/url-state";
 
 const now = new Date("2026-06-18T08:00:00.000Z");
@@ -136,12 +137,15 @@ test("buildWorkstationPresentation prioritizes blocked over standard due work", 
     priority: "critical",
     status: "Blocked",
     group: "blocked",
+    lane: "critical",
     reason: "Needs attention.",
+    withinLaneRank: 5000,
   });
   const due = makeItem({
     id: "task-due",
     title: "Complete site survey",
     status: "Due today",
+    lane: "due",
     reason: "Task is due today.",
     withinLaneRank: 0,
   });
@@ -157,6 +161,36 @@ test("buildWorkstationPresentation prioritizes blocked over standard due work", 
   assert.equal(result.overviewNextActions.length, 2);
   assert.equal(result.overviewNextActions[0]?.id, "task-blocked");
   assert.equal(result.operationalExceptions.length, 0);
+});
+
+test("buildWorkstationPresentation sorts critical lane above due even with lower withinLaneRank", () => {
+  const critical = makeItem({
+    id: "critical-task",
+    lane: "critical",
+    withinLaneRank: 9000,
+    priority: "critical",
+    reason: "Blocked by issue.",
+    isBlocked: true,
+    group: "blocked",
+  });
+  const due = makeItem({
+    id: "due-task",
+    lane: "due",
+    withinLaneRank: 1,
+    priority: "high",
+    status: "Due today",
+    reason: "Due today.",
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [due, critical],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  assert.equal(result.overviewNextActions[0]?.id, "critical-task");
 });
 
 test("buildWorkstationPresentation summarizes active job health", () => {
@@ -346,4 +380,78 @@ test("buildDomainQueues includes calendarDay for scheduled items", () => {
 
   const queues = buildDomainQueues([scheduled]);
   assert.equal(queues.calendar[0]?.calendarDay, "2026-06-19");
+});
+
+test("buildWorkstationPresentation surfaces unassigned tasks for office roles", () => {
+  const unassigned = makeItem({
+    id: "task-unassigned",
+    assignedUserId: null,
+    status: "Ready",
+    lens: "upcoming",
+    priority: "medium",
+    group: "active",
+    reason: "Task is ready to complete.",
+  });
+  const assigned = makeItem({
+    id: "task-assigned",
+    assignedUserId: "user-2",
+    status: "Ready",
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [unassigned, assigned],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+    overviewLimits: { unassigned: 3 },
+  });
+
+  assert.equal(result.overviewUnassigned.length, 1);
+  assert.equal(result.overviewUnassigned[0]?.id, "task-unassigned");
+});
+
+test("buildWorkstationPresentation adds payment hold badge on tasks", () => {
+  const held = makeItem({
+    id: "task-held",
+    paymentHoldLabel: "Deposit",
+    status: "Ready",
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [held],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  assert.ok(result.domainQueues.tasks[0]?.badgeLabels?.includes("Payment hold"));
+});
+
+test("applyWorkstationQueueFilter waiting filter matches prerequisite holds", () => {
+  const waiting = {
+    id: "row-wait",
+    selectedId: "task-w",
+    selectedKind: "task",
+    title: "Install panels",
+    reason: "Waiting",
+    nextAction: "Wait",
+    tone: "warning" as const,
+    isWaiting: true,
+  };
+  const ready = {
+    id: "row-ready",
+    selectedId: "task-r",
+    selectedKind: "task",
+    title: "Rough-in",
+    reason: "Ready",
+    nextAction: "Complete",
+    tone: "neutral" as const,
+    isWaiting: false,
+  };
+
+  const filtered = applyWorkstationQueueFilter([waiting, ready], "tasks", "waiting");
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]?.id, "row-wait");
 });
