@@ -12,6 +12,7 @@ import {
   attachIntakeServiceLocationToCustomerFromLead,
   intakeSnapshotForCustomerFromLead,
 } from "@/lib/customer-service-location-from-lead";
+import { linkLeadToCustomerInTransaction } from "@/lib/lead-customer-link-site";
 import { db } from "@/lib/db";
 import { finalizeLeadAttachments } from "@/lib/finalize-lead-attachments";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
@@ -496,61 +497,21 @@ export async function linkLeadToCustomerAction(
   const convertedAt = new Date();
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          customerId: null,
-        },
-        select: { id: true, address: true, signals: true, channel: true },
-      });
-      if (!lead) {
-        throw new CreateFromLeadTransactionError(
-          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
-        );
-      }
-      const result = await tx.lead.updateMany({
-        where: {
-          id,
-          organizationId: ctx.organizationId,
-          customerId: null,
-        },
-        data: {
-          customerId: customer.id,
-          convertedAt,
-          status: "CONVERTED",
-        },
-      });
-      if (result.count === 0) {
-        throw new CreateFromLeadTransactionError(
-          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
-        );
-      }
-      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      await linkLeadToCustomerInTransaction(tx, {
         organizationId: ctx.organizationId,
-        customerId: customer.id,
+        userId: ctx.userId,
         leadId: id,
-        leadChannel: lead.channel,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
-      });
-      if (attached.locationId) {
-        await tx.lead.update({
-          where: { id },
-          data: { serviceLocationId: attached.locationId },
-        });
-      }
-
-      await tx.leadEvent.create({
-        data: {
-          leadId: id,
-          type: "LINKED_TO_CUSTOMER",
-          payload: { customerId: customer.id } as Prisma.InputJsonValue,
-          actorUserId: ctx.userId,
-        },
+        customerId: customer.id,
+        convertedAt,
+        setStatusConverted: true,
+        recordLinkEvent: true,
       });
     });
   } catch (e) {
     if (e instanceof CreateFromLeadTransactionError) {
+      return { error: e.message };
+    }
+    if (e instanceof Error) {
       return { error: e.message };
     }
     throw e;

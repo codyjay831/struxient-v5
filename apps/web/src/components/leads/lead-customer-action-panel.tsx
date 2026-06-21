@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition, type RefObject } from "react";
-import { ArrowRight, CheckCircle2, ChevronRight, ExternalLink, Loader2, Search } from "lucide-react";
+import { useState, type RefObject } from "react";
+import { ArrowRight, CheckCircle2, ChevronRight, ExternalLink, Search } from "lucide-react";
 import {
   customerMatchReasonLabels,
   type CustomerMatchHint,
 } from "@/lib/lead-customer-match-hints";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
-import { linkLeadToCustomerWorkspaceAction } from "@/app/(workspace)/leads/lead-workspace-actions";
 import {
   useLeadCustomerCreateForm,
   type LeadWorkspaceCustomerCreateLeadInput,
@@ -57,6 +56,7 @@ export function LeadCustomerActionPanel({
   lead,
   linkedCustomer,
   customerReachabilityLine,
+  needsJobsiteLinkConfirmation = false,
   hasBlockingCustomerMatch,
   suggestedMatches,
   onSuccess,
@@ -67,6 +67,7 @@ export function LeadCustomerActionPanel({
   lead: LeadWorkspaceCustomerCreateLeadInput;
   linkedCustomer?: { displayName: string; href: string } | null;
   customerReachabilityLine?: string | null;
+  needsJobsiteLinkConfirmation?: boolean;
   hasBlockingCustomerMatch: boolean;
   suggestedMatches: CustomerMatchHint[];
   onSuccess: () => void;
@@ -76,7 +77,7 @@ export function LeadCustomerActionPanel({
   compact?: boolean;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [initialCustomerId, setInitialCustomerId] = useState<string | null>(null);
   const { prepared, state, dispatch, isPending: isCreating } = useLeadCustomerCreateForm(
     lead,
     onSuccess,
@@ -86,17 +87,16 @@ export function LeadCustomerActionPanel({
   const topMatch = suggestedMatches[0] ?? null;
   const otherMatches = suggestedMatches.slice(1, 3);
 
-  const handleLinkSuggested = (candidateId: string) => {
-    startTransition(async () => {
-      const formData = new FormData();
-      formData.append("customerId", candidateId);
-      const result = await linkLeadToCustomerWorkspaceAction(lead.id, {}, formData);
-      if (result.success) {
-        onSuccess();
-      } else {
-        onError(result.error ?? "Could not link this request to a customer.");
-      }
-    });
+  const openReviewForCustomer = (customerId: string) => {
+    setInitialCustomerId(customerId);
+    setSearchOpen(true);
+  };
+
+  const handleSearchOpenChange = (open: boolean) => {
+    setSearchOpen(open);
+    if (!open) {
+      setInitialCustomerId(null);
+    }
   };
 
   return (
@@ -112,34 +112,43 @@ export function LeadCustomerActionPanel({
           className="scroll-mt-24 outline-none rounded-xl border border-border bg-surface p-4 shadow-sm"
         >
           {linkedCustomer ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <CheckCircle2 className="size-5 shrink-0 text-success" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">
-                  Linked to {linkedCustomer.displayName}
-                </p>
-                {customerReachabilityLine ? (
-                  <p className="mt-0.5 text-sm text-foreground-muted truncate">
-                    {customerReachabilityLine}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <CheckCircle2 className="size-5 shrink-0 text-success" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Linked to {linkedCustomer.displayName}
                   </p>
-                ) : (
-                  <p className="mt-0.5 text-sm text-foreground-muted">
-                    This request is attached to an existing customer record.
-                  </p>
-                )}
+                  {customerReachabilityLine ? (
+                    <p className="mt-0.5 text-sm text-foreground-muted truncate">
+                      {customerReachabilityLine}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-sm text-foreground-muted">
+                      This request is attached to an existing customer record.
+                    </p>
+                  )}
+                </div>
+                <Link
+                  href={linkedCustomer.href}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground"
+                >
+                  View customer
+                  <ExternalLink className="size-3" />
+                </Link>
               </div>
-              <Link
-                href={linkedCustomer.href}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground"
-              >
-                View customer
-                <ExternalLink className="size-3" />
-              </Link>
+              {needsJobsiteLinkConfirmation ? (
+                <p className="rounded-lg border border-warning/30 bg-warning/[0.04] px-3 py-2 text-xs text-foreground-muted">
+                  Jobsite not confirmed for this request yet. Confirm the service address in the
+                  jobsite section before quoting.
+                </p>
+              ) : null}
             </div>
           ) : hasMatch ? (
             <>
               <p className="text-sm text-foreground-muted">
-                This lead matches an existing customer. Link before quoting to avoid duplicates.
+                This lead matches an existing customer. Review the customer and jobsite before
+                linking to avoid duplicates.
               </p>
 
               {topMatch ? (
@@ -155,16 +164,12 @@ export function LeadCustomerActionPanel({
                     <button
                       key={candidate.id}
                       type="button"
-                      onClick={() => handleLinkSuggested(candidate.id)}
-                      disabled={isPending}
+                      onClick={() => openReviewForCustomer(candidate.id)}
+                      disabled={isCreating}
                       className="flex w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-left text-sm hover:border-border-strong disabled:opacity-50"
                     >
                       <span className="font-medium text-foreground">{candidate.displayName}</span>
-                      {isPending ? (
-                        <Loader2 className="size-3.5 animate-spin text-accent" />
-                      ) : (
-                        <ChevronRight className="size-3.5 text-foreground-subtle" />
-                      )}
+                      <ChevronRight className="size-3.5 text-foreground-subtle" />
                     </button>
                   ))}
                 </div>
@@ -180,24 +185,17 @@ export function LeadCustomerActionPanel({
                 {topMatch ? (
                   <button
                     type="button"
-                    onClick={() => handleLinkSuggested(topMatch.id)}
-                    disabled={isPending || isCreating}
+                    onClick={() => openReviewForCustomer(topMatch.id)}
+                    disabled={isCreating}
                     className={`${primaryBtnClass} ${compact ? "" : "sm:flex-1 sm:min-w-[200px]"}`}
                   >
-                    {isPending ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Linking…
-                      </>
-                    ) : (
-                      <>Link to {topMatch.displayName}</>
-                    )}
+                    Review customer + jobsite
                   </button>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  disabled={isPending || isCreating}
+                  disabled={isCreating}
                   className={`${secondaryBtnClass} ${compact ? "" : "sm:max-w-[220px]"}`}
                 >
                   <Search className="size-4" />
@@ -206,7 +204,7 @@ export function LeadCustomerActionPanel({
                 <form action={dispatch} className={compact ? "" : "sm:ml-auto"}>
                   <button
                     type="submit"
-                    disabled={isCreating || isPending || !prepared.ok}
+                    disabled={isCreating || !prepared.ok}
                     aria-busy={isCreating}
                     className="w-full py-2 text-xs font-medium text-foreground-subtle underline-offset-2 hover:text-foreground-muted hover:underline disabled:opacity-50"
                   >
@@ -231,7 +229,7 @@ export function LeadCustomerActionPanel({
                 <form action={dispatch} className="flex-1 min-w-0">
                   <button
                     type="submit"
-                    disabled={isCreating || isPending || !prepared.ok}
+                    disabled={isCreating || !prepared.ok}
                     aria-busy={isCreating}
                     className={primaryBtnClass}
                   >
@@ -242,7 +240,7 @@ export function LeadCustomerActionPanel({
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  disabled={isPending || isCreating}
+                  disabled={isCreating}
                   className={`${secondaryBtnClass} ${compact ? "" : "sm:max-w-[220px]"}`}
                 >
                   <Search className="size-4" />
@@ -257,8 +255,9 @@ export function LeadCustomerActionPanel({
       <LeadCustomerSearchDialog
         leadId={lead.id}
         open={searchOpen}
-        onOpenChange={setSearchOpen}
+        onOpenChange={handleSearchOpenChange}
         onSuccess={onSuccess}
+        initialCustomerId={initialCustomerId}
       />
     </>
   );

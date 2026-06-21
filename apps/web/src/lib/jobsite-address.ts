@@ -62,20 +62,43 @@ export function isCustomerPrimaryLocationQuoteReady(
   return Boolean(location?.googlePlaceId?.trim());
 }
 
+export type LeadAddressQuoteReadyContext = {
+  /** Linked lead/quote/job service location when resolved. */
+  resolvedServiceLocation?: { googlePlaceId: string } | null;
+  /** Customer primary — only used when the lead has no intake jobsite line. */
+  customerPrimaryLocation?: { googlePlaceId: string } | null;
+};
+
 /**
- * Quote readiness: lead intake snapshot or linked customer primary location is Google-verified.
+ * Quote readiness: resolved service location or verified lead intake.
+ * Customer primary does not mask a different unresolved lead jobsite.
  */
 export function isLeadAddressQuoteReady(
   row: {
     address: Prisma.JsonValue | null;
     signals: Prisma.JsonValue | null;
   },
-  customerPrimaryLocation?: { googlePlaceId: string } | null,
+  context?: LeadAddressQuoteReadyContext | { googlePlaceId: string } | null,
 ): boolean {
-  if (isCustomerPrimaryLocationQuoteReady(customerPrimaryLocation)) {
+  const ctx: LeadAddressQuoteReadyContext =
+    context != null && "googlePlaceId" in context && !("resolvedServiceLocation" in context)
+      ? { customerPrimaryLocation: context }
+      : (context ?? {});
+
+  if (isCustomerPrimaryLocationQuoteReady(ctx.resolvedServiceLocation)) {
     return true;
   }
-  return isLeadAddressVerified(row);
+  if (isLeadAddressVerified(row)) {
+    return true;
+  }
+  const intakeLine = jobsiteLineFromLead(row);
+  if (
+    !intakeLine &&
+    isCustomerPrimaryLocationQuoteReady(ctx.customerPrimaryLocation)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

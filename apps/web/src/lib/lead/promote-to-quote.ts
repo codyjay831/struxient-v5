@@ -52,6 +52,7 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
             id: true,
             status: true,
             customerId: true,
+            serviceLocationId: true,
             contact: true,
             request: true,
             address: true,
@@ -98,12 +99,25 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
         }));
 
         let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+        let resolvedServiceLocation: { googlePlaceId: string } | null = null;
         if (lead.customerId) {
-          customerPrimaryLocation = await tx.customerServiceLocation.findFirst({
-            where: { customerId: lead.customerId, organizationId: ctx.organizationId },
-            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-            select: { googlePlaceId: true },
-          });
+          if (lead.serviceLocationId) {
+            resolvedServiceLocation = await tx.customerServiceLocation.findFirst({
+              where: {
+                id: lead.serviceLocationId,
+                customerId: lead.customerId,
+                organizationId: ctx.organizationId,
+              },
+              select: { googlePlaceId: true },
+            });
+          }
+          if (!resolvedServiceLocation) {
+            customerPrimaryLocation = await tx.customerServiceLocation.findFirst({
+              where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+              orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+              select: { googlePlaceId: true },
+            });
+          }
         }
 
         const readiness = evaluateLeadReadiness({
@@ -112,7 +126,10 @@ export async function promoteLeadToQuote(leadId: string): Promise<PromoteLeadToQ
           email: contact.email,
           phone: contact.phone,
           address: jobsiteLineFromLead(lead),
-          isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
+          isAddressVerified: isLeadAddressQuoteReady(lead, {
+            resolvedServiceLocation,
+            customerPrimaryLocation,
+          }),
         });
 
         if (lead.status === "LOST" || lead.status === "ARCHIVED") {

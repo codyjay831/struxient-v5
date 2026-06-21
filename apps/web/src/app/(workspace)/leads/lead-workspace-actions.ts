@@ -51,6 +51,13 @@ import {
   isLeadAddressQuoteReady,
   isLeadAddressVerified,
 } from "@/lib/jobsite-address";
+import {
+  classifyLeadIntakeAgainstCustomerSites,
+  describeLeadCustomerLinkSiteOutcome,
+  intakeSnapshotFromLeadRow,
+  linkLeadToCustomerInTransaction,
+  type LeadCustomerLinkSiteOutcome,
+} from "@/lib/lead-customer-link-site";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import {
   parseStoredPublicIntakeServiceLocation,
@@ -291,40 +298,18 @@ export async function linkLeadToCustomerWorkspaceAction(
   const convertedAt = new Date();
   try {
     await db.$transaction(async (tx) => {
-      const lead = await tx.lead.findFirst({
-        where: { id, organizationId: ctx.organizationId, customerId: null },
-        select: { id: true, address: true, signals: true, channel: true },
-      });
-      if (!lead) {
-        throw new WorkspaceTxError(
-          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
-        );
-      }
-      const result = await tx.lead.updateMany({
-        where: { id, organizationId: ctx.organizationId, customerId: null },
-        data: { customerId: customer.id, convertedAt },
-      });
-      if (result.count === 0) {
-        throw new WorkspaceTxError(
-          "This opportunity could not be linked. It may have been linked already—refresh the page and try again.",
-        );
-      }
-      const attached = await attachIntakeServiceLocationToCustomerFromLead(tx, {
+      await linkLeadToCustomerInTransaction(tx, {
         organizationId: ctx.organizationId,
-        customerId: customer.id,
         leadId: id,
-        leadChannel: lead.channel,
-        snapshot: intakeSnapshotForCustomerFromLead(lead),
+        customerId: customer.id,
+        convertedAt,
+        setStatusConverted: false,
+        recordLinkEvent: false,
       });
-      if (attached.locationId) {
-        await tx.lead.update({
-          where: { id },
-          data: { serviceLocationId: attached.locationId },
-        });
-      }
     });
   } catch (e) {
     if (e instanceof WorkspaceTxError) return { error: e.message };
+    if (e instanceof Error) return { error: e.message };
     throw e;
   }
 
@@ -683,6 +668,109 @@ export type CustomerSearchMatch = {
   phone: string | null;
 };
 
+export type CustomerLinkPreview = {
+  customer: CustomerSearchMatch;
+  leadContact: {
+    contactName: string;
+    companyName: string | null;
+    email: string | null;
+    phone: string | null;
+    jobsiteAddressLine: string | null;
+  };
+  siteOutcome: LeadCustomerLinkSiteOutcome;
+  siteOutcomeDescription: string;
+  customerSiteCount: number;
+};
+
+export type LoadCustomerLinkPreviewResult =
+  | { ok: true; preview: CustomerLinkPreview }
+  | { ok: false; error: string };
+
+/**
+ * Read-only preview for customer + jobsite confirmation before linking.
+ */
+export async function loadCustomerLinkPreviewAction(
+  leadId: string,
+  customerId: string,
+): Promise<LoadCustomerLinkPreviewResult> {
+  const id = leadId.trim();
+  const cid = customerId.trim();
+  if (!id || !cid) {
+    return { ok: false, error: "Missing lead or customer id." };
+  }
+
+  const ctx = await getCommercialRequestContextOrThrow();
+
+  const lead = await db.lead.findFirst({
+    where: { id, organizationId: ctx.organizationId, customerId: null },
+    select: { contact: true, address: true, signals: true },
+  });
+  if (!lead) {
+    return {
+      ok: false,
+      error: "This opportunity was not found or is already linked to a customer.",
+    };
+  }
+
+  const customer = await db.customer.findFirst({
+    where: { id: cid, organizationId: ctx.organizationId },
+    select: {
+      id: true,
+      displayName: true,
+      companyName: true,
+      email: true,
+      phone: true,
+      serviceLocations: {
+        where: { organizationId: ctx.organizationId },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          formattedAddress: true,
+          addressLine1: true,
+          googlePlaceId: true,
+          isPrimary: true,
+        },
+      },
+    },
+  });
+  if (!customer) {
+    return { ok: false, error: "That customer was not found in your organization." };
+  }
+
+  const contact = readContact(lead.contact);
+  const snapshot = intakeSnapshotFromLeadRow({
+    address: lead.address,
+    signals: lead.signals,
+  });
+  const siteOutcome = classifyLeadIntakeAgainstCustomerSites(
+    snapshot,
+    customer.serviceLocations,
+  );
+
+  return {
+    ok: true,
+    preview: {
+      customer: {
+        id: customer.id,
+        displayName: customer.displayName,
+        companyName: customer.companyName,
+        email: customer.email,
+        phone: customer.phone,
+      },
+      leadContact: {
+        contactName: contact.name?.trim() || "",
+        companyName: contact.companyName?.trim() || null,
+        email: contact.email?.trim() || null,
+        phone: contact.phone?.trim() || null,
+        jobsiteAddressLine: jobsiteLineFromLead(lead),
+      },
+      siteOutcome,
+      siteOutcomeDescription: describeLeadCustomerLinkSiteOutcome(siteOutcome),
+      customerSiteCount: customer.serviceLocations.length,
+    },
+  };
+}
+
 export type SearchCustomersForLeadAttachResult =
   | { ok: true; matches: CustomerSearchMatch[] }
   | { ok: false; error: string };
@@ -761,6 +849,7 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       status: true,
       followUpAt: true,
       customerId: true,
+      serviceLocationId: true,
       contact: true,
       address: true,
       signals: true,
@@ -847,12 +936,25 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
   );
 
   let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+  let resolvedServiceLocation: { googlePlaceId: string } | null = null;
   if (lead.customerId) {
-    customerPrimaryLocation = await db.customerServiceLocation.findFirst({
-      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
-      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      select: { googlePlaceId: true },
-    });
+    if (lead.serviceLocationId) {
+      resolvedServiceLocation = await db.customerServiceLocation.findFirst({
+        where: {
+          id: lead.serviceLocationId,
+          customerId: lead.customerId,
+          organizationId: ctx.organizationId,
+        },
+        select: { googlePlaceId: true },
+      });
+    }
+    if (!resolvedServiceLocation) {
+      customerPrimaryLocation = await db.customerServiceLocation.findFirst({
+        where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        select: { googlePlaceId: true },
+      });
+    }
   }
 
   const flow = getOpportunityFlow({
@@ -866,7 +968,10 @@ export async function loadLeadActiveQuoteWorkSurfaceAction(
       email: contact.email,
       phone: contact.phone,
       jobsiteAddressLine: jobsiteLineFromLead(lead),
-      isAddressVerified: isLeadAddressQuoteReady(lead, customerPrimaryLocation),
+      isAddressVerified: isLeadAddressQuoteReady(lead, {
+        resolvedServiceLocation,
+        customerPrimaryLocation,
+      }),
     },
     quotes: flowQuoteInputs,
     visits: lead.visitRequests.map((visit) => ({

@@ -80,6 +80,8 @@ export type LeadReviewDisplay = {
     show: boolean;
     placement: "prominent";
   };
+  /** Linked customer but jobsite not resolved on this lead. */
+  needsJobsiteLinkConfirmation: boolean;
   siteDetails: {
     showRow: boolean;
     showPlaceholder: boolean;
@@ -265,6 +267,9 @@ export function buildLeadReviewDisplay(input: LeadReviewDisplayInput): LeadRevie
   );
 
   const hasServiceLocation = Boolean(lead.serviceLocationId);
+  const needsJobsiteLinkConfirmation = Boolean(
+    customer && lead.jobsiteAddressLine?.trim() && !lead.serviceLocationId,
+  );
   const siteDetails = {
     showRow: hasServiceLocation,
     showPlaceholder: Boolean(jobsiteLine && !hasServiceLocation),
@@ -299,6 +304,7 @@ export function buildLeadReviewDisplay(input: LeadReviewDisplayInput): LeadRevie
       show: showAddressResolve,
       placement: "prominent",
     },
+    needsJobsiteLinkConfirmation,
     siteDetails,
     siteDetailsShowAddressLine: siteDetails.showAddressLine,
   };

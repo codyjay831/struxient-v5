@@ -259,6 +259,9 @@ export async function queryWorkstationWorkItems(
           },
         },
       },
+      serviceLocation: {
+        select: { googlePlaceId: true, organizationId: true },
+      },
       visitRequests: {
         orderBy: { createdAt: "desc" },
       },
@@ -313,10 +316,13 @@ export async function queryWorkstationWorkItems(
         email: lead.email,
         phone: lead.phone,
         jobsiteAddressLine: leadJobsiteLine,
-        isAddressVerified: isLeadAddressQuoteReady(
-          lead,
-          lead.customer?.serviceLocations[0] ?? null,
-        ),
+        isAddressVerified: isLeadAddressQuoteReady(lead, {
+          resolvedServiceLocation:
+            lead.serviceLocation && lead.serviceLocation.organizationId === organizationId
+              ? lead.serviceLocation
+              : null,
+          customerPrimaryLocation: lead.customer?.serviceLocations[0] ?? null,
+        }),
       },
       quotes: lead.quotes.map((q) => ({
         id: q.id,

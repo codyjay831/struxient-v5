@@ -203,6 +203,24 @@ test("site details row when service location linked", () => {
   assert.equal(display.siteDetails.showPlaceholder, false);
 });
 
+test("needsJobsiteLinkConfirmation when linked without service location", () => {
+  const display = buildLeadReviewDisplay({
+    ...baseInput(),
+    customer: { displayName: "Jane Doe" },
+    lead: { ...baseLead, serviceLocationId: null },
+  });
+  assert.equal(display.needsJobsiteLinkConfirmation, true);
+});
+
+test("needsJobsiteLinkConfirmation false when service location resolved", () => {
+  const display = buildLeadReviewDisplay({
+    ...baseInput(),
+    customer: { displayName: "Jane Doe" },
+    lead: { ...baseLead, serviceLocationId: "loc_1" },
+  });
+  assert.equal(display.needsJobsiteLinkConfirmation, false);
+});
+
 test("resolveCustomerPrimaryJobsiteLine prefers primary flag", () => {
   const line = resolveCustomerPrimaryJobsiteLine({
     customer: {

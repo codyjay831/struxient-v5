@@ -50,17 +50,47 @@ test("verified lead address satisfies quote readiness", () => {
   assert.equal(isLeadAddressQuoteReady(row), true);
 });
 
-test("linked customer primary location can satisfy quote readiness", () => {
+test("linked customer primary location can satisfy quote readiness when lead has no intake jobsite", () => {
+  const row = {
+    address: null,
+    signals: null,
+  };
+  assert.equal(
+    isLeadAddressQuoteReady(row, { customerPrimaryLocation: { googlePlaceId: "ChIJ_customer_primary" } }),
+    true,
+  );
+});
+
+test("linked customer primary does not mask different unresolved lead jobsite", () => {
   const row = {
     address: addressJson({
-      addressLine1: "401 Royal Tern Drive",
-      formattedAddress: "401 Royal Tern Drive",
+      addressLine1: "99 New Property Ln",
+      formattedAddress: "99 New Property Ln, Austin, TX",
+      googlePlaceId: "",
+    }),
+    signals: null,
+  };
+  assert.equal(isLeadAddressVerified(row), false);
+  assert.equal(
+    isLeadAddressQuoteReady(row, { customerPrimaryLocation: { googlePlaceId: "ChIJ_customer_primary" } }),
+    false,
+  );
+});
+
+test("resolved service location satisfies quote readiness for linked lead", () => {
+  const row = {
+    address: addressJson({
+      addressLine1: "99 New Property Ln",
+      formattedAddress: "99 New Property Ln, Austin, TX",
       googlePlaceId: "",
     }),
     signals: null,
   };
   assert.equal(
-    isLeadAddressQuoteReady(row, { googlePlaceId: "ChIJ_customer_primary" }),
+    isLeadAddressQuoteReady(row, {
+      resolvedServiceLocation: { googlePlaceId: "ChIJ_resolved_site" },
+      customerPrimaryLocation: { googlePlaceId: "ChIJ_other_primary" },
+    }),
     true,
   );
 });

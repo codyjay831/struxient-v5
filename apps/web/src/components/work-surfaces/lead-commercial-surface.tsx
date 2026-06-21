@@ -754,6 +754,11 @@ export function LeadCommercialSurface({
                 : ""}
             </p>
           ) : null}
+          {reviewDisplay.needsJobsiteLinkConfirmation ? (
+            <p className="mt-1 text-xs text-warning">
+              Jobsite not confirmed for this linked customer yet.
+            </p>
+          ) : null}
         </div>
       </div>
       {reviewDisplay.siteDetails.showPlaceholder ? (
@@ -879,6 +884,7 @@ export function LeadCommercialSurface({
       }}
       linkedCustomer={customer}
       customerReachabilityLine={reviewDisplay.customerReachabilityLine}
+      needsJobsiteLinkConfirmation={reviewDisplay.needsJobsiteLinkConfirmation}
       hasBlockingCustomerMatch={hasBlockingCustomerMatch}
       suggestedMatches={matches}
       onSuccess={notifyMutationSuccess}

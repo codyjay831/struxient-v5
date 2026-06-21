@@ -500,17 +500,31 @@ export async function loadLeadCommercialSurface(
   });
 
   let customerPrimaryLocation: { googlePlaceId: string } | null = null;
+  let resolvedServiceLocation: { googlePlaceId: string } | null = null;
   if (lead.customerId) {
-    customerPrimaryLocation = await db.customerServiceLocation.findFirst({
-      where: { customerId: lead.customerId, organizationId: ctx.organizationId },
-      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      select: { googlePlaceId: true },
-    });
+    if (lead.serviceLocationId) {
+      const resolved = await db.customerServiceLocation.findFirst({
+        where: {
+          id: lead.serviceLocationId,
+          customerId: lead.customerId,
+          organizationId: ctx.organizationId,
+        },
+        select: { googlePlaceId: true },
+      });
+      resolvedServiceLocation = resolved;
+    }
+    if (!resolvedServiceLocation) {
+      customerPrimaryLocation = await db.customerServiceLocation.findFirst({
+        where: { customerId: lead.customerId, organizationId: ctx.organizationId },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        select: { googlePlaceId: true },
+      });
+    }
   }
 
   const isAddressQuoteReady = isLeadAddressQuoteReady(
     { address: lead.address, signals: lead.signals },
-    customerPrimaryLocation,
+    { resolvedServiceLocation, customerPrimaryLocation },
   );
   const safeServiceLocation =
     lead.serviceLocation && lead.serviceLocation.organizationId === ctx.organizationId
