@@ -61,7 +61,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   Briefcase,
-  CheckCircle2,
   ChevronRight,
   Eye,
   FileText,
@@ -95,7 +94,6 @@ import {
 } from "@/app/(workspace)/quotes/quote-change-request-actions";
 import {
   resolveQuoteReadinessActionHref,
-  type QuoteReadiness,
   type QuoteReadinessAction,
   type QuoteReadinessActionKind,
 } from "@/lib/quote-readiness";
@@ -124,6 +122,7 @@ import {
 import { QuotePaymentScheduleEditor } from "@/components/quotes/quote-payment-schedule-editor";
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
+import { Button, ButtonLink, buttonClassName } from "@/components/ui/button";
 
 /* ─── Public types ─────────────────────────────────────────────────────── */
 
@@ -201,6 +200,8 @@ const workspaceActionInitial: QuoteWorkspaceActionState = {};
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
+
+const panelClass = "rounded-lg border border-border bg-surface";
 
 const primaryBtnClass =
   "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
@@ -799,7 +800,10 @@ function renderAction({
       <button
         type="button"
         onClick={() => onSwitchToTab("sendaccept", "send")}
-        className={variant === "primary" ? primaryBtnClass : secondaryBtnClass}
+        className={buttonClassName({
+          variant: variant === "primary" ? "primary" : "secondary",
+          size: "sm",
+        })}
       >
         <Send className="size-3.5 opacity-80" strokeWidth={2} />
         {action.label}
@@ -831,7 +835,10 @@ function renderAction({
   }
 
   const targetTab = TAB_BOUND_ACTIONS[action.kind];
-  const cls = variant === "primary" ? primaryBtnClass : secondaryBtnClass;
+  const cls = buttonClassName({
+    variant: variant === "primary" ? "primary" : "secondary",
+    size: "sm",
+  });
   const Icon = ACTION_ICON[action.kind] ?? ArrowRight;
 
   if (targetTab) {
@@ -864,17 +871,28 @@ function renderAction({
   /* External link — preview / execution review / activate / open job. */
   const href = resolveQuoteReadinessActionHref(action, { quoteId: quote.id });
   return (
-    <Link href={href} className={cls}>
+    <ButtonLink href={href} variant={variant === "primary" ? "primary" : "secondary"} size="sm">
       <Icon className="size-3.5 opacity-80" strokeWidth={2} />
       {externalActionLabel(action)}
       {variant === "primary" ? (
         <ArrowUpRight className="size-3.5 opacity-70" strokeWidth={1.5} />
       ) : null}
-    </Link>
+    </ButtonLink>
   );
 }
 
-/* ─── Identity row (standard mode only) ────────────────────────────────── */
+function quoteSubtitleLine(quote: QuoteWorkSurfaceData): string | null {
+  const subtitle = quote.subtitle?.trim();
+  if (!subtitle) return null;
+  const primary = quote.primaryTitle.trim().toLowerCase();
+  const sub = subtitle.toLowerCase();
+  if (sub === primary || sub === `quote — ${primary}` || primary.includes(sub)) {
+    return null;
+  }
+  return subtitle;
+}
+
+/* ─── Identity row (embedded popup — mobile fallback) ─────────────────── */
 
 function StandardIdentityRow({ quote }: { quote: QuoteWorkSurfaceData }) {
   return (
@@ -898,9 +916,46 @@ function StandardIdentityRow({ quote }: { quote: QuoteWorkSurfaceData }) {
   );
 }
 
+function QuotePageHero({
+  quote,
+  workflow,
+}: {
+  quote: QuoteWorkSurfaceData;
+  workflow: QuoteWorkflowPresentation;
+}) {
+  const subtitle = quoteSubtitleLine(quote);
+
+  return (
+    <section className={`${panelClass} p-5`} aria-label="Quote summary">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label={workflow.statusLabel} tone={workflow.readiness.badgeTone} />
+            {quote.createdAtLabel ? (
+              <span className="text-xs text-foreground-subtle">{quote.createdAtLabel}</span>
+            ) : null}
+            {workflow.isCommercialLocked ? (
+              <span className="text-xs text-foreground-muted">Terms locked</span>
+            ) : null}
+          </div>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            {quote.primaryTitle}
+          </h1>
+          {subtitle ? (
+            <p className="mt-1 text-sm text-foreground-muted">{subtitle}</p>
+          ) : null}
+        </div>
+        <p className="shrink-0 text-2xl font-bold tabular-nums tracking-tight text-foreground">
+          {formatMoneyCents(quote.totalCents)}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Tab: Overview ────────────────────────────────────────────────────── */
 
-function WorkflowHeroCard({
+function NextStepPanel({
   quote,
   workflow,
   onSwitchToTab,
@@ -917,98 +972,248 @@ function WorkflowHeroCard({
 }) {
   const { readiness } = workflow;
   const { showsRevisionDrift } = readiness;
+  const blockerChips = workflow.blockers.slice(0, 3);
 
   return (
-    <div className="rounded-xl border border-border border-l-4 border-l-accent bg-surface p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className={`${panelClass} p-4`} aria-label="Next step">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
-          <p className={sectionLabelClass}>Quote workflow</p>
-          <h2 className="mt-1 text-xl font-semibold leading-snug tracking-tight text-foreground">
+          <p className={sectionLabelClass}>Next step</p>
+          <h2 className="mt-1 text-base font-semibold tracking-tight text-foreground">
             {workflow.primaryHeadline}
           </h2>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <StatusBadge label={workflow.statusLabel} tone={readiness.badgeTone} />
-          <span
-            className={[
-              "rounded-md border px-2 py-0.5 text-[0.65rem] font-medium",
-              workflow.isCommercialLocked
-                ? "border-border bg-foreground/[0.03] text-foreground-muted"
-                : "border-accent/30 bg-accent/5 text-foreground",
-            ].join(" ")}
-          >
-            {workflow.isCommercialLocked
-              ? "Commercial terms locked"
-              : "Commercial terms editable"}
-          </span>
-        </div>
-      </div>
-
-      <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
-        {workflow.primaryMessage}
-      </p>
-
-      {workflow.blockers.length > 0 ? (
-        <ul className="mt-4 space-y-1.5">
-          {workflow.blockers.map((blocker) => (
-            <li
-              key={blocker.message}
-              className="flex items-start gap-2 text-xs text-foreground-muted"
-            >
-              <span className="mt-1 size-1.5 shrink-0 rounded-full bg-danger" aria-hidden />
-              <span>
-                {blocker.message}
-                {blocker.fixTab ? (
-                  <>
-                    {" "}
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+            {workflow.primaryMessage}
+          </p>
+          {blockerChips.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {blockerChips.map((blocker) => (
+                <span
+                  key={blocker.message}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-foreground/[0.02] px-2 py-0.5 text-xs text-foreground-muted"
+                >
+                  {blocker.message}
+                  {blocker.fixTab ? (
                     <button
                       type="button"
                       onClick={() => onSwitchToTab(blocker.fixTab!)}
-                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       Fix
                     </button>
-                  </>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {showsRevisionDrift ? (
-        <p className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-foreground/[0.04] px-2 py-1 text-[0.7rem] font-medium text-foreground">
-          <CheckCircle2 className="size-3.5 opacity-70" strokeWidth={2} />
-          Quote edited since last commercial proof
-        </p>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        {renderAction({
-          action: workflow.primaryAction,
-          variant: "primary",
-          quote,
-          onSwitchToTab,
-          onRequestAddLineItem,
-          onRequestScopeLibraryPicker,
-          onMutated,
-        })}
-        {workflow.secondaryActions.map((action) =>
-          renderAction({
-            action,
-            variant: "secondary",
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {showsRevisionDrift ? (
+            <p className="mt-3 text-xs text-foreground-muted">
+              Edited since last send — review before sending again.
+            </p>
+          ) : null}
+        </div>
+        <div className="flex w-full shrink-0 flex-col gap-2 lg:w-auto lg:min-w-[10rem]">
+          {renderAction({
+            action: workflow.primaryAction,
+            variant: "primary",
             quote,
             onSwitchToTab,
             onRequestAddLineItem,
             onRequestScopeLibraryPicker,
             onMutated,
-          }),
-        )}
+          })}
+          {workflow.secondaryActions.map((action) => (
+            <span key={`${action.kind}:${action.label}`} className="[&_a]:w-full [&_button]:w-full">
+              {renderAction({
+                action,
+                variant: "secondary",
+                quote,
+                onSwitchToTab,
+                onRequestAddLineItem,
+                onRequestScopeLibraryPicker,
+                onMutated,
+              })}
+            </span>
+          ))}
+        </div>
       </div>
+    </section>
+  );
+}
+
+function QuoteFactsGrid({
+  quote,
+  workflow,
+  onSwitchToTab,
+}: {
+  quote: QuoteWorkSurfaceData;
+  workflow: QuoteWorkflowPresentation;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
+}) {
+  const paymentItem = workflow.readinessItems.find((item) => item.label === "Payment schedule");
+  const leadLabel = quote.leadTitle ?? "—";
+
+  const tiles: {
+    key: string;
+    label: string;
+    value: string;
+    sub?: string | null;
+    onClick?: () => void;
+  }[] = [
+    {
+      key: "lines",
+      label: "Lines",
+      value: String(quote.lineItemCount),
+      sub: formatMoney(quote.totalCents),
+      onClick: () => onSwitchToTab("scope"),
+    },
+    {
+      key: "customer",
+      label: "Customer",
+      value: quote.customerDisplayName ?? "Not linked",
+      onClick: () => onSwitchToTab("context"),
+    },
+    {
+      key: "intake",
+      label: "Intake",
+      value: leadLabel,
+      onClick: quote.leadId ? () => onSwitchToTab("context") : undefined,
+    },
+    {
+      key: "job",
+      label: "Job",
+      value: quote.activatedJobId
+        ? quote.activatedJobStatus
+          ? `${quote.activatedJobStatus.charAt(0).toUpperCase()}${quote.activatedJobStatus.slice(1).toLowerCase()}`
+          : "Active"
+        : "Not activated",
+    },
+    {
+      key: "payments",
+      label: "Payments",
+      value: paymentItem?.satisfied ? "Defined" : "Needed",
+      sub: paymentItem?.satisfied ? null : "Add milestones before send",
+      onClick: paymentItem && !paymentItem.satisfied ? () => onSwitchToTab("payments") : undefined,
+    },
+  ];
+
+  return (
+    <div
+      className={`${panelClass} grid grid-cols-2 divide-x divide-y divide-border overflow-hidden lg:grid-cols-5`}
+    >
+      {tiles.map((tile) => {
+        const inner = (
+          <>
+            <p className={sectionLabelClass}>{tile.label}</p>
+            <p className="mt-1.5 text-sm font-semibold text-foreground">{tile.value}</p>
+            {tile.sub ? (
+              <p className="mt-0.5 text-xs text-foreground-muted">{tile.sub}</p>
+            ) : null}
+          </>
+        );
+        if (tile.onClick) {
+          return (
+            <button
+              key={tile.key}
+              type="button"
+              onClick={tile.onClick}
+              className="min-h-[4.5rem] p-3.5 text-left transition-colors hover:bg-foreground/[0.02]"
+            >
+              {inner}
+            </button>
+          );
+        }
+        return (
+          <div key={tile.key} className="min-h-[4.5rem] p-3.5">
+            {inner}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
+function JobsiteSnapshot({
+  quote,
+  onSwitchToTab,
+  embeddedInLead = false,
+  onRequestServiceAddress,
+}: {
+  quote: QuoteWorkSurfaceData;
+  onSwitchToTab: (tab: QuoteWorkSurfaceTab) => void;
+  embeddedInLead?: boolean;
+  onRequestServiceAddress?: () => void;
+}) {
+  const hasLine = Boolean(quote.jobsiteAddressLine?.trim());
+
+  if (embeddedInLead && hasLine) {
+    return null;
+  }
+
+  if (embeddedInLead && !hasLine && onRequestServiceAddress) {
+    return (
+      <div className={`${panelClass} p-4`}>
+        <div className="flex gap-3">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className={sectionLabelClass}>Jobsite</p>
+            <p className="mt-1 text-sm text-foreground-muted">
+              Add the project address in Customer Info before scheduling or activating a job.
+            </p>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="mt-3"
+              onClick={onRequestServiceAddress}
+            >
+              Add jobsite in Customer Info
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasLine) {
+    return (
+      <div className={`${panelClass} p-4`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 gap-2">
+            <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+            <div>
+              <p className={sectionLabelClass}>Jobsite</p>
+              <p className="mt-1 text-sm font-medium text-foreground">No address yet</p>
+              <p className="mt-0.5 text-xs text-foreground-muted">
+                Add the project address before sending or activating.
+              </p>
+            </div>
+          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={() => onSwitchToTab("context")}>
+            Add
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${panelClass} p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-2">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-foreground-subtle" aria-hidden />
+          <div className="min-w-0">
+            <p className={sectionLabelClass}>Jobsite</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{quote.jobsiteAddressLine}</p>
+          </div>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onSwitchToTab("context")}>
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function QuoteJobsiteCallout({
   quote,
@@ -1071,160 +1276,6 @@ function QuoteJobsiteCallout({
   );
 }
 
-function ReadinessGrid({
-  workflow,
-  onSwitchToTab,
-}: {
-  workflow: QuoteWorkflowPresentation;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 @4xl:grid-cols-3">
-      {workflow.readinessItems.map((item) => {
-        const content = (
-          <>
-            <p className={`${sectionLabelClass} mb-0.5`}>{item.label}</p>
-            <p
-              className={[
-                "text-sm font-medium",
-                item.satisfied ? "text-foreground" : "text-foreground-muted",
-              ].join(" ")}
-            >
-              {item.satisfied ? "Complete" : "Needed"}
-            </p>
-          </>
-        );
-        if (item.fixTab && !item.satisfied) {
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => onSwitchToTab(item.fixTab!)}
-              className="rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-border-strong hover:bg-surface"
-            >
-              {content}
-            </button>
-          );
-        }
-        return (
-          <div
-            key={item.label}
-            className="rounded-lg border border-border bg-background p-3"
-          >
-            {content}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RecentActivityList({
-  workflow,
-  showWhenEmpty = false,
-}: {
-  workflow: QuoteWorkflowPresentation;
-  /** When true, render an empty-state panel instead of hiding the section. */
-  showWhenEmpty?: boolean;
-}) {
-  const items = workflow.activityItems.slice(0, 5);
-
-  if (items.length === 0) {
-    if (!showWhenEmpty) return null;
-    return (
-      <div className="rounded-xl border border-border bg-background p-4">
-        <p className={`${sectionLabelClass} mb-1`}>Recent activity</p>
-        <p className="text-xs text-foreground-muted">
-          No proposal sends or customer approvals recorded yet.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-background p-4">
-      <p className={`${sectionLabelClass} mb-3`}>Recent activity</p>
-      <ul className="space-y-2 text-xs text-foreground-muted">
-        {items.map((item) => (
-          <li key={`${item.kind}-${item.atIso}-${item.label}`} className="flex justify-between gap-2">
-            <span className="text-foreground">{item.label}</span>
-            <time dateTime={item.atIso} className="shrink-0 text-foreground-subtle">
-              {item.atLabel}
-            </time>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function FactsGrid({
-  quote,
-  readiness,
-  onSwitchToTab,
-}: {
-  quote: QuoteWorkSurfaceData;
-  readiness: QuoteReadiness;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
-}) {
-  const { signals } = readiness;
-  const leadLabel = quote.leadTitle ?? "—";
-
-  return (
-    <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
-      <button
-        type="button"
-        onClick={() => onSwitchToTab("scope")}
-        className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background"
-      >
-        <p className={`${sectionLabelClass} mb-0.5`}>Lines</p>
-        <p className="text-sm font-medium text-foreground">{signals.lineItemCount}</p>
-        <p className="mt-0.5 text-[0.7rem] text-foreground-subtle">
-          {formatMoney(quote.totalCents)}
-        </p>
-      </button>
-      <button
-        type="button"
-        onClick={() => onSwitchToTab("context")}
-        className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background"
-      >
-        <p className={`${sectionLabelClass} mb-0.5`}>Customer</p>
-        <p className="truncate text-sm font-medium text-foreground">
-          {quote.customerDisplayName ?? "Not linked"}
-        </p>
-      </button>
-      <button
-        type="button"
-        onClick={() => onSwitchToTab("context")}
-        className="rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:bg-background group"
-      >
-        <div className="flex items-center justify-between gap-2 mb-0.5">
-          <p className={sectionLabelClass}>Intake</p>
-          {quote.leadId && (
-            <ArrowUpRight className="size-3 text-foreground-subtle opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
-        </div>
-        <p className="truncate text-sm font-medium text-foreground">{leadLabel}</p>
-      </button>
-      <div className="rounded-lg border border-border bg-surface p-3">
-        <p className={`${sectionLabelClass} mb-0.5`}>Job</p>
-        {quote.activatedJobId ? (
-          <Link
-            href={`/jobs/${quote.activatedJobId}`}
-            className="text-sm font-medium text-foreground underline-offset-4 hover:underline capitalize"
-          >
-            {quote.activatedJobStatus
-              ? `${quote.activatedJobStatus.charAt(0).toUpperCase()}${quote.activatedJobStatus.slice(1).toLowerCase()}`
-              : "Active"}
-          </Link>
-        ) : (
-          <p className="text-sm text-foreground-muted">Not activated</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function OverviewTab({
   quote,
   workflow,
@@ -1248,9 +1299,15 @@ function OverviewTab({
   onRequestServiceAddress?: () => void;
   suppressIdentityRow?: boolean;
 }) {
+  const showEmptyActivity =
+    workflow.workflowState === "SENT_PENDING_APPROVAL" ||
+    workflow.workflowState === "APPROVED_EXECUTION_NEEDED" ||
+    workflow.workflowState === "READY_FOR_JOB_ACTIVATION" ||
+    workflow.workflowState === "JOB_ACTIVATED";
+
   return (
     <div className="space-y-4">
-      <WorkflowHeroCard
+      <NextStepPanel
         quote={quote}
         workflow={workflow}
         onSwitchToTab={onSwitchToTab}
@@ -1261,47 +1318,23 @@ function OverviewTab({
 
       <QuoteChangeRequestsCard quote={quote} onMutated={onMutated} />
 
-      <div>
-        <p className={`${sectionLabelClass} mb-2`}>Readiness</p>
-        <ReadinessGrid workflow={workflow} onSwitchToTab={onSwitchToTab} />
-      </div>
+      <section aria-label="Quote facts">
+        <p className={`${sectionLabelClass} mb-2`}>Quote facts</p>
+        <QuoteFactsGrid quote={quote} workflow={workflow} onSwitchToTab={onSwitchToTab} />
+      </section>
 
-      <div>
-        <p className={`${sectionLabelClass} mb-2`}>Details</p>
-        <FactsGrid
-          quote={quote}
-          readiness={workflow.readiness}
-          onSwitchToTab={onSwitchToTab}
-        />
-      </div>
-
-      <QuoteJobsiteCallout
+      <JobsiteSnapshot
         quote={quote}
-        onMutated={onMutated}
+        onSwitchToTab={onSwitchToTab}
         embeddedInLead={embeddedInLead}
         onRequestServiceAddress={onRequestServiceAddress}
       />
 
-      <RecentActivityList workflow={workflow} />
-
-      {/* Active job link — visible on Overview when activated. */}
-      {quote.activatedJobId ? (
-        <Link
-          href={`/jobs/${quote.activatedJobId}`}
-          className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong"
-        >
-          <div>
-            <p className={sectionLabelClass}>Active job</p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">
-              Job activated from this quote
-            </p>
-          </div>
-          <ArrowUpRight className="size-4 text-foreground-subtle" strokeWidth={1.5} />
-        </Link>
+      {workflow.activityItems.length > 0 || showEmptyActivity ? (
+        <RecentActivityList workflow={workflow} showWhenEmpty={showEmptyActivity} />
       ) : null}
 
-      {/* Record details disclosure — handy on Overview, full content lives on Record tab. */}
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className={`${panelClass} p-4`}>
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <ChevronRight
@@ -1346,6 +1379,45 @@ function OverviewTab({
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RecentActivityList({
+  workflow,
+  showWhenEmpty = false,
+}: {
+  workflow: QuoteWorkflowPresentation;
+  /** When true, render an empty-state panel instead of hiding the section. */
+  showWhenEmpty?: boolean;
+}) {
+  const items = workflow.activityItems.slice(0, 5);
+
+  if (items.length === 0) {
+    if (!showWhenEmpty) return null;
+    return (
+      <div className={`${panelClass} p-4`}>
+        <p className={`${sectionLabelClass} mb-1`}>Recent activity</p>
+        <p className="text-xs text-foreground-muted">
+          No proposal sends or customer approvals recorded yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${panelClass} p-4`}>
+      <p className={`${sectionLabelClass} mb-3`}>Recent activity</p>
+      <ul className="space-y-2 text-xs text-foreground-muted">
+        {items.map((item) => (
+          <li key={`${item.kind}-${item.atIso}-${item.label}`} className="flex justify-between gap-2">
+            <span className="text-foreground">{item.label}</span>
+            <time dateTime={item.atIso} className="shrink-0 text-foreground-subtle">
+              {item.atLabel}
+            </time>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1454,7 +1526,6 @@ function ScopeTab({
   quote,
   workspaceTabs,
   workflow,
-  onSwitchToTab,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
   shouldOpenScopeLibraryPicker,
@@ -1465,7 +1536,6 @@ function ScopeTab({
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   workflow: QuoteWorkflowPresentation;
-  onSwitchToTab: (tab: QuoteWorkSurfaceTab, preview?: "none" | "proposal" | "execution" | "send") => void;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
   shouldOpenScopeLibraryPicker: boolean;
@@ -1479,7 +1549,6 @@ function ScopeTab({
     isArchived,
     customerDocumentTitle,
     internalNotes,
-    hasLeadNotes,
     subtotalCents,
     totalCents,
     lineItems,
@@ -2583,7 +2652,9 @@ export function QuoteWorkSurface({
 
   return (
     <div className="@container space-y-4 @[768px]:mb-6">
-      {!suppressIdentityRow && (
+      {!suppressIdentityRow ? (
+        <QuotePageHero quote={quote} workflow={workflow} />
+      ) : (
         <div className="@[768px]:hidden">
           <StandardIdentityRow quote={quote} />
         </div>
@@ -2651,7 +2722,6 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           workflow={workflow}
-          onSwitchToTab={handleSwitchToTab}
           shouldFocusAddForm={shouldFocusAddForm}
           onAddFormFocusConsumed={handleAddFormFocusConsumed}
           shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}

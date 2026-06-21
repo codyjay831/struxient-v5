@@ -11,7 +11,14 @@
  * ensuring the UI stays open in drawers and popups.
  */
 
-import { useEffect, useMemo, useRef, useState, useActionState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useActionState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { ArrowUpRight, ListOrdered, Sparkles, Loader2, X, ChevronDown } from "lucide-react";
 import {
@@ -103,6 +110,7 @@ import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-
 import type { QuoteWorkspaceLead } from "@/lib/quote-workspace-payload";
 import { toast } from "sonner";
 
+import { buttonClassName } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
@@ -212,11 +220,13 @@ function QuoteDraftDetailsForm({
   initialTitle,
   initialCustomerDocumentTitle,
   onMutated,
+  headerActions,
 }: {
   quoteId: string;
   initialTitle: string;
   initialCustomerDocumentTitle: string | null;
   onMutated: () => void;
+  headerActions?: ReactNode;
 }) {
   const [state, formAction, isPending] = useActionState(
     updateDraftQuoteDetailsWorkspaceAction.bind(null, quoteId),
@@ -238,6 +248,7 @@ function QuoteDraftDetailsForm({
       <SectionHeading
         title="Draft details"
         description="Internal title and the name your customer sees on the proposal."
+        actions={headerActions}
       />
       <form action={formAction} className="space-y-4">
         {state.error ? <FormError message={state.error} /> : null}
@@ -329,6 +340,108 @@ function QuoteInternalNotesSidebarForm({
         </button>
       </form>
     </section>
+  );
+}
+
+function QuoteAuthoringReferencePanel({
+  lead,
+  isPublicIntake,
+  parsedFields,
+  cleanNotes,
+  showRawIntake,
+  onToggleRawIntake,
+  onOpenScopeCapture,
+  showScopeCaptureLink,
+  quoteId,
+  initialTitle,
+  initialInternalNotes,
+  onMutated,
+}: {
+  lead: QuoteWorkspaceLead | null | undefined;
+  isPublicIntake: boolean;
+  parsedFields: { label: string; value: string }[];
+  cleanNotes: string | null;
+  showRawIntake: boolean;
+  onToggleRawIntake: () => void;
+  onOpenScopeCapture: () => void;
+  showScopeCaptureLink: boolean;
+  quoteId: string;
+  initialTitle: string;
+  initialInternalNotes: string | null;
+  onMutated: () => void;
+}) {
+  return (
+    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+      <section className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-3.5 text-accent" />
+          <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
+            Intake Reference
+          </h3>
+        </div>
+
+        {isPublicIntake ? (
+          <div className="space-y-4">
+            {parsedFields.map((field) => {
+              const isHighSignal =
+                field.label === "Service Location Address" || field.label === "Request Type";
+              return (
+                <div key={field.label} className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-wider text-foreground-subtle">
+                    {field.label}
+                  </p>
+                  <p
+                    className={`text-xs leading-tight ${isHighSignal ? "font-bold text-foreground" : "text-foreground-muted"}`}
+                  >
+                    {field.value}
+                  </p>
+                </div>
+              );
+            })}
+
+            <div className="border-t border-border pt-2">
+              <button
+                type="button"
+                onClick={onToggleRawIntake}
+                className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground-subtle transition-colors hover:text-foreground"
+              >
+                <ChevronDown
+                  className={`size-2.5 transition-transform ${showRawIntake ? "rotate-180" : ""}`}
+                />
+                {showRawIntake ? "Hide raw notes" : "View raw notes"}
+              </button>
+              {showRawIntake ? (
+                <p className="mt-2 text-[10px] italic text-foreground-muted leading-relaxed">
+                  &ldquo;{cleanNotes}&rdquo;
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : lead?.notes ? (
+          <p className="text-xs italic text-foreground-muted leading-relaxed">
+            &ldquo;{lead.notes}&rdquo;
+          </p>
+        ) : (
+          <p className="text-xs italic text-foreground-subtle">No intake notes available.</p>
+        )}
+        {showScopeCaptureLink ? (
+          <button
+            type="button"
+            className="text-xs font-medium text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
+            onClick={onOpenScopeCapture}
+          >
+            Draft scope from intake →
+          </button>
+        ) : null}
+      </section>
+
+      <QuoteInternalNotesSidebarForm
+        quoteId={quoteId}
+        initialTitle={initialTitle}
+        initialInternalNotes={initialInternalNotes}
+        onMutated={onMutated}
+      />
+    </div>
   );
 }
 
@@ -769,7 +882,7 @@ export function QuoteAuthoringSurface({
   const [isAiAssessing, setIsAiAssessing] = useState(false);
   const aiAssessRequestSeqRef = useRef(0);
   const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isReferenceOpen, setIsReferenceOpen] = useState(false);
   const [showRawIntake, setShowRawIntake] = useState(false);
   const [scopeCaptureOpen, setScopeCaptureOpen] = useState(false);
   const [scopeCaptureText, setScopeCaptureText] = useState("");
@@ -1332,19 +1445,47 @@ export function QuoteAuthoringSurface({
   );
 
   return (
-    <div className="@container">
-      <div className="flex flex-col gap-6 @5xl:flex-row @5xl:items-start">
-        {/* Main Content Area */}
-        <div className="flex-1 min-w-0 space-y-6">
-          <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
-            <QuoteDraftDetailsForm
+    <div className="@container min-w-0 overflow-x-hidden">
+      <div className="min-w-0 space-y-6">
+        <WorkspacePanel className="border-border-strong shadow-md ring-1 ring-ring/30">
+          <QuoteDraftDetailsForm
+            quoteId={quoteId}
+            initialTitle={initialTitle}
+            initialCustomerDocumentTitle={initialCustomerDocumentTitle}
+            onMutated={onMutated}
+            headerActions={
+              <button
+                type="button"
+                aria-expanded={isReferenceOpen}
+                onClick={() => setIsReferenceOpen((open) => !open)}
+                className={buttonClassName({ variant: "ghost", size: "sm" })}
+              >
+                <Sparkles className="size-3.5 opacity-80" strokeWidth={2} />
+                Reference
+              </button>
+            }
+          />
+
+          {isReferenceOpen ? (
+            <QuoteAuthoringReferencePanel
+              lead={lead}
+              isPublicIntake={isPublicIntake}
+              parsedFields={parsedFields}
+              cleanNotes={cleanNotes}
+              showRawIntake={showRawIntake}
+              onToggleRawIntake={() => setShowRawIntake((open) => !open)}
+              onOpenScopeCapture={openScopeCapture}
+              showScopeCaptureLink={
+                hasIntakeNotes || hasScopeSummary || hasInternalNotesForCapture
+              }
               quoteId={quoteId}
               initialTitle={initialTitle}
-              initialCustomerDocumentTitle={initialCustomerDocumentTitle}
+              initialInternalNotes={initialInternalNotes}
               onMutated={onMutated}
             />
+          ) : null}
 
-            <div className="my-6 border-t border-border" />
+          <div className="my-6 border-t border-border" />
 
             <SectionHeading
               title="Line items"
@@ -1586,100 +1727,6 @@ export function QuoteAuthoringSurface({
               </Link>
             </div>
           ) : null}
-        </div>
-
-        {/* Sidebar: Intake Reference & Internal Notes */}
-        <div
-          className={[
-            "w-full shrink-0 transition-all duration-300",
-            isSidebarOpen ? "opacity-100 @5xl:w-72" : "opacity-50 @5xl:w-10",
-          ].join(" ")}
-        >
-          <div className="sticky top-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-foreground-subtle transition-colors hover:text-foreground"
-              >
-                {isSidebarOpen ? (
-                  <>Hide Reference <X className="size-3" /></>
-                ) : (
-                  <><Sparkles className="size-3" /> Show Reference</>
-                )}
-              </button>
-            </div>
-
-            {isSidebarOpen && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                {/* Intake Reference Block */}
-                <section className="rounded-xl border border-border bg-surface p-4 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="size-3.5 text-accent" />
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground-subtle">
-                      Intake Reference
-                    </h3>
-                  </div>
-
-                  {isPublicIntake ? (
-                    <div className="space-y-4">
-                      {parsedFields.map((field) => {
-                        const isHighSignal = field.label === "Service Location Address" || field.label === "Request Type";
-                        return (
-                          <div key={field.label} className="space-y-1">
-                            <p className="text-xs font-bold uppercase tracking-wider text-foreground-subtle">
-                              {field.label}
-                            </p>
-                            <p className={`text-xs leading-tight ${isHighSignal ? "font-bold text-foreground" : "text-foreground-muted"}`}>
-                              {field.value}
-                            </p>
-                          </div>
-                        );
-                      })}
-                      
-                      <div className="border-t border-border pt-2">
-                        <button
-                          onClick={() => setShowRawIntake(!showRawIntake)}
-                          className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground-subtle transition-colors hover:text-foreground"
-                        >
-                          <ChevronDown className={`size-2.5 transition-transform ${showRawIntake ? "rotate-180" : ""}`} />
-                          {showRawIntake ? "Hide raw notes" : "View raw notes"}
-                        </button>
-                        {showRawIntake && (
-                          <p className="mt-2 text-[10px] italic text-foreground-muted leading-relaxed">
-                            &ldquo;{cleanNotes}&rdquo;
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ) : lead?.notes ? (
-                    <p className="text-xs italic text-foreground-muted leading-relaxed">
-                      &ldquo;{lead.notes}&rdquo;
-                    </p>
-                  ) : (
-                    <p className="text-xs italic text-foreground-subtle">No intake notes available.</p>
-                  )}
-                  {(hasIntakeNotes || hasScopeSummary || hasInternalNotesForCapture) && (
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
-                      onClick={openScopeCapture}
-                    >
-                      Draft scope from intake →
-                    </button>
-                  )}
-                </section>
-
-                {/* Internal Quote Notes Block */}
-                <QuoteInternalNotesSidebarForm
-                  quoteId={quoteId}
-                  initialTitle={initialTitle}
-                  initialInternalNotes={initialInternalNotes}
-                  onMutated={onMutated}
-                />
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {activeAiLineId && !lineExecutionAiRetired ? (
