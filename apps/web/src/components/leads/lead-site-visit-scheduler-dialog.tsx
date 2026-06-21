@@ -236,86 +236,96 @@ export function LeadSiteVisitSchedulerDialog({
   }, [open, weekStartValue]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} className="max-w-2xl">
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            Pick a time without leaving this lead. This confirms the pre-job visit request.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {requestedWindow?.trim() ? (
-            <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground-muted">
-              Customer requested: <span className="font-medium text-foreground">{requestedWindow.trim()}</span>
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setWeekStartValue(toDateInputValue(addDays(weekStartDate, -7)));
-                setDateValue(toDateInputValue(addDays(selectedDate, -7)));
-              }}
-              aria-label="Previous week"
-            >
-              <ChevronLeft className="size-4" aria-hidden />
-            </Button>
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Schedule context
-              </p>
-              <p className="text-sm font-medium text-foreground">{weekRangeLabel}</p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setWeekStartValue(toDateInputValue(addDays(weekStartDate, 7)));
-                setDateValue(toDateInputValue(addDays(selectedDate, 7)));
-              }}
-              aria-label="Next week"
-            >
-              <ChevronRight className="size-4" aria-hidden />
-            </Button>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      className="h-[calc(100dvh-4rem)] max-h-[44rem] max-w-2xl overflow-hidden p-0"
+    >
+      <DialogContent className="h-full">
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
+          <div className="px-6 pb-3 pt-6">
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>
+                Pick a time without leaving this lead. This confirms the pre-job visit request.
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
-          <div className="grid grid-cols-7 gap-1.5">
-            {weekDays.map((day) => {
-              const value = toDateInputValue(day);
-              const selected = value === dateValue;
-              const busyCount = scheduleEvents.filter((event) => eventTouchesDay(event, day)).length;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setDateValue(value)}
-                  className={`rounded-lg border px-2 py-2 text-center text-xs transition-colors ${
-                    selected
-                      ? "border-border-strong bg-accent text-accent-contrast"
-                      : "border-border bg-background text-foreground-muted hover:border-border-strong hover:text-foreground"
-                  }`}
-                >
-                  <span className="block text-[0.65rem] uppercase tracking-wide">
-                    {day.toLocaleDateString(undefined, { weekday: "short" })}
-                  </span>
-                  <span className="block text-sm font-semibold">{day.getDate()}</span>
-                  <span
-                    className={`mt-1 block text-[0.65rem] ${
-                      selected ? "text-accent-contrast/80" : "text-foreground-subtle"
+          <div className="min-h-0 space-y-4 overflow-y-auto overscroll-contain px-6 py-4">
+            {requestedWindow?.trim() ? (
+              <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground-muted">
+                Customer requested:{" "}
+                <span className="font-medium text-foreground">{requestedWindow.trim()}</span>
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-9"
+                onClick={() => {
+                  setWeekStartValue(toDateInputValue(addDays(weekStartDate, -7)));
+                  setDateValue(toDateInputValue(addDays(selectedDate, -7)));
+                }}
+                aria-label="Previous week"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+              </Button>
+              <div className="text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                  Schedule context
+                </p>
+                <p className="text-sm font-medium text-foreground">{weekRangeLabel}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-9"
+                onClick={() => {
+                  setWeekStartValue(toDateInputValue(addDays(weekStartDate, 7)));
+                  setDateValue(toDateInputValue(addDays(selectedDate, 7)));
+                }}
+                aria-label="Next week"
+              >
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1.5">
+              {weekDays.map((day) => {
+                const value = toDateInputValue(day);
+                const selected = value === dateValue;
+                const busyCount = scheduleEvents.filter((event) => eventTouchesDay(event, day)).length;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setDateValue(value)}
+                    className={`min-h-16 rounded-lg border px-2 py-2.5 text-center text-xs leading-tight transition-colors ${
+                      selected
+                        ? "border-border-strong bg-accent text-accent-contrast"
+                        : "border-border bg-background text-foreground-muted hover:border-border-strong hover:text-foreground"
                     }`}
                   >
-                    {isScheduleLoading ? "..." : busyCount > 0 ? `${busyCount} busy` : "Open"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="block text-[0.65rem] uppercase tracking-wide">
+                      {day.toLocaleDateString(undefined, { weekday: "short" })}
+                    </span>
+                    <span className="block text-sm font-semibold">{day.getDate()}</span>
+                    <span
+                      className={`mt-1 block text-[0.65rem] ${
+                        selected ? "text-accent-contrast/80" : "text-foreground-subtle"
+                      }`}
+                    >
+                      {isScheduleLoading ? "..." : busyCount > 0 ? `${busyCount} busy` : "Open"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label>
@@ -512,69 +522,78 @@ export function LeadSiteVisitSchedulerDialog({
               {error}
             </p>
           ) : null}
+          </div>
+
+          <div className="border-t border-border bg-surface px-6 py-4">
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                className="min-h-10"
+                disabled={isPending}
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="min-h-10"
+                disabled={isPending || !requestId}
+                onClick={() => {
+                  setError(null);
+                  const scheduledStartAt = parseLocalDateTime(dateValue, timeValue);
+                  if (!scheduledStartAt) {
+                    setError("Choose a valid visit date and time.");
+                    return;
+                  }
+                  if (!requestId) {
+                    setError("Missing visit request.");
+                    return;
+                  }
+
+                  startTransition(async () => {
+                    const parsedDuration = Number.parseInt(durationMinutes, 10);
+                    const scheduleDetails = {
+                      scheduledStartAt,
+                      estimatedDurationMinutes: Number.isFinite(parsedDuration)
+                        ? parsedDuration
+                        : DEFAULT_ESTIMATED_DURATION_MINUTES,
+                      assignedUserId: assignedUserId || null,
+                      arrivalWindowLabel: arrivalWindowLabel.trim() || null,
+                      accessSnapshot,
+                      siteContactSnapshot,
+                      notes: requestedWindow ?? undefined,
+                    };
+                    const actionOptions = {
+                      sourceSurface: "lead" as const,
+                      expectedUpdatedAt,
+                    };
+                    const result =
+                      mode === "reschedule"
+                        ? await rescheduleLeadVisitRequestAction(
+                            requestId,
+                            scheduleDetails,
+                            actionOptions,
+                          )
+                        : await confirmLeadVisitRequestAction(
+                            requestId,
+                            scheduleDetails,
+                            actionOptions,
+                          );
+
+                    if (result.error) {
+                      setError(result.error);
+                      return;
+                    }
+
+                    onOpenChange(false);
+                    onScheduled?.();
+                  });
+                }}
+              >
+                {isPending ? "Saving..." : actionLabel}
+              </Button>
+            </DialogFooter>
+          </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="ghost" disabled={isPending} onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={isPending || !requestId}
-            onClick={() => {
-              setError(null);
-              const scheduledStartAt = parseLocalDateTime(dateValue, timeValue);
-              if (!scheduledStartAt) {
-                setError("Choose a valid visit date and time.");
-                return;
-              }
-              if (!requestId) {
-                setError("Missing visit request.");
-                return;
-              }
-
-              startTransition(async () => {
-                const parsedDuration = Number.parseInt(durationMinutes, 10);
-                const scheduleDetails = {
-                  scheduledStartAt,
-                  estimatedDurationMinutes: Number.isFinite(parsedDuration)
-                    ? parsedDuration
-                    : DEFAULT_ESTIMATED_DURATION_MINUTES,
-                  assignedUserId: assignedUserId || null,
-                  arrivalWindowLabel: arrivalWindowLabel.trim() || null,
-                  accessSnapshot,
-                  siteContactSnapshot,
-                  notes: requestedWindow ?? undefined,
-                };
-                const actionOptions = {
-                  sourceSurface: "lead" as const,
-                  expectedUpdatedAt,
-                };
-                const result =
-                  mode === "reschedule"
-                    ? await rescheduleLeadVisitRequestAction(
-                        requestId,
-                        scheduleDetails,
-                        actionOptions,
-                      )
-                    : await confirmLeadVisitRequestAction(
-                        requestId,
-                        scheduleDetails,
-                        actionOptions,
-                      );
-
-                if (result.error) {
-                  setError(result.error);
-                  return;
-                }
-
-                onOpenChange(false);
-                onScheduled?.();
-              });
-            }}
-          >
-            {isPending ? "Saving..." : actionLabel}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

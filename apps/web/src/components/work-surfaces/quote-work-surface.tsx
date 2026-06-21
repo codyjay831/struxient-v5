@@ -108,6 +108,7 @@ import {
   QuoteAuthoringSurface,
   ArchivedQuoteReadOnlyNotice,
 } from "@/components/quotes/quote-authoring-surface";
+import { QuoteRequestedWorkCard } from "@/components/quotes/quote-requested-work-card";
 import { QuoteSendPanel } from "@/components/quotes/quote-send-panel";
 import {
   QuoteArchivedRestorePanel,
@@ -1323,6 +1324,8 @@ function OverviewTab({
         <QuoteFactsGrid quote={quote} workflow={workflow} onSwitchToTab={onSwitchToTab} />
       </section>
 
+      <QuoteRequestedWorkCard lead={workspaceTabs.lead} />
+
       <JobsiteSnapshot
         quote={quote}
         onSwitchToTab={onSwitchToTab}
@@ -1591,6 +1594,8 @@ function ScopeTab({
   /* non-DRAFT — read-only line list with execution-edit summaries. */
   return (
     <div className="space-y-4">
+      <QuoteRequestedWorkCard lead={workspaceTabs.lead} />
+
       {workflow.canBuildExecutionPlan ? (
         <div className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
           <p className="text-sm font-medium text-foreground">Execution planning</p>

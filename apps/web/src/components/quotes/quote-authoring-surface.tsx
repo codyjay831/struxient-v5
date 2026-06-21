@@ -108,6 +108,7 @@ import {
 import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-line-draft-execution-panel";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { QuoteWorkspaceLead } from "@/lib/quote-workspace-payload";
+import { QuoteRequestedWorkCard } from "@/components/quotes/quote-requested-work-card";
 import { toast } from "sonner";
 
 import { buttonClassName } from "@/components/ui/button";
@@ -1485,6 +1486,8 @@ export function QuoteAuthoringSurface({
             />
           ) : null}
 
+          <QuoteRequestedWorkCard lead={lead} />
+
           <div className="my-6 border-t border-border" />
 
             <SectionHeading
@@ -1826,6 +1829,7 @@ export function QuoteAuthoringSurface({
         hasIntakeNotes={hasIntakeNotes}
         hasInternalNotes={hasInternalNotesForCapture}
         hasScopeSummary={hasScopeSummary}
+        scopeSummaryText={lead?.scopeSummary ?? null}
         captureText={scopeCaptureText}
         onCaptureTextChange={setScopeCaptureText}
         additionalInstructions={scopeAdditionalInstructions}

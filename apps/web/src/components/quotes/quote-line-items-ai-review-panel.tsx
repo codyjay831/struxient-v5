@@ -42,6 +42,8 @@ export type QuoteScopeCapturePanelProps = {
   hasIntakeNotes: boolean;
   hasInternalNotes: boolean;
   hasScopeSummary: boolean;
+  /** Exact lead scope summary text when available (shown when included). */
+  scopeSummaryText?: string | null;
   captureText: string;
   onCaptureTextChange: (value: string) => void;
   additionalInstructions: string;
@@ -67,6 +69,7 @@ export function QuoteScopeCapturePanel({
   hasIntakeNotes,
   hasInternalNotes,
   hasScopeSummary,
+  scopeSummaryText = null,
   captureText,
   onCaptureTextChange,
   additionalInstructions,
@@ -293,6 +296,18 @@ export function QuoteScopeCapturePanel({
                 <span className="text-foreground-subtle">(none available)</span>
               ) : null}
             </label>
+            {hasScopeSummary &&
+            sources.includeScopeSummary !== false &&
+            scopeSummaryText?.trim() ? (
+              <div className="ml-6 rounded-md border border-border bg-surface px-3 py-2">
+                <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                  Included text
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap">
+                  {scopeSummaryText.trim()}
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <label className="block">

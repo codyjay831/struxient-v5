@@ -32,8 +32,14 @@ export function DialogTrigger({ children, asChild, ...props }: React.HTMLAttribu
   return React.cloneElement(children as React.ReactElement, props);
 }
 
-export function DialogContent({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4">{children}</div>;
+export function DialogContent({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={`grid gap-4 ${className}`}>{children}</div>;
 }
 
 export function DialogHeader({ children }: { children: React.ReactNode }) {
