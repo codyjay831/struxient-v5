@@ -42,7 +42,6 @@ export type LeadRecordFormProps = {
       formData: FormData,
     ) => Promise<LeadFormState>;
     initial: {
-      title: string;
       contactName: string | null;
       companyName: string | null;
       email: string | null;
@@ -143,21 +142,6 @@ export function LeadRecordForm(props: LeadRecordFormProps) {
           {state.error}
         </p>
       ) : null}
-
-      <div>
-        <label className="block">
-          <span className={fieldLabelClass}>Title</span>
-          <input
-            name="title"
-            type="text"
-            required
-            maxLength={LEAD_FIELD_LIMITS.title}
-            autoComplete="off"
-            defaultValue={defaults.title}
-            className={controlClass}
-          />
-        </label>
-      </div>
 
       <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1 w-fit">
         <button

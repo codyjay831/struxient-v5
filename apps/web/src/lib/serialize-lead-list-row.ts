@@ -38,6 +38,8 @@ export type SerializedQuoteSummary = {
 export type SerializedLeadRow = {
   id: string;
   title: string;
+  requestType: string | null;
+  scopeSummary: string | null;
   contactName: string | null;
   companyName: string | null;
   email: string | null;
@@ -84,6 +86,8 @@ export type SerializedLeadRow = {
 export type LeadWithRelations = {
   id: string;
   title: string;
+  requestType: string | null;
+  scopeSummary: string | null;
   status: LeadStatus;
   followUpAt: Date | null;
   channel: LeadChannel;
@@ -233,6 +237,8 @@ export function serializeLeadListRow(
   return {
     id: lead.id,
     title: lead.title,
+    requestType: lead.requestType,
+    scopeSummary: lead.scopeSummary,
     contactName: lead.contactName,
     companyName: lead.companyName,
     email: lead.email,

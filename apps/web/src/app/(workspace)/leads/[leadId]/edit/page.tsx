@@ -119,7 +119,7 @@ export default async function EditLeadPage({
       <WorkspacePanel className="mb-6">
         <SectionHeading
           title="Intake record"
-          description="Title is required. Leave optional fields blank to clear stored values. Empty optional values normalize to null on the server."
+          description="Leave optional fields blank to clear stored values. Empty optional values normalize to null on the server."
         />
         <LeadRecordForm
           updateFormAction={updateLeadAction.bind(null, lead.id)}
@@ -128,7 +128,6 @@ export default async function EditLeadPage({
           availableTemplates={availableTemplates}
           customFieldDefs={customFieldDefs}
           initial={{
-            title: lead.title,
             contactName: lead.contactName,
             companyName: lead.companyName,
             email: lead.email,

@@ -12,27 +12,22 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { type SerializedLeadRow } from "@/lib/serialize-lead-list-row";
 import { leadRowMatchesPipeline } from "@/lib/lead-list-query";
 
-function LeadRow({ lead }: { lead: SerializedLeadRow }) {
-  const toneDotClass =
-    lead.progressTone === "approved"
-      ? "bg-success"
-      : lead.progressTone === "sent"
-        ? "bg-accent"
-        : lead.progressTone === "warning"
-          ? "bg-warning"
-          : "bg-foreground-subtle";
+function trimOrNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
 
+function LeadRow({ lead }: { lead: SerializedLeadRow }) {
   const primaryName =
     lead.customerDisplayName ??
     lead.contactName ??
     lead.companyName ??
     lead.email ??
     "Unknown contact";
-  const workLabel =
-    lead.title && lead.title !== "New lead" && lead.title !== "Untitled Request"
-      ? lead.title
-      : null;
-  const secondaryParts = [workLabel, lead.jobsiteAddressLine].filter(Boolean);
+  const requestTypeLabel = trimOrNull(lead.requestType);
+  const addressLine = trimOrNull(lead.jobsiteAddressLine);
+  const scopePreview = trimOrNull(lead.scopeSummary);
+  const ageLabel = lead.opportunityFlow.ageLabel || lead.ageLabel;
 
   return (
     <div className="group relative flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -42,35 +37,36 @@ function LeadRow({ lead }: { lead: SerializedLeadRow }) {
         className="flex min-w-0 flex-1 flex-col gap-2 border-l-2 border-transparent px-4 py-3 text-left transition-colors hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex-row sm:items-center sm:gap-4"
       >
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className={`h-2 w-2 shrink-0 rounded-full ${toneDotClass}`} aria-hidden />
-          <span className="text-sm font-semibold text-foreground leading-none">{primaryName}</span>
-          <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold leading-none text-foreground">{primaryName}</span>
+            <StatusBadge label={lead.progressLabel} tone={lead.progressTone} />
+          </div>
 
-        {secondaryParts.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
-            {workLabel ? <span className="max-w-[20rem] truncate">{workLabel}</span> : null}
-            {workLabel && lead.jobsiteAddressLine ? <span aria-hidden>·</span> : null}
-            {lead.jobsiteAddressLine ? (
-              <span className="max-w-[12rem] truncate">{lead.jobsiteAddressLine}</span>
+          {addressLine ? (
+            <p className="max-w-3xl truncate text-sm text-foreground-muted">{addressLine}</p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
+            {requestTypeLabel ? (
+              <span className="max-w-[18rem] truncate font-medium text-foreground-muted">
+                {requestTypeLabel}
+              </span>
+            ) : null}
+            {requestTypeLabel ? <span aria-hidden>·</span> : null}
+            <span>{ageLabel}</span>
+            {lead.valueLabel ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{lead.valueLabel}</span>
+              </>
             ) : null}
           </div>
-        ) : null}
 
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-foreground-subtle">
-          {lead.progressDescription ? (
-            <span className="font-medium text-foreground-muted">{lead.progressDescription}</span>
+          {scopePreview ? (
+            <p className="max-w-3xl truncate text-xs text-foreground-muted">
+              {scopePreview}
+            </p>
           ) : null}
-          {lead.progressDescription ? <span aria-hidden>·</span> : null}
-          <span>{lead.opportunityFlow.ageLabel || lead.ageLabel}</span>
-          {lead.valueLabel ? (
-            <>
-              <span aria-hidden>·</span>
-              <span>{lead.valueLabel}</span>
-            </>
-          ) : null}
-        </div>
         </div>
       </Link>
 

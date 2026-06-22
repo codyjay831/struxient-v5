@@ -184,15 +184,6 @@ export async function updateLeadAction(
     return { error: "Missing sales record id." };
   }
 
-  const title = trimRequired(formData.get("title"));
-  if (!title) {
-    return { error: "Title is required." };
-  }
-  const titleErr = enforceMaxLength("Title", title, LEAD_FIELD_LIMITS.title);
-  if (titleErr) {
-    return titleErr;
-  }
-
   const ctx = await getCommercialRequestContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },

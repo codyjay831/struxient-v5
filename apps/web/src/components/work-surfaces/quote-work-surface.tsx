@@ -2516,7 +2516,7 @@ function RecordTab({
         </div>
       </div>
 
-      {/* Internal notes — read-only when commercial-locked (DRAFT shows them inline in Scope tab via the details form). */}
+      {/* Internal notes — read-only when commercial-locked (editable on Scope tab while DRAFT). */}
       {!isCommercialEditable ? (
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className={`${sectionLabelClass} mb-1`}>Internal notes</p>

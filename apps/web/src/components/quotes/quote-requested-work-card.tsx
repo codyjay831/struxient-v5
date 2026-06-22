@@ -55,9 +55,11 @@ export function QuoteRequestedWorkCard({ lead, embedded = false }: QuoteRequeste
           ) : hasIntakeNotes ? (
             <>
               <p className="text-sm text-foreground-muted">
-                No scope summary on the linked opportunity. Intake notes are available via{" "}
-                <span className="font-medium text-foreground">Reference</span> and{" "}
-                <span className="font-medium text-foreground">Quick scope capture</span>.
+                No scope summary on the linked opportunity. Use{" "}
+                <span className="font-medium text-foreground">Customer &amp; Intake</span> for full
+                intake context, or{" "}
+                <span className="font-medium text-foreground">Quick scope capture</span> to draft
+                line items.
               </p>
               <p className="text-xs text-foreground-subtle truncate" title={lead.title}>
                 {lead.title}

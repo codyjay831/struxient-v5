@@ -903,6 +903,9 @@ export function LeadCommercialSurface({
     </section>
   );
 
+  const showCustomerRail =
+    !isAssignedVisitMode && !(embeddedInOpportunityWorkspace && customer);
+
   const customerRail = !isAssignedVisitMode ? (
     <LeadCustomerActionPanel
       panelRef={customerSectionRef}
@@ -1081,16 +1084,18 @@ export function LeadCommercialSurface({
               </div>
             </section>
           ) : (
-            <header className="space-y-3">
-              <LeadReviewQuickActions
-                phone={lead.phone}
-                email={lead.email}
-                leadId={lead.id}
-                visits={visitRequests}
-                siteVisitDisabled={isTerminalPhase || isAssignedVisitMode}
-                onSuccess={notifyMutationSuccess}
-              />
-            </header>
+            !embeddedInOpportunityWorkspace ? (
+              <header className="space-y-3">
+                <LeadReviewQuickActions
+                  phone={lead.phone}
+                  email={lead.email}
+                  leadId={lead.id}
+                  visits={visitRequests}
+                  siteVisitDisabled={isTerminalPhase || isAssignedVisitMode}
+                  onSuccess={notifyMutationSuccess}
+                />
+              </header>
+            ) : null
           )}
 
           {nextActionPanel}
@@ -1115,7 +1120,7 @@ export function LeadCommercialSurface({
 
           {isCompact ? (
             <>
-              {!isAssignedVisitMode ? customerRail : null}
+              {showCustomerRail ? customerRail : null}
               <button
                 type="button"
                 onClick={() => setShowSecondaryDetails((open) => !open)}
@@ -1147,7 +1152,7 @@ export function LeadCommercialSurface({
                   {activityFilesPanel}
                 </div>
                 <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20">
-                  {customerRail}
+                  {showCustomerRail ? customerRail : null}
                   {readinessRail}
                   {secondaryActionsRail}
                   {closePauseRail}

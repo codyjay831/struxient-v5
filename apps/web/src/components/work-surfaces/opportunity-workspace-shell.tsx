@@ -2,12 +2,14 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/status-badge";
 import { workspaceContentWidth } from "@/components/shell/shell-layout-classes";
 import { LeadCommercialSurface } from "@/components/work-surfaces/lead-commercial-surface";
 import { QuoteWorkSurface } from "@/components/work-surfaces/quote-work-surface";
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
+import { LeadReviewQuickActions } from "@/components/leads/lead-review-quick-actions";
 import {
   loadLeadActiveQuoteWorkSurfaceAction,
 } from "@/app/(workspace)/leads/lead-workspace-actions";
@@ -69,6 +71,8 @@ export function OpportunityWorkspaceShell({
   const quoteSurface = quoteSurfaceOverride ?? initialQuoteSurface;
 
   const { lead, opportunityFlow, customer } = payload;
+  const isTerminalPhase = opportunityFlow.phase === "PAUSED" || opportunityFlow.phase === "LOST";
+  const isAssignedVisitMode = payload.surfaceMode === "assigned_visit";
   const primaryName =
     customer?.displayName ||
     lead.contactName ||
@@ -101,7 +105,7 @@ export function OpportunityWorkspaceShell({
   }, [lead.id, onWorkspaceMutated, router]);
 
   const handleNavigateToQuoteTab = useCallback(
-    (_quoteId?: string) => {
+    () => {
       startTransition(async () => {
         await refreshQuoteSurface();
         switchTab("quote");
@@ -176,9 +180,18 @@ export function OpportunityWorkspaceShell({
                   <span className="text-xs text-foreground-muted">{opportunityFlow.ageLabel}</span>
                 ) : null}
               </div>
-              <h1 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                {primaryName}
-              </h1>
+              {customer ? (
+                <Link
+                  href={customer.href}
+                  className="mt-2 inline-flex max-w-full text-xl font-bold tracking-tight text-foreground underline-offset-4 hover:underline sm:text-2xl"
+                >
+                  <span className="truncate">{primaryName}</span>
+                </Link>
+              ) : (
+                <h1 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                  {primaryName}
+                </h1>
+              )}
               {lead.jobsiteAddressLine ? (
                 <p className="mt-1 text-sm text-foreground-muted">{lead.jobsiteAddressLine}</p>
               ) : null}
@@ -186,15 +199,25 @@ export function OpportunityWorkspaceShell({
                 {opportunityFlow.summary}
               </p>
             </div>
-            {onClose ? (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md px-2 py-1 text-xs font-medium text-foreground-muted hover:text-foreground"
-              >
-                Close
-              </button>
-            ) : null}
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <LeadReviewQuickActions
+                phone={lead.phone}
+                email={lead.email}
+                leadId={lead.id}
+                visits={payload.visitRequests}
+                siteVisitDisabled={isTerminalPhase || isAssignedVisitMode}
+                onSuccess={handleMutationSuccess}
+              />
+              {onClose ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-foreground-muted hover:text-foreground"
+                >
+                  Close
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <nav
