@@ -30,6 +30,16 @@ export default async function PublicIntakeSettingsPage() {
   const ctx = await getRequestContextOrThrow();
   const row = await db.publicRequestSettings.findUnique({
     where: { organizationId: ctx.organizationId },
+    select: {
+      enabled: true,
+      formTitle: true,
+      introMessage: true,
+      emergencyWarningText: true,
+      submitButtonText: true,
+      instantQuoteEnabled: true,
+      showInstantQuoteDetails: true,
+      offerings: true,
+    },
   });
 
   const introFieldValue = !row ? DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE : (row.introMessage ?? "");

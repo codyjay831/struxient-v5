@@ -373,7 +373,24 @@ export async function getPublicRequestIntakeBundle(
   }
 
   const requestTypeOptions = resolvePublicFormRequestTypeOptions(triageRules);
-  if (!requestTypeOptions) {
+  if (!requestTypeOptions && !formSlug) {
+    try {
+      formDefinition = await ensureDefaultPublicIntakeFormDefinition(org.id);
+      const provisioned = await db.intakeFormDefinition.findFirst({
+        where: { id: formDefinition.id, organizationId: org.id },
+        select: { triageRules: true },
+      });
+      triageRules = provisioned?.triageRules;
+    } catch (error) {
+      console.error(
+        "[getPublicRequestIntakeBundle] backfill default public triageRules failed",
+        { organizationId: org.id, companySlug: normalizedCompany, error },
+      );
+    }
+  }
+
+  const resolvedRequestTypeOptions = resolvePublicFormRequestTypeOptions(triageRules);
+  if (!resolvedRequestTypeOptions) {
     console.error(
       "[getPublicRequestIntakeBundle] intake form missing triageRules.requestTypeOptions",
       { organizationId: org.id, companySlug: normalizedCompany, formId: formDefinition.id },
@@ -387,7 +404,7 @@ export async function getPublicRequestIntakeBundle(
     companySlug: org.slug,
     intake,
     formDefinition,
-    requestTypeOptions,
+    requestTypeOptions: resolvedRequestTypeOptions,
   };
 }
 

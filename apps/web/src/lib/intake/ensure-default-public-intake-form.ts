@@ -5,6 +5,7 @@ import {
   type IntakeFormDefinitionShape,
 } from "@/lib/intake/default-intake-form";
 import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
+import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
 import {
   INTAKE_FORM_DEFINITION_SELECT,
   PUBLIC_INTAKE_FORM_WHERE,
@@ -29,19 +30,35 @@ export async function ensureDefaultPublicIntakeFormDefinition(
       isDefault: true,
       archivedAt: null,
     },
-    select: INTAKE_FORM_DEFINITION_SELECT,
+    select: {
+      ...INTAKE_FORM_DEFINITION_SELECT,
+      triageRules: true,
+    },
     orderBy: { updatedAt: "desc" },
   });
 
   const shaped = existing ? toIntakeFormDefinitionShape(existing) : null;
-  if (shaped) {
-    return shaped;
-  }
-
-  const schemaJson = DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
   const triageRulesJson = {
     requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
   } as Prisma.InputJsonValue;
+  const hasRequestTypeOptions = resolvePublicFormRequestTypeOptions(existing?.triageRules);
+  if (shaped && hasRequestTypeOptions) {
+    return shaped;
+  }
+  if (shaped && existing) {
+    const repaired = await db.intakeFormDefinition.update({
+      where: { id: existing.id },
+      data: { triageRules: triageRulesJson },
+      select: INTAKE_FORM_DEFINITION_SELECT,
+    });
+    const result = toIntakeFormDefinitionShape(repaired);
+    if (!result) {
+      throw new Error("Failed to backfill default public intake triageRules.");
+    }
+    return result;
+  }
+
+  const schemaJson = DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
 
   const upserted = await db.intakeFormDefinition.upsert({
     where: {
@@ -67,6 +84,7 @@ export async function ensureDefaultPublicIntakeFormDefinition(
       isDefault: true,
       archivedAt: null,
       schema: schemaJson,
+      triageRules: triageRulesJson,
     },
     select: INTAKE_FORM_DEFINITION_SELECT,
   });
