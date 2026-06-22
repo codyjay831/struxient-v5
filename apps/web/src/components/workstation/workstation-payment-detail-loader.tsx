@@ -53,6 +53,8 @@ export async function WorkstationPaymentDetailLoader({
           amountCents: true,
           status: true,
           notes: true,
+          paymentUrl: true,
+          paymentUrlLabel: true,
           requiredBeforeStageId: true,
           sourcePaymentScheduleItemId: true,
           paidAt: true,

@@ -14,6 +14,7 @@ import {
   QuoteCheckpointSource,
   StaffRole,
   LeadVisitRequestStatus,
+  CustomerRequestStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
@@ -1880,6 +1881,96 @@ export async function queryWorkstationWorkItems(
       href: `/jobs/${log.jobId}`, // No popup for now, link to job
       updatedAt: log.updatedAt,
     });
+  }
+
+  if (commercialReadable) {
+    const customerPortalRequests = await db.customerRequest.findMany({
+      where: {
+        organizationId,
+        status: { in: [CustomerRequestStatus.OPEN, CustomerRequestStatus.NEEDS_REVIEW] },
+        job: { status: JobStatus.ACTIVE, ...jobVisibilityWhere },
+      },
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            updatedAt: true,
+            customer: {
+              include: {
+                serviceLocations: {
+                  where: { organizationId },
+                  orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+                },
+              },
+            },
+            lead: { select: { address: true, signals: true } },
+            serviceLocation: {
+              select: { formattedAddress: true, addressLine1: true, organizationId: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 25,
+    });
+
+    for (const request of customerPortalRequests) {
+      const jobsiteLine = resolveJobsiteLineForQuoteOrJob({
+        serviceLocation:
+          request.job.serviceLocation &&
+          request.job.serviceLocation.organizationId === organizationId
+            ? {
+                formattedAddress: request.job.serviceLocation.formattedAddress,
+                addressLine1: request.job.serviceLocation.addressLine1,
+              }
+            : null,
+        customerLocations: request.job.customer?.serviceLocations ?? [],
+        leadRow: request.job.lead
+          ? { address: request.job.lead.address, signals: request.job.lead.signals }
+          : null,
+      });
+      const workContext = resolveJobWorkContext({
+        jobTitle: request.job.title,
+        customer: request.job.customer,
+        jobsiteLine,
+      });
+
+      const { lane, withinLaneRank } = rank(
+        {
+          kind: "job",
+          priority: request.status === CustomerRequestStatus.NEEDS_REVIEW ? "high" : "medium",
+          group: "investigate",
+          updatedAt: request.createdAt,
+        },
+        role,
+        now,
+      );
+
+      items.push({
+        id: `customer-request-${request.id}`,
+        kind: "job",
+        title: request.title,
+        subtitle: workContext.customerName ?? undefined,
+        contextLine: workContext.contextLine,
+        addressLine: jobsiteLine,
+        status: request.status,
+        priority: request.status === CustomerRequestStatus.NEEDS_REVIEW ? "high" : "medium",
+        group: "investigate",
+        lens: "attention",
+        lane,
+        withinLaneRank,
+        filterCategory: "jobs",
+        reason: request.message,
+        nextStep: "Review and resolve the customer portal request.",
+        recordId: request.id,
+        parentRecordId: request.jobId,
+        parentLabel: workContext.parentLabel ?? undefined,
+        href: `/jobs/${request.jobId}#job-customer-portal`,
+        updatedAt: request.createdAt,
+        typeLabel: "Customer request",
+      });
+    }
   }
 
   const scheduleCleanupJobs = await queryJobsNeedingScheduleCleanupAttention(organizationId, now);

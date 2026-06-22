@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/lib/**/*.test.ts",
+    "smoke:portal": "tsx scripts/customer-portal-smoke-test.ts",
     "guardrails": "node ../../scripts/guardrails/run-all.mjs"
   },
   "dependencies": {

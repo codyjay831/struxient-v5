@@ -32,9 +32,12 @@ import {
 } from "@/app/(workspace)/quotes/quote-field-limits";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
-import { randomBytes } from "crypto";
 import { addDays } from "date-fns";
 import { notifyQuoteSent } from "@/lib/notifications";
+import {
+  createPublicAccessToken,
+  hashPublicAccessToken,
+} from "@/lib/public-access/public-token-crypto";
 
 export type QuoteWorkspaceActionState = {
   error?: string;
@@ -449,24 +452,25 @@ export async function extendQuoteShareTokenAction(
 
     const now = new Date();
     const expiresAt = expiresInDays ? addDays(now, expiresInDays) : null;
-    const newToken = rotateToken ? randomBytes(32).toString("hex") : existingToken.token;
+    const rawToken = rotateToken ? createPublicAccessToken() : null;
+    const storedToken = rawToken ? hashPublicAccessToken(rawToken) : existingToken.token;
 
     await db.quoteShareToken.update({
       where: { id: existingToken.id },
       data: {
-        token: newToken,
+        token: storedToken,
         expiresAt,
         revokedAt: null,
       },
     });
 
     // Send email if rotating token
-    if (rotateToken) {
+    if (rotateToken && rawToken) {
       const customerEmail = existingToken.quote.customer?.email || existingToken.quote.lead?.email;
       const customerName = existingToken.quote.customer?.displayName || existingToken.quote.lead?.contactName || "Customer";
 
       if (customerEmail) {
-        const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL}/q/${newToken}`;
+        const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL}/q/${rawToken}`;
         void notifyQuoteSent({
           organizationId: ctx.organizationId,
           quoteId,

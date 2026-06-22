@@ -26,7 +26,6 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
     throw new Error(permission.error);
   }
 
-  // Verify job belongs to organization
   const job = await db.job.findFirst({
     where: { id: input.jobId, organizationId },
   });
@@ -35,7 +34,6 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
     throw new Error("Job not found or access denied.");
   }
 
-  // Verify stage belongs to job if provided
   if (input.requiredBeforeStageId) {
     const stage = await db.jobStage.findFirst({
       where: { id: input.requiredBeforeStageId, jobId: input.jobId },
@@ -102,7 +100,6 @@ export async function markJobPaymentRequirementPaidAction(requirementId: string)
     },
   });
 
-  // Publish payment-cleared signal
   await publishSignal({
     jobId: requirement.jobId,
     name: "payment-cleared",
@@ -149,7 +146,6 @@ export async function waiveJobPaymentRequirementAction(requirementId: string) {
     },
   });
 
-  // Publish payment-cleared signal
   await publishSignal({
     jobId: requirement.jobId,
     name: "payment-cleared",
@@ -203,6 +199,51 @@ export async function cancelJobPaymentRequirementAction(requirementId: string) {
     entityType: "JobPaymentRequirement",
     entityId: requirement.id,
     actorUserId: session.userId,
+  });
+
+  revalidatePath("/workstation");
+  revalidatePath(`/jobs/${requirement.jobId}`);
+
+  return { success: true };
+}
+
+export async function updateJobPaymentRequirementPortalLinkAction(
+  requirementId: string,
+  paymentUrl: string | null,
+  paymentUrlLabel: string | null,
+) {
+  const session = await requireMutableSession();
+  const organizationId = session.organizationId;
+  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
+
+  const requirement = await db.jobPaymentRequirement.findFirst({
+    where: { id: requirementId, organizationId },
+  });
+  if (!requirement) {
+    throw new Error("Payment requirement not found or access denied.");
+  }
+
+  const trimmedUrl = paymentUrl?.trim() || null;
+  if (trimmedUrl) {
+    try {
+      const parsed = new URL(trimmedUrl);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        throw new Error("Invalid URL");
+      }
+    } catch {
+      throw new Error("Enter a valid payment URL (https://…).");
+    }
+  }
+
+  await db.jobPaymentRequirement.update({
+    where: { id: requirementId },
+    data: {
+      paymentUrl: trimmedUrl,
+      paymentUrlLabel: paymentUrlLabel?.trim() || null,
+    },
   });
 
   revalidatePath("/workstation");

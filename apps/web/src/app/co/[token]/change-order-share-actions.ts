@@ -5,6 +5,7 @@ import {
   ChangeOrderCheckpointKind,
   ChangeOrderCheckpointSource,
   ChangeOrderStatus,
+  CustomerPortalEventType,
   Prisma,
 } from "@prisma/client";
 import {
@@ -20,6 +21,7 @@ import { notifyChangeOrderAccepted } from "@/lib/notifications";
 import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 import { resolveChangeOrderShareToken } from "@/lib/public-access/public-token-service";
 import { auditPublicTokenEvent } from "@/lib/public-access/public-token-audit";
+import { recordCommercialPortalEventForChangeOrder } from "@/lib/customer-portal/commercial-event-bridge";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -155,6 +157,12 @@ export async function acceptChangeOrderFromTokenAction(
       organizationId: result.organizationId,
       ip,
     });
+    void recordCommercialPortalEventForChangeOrder({
+      changeOrderId: result.changeOrderId,
+      eventType: CustomerPortalEventType.CHANGE_ORDER_ACCEPTED,
+      ipAddress: ip,
+      userAgent,
+    });
 
     return { success: true };
   } catch (e) {
@@ -197,6 +205,12 @@ export async function recordChangeOrderViewAction(token: string) {
       changeOrderId: shareToken.changeOrderId,
       organizationId: shareToken.organizationId,
       ip,
+    });
+    void recordCommercialPortalEventForChangeOrder({
+      changeOrderId: shareToken.changeOrderId,
+      eventType: CustomerPortalEventType.CHANGE_ORDER_VIEWED,
+      ipAddress: ip,
+      userAgent,
     });
   }
 }

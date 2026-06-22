@@ -98,18 +98,22 @@
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
-| Customer contact role | **Stored** | Planned `CustomerContact` model + customer portal access service | Treating a phone/email as both relationship context and verified auth identity |
-| Customer portal identity | **Stored** | Planned `CustomerPortalIdentity` model + portal identity/token services | Reusing staff `User` for external customers or collapsing identity into a single customer record |
-| Customer portal access grant | **Stored** | Planned `CustomerPortalAccess` model + `customer-portal-access-service.ts` | Customer sees another customer's job, revoked access still works, or access leaks across orgs/jobs |
-| Customer portal session | **Stored token hash + derived validation** | Planned `CustomerPortalSession` model + `customer-portal-session-service.ts` / `requireCustomerPortalAccess()` | Staff and customer sessions getting mixed, stale sessions surviving revocation |
-| Customer portal magic-link token | **Stored token hash + consumed/expired facts** | Planned `CustomerPortalMagicLinkToken` model + `customer-portal-token-service.ts`; current `/q/[token]` and `/co/[token]` token helpers migrate toward this boundary | Reusable bearer links, inconsistent token hashing, quote/CO/portal token drift |
-| Customer-visible resource | **Stored visibility grant** | Planned `CustomerVisibleResource` model + `customer-visible-resource-service.ts` | Internal documents/photos/schedule details exposed because UI serialized a raw object |
-| Customer request | **Stored request workflow fact** | Planned `CustomerRequest` model + `customer-request-service.ts` | Customer messages becoming unstructured chat or directly mutating job/schedule truth |
-| Customer portal event | **Stored append-only audit** | Planned `CustomerPortalEvent` model + `customer-portal-event-service.ts` | Missing accountability for link use, upload, acceptance, revoke, and portal access events |
-| Customer project status | **Derived** | Planned `customer-portal-presenter.ts` — `getCustomerProjectStatus()` from quote/job/task/schedule/payment/request facts | Stored customer-facing status drifting from real job/commercial/payment state |
-| Customer next action | **Derived** | Planned `customer-portal-presenter.ts` — `getCustomerNextAction()` from visible resources, quote/CO state, payments, schedule, and requests | Portal fails its main job or shows different next actions in cards vs header |
-| Customer-safe activity feed | **Derived projection** | Planned customer portal presenter reading `CustomerPortalEvent` plus approved customer-visible milestones | Internal task failures, cost notes, AI reasoning, or staff comments leaking into customer history |
-| Portal notification delivery | **Stored delivery attempt + event** | Planned `customerPortalNotificationService` + portal token/event services | Random UI-created emails/SMS with no token/audit/delivery lineage |
+| Customer contact role | **Stored** | `CustomerContact` + `apps/web/src/lib/customer-portal/access-service.ts` | Treating a phone/email as both relationship context and verified auth identity |
+| Customer portal identity | **Stored** | `CustomerPortalIdentity` + `access-service.ts` / `token-service.ts` | Reusing staff `User` for external customers or collapsing identity into a single customer record |
+| Customer portal access grant | **Stored** | `CustomerPortalAccess` + `access-service.ts` | Customer sees another customer's job, revoked access still works, or access leaks across orgs/jobs |
+| Customer portal session | **Stored token hash + derived validation** | `CustomerPortalSession` + `session-service.ts` / `requireCustomerPortalAccess()` in `authorize.ts` | Staff and customer sessions getting mixed, stale sessions surviving revocation |
+| Customer portal magic-link token | **Stored token hash + consumed/expired facts** | `CustomerPortalMagicLinkToken` + `token-service.ts`; quote/CO share tokens remain on existing models | Reusable bearer links, inconsistent token hashing, quote/CO/portal token drift |
+| Customer-visible resource | **Stored visibility grant** | `CustomerVisibleResource` + `visible-resource-service.ts` | Internal documents/photos/schedule details exposed because UI serialized a raw object |
+| Customer request | **Stored request workflow fact** | `CustomerRequest` + `request-service.ts` | Customer messages becoming unstructured chat or directly mutating job/schedule truth |
+| Customer portal event | **Stored append-only audit** | `CustomerPortalEvent` + `event-service.ts` | Missing accountability for link use, upload, acceptance, revoke, and portal access events |
+| Staff portal audit timeline | **Derived projection (internal)** | `listPortalAuditEventsForJob()` + `portalAuditEventLabel()` in `event-service.ts` | Customer-safe filter hiding staff delivery/revoke events from job panel |
+| Customer project status | **Derived** | `presenter.ts` — `getCustomerProjectStatus()` | Stored customer-facing status drifting from real job/commercial/payment state |
+| Customer next action | **Derived** | `presenter.ts` — `getCustomerNextAction()` | Portal fails its main job or shows different next actions in cards vs header |
+| Customer payment portal URL | **Stored** | `JobPaymentRequirement.paymentUrl` / `paymentUrlLabel` + `job-payment-actions.ts` | Duplicate payment link truth in `CustomerVisibleResource` or derived-only URLs with no staff entry point |
+| Commercial link mint from portal | **Stored token rotation at click** | `commercial-navigation-service.ts` | Raw share tokens in SSR DTOs or unhashed tokens in `QuoteShareToken` |
+| Portal notification delivery | **Stored on event metadata** | `notification-service.ts` — Resend send + `MAGIC_LINK_SENT` metadata (`deliveryStatus`, `providerMessageId`) | Copy-paste-only invites or emails with no audit lineage |
+| Customer-safe activity feed | **Derived projection** | `event-service.ts` + `presenter.ts` | Internal task failures, cost notes, AI reasoning, or staff comments leaking into customer history |
+| Portal routes | **UI shell** | `/portal/[token]`, `/portal/verify`, `/portal/project/[accessId]`; staff panel on job page | Staff chrome leaking into customer hub or parallel portal auth in components |
 
 ## Commercial pipeline
 

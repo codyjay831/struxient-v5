@@ -8,6 +8,7 @@ import {
   markJobPaymentRequirementPaidAction,
   waiveJobPaymentRequirementAction,
   cancelJobPaymentRequirementAction,
+  updateJobPaymentRequirementPortalLinkAction,
 } from "@/app/(workspace)/jobs/job-payment-actions";
 import {
   formatJobPaymentStatus,
@@ -25,6 +26,8 @@ type PaymentRequirement = {
   amountCents: number | null;
   status: JobPaymentRequirementStatus;
   notes: string | null;
+  paymentUrl: string | null;
+  paymentUrlLabel: string | null;
   requiredBeforeStageId: string | null;
   requiredBeforeStage?: { title: string } | null;
   paidAt: Date | null;
@@ -224,6 +227,9 @@ function RequirementCard({
               {requirement.notes}
             </p>
           )}
+          {!isHistorical ? (
+            <PaymentPortalLinkEditor requirement={requirement} isPending={isPending} />
+          ) : null}
         </div>
 
         {!isHistorical && (
@@ -399,5 +405,64 @@ function CreateRequirementForm({
         </div>
       </form>
     </WorkspacePanel>
+  );
+}
+
+function PaymentPortalLinkEditor({
+  requirement,
+  isPending,
+}: {
+  requirement: PaymentRequirement;
+  isPending: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [url, setUrl] = useState(requirement.paymentUrl ?? "");
+  const [label, setLabel] = useState(requirement.paymentUrlLabel ?? "");
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <div className="mt-3 space-y-2 rounded-lg border border-border bg-surface-elevated/30 p-3">
+      <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+        Customer portal payment link
+      </p>
+      <input
+        type="url"
+        placeholder="https://pay.stripe.com/…"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+      />
+      <input
+        type="text"
+        placeholder="Button label (optional)"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+      />
+      <button
+        type="button"
+        disabled={pending || isPending}
+        onClick={() =>
+          startTransition(async () => {
+            await updateJobPaymentRequirementPortalLinkAction(
+              requirement.id,
+              url || null,
+              label || null,
+            );
+            setSaved(true);
+            router.refresh();
+          })
+        }
+        className="text-xs font-semibold text-primary underline-offset-4 hover:underline disabled:opacity-50"
+      >
+        {pending ? "Saving…" : "Save portal link"}
+      </button>
+      {saved ? (
+        <p className="text-xs text-success" role="status">
+          Portal link saved.
+        </p>
+      ) : null}
+    </div>
   );
 }

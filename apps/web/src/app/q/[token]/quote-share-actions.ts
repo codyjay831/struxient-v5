@@ -6,6 +6,7 @@ import {
   QuoteCheckpointKind,
   QuoteCheckpointSource,
   QuoteStatus,
+  CustomerPortalEventType,
 } from "@prisma/client";
 import {
   serializeCustomerPreviewDocumentForCheckpoint,
@@ -25,6 +26,7 @@ import { AttachmentStatus } from "@prisma/client";
 import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 import { resolveQuoteShareToken } from "@/lib/public-access/public-token-service";
 import { auditPublicTokenEvent } from "@/lib/public-access/public-token-audit";
+import { recordCommercialPortalEventForQuote } from "@/lib/customer-portal/commercial-event-bridge";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -114,6 +116,12 @@ export async function requestQuoteChangesAction(
       quoteId: result.quoteId,
       organizationId: result.organizationId,
       ip,
+    });
+    void recordCommercialPortalEventForQuote({
+      quoteId: result.quoteId,
+      eventType: CustomerPortalEventType.QUOTE_CHANGE_REQUESTED,
+      ipAddress: ip,
+      userAgent: headerList.get("user-agent"),
     });
 
     return { success: true };
@@ -251,6 +259,12 @@ export async function acceptQuoteFromTokenAction(
       organizationId: result.organizationId,
       ip,
     });
+    void recordCommercialPortalEventForQuote({
+      quoteId: result.quoteId,
+      eventType: CustomerPortalEventType.QUOTE_ACCEPTED,
+      ipAddress: ip,
+      userAgent,
+    });
 
     // Generate and store signed PDF artifact
     try {
@@ -357,6 +371,12 @@ export async function recordQuoteViewAction(token: string) {
       quoteId: shareToken.quoteId,
       organizationId: shareToken.organizationId,
       ip,
+    });
+    void recordCommercialPortalEventForQuote({
+      quoteId: shareToken.quoteId,
+      eventType: CustomerPortalEventType.QUOTE_VIEWED,
+      ipAddress: ip,
+      userAgent,
     });
   }
 }

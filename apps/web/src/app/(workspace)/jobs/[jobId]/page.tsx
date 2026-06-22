@@ -23,7 +23,8 @@ import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobScheduleEventsPanel } from "@/components/jobs/job-schedule-events-panel";
 import { JobWorkPackagePanel } from "@/components/jobs/job-work-package-panel";
 import { JobScheduleCleanupReview } from "@/components/jobs/job-schedule-cleanup-review";
-import { JobArchiveButton } from "@/components/jobs/job-archive-button";
+import { JobCustomerPortalPanel } from "@/components/jobs/job-customer-portal-panel";
+import { loadJobPortalManagementData } from "@/app/(workspace)/jobs/job-portal-actions";
 import {
   buildScheduleCleanupReviewItems,
   loadPendingScheduleCleanupEvents,
@@ -83,7 +84,7 @@ export default async function JobDetailPage({
   const jobVisibilityWhere = getJobVisibilityWhere(ctx.role, ctx.userId);
   const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
 
-  const [job, liveSignals] = await Promise.all([
+  const [job, liveSignals, portalManagement] = await Promise.all([
     db.job.findFirst({
       where: { id, organizationId: ctx.organizationId, ...jobVisibilityWhere },
       select: {
@@ -298,6 +299,8 @@ export default async function JobDetailPage({
             amountCents: true,
             status: true,
             notes: true,
+            paymentUrl: true,
+            paymentUrlLabel: true,
             requiredBeforeStageId: true,
             sourcePaymentScheduleItemId: true,
             requiredBeforeStage: { select: { title: true, sortOrder: true } },
@@ -335,6 +338,7 @@ export default async function JobDetailPage({
       },
     }),
     getLiveSignals(id),
+    loadJobPortalManagementData(id),
   ]);
 
   if (!job) {
@@ -664,6 +668,12 @@ export default async function JobDetailPage({
           effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
         />
       </section>
+
+      {portalManagement ? (
+        <WorkspacePanel id="job-customer-portal" padding="compact" className="mb-6">
+          <JobCustomerPortalPanel jobId={job.id} {...portalManagement} />
+        </WorkspacePanel>
+      ) : null}
 
       <JobScheduleCleanupReview
         jobId={job.id}

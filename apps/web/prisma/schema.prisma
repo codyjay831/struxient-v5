@@ -81,6 +81,11 @@ model Organization {
   aiBillingPeriods        AiBillingPeriod[]
   betaGrant               OrganizationBetaGrant?
   betaSignupInvite        BetaSignupInvite?
+  customerContacts        CustomerContact[]
+  customerPortalAccesses  CustomerPortalAccess[]
+  customerPortalEvents    CustomerPortalEvent[]
+  customerVisibleResources CustomerVisibleResource[]
+  customerRequests        CustomerRequest[]
 }
 
 model Stage {
@@ -153,8 +158,223 @@ model Customer {
   jobs             Job[]
   leads            Lead[]
   quotes           Quote[]
+  contacts         CustomerContact[]
+  portalAccesses   CustomerPortalAccess[]
+  portalEvents     CustomerPortalEvent[]
+  visibleResources CustomerVisibleResource[]
+  portalRequests   CustomerRequest[]
 
   @@index([organizationId])
+}
+
+/// Person attached to a customer/property — contact context, not portal auth identity.
+model CustomerContact {
+  id                     String       @id @default(cuid())
+  organizationId         String
+  customerId             String
+  name                   String
+  email                  String?
+  phone                  String?
+  relationshipToProperty String?
+  isPrimary              Boolean      @default(false)
+  isBillingContact       Boolean      @default(false)
+  isDecisionMaker        Boolean      @default(false)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  archivedAt             DateTime?
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer               Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  portalAccesses         CustomerPortalAccess[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([organizationId, email])
+  @@index([organizationId, phone])
+}
+
+/// Verified external customer portal identity — separate from staff User and CustomerContact.
+model CustomerPortalIdentity {
+  id               String    @id @default(cuid())
+  emailNormalized  String?   @unique
+  phoneNormalized  String?   @unique
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastSeenAt       DateTime?
+  disabledAt       DateTime?
+  portalAccesses   CustomerPortalAccess[]
+  sessions         CustomerPortalSession[]
+  magicLinkTokens  CustomerPortalMagicLinkToken[]
+  portalEvents     CustomerPortalEvent[]
+
+  @@index([disabledAt])
+}
+
+/// Scoped customer permission for organization + customer + job.
+model CustomerPortalAccess {
+  id                    String                     @id @default(cuid())
+  organizationId        String
+  customerId            String
+  jobId                 String
+  customerContactId     String?
+  portalIdentityId      String?
+  accessLevel           CustomerPortalAccessLevel  @default(PROJECT_PARTICIPANT)
+  status                CustomerPortalAccessStatus @default(PENDING_VERIFICATION)
+  invitedByMembershipId String?
+  revokedByMembershipId String?
+  expiresAt             DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  revokedAt             DateTime?
+  lastUsedAt            DateTime?
+  organization          Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer              Customer                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job                   Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customerContact       CustomerContact?           @relation(fields: [customerContactId], references: [id], onDelete: SetNull)
+  portalIdentity        CustomerPortalIdentity?    @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
+  invitedByMembership   Membership?                @relation("PortalAccessInvitedBy", fields: [invitedByMembershipId], references: [id], onDelete: SetNull)
+  revokedByMembership   Membership?                @relation("PortalAccessRevokedBy", fields: [revokedByMembershipId], references: [id], onDelete: SetNull)
+  sessions              CustomerPortalSession[]
+  magicLinkTokens       CustomerPortalMagicLinkToken[]
+  portalEvents          CustomerPortalEvent[]
+  visibleResources      CustomerVisibleResource[]
+  requests              CustomerRequest[]
+
+  @@index([organizationId, customerId])
+  @@index([organizationId, jobId])
+  @@index([customerContactId])
+  @@index([portalIdentityId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model CustomerPortalSession {
+  id                     String                 @id @default(cuid())
+  portalIdentityId       String
+  customerPortalAccessId String
+  sessionTokenHash       String                 @unique
+  createdAt              DateTime               @default(now())
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  lastSeenAt             DateTime?
+  ipAddress              String?
+  userAgent              String?
+  portalIdentity         CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+  customerPortalAccess   CustomerPortalAccess   @relation(fields: [customerPortalAccessId], references: [id], onDelete: Cascade)
+
+  @@index([portalIdentityId])
+  @@index([customerPortalAccessId])
+  @@index([expiresAt])
+}
+
+model CustomerPortalMagicLinkToken {
+  id                     String                         @id @default(cuid())
+  portalIdentityId       String?
+  customerPortalAccessId String
+  tokenHash              String                         @unique
+  purpose                CustomerPortalMagicLinkPurpose
+  createdAt              DateTime                       @default(now())
+  expiresAt              DateTime
+  usedAt                 DateTime?
+  revokedAt              DateTime?
+  ipAddress              String?
+  userAgent              String?
+  portalIdentity         CustomerPortalIdentity?        @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
+  customerPortalAccess   CustomerPortalAccess           @relation(fields: [customerPortalAccessId], references: [id], onDelete: Cascade)
+
+  @@index([customerPortalAccessId])
+  @@index([expiresAt])
+  @@index([purpose])
+}
+
+model CustomerPortalEvent {
+  id                     String                  @id @default(cuid())
+  organizationId         String
+  customerId             String
+  jobId                  String?
+  customerPortalAccessId String?
+  portalIdentityId       String?
+  eventType              CustomerPortalEventType
+  resourceType           String?
+  resourceId             String?
+  metadataJson           Json?
+  ipAddress              String?
+  userAgent              String?
+  createdAt              DateTime                @default(now())
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer               Customer                @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job                    Job?                    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  customerPortalAccess   CustomerPortalAccess?   @relation(fields: [customerPortalAccessId], references: [id], onDelete: SetNull)
+  portalIdentity         CustomerPortalIdentity? @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([jobId])
+  @@index([customerPortalAccessId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model CustomerVisibleResource {
+  id                     String                            @id @default(cuid())
+  organizationId         String
+  customerId             String
+  jobId                  String
+  resourceType           CustomerVisibleResourceType
+  resourceId             String
+  visibility             CustomerVisibleResourceVisibility @default(CUSTOMER_VISIBLE)
+  visibleToAccessLevel   CustomerPortalAccessLevel?
+  title                  String?
+  description            String?
+  createdByMembershipId  String?
+  customerPortalAccessId String?
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
+  revokedAt              DateTime?
+  organization           Organization                      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer               Customer                          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job                    Job                               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customerPortalAccess   CustomerPortalAccess?             @relation(fields: [customerPortalAccessId], references: [id], onDelete: SetNull)
+  createdByMembership    Membership?                       @relation("VisibleResourceCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, jobId])
+  @@index([customerId])
+  @@index([resourceType, resourceId])
+  @@index([visibility])
+}
+
+model CustomerRequest {
+  id                     String                @id @default(cuid())
+  organizationId         String
+  customerId             String
+  jobId                  String
+  customerPortalAccessId String?
+  type                   CustomerRequestType
+  status                 CustomerRequestStatus @default(OPEN)
+  title                  String
+  message                String
+  metadataJson           Json?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  resolvedAt             DateTime?
+  resolvedByMembershipId String?
+  linkedTaskId           String?
+  linkedScheduleEventId  String?
+  linkedDocumentId       String?
+  organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer               Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job                    Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customerPortalAccess   CustomerPortalAccess? @relation(fields: [customerPortalAccessId], references: [id], onDelete: SetNull)
+  resolvedByMembership   Membership?         @relation("CustomerRequestResolvedBy", fields: [resolvedByMembershipId], references: [id], onDelete: SetNull)
+  linkedTask             JobTask?              @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
+  linkedScheduleEvent    JobScheduleEvent?     @relation(fields: [linkedScheduleEventId], references: [id], onDelete: SetNull)
+  linkedDocument         Attachment?           @relation(fields: [linkedDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, jobId])
+  @@index([customerId])
+  @@index([status])
+  @@index([type])
 }
 
 /// Canonical service location record (legacy model name retained for safe additive migration).
@@ -334,6 +554,10 @@ model Membership {
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedPortalAccesses CustomerPortalAccess[] @relation("PortalAccessInvitedBy")
+  revokedPortalAccesses CustomerPortalAccess[] @relation("PortalAccessRevokedBy")
+  createdVisibleResources CustomerVisibleResource[] @relation("VisibleResourceCreatedBy")
+  resolvedCustomerRequests CustomerRequest[] @relation("CustomerRequestResolvedBy")
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -1382,6 +1606,10 @@ model Job {
   changeOrders        ChangeOrder[]
   executionPlanRevisions ExecutionPlanRevision[]
   collaborators       JobCollaborator[]
+  portalAccesses      CustomerPortalAccess[]
+  portalEvents        CustomerPortalEvent[]
+  visibleResources    CustomerVisibleResource[]
+  portalRequests      CustomerRequest[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1509,6 +1737,7 @@ model JobTask {
   scheduleEventLinks             JobScheduleEventTask[]
   workPackage                    JobWorkPackage?            @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
   scopes                         JobTaskScope[]
+  linkedCustomerRequests         CustomerRequest[]
 
   @@index([jobId])
   @@index([jobStageId, sortOrder])
@@ -1614,6 +1843,7 @@ model JobScheduleEvent {
   job            Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   leadUser       User?                  @relation("LeadScheduleEvents", fields: [leadUserId], references: [id], onDelete: SetNull)
   taskLinks      JobScheduleEventTask[]
+  linkedCustomerRequests CustomerRequest[]
 
   @@index([organizationId])
   @@index([jobId])
@@ -1739,6 +1969,7 @@ model Attachment {
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote            Quote?           @relation(fields: [quoteId], references: [id])
   uploadedByUser   User?            @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
+  linkedCustomerRequests CustomerRequest[]
 
   @@index([organizationId])
   @@index([leadId])
@@ -1810,6 +2041,8 @@ model JobPaymentRequirement {
   waivedAt                    DateTime?
   canceledAt                  DateTime?
   notes                       String?
+  paymentUrl                  String?
+  paymentUrlLabel             String?
   createdAt                   DateTime                    @default(now())
   updatedAt                   DateTime                    @updatedAt
   job                         Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -2932,6 +3165,95 @@ enum ClarificationQuestionSetStatus {
 
 enum PlatformRole {
   OPERATOR
+}
+
+enum CustomerPortalAccessLevel {
+  VIEW_ONLY
+  PROJECT_PARTICIPANT
+  BILLING_CONTACT
+  DECISION_MAKER
+  PROPERTY_MANAGER
+}
+
+enum CustomerPortalAccessStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  REVOKED
+  EXPIRED
+  DISABLED
+}
+
+enum CustomerPortalMagicLinkPurpose {
+  PORTAL_SIGN_IN
+  QUOTE_VIEW
+  CHANGE_ORDER_VIEW
+  PAYMENT_VIEW
+  DOCUMENT_UPLOAD
+}
+
+enum CustomerPortalEventType {
+  PORTAL_OPENED
+  MAGIC_LINK_SENT
+  MAGIC_LINK_USED
+  QUOTE_VIEWED
+  QUOTE_ACCEPTED
+  QUOTE_CHANGE_REQUESTED
+  CHANGE_ORDER_VIEWED
+  CHANGE_ORDER_ACCEPTED
+  PAYMENT_LINK_OPENED
+  DOCUMENT_VIEWED
+  DOCUMENT_UPLOADED
+  PHOTO_UPLOADED
+  APPOINTMENT_VIEWED
+  APPOINTMENT_CONFIRMED
+  RESCHEDULE_REQUESTED
+  AVAILABILITY_SUBMITTED
+  ACCESS_NOTE_SUBMITTED
+  QUESTION_SUBMITTED
+  CONTRACTOR_RESPONSE_VIEWED
+  ACCESS_REVOKED
+  ACCESS_EXPIRED
+}
+
+enum CustomerVisibleResourceType {
+  QUOTE
+  CHANGE_ORDER
+  INVOICE
+  PAYMENT_LINK
+  DOCUMENT
+  PHOTO
+  SCHEDULE_EVENT
+  PROJECT_UPDATE
+  CUSTOMER_REQUEST
+  CUSTOMER_UPLOAD
+}
+
+enum CustomerVisibleResourceVisibility {
+  CUSTOMER_VISIBLE
+  CUSTOMER_ACTION_REQUIRED
+  CUSTOMER_UPLOADED
+  REVOKED
+}
+
+enum CustomerRequestType {
+  ASK_QUESTION
+  REQUEST_RESCHEDULE
+  SUBMIT_AVAILABILITY
+  UPLOAD_DOCUMENT
+  UPLOAD_PHOTO
+  ADD_ACCESS_NOTE
+  REPORT_ISSUE
+  REQUEST_SCOPE_CHANGE
+  BILLING_QUESTION
+}
+
+enum CustomerRequestStatus {
+  OPEN
+  NEEDS_REVIEW
+  ACCEPTED
+  DECLINED
+  RESOLVED
+  CLOSED
 }
 
 enum PlatformAuditActorType {
