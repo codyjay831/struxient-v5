@@ -56,7 +56,24 @@ const EVENT_LABELS: Record<string, string> = {
   FINAL_PDF_GENERATED: "Final packet generated",
 };
 
-function eventLabel(eventType: string): string {
+function eventLabel(eventType: string, metadata?: Record<string, unknown> | null): string {
+  if (eventType === "CHANGE_REQUESTED") {
+    const message =
+      typeof metadata?.message === "string" ? metadata.message.trim() : "";
+    const signer =
+      typeof metadata?.signerEmail === "string"
+        ? metadata.signerEmail
+        : typeof metadata?.signerName === "string"
+          ? metadata.signerName
+          : null;
+    const parts = ["Change requested"];
+    if (signer) parts.push(`from ${signer}`);
+    if (message) {
+      const snippet = message.length > 80 ? `${message.slice(0, 77)}…` : message;
+      parts.push(`— ${snippet}`);
+    }
+    return parts.join(" ");
+  }
   return EVENT_LABELS[eventType] ?? eventType.replaceAll("_", " ").toLowerCase();
 }
 
@@ -110,7 +127,10 @@ export function buildSignatureTimeline(params: {
       id: e.id,
       occurredAt: e.occurredAt.toISOString(),
       eventType: e.eventType,
-      label: eventLabel(e.eventType),
+      label:
+        e.metadataJson && typeof e.metadataJson === "object"
+          ? eventLabel(e.eventType, e.metadataJson as Record<string, unknown>)
+          : eventLabel(e.eventType),
       actorType: e.actorType,
       ipAddress: e.ipAddress,
       metadata:

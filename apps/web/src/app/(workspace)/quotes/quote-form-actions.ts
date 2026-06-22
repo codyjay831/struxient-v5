@@ -1293,6 +1293,7 @@ export type PerformQuoteCheckpointResult = {
   message?: string;
   deliveryWarnings?: string[];
   signatureRequestId?: string;
+  signerUrls?: string[];
 };
 
 /**
@@ -1315,6 +1316,7 @@ export async function performQuoteSendCheckpoint(
     message: result.message,
     deliveryWarnings: result.deliveryWarnings,
     signatureRequestId: result.signatureRequestId,
+    signerUrls: result.signerUrls,
   };
 }
 

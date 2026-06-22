@@ -1,5 +1,5 @@
-import { Resend } from "resend";
 import { escapeHtml, escapeHtmlWithBreaks } from "@/lib/html-escape";
+import { getResendFromAddress, getResendClient } from "@/lib/resend-from";
 import { db } from "@/lib/db";
 import {
   QuoteSignatureEventType,
@@ -7,8 +7,6 @@ import {
   SignatureDeliveryChannel,
 } from "@prisma/client";
 import { recordQuoteSignatureEvent } from "./event-service";
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 export type SignatureEmailDeliveryInput = {
   organizationId: string;
@@ -37,6 +35,7 @@ function maskEmail(email: string): string {
 export async function sendSignatureEmail(
   input: SignatureEmailDeliveryInput,
 ): Promise<SignatureEmailDeliveryResult> {
+  const resend = getResendClient();
   if (!resend) {
     await recordQuoteSignatureEvent(db, {
       organizationId: input.organizationId,
@@ -84,7 +83,7 @@ export async function sendSignatureEmail(
     });
 
     const response = await resend.emails.send({
-      from: "Struxient <notifications@struxient.com>",
+      from: getResendFromAddress(),
       to: input.recipientEmail,
       subject: `Your proposal from ${escapeHtml(input.organizationDisplayName)}`,
       html: `

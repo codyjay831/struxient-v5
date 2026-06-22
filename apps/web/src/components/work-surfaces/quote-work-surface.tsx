@@ -2135,7 +2135,7 @@ function SendAcceptTab({
     recipientCount: number;
     recipientEmails: string[];
     expiresInDays: string;
-    shareUrl: string;
+    signerUrls: string[];
     deliveryFailed?: boolean;
   } | null>(null);
 
@@ -2155,7 +2155,6 @@ function SendAcceptTab({
             : []
         }
         organizationDisplayName={quote.organizationDisplayName}
-        shareUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/q/${quote.shareToken}`}
         onSuccess={(summary) => {
           setLastSendSummary(summary);
           onPreviewChange("none");
@@ -2244,9 +2243,25 @@ function SendAcceptTab({
               ? "Never"
               : `${lastSendSummary.expiresInDays} days`}
           </p>
-          <p className="mt-1 text-xs text-foreground-muted truncate">
-            Share link: {lastSendSummary.shareUrl}
-          </p>
+          {lastSendSummary.signerUrls.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                Signer links
+              </p>
+              {lastSendSummary.signerUrls.map((url, index) => (
+                <p key={url} className="truncate text-xs font-mono text-foreground-muted">
+                  {lastSendSummary.recipientEmails[index] ?? `Recipient ${index + 1}`}: {url}
+                </p>
+              ))}
+              <p className="text-[10px] text-foreground-subtle">
+                Copy individual links from the signature timeline below if needed.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-foreground-muted">
+              Signer links are available in the signature timeline after send.
+            </p>
+          )}
         </div>
       ) : null}
 

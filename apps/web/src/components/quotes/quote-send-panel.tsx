@@ -27,12 +27,11 @@ export type QuoteSendPanelProps = {
   quoteId: string;
   initialRecipients: { email: string; name?: string }[];
   organizationDisplayName: string;
-  shareUrl: string;
   onSuccess: (summary: {
     recipientCount: number;
     recipientEmails: string[];
     expiresInDays: string;
-    shareUrl: string;
+    signerUrls: string[];
     deliveryFailed?: boolean;
   }) => void;
   onCancel: () => void;
@@ -44,7 +43,6 @@ export function QuoteSendPanel({
   quoteId,
   initialRecipients,
   organizationDisplayName,
-  shareUrl,
   onSuccess,
   onCancel,
 }: QuoteSendPanelProps) {
@@ -79,11 +77,11 @@ export function QuoteSendPanel({
         recipientCount: recipients.length,
         recipientEmails: recipients.map((recipient) => recipient.email),
         expiresInDays,
-        shareUrl,
+        signerUrls: state.signerUrls ?? [],
         deliveryFailed: state.sendOutcome === "delivery_failed",
       });
     }
-  }, [state, onSuccess, recipients, expiresInDays, shareUrl]);
+  }, [state, onSuccess, recipients, expiresInDays]);
 
   const handleAddRecipient = (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,8 +272,9 @@ export function QuoteSendPanel({
                 <div className="inline-block bg-accent px-6 py-2.5 rounded-lg font-bold text-accent-contrast shadow-sm opacity-80">
                   View Proposal
                 </div>
-                <p className="mt-2 text-[10px] text-foreground-subtle break-all">
-                  Or copy this link: {shareUrl || "(Link will be generated)"}
+                <p className="mt-2 text-[10px] text-foreground-subtle">
+                  A unique signer link is generated per recipient after send. Use the signature
+                  timeline to copy links if email delivery fails.
                 </p>
               </div>
 

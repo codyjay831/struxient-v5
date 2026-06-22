@@ -65,6 +65,15 @@ export class GcsStorageProvider implements StorageProvider {
     return file.createReadStream();
   }
 
+  async writeObject(fileKey: string, buffer: Buffer, contentType = "application/octet-stream"): Promise<void> {
+    const bucket = this.storage.bucket(this.bucketName);
+    const file = bucket.file(fileKey);
+    await file.save(buffer, {
+      contentType,
+      resumable: false,
+    });
+  }
+
   async deleteObject(fileKey: string): Promise<void> {
     const bucket = this.storage.bucket(this.bucketName);
     const file = bucket.file(fileKey);

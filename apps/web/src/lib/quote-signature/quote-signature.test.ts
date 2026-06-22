@@ -94,6 +94,47 @@ test("buildSignatureTimeline produces staff DTO", () => {
   assert.equal(dto.events[0]?.label, "Signature request sent");
 });
 
+test("buildSignatureTimeline labels change requests with signer context", () => {
+  const dto = buildSignatureTimeline({
+    request: {
+      id: "req1",
+      status: QuoteSignatureRequestStatus.SENT,
+      mode: "STANDARD_ACCEPTANCE",
+      sentAt: new Date("2026-06-22T12:00:00Z"),
+      acceptedAt: null,
+      sentPdfSha256: null,
+      finalPdfSha256: null,
+      auditPacketSha256: null,
+    },
+    recipients: [],
+    events: [
+      {
+        id: "ev-change",
+        organizationId: "org",
+        quoteId: "q1",
+        signatureRequestId: "req1",
+        recipientId: "rec1",
+        actorType: "CUSTOMER_SIGNER",
+        actorUserId: null,
+        eventType: "CHANGE_REQUESTED",
+        occurredAt: new Date("2026-06-22T12:00:01Z"),
+        ipAddress: null,
+        userAgent: null,
+        provider: null,
+        providerEventId: null,
+        metadataJson: {
+          message: "Please adjust the deck size",
+          signerEmail: "pat@example.com",
+          changeRequestId: "cr1",
+        },
+        createdAt: new Date("2026-06-22T12:00:01Z"),
+      },
+    ],
+  });
+  assert.match(dto.events[0]?.label ?? "", /Change requested from pat@example.com/);
+  assert.match(dto.events[0]?.label ?? "", /adjust the deck size/);
+});
+
 test("viewer cannot send quote signature", () => {
   assert.notEqual(denyUnlessCanSendQuoteSignature(StaffRole.VIEWER), null);
 });

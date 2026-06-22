@@ -59,10 +59,7 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  /**
-   * Helper for legacy direct upload support in local dev.
-   */
-  async writeObject(fileKey: string, buffer: Buffer): Promise<void> {
+  async writeObject(fileKey: string, buffer: Buffer, _contentType?: string): Promise<void> {
     await mkdir(this.uploadDir, { recursive: true });
     const filePath = join(this.uploadDir, fileKey);
     await writeFile(filePath, buffer);

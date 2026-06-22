@@ -5,10 +5,16 @@ import {
 } from "@prisma/client";
 import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
 import { recalculateQuoteRollupsInTx } from "@/lib/quote-line-item-template-apply-tx";
+import { revokeActiveSignatureRequestsForQuoteInTx } from "@/lib/quote-signature/request-service";
 
 export type PerformReviseQuoteResult =
   | { ok: true; revisedQuoteId: string; reusedExisting?: boolean }
   | { ok: false; error: string };
+
+export type ReviseQuoteActorContext = {
+  organizationId: string;
+  userId: string;
+};
 
 /**
  * Pre-activation commercial revision path for issued quotes.
@@ -16,14 +22,14 @@ export type PerformReviseQuoteResult =
  * line items, clarifications, payment schedule, and draft execution seeds.
  * Accepted execution plans are not copied — the revision must be re-reviewed.
  */
-export async function performReviseQuoteByClone(
+export async function performReviseQuoteByCloneWithActorContext(
   quoteId: string,
+  ctx: ReviseQuoteActorContext,
 ): Promise<PerformReviseQuoteResult> {
   const id = quoteId.trim();
   if (!id) {
     return { ok: false, error: "Missing quote record id." };
   }
-  const ctx = await getCommercialRequestContextOrThrow();
 
   try {
     return await db.$transaction(async (tx) => {
@@ -128,6 +134,13 @@ export async function performReviseQuoteByClone(
         orderBy: { updatedAt: "desc" },
       });
       if (existingOpenRevision) {
+        await revokeActiveSignatureRequestsForQuoteInTx(tx, {
+          quoteId: quote.id,
+          organizationId: ctx.organizationId,
+          actorUserId: ctx.userId,
+          reason: "quote_revision",
+          metadata: { resultingQuoteId: existingOpenRevision.id },
+        });
         return {
           ok: true as const,
           revisedQuoteId: existingOpenRevision.id,
@@ -229,6 +242,14 @@ export async function performReviseQuoteByClone(
         organizationId: ctx.organizationId,
       });
 
+      await revokeActiveSignatureRequestsForQuoteInTx(tx, {
+        quoteId: quote.id,
+        organizationId: ctx.organizationId,
+        actorUserId: ctx.userId,
+        reason: "quote_revision",
+        metadata: { resultingQuoteId: clonedQuote.id },
+      });
+
       await tx.quoteChangeRequest.updateMany({
         where: {
           organizationId: ctx.organizationId,
@@ -253,4 +274,14 @@ export async function performReviseQuoteByClone(
     }
     throw e;
   }
+}
+
+export async function performReviseQuoteByClone(
+  quoteId: string,
+): Promise<PerformReviseQuoteResult> {
+  const ctx = await getCommercialRequestContextOrThrow();
+  return performReviseQuoteByCloneWithActorContext(quoteId, {
+    organizationId: ctx.organizationId,
+    userId: ctx.userId,
+  });
 }

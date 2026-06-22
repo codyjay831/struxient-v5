@@ -1,8 +1,6 @@
-import { Resend } from "resend";
 import { db } from "./db";
 import { escapeHtml, escapeHtmlWithBreaks } from "./html-escape";
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+import { getResendFromAddress, getResendClient } from "./resend-from";
 
 export type LeadNotificationPayload = {
   organizationId: string;
@@ -71,7 +69,7 @@ export async function notifyLeadSubmitted(payload: LeadNotificationPayload) {
     `[Notification] New lead submitted for org=${payload.organizationId} lead=${payload.leadId}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -89,8 +87,8 @@ export async function notifyLeadSubmitted(payload: LeadNotificationPayload) {
     const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
 
     if (staffEmails.length > 0) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: staffEmails,
         subject: `New Lead: ${escapeHtml(payload.contactName)}`,
         html: `
@@ -106,8 +104,8 @@ export async function notifyLeadSubmitted(payload: LeadNotificationPayload) {
 
     // 2. Send confirmation email to the customer
     if (payload.email) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: payload.email,
         subject: "We received your request",
         html: `
@@ -131,7 +129,7 @@ export async function notifyQuoteAccepted(payload: QuoteAcceptanceNotificationPa
     `[Notification] Quote accepted for org=${payload.organizationId} quote=${payload.quoteId}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -149,8 +147,8 @@ export async function notifyQuoteAccepted(payload: QuoteAcceptanceNotificationPa
     const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
 
     if (staffEmails.length > 0) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: staffEmails,
         subject: `Quote Accepted: ${escapeHtml(payload.acceptedByName)}`,
         html: `
@@ -171,8 +169,8 @@ export async function notifyQuoteAccepted(payload: QuoteAcceptanceNotificationPa
     const customerEmail = quote?.customer?.email || quote?.lead?.email;
 
     if (customerEmail) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: customerEmail,
         subject: "Quote Accepted",
         html: `
@@ -194,7 +192,7 @@ export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
     `[Notification] Quote sent for org=${payload.organizationId} quote=${payload.quoteId} recipients=${payload.recipients.length}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -212,8 +210,8 @@ export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
 
     // 1. Send proposal link to each recipient
     for (const recipient of payload.recipients) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: recipient.email,
         subject: `Your proposal from ${escapeHtml(payload.organizationDisplayName)}`,
         html: `
@@ -245,8 +243,8 @@ export async function notifyQuoteSent(payload: QuoteSentNotificationPayload) {
       .join(", ");
 
     if (staffEmails.length > 0) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: staffEmails,
         subject: `Quote sent to ${payload.recipients.length} recipient(s)`,
         html: `
@@ -272,7 +270,7 @@ export async function notifyQuoteChangeRequested(payload: QuoteChangeRequestNoti
     `[Notification] Quote change requested for org=${payload.organizationId} quote=${payload.quoteId}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -289,8 +287,8 @@ export async function notifyQuoteChangeRequested(payload: QuoteChangeRequestNoti
     const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
 
     if (staffEmails.length > 0) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: staffEmails,
         subject: "Customer Requested Changes to Quote",
         html: `
@@ -314,7 +312,7 @@ export async function notifyChangeOrderSent(payload: ChangeOrderSentNotification
     `[Notification] Change order sent for org=${payload.organizationId} changeOrder=${payload.changeOrderId}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -331,8 +329,8 @@ export async function notifyChangeOrderSent(payload: ChangeOrderSentNotification
       : "";
 
     for (const recipient of payload.recipients) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: recipient.email,
         subject: `Change Order from ${escapeHtml(payload.organizationDisplayName)}`,
         html: `
@@ -356,7 +354,7 @@ export async function notifyChangeOrderAccepted(payload: ChangeOrderAcceptedNoti
     `[Notification] Change order accepted for org=${payload.organizationId} changeOrder=${payload.changeOrderId}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping email.");
     return;
   }
@@ -371,8 +369,8 @@ export async function notifyChangeOrderAccepted(payload: ChangeOrderAcceptedNoti
     });
     const staffEmails = staffMembers.map((m) => m.user.email).filter(Boolean) as string[];
     if (staffEmails.length > 0) {
-      await resend.emails.send({
-        from: "Struxient <notifications@struxient.com>",
+      await getResendClient()!.emails.send({
+        from: getResendFromAddress(),
         to: staffEmails,
         subject: `Change Order Accepted: ${escapeHtml(payload.acceptedByName)}`,
         html: `
@@ -393,14 +391,14 @@ export async function notifyTeamInviteSent(payload: TeamInviteNotificationPayloa
     `[Notification] Team invite sent for org=${payload.organizationId} email=${payload.recipientEmail}`,
   );
 
-  if (!resend) {
+  if (!getResendClient()) {
     console.warn("[Notification] Resend API key not found, skipping invite email.");
     return;
   }
 
   try {
-    await resend.emails.send({
-      from: "Struxient <notifications@struxient.com>",
+    await getResendClient()!.emails.send({
+      from: getResendFromAddress(),
       to: payload.recipientEmail,
       subject: `You've been invited to ${escapeHtml(payload.organizationDisplayName)} on Struxient`,
       html: `

@@ -26,6 +26,7 @@ import {
   isRecipientTokenValid,
   resolveQuoteSignatureRecipient,
 } from "./recipient-token-service";
+import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 
 export type AcceptQuoteSignatureInput = {
   rawToken: string;
@@ -484,6 +485,62 @@ export async function recordSignerPdfDownload(params: {
   });
 
   return { ok: true };
+}
+
+export async function submitQuoteChangeRequestViaSignatureToken(params: {
+  rawToken: string;
+  message: string;
+  ip: string;
+  userAgent: string | null;
+}): Promise<{ ok: true; changeRequestId: string } | { ok: false; error: string }> {
+  const message = params.message.trim();
+  if (message.length < 5) {
+    return { ok: false, error: "Please provide a brief description of the changes you'd like to see." };
+  }
+
+  const recipient = await resolveQuoteSignatureRecipient(params.rawToken);
+  if (!recipient) return { ok: false, error: "This link is no longer valid." };
+
+  const tokenValid = isRecipientTokenValid(recipient);
+  if (!tokenValid.ok && tokenValid.reason !== "accepted") {
+    return { ok: false, error: "This link is no longer valid." };
+  }
+
+  const requiresVisit = /\b(site|visit|measure|inspect|onsite)\b/i.test(message);
+  const changeRequest = await db.$transaction(async (tx) => {
+    const created = await tx.quoteChangeRequest.create({
+      data: {
+        organizationId: recipient.organizationId,
+        quoteId: recipient.quoteId,
+        token: hashPublicAccessToken(params.rawToken),
+        message,
+        requiresVisit,
+        submittedFromIp: params.ip,
+        userAgent: params.userAgent,
+      },
+    });
+    await recordQuoteSignatureEvent(tx, {
+      organizationId: recipient.organizationId,
+      quoteId: recipient.quoteId,
+      signatureRequestId: recipient.signatureRequestId,
+      recipientId: recipient.id,
+      actorType: SignatureActorType.CUSTOMER_SIGNER,
+      eventType: QuoteSignatureEventType.CHANGE_REQUESTED,
+      ipAddress: params.ip,
+      userAgent: params.userAgent,
+      metadataJson: {
+        message,
+        changeRequestId: created.id,
+        signatureRequestId: recipient.signatureRequestId,
+        recipientId: recipient.id,
+        signerEmail: recipient.recipientEmail,
+        signerName: recipient.recipientName,
+      },
+    });
+    return created;
+  });
+
+  return { ok: true, changeRequestId: changeRequest.id };
 }
 
 export { hashSignerToken };

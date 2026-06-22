@@ -452,51 +452,123 @@ export async function resendSignatureRequest(
   };
 }
 
+export async function revokeSignatureRequestInTx(
+  tx: ExtendedTransactionClient,
+  params: {
+    request: {
+      id: string;
+      organizationId: string;
+      quoteId: string;
+      status: QuoteSignatureRequestStatus;
+      revokedAt: Date | null;
+      recipients: { id: string }[];
+    };
+    actorUserId?: string | null;
+    actorType?: SignatureActorType;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<{ ok: true; alreadyRevoked?: boolean } | { ok: false; error: string }> {
+  const { request } = params;
+  if (request.status === QuoteSignatureRequestStatus.ACCEPTED) {
+    return { ok: false, error: "Accepted requests cannot be revoked." };
+  }
+  if (request.revokedAt) {
+    return { ok: true, alreadyRevoked: true };
+  }
+
+  const now = new Date();
+  await tx.quoteSignatureRequest.update({
+    where: { id: request.id },
+    data: {
+      status: QuoteSignatureRequestStatus.REVOKED,
+      revokedAt: now,
+    },
+  });
+  for (const r of request.recipients) {
+    await tx.quoteSignatureRecipient.update({
+      where: { id: r.id },
+      data: {
+        status: QuoteSignatureRecipientStatus.REVOKED,
+        tokenRevokedAt: now,
+      },
+    });
+  }
+  await recordQuoteSignatureEvent(tx, {
+    organizationId: request.organizationId,
+    quoteId: request.quoteId,
+    signatureRequestId: request.id,
+    actorType: params.actorType ?? SignatureActorType.STAFF,
+    actorUserId: params.actorUserId ?? undefined,
+    eventType: QuoteSignatureEventType.SIGNATURE_REQUEST_REVOKED,
+    metadataJson: {
+      ...(params.reason ? { reason: params.reason } : {}),
+      ...(params.metadata ?? {}),
+    },
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Revokes all active unaccepted signature requests on a quote (e.g. commercial revision).
+ */
+export async function revokeActiveSignatureRequestsForQuoteInTx(
+  tx: ExtendedTransactionClient,
+  params: {
+    quoteId: string;
+    organizationId: string;
+    actorUserId?: string | null;
+    reason: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<{ revokedCount: number }> {
+  const requests = await tx.quoteSignatureRequest.findMany({
+    where: {
+      quoteId: params.quoteId,
+      organizationId: params.organizationId,
+      status: { in: ACTIVE_SIGNATURE_REQUEST_STATUSES },
+    },
+    include: { recipients: { select: { id: true } } },
+  });
+
+  let revokedCount = 0;
+  for (const request of requests) {
+    const result = await revokeSignatureRequestInTx(tx, {
+      request,
+      actorUserId: params.actorUserId,
+      reason: params.reason,
+      metadata: params.metadata,
+    });
+    if (result.ok && !result.alreadyRevoked) {
+      revokedCount += 1;
+    }
+  }
+
+  return { revokedCount };
+}
+
 export async function revokeSignatureRequest(
   signatureRequestId: string,
   reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const ctx = await getCommercialRequestContextOrThrow();
-  const now = new Date();
 
   const request = await db.quoteSignatureRequest.findFirst({
     where: { id: signatureRequestId, organizationId: ctx.organizationId },
     include: { recipients: true },
   });
   if (!request) return { ok: false, error: "Signature request not found." };
-  if (request.status === QuoteSignatureRequestStatus.ACCEPTED) {
-    return { ok: false, error: "Accepted requests cannot be revoked." };
-  }
-  if (request.revokedAt) return { ok: true };
 
-  await db.$transaction(async (tx) => {
-    await tx.quoteSignatureRequest.update({
-      where: { id: request.id },
-      data: {
-        status: QuoteSignatureRequestStatus.REVOKED,
-        revokedAt: now,
-      },
-    });
-    for (const r of request.recipients) {
-      await tx.quoteSignatureRecipient.update({
-        where: { id: r.id },
-        data: {
-          status: QuoteSignatureRecipientStatus.REVOKED,
-          tokenRevokedAt: now,
-        },
-      });
-    }
-    await recordQuoteSignatureEvent(tx, {
-      organizationId: request.organizationId,
-      quoteId: request.quoteId,
-      signatureRequestId: request.id,
-      actorType: SignatureActorType.STAFF,
+  const result = await db.$transaction(async (tx) =>
+    revokeSignatureRequestInTx(tx, {
+      request,
       actorUserId: ctx.userId,
-      eventType: QuoteSignatureEventType.SIGNATURE_REQUEST_REVOKED,
-      metadataJson: reason ? { reason } : undefined,
-    });
-  });
+      reason,
+    }),
+  );
 
+  if (!result.ok) return { ok: false, error: result.error };
   return { ok: true };
 }
 

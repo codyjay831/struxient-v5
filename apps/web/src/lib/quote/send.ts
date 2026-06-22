@@ -1,4 +1,5 @@
 import { sendStandardAcceptanceQuote, type StandardAcceptanceSendOptions } from "@/lib/quote-signature/request-service";
+import { buildSignerUrl } from "@/lib/quote-signature/recipient-token-service";
 
 export interface QuoteSendOptions {
   expiresInDays?: number | null;
@@ -33,6 +34,6 @@ export async function sendQuote(
     message: result.message,
     signatureRequestId: result.signatureRequestId,
     deliveryWarnings: result.deliveryWarnings,
-    signerUrls: result.recipientTokens?.map((r) => `/q/sign/${r.rawToken}`),
+    signerUrls: result.recipientTokens?.map((r) => buildSignerUrl(r.rawToken)),
   };
 }

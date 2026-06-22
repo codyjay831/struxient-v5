@@ -11,7 +11,7 @@ import {
   type AuditPacketMetadata,
 } from "@/lib/quote-pdf";
 import type { QuoteCustomerPreviewDocument } from "@/lib/quote-customer-projection";
-import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
+import { getStorageProvider } from "@/lib/storage";
 import { sha256Hex } from "./hash";
 
 type DbClient = ExtendedTransactionClient | typeof db;
@@ -55,17 +55,11 @@ export async function storeSignaturePdfArtifact(
     fileName: params.fileName,
   });
 
-  if (storage instanceof LocalStorageProvider) {
-    await storage.writeObject(fileKey, params.pdfBuffer);
-    await client.attachment.update({
-      where: { id: attachment.id },
-      data: { fileKey, status: AttachmentStatus.READY },
-    });
-  } else {
-    throw new Error(
-      "Generated signature PDF storage requires local storage in this build. Configure server-side GCS write for production.",
-    );
-  }
+  await storage.writeObject(fileKey, params.pdfBuffer, "application/pdf");
+  await client.attachment.update({
+    where: { id: attachment.id },
+    data: { fileKey, status: AttachmentStatus.READY },
+  });
 
   const artifact = await client.quoteSignatureArtifact.create({
     data: {

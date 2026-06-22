@@ -5,12 +5,12 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notifyQuoteChangeRequested } from "@/lib/notifications";
-import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 import {
   acceptQuoteViaSignatureToken,
   declineQuoteViaSignatureToken,
   recordSignerPdfDownload,
   recordSignerView,
+  submitQuoteChangeRequestViaSignatureToken,
 } from "@/lib/quote-signature/accept-service";
 import {
   parseFrozenSnapshotJson,
@@ -19,8 +19,7 @@ import {
   isRecipientTokenValid,
   resolveQuoteSignatureRecipient,
 } from "@/lib/quote-signature/recipient-token-service";
-import { QuoteSignatureArtifactKind, QuoteSignatureEventType, QuoteStatus, SignatureActorType } from "@prisma/client";
-import { recordQuoteSignatureEvent } from "@/lib/quote-signature/event-service";
+import { QuoteSignatureArtifactKind, QuoteStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 import { readFile } from "fs/promises";
 import path from "path";
@@ -133,48 +132,24 @@ export async function requestQuoteChangesFromSignerAction(
     return { error: "Too many requests. Please try again in an hour." };
   }
 
+  const result = await submitQuoteChangeRequestViaSignatureToken({
+    rawToken: recipientToken,
+    message,
+    ip,
+    userAgent,
+  });
+  if (!result.ok) return { error: result.error };
+
   const recipient = await resolveQuoteSignatureRecipient(recipientToken);
-  if (!recipient) return { error: "This link is no longer valid." };
-
-  const tokenValid = isRecipientTokenValid(recipient);
-  if (!tokenValid.ok && tokenValid.reason !== "accepted") {
-    return { error: "This link is no longer valid." };
-  }
-
-  const requiresVisit = /\b(site|visit|measure|inspect|onsite)\b/i.test(message);
-  await db.$transaction(async (tx) => {
-    await tx.quoteChangeRequest.create({
-      data: {
-        organizationId: recipient.organizationId,
-        quoteId: recipient.quoteId,
-        token: hashPublicAccessToken(recipientToken),
-        message: message.trim(),
-        requiresVisit,
-        submittedFromIp: ip,
-        userAgent,
-      },
-    });
-    await recordQuoteSignatureEvent(tx, {
+  if (recipient) {
+    void notifyQuoteChangeRequested({
       organizationId: recipient.organizationId,
       quoteId: recipient.quoteId,
-      signatureRequestId: recipient.signatureRequestId,
-      recipientId: recipient.id,
-      actorType: SignatureActorType.CUSTOMER_SIGNER,
-      eventType: QuoteSignatureEventType.CHANGE_REQUESTED,
-      ipAddress: ip,
-      userAgent,
-      metadataJson: { message: message.trim() },
+      message: message.trim(),
+      submittedFromIp: ip,
     });
-  });
-
-  void notifyQuoteChangeRequested({
-    organizationId: recipient.organizationId,
-    quoteId: recipient.quoteId,
-    message: message.trim(),
-    submittedFromIp: ip,
-  });
-
-  revalidatePath(`/quotes/${recipient.quoteId}`);
+    revalidatePath(`/quotes/${recipient.quoteId}`);
+  }
   revalidatePath("/workstation");
   revalidatePath("/leads");
   return { success: true };

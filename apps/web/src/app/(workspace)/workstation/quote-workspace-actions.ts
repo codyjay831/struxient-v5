@@ -43,6 +43,7 @@ export type QuoteWorkspaceActionState = {
   sendOutcome?: "sent" | "delivery_failed" | "ready_to_send" | "not_ready";
   sendMessage?: string;
   deliveryWarnings?: string[];
+  signerUrls?: string[];
 };
 
 function revalidateQuoteCommercialSurfaces(quoteId: string) {
@@ -226,6 +227,7 @@ export async function sendQuoteWorkspaceAction(
     sendOutcome: result.outcome,
     sendMessage: result.message,
     deliveryWarnings: result.deliveryWarnings,
+    signerUrls: result.signerUrls,
   };
 }
 
