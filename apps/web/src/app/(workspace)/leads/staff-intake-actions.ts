@@ -2,7 +2,7 @@
 
 import { LeadChannel } from "@prisma/client";
 import { redirect } from "next/navigation";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { ingestLead } from "@/lib/lead/ingest-lead";
 import { mapIntakeFormDataToLeadInput } from "@/lib/intake/map-intake-form-data-to-lead-input";
@@ -27,7 +27,7 @@ export async function createStaffLeadFromIntakeAction(
   _prevState: StaffIntakeState,
   formData: FormData,
 ): Promise<StaffIntakeState> {
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getMutableRequestContextOrThrow();
   const officeBundle = await getOfficeIntakeFormBundle(ctx.organizationId);
 
   const formDefinitionId = trimOrNull(formData.get("formDefinitionId"));

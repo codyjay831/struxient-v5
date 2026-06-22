@@ -127,7 +127,6 @@ export async function submitPublicLeadAction(
           introMessage: true,
           emergencyWarningText: true,
           submitButtonText: true,
-          requestTypeOptionsJson: true,
           instantQuoteConfigJson: true,
           instantQuoteEnabled: true,
           showInstantQuoteDetails: true,
@@ -174,10 +173,14 @@ export async function submitPublicLeadAction(
         : null;
   }
 
-  const requestTypeOptions = resolvePublicFormRequestTypeOptions(
-    submitTriageRules,
-    record.publicRequestSettings?.requestTypeOptionsJson,
-  );
+  const requestTypeOptions = resolvePublicFormRequestTypeOptions(submitTriageRules);
+  if (!requestTypeOptions) {
+    console.error(
+      "[submitPublicLeadAction] intake form missing triageRules.requestTypeOptions",
+      { organizationId: record.id, formDefinitionId },
+    );
+    return { error: "We could not send your request. Please check the link and try again." };
+  }
 
   const schemaRequiresRequestType =
     submitFormSchema == null || publicIntakeSchemaIncludesRequestType(submitFormSchema);

@@ -74,18 +74,19 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Reads optional `requestTypeOptions` from `IntakeFormDefinition.triageRules`.
- * Safe fallback to code defaults when missing or invalid.
+ * Reads `requestTypeOptions` from `IntakeFormDefinition.triageRules`.
+ * Returns null when missing or empty — no code-default fallback at runtime.
+ * Defaults are seeded only when provisioning office forms.
  */
 export function parseOfficeRequestTypeOptionsFromTriageRules(
   triageRules: unknown,
-): IntakeRequestTypeOptionLike[] {
+): IntakeRequestTypeOptionLike[] | null {
   if (!isRecord(triageRules)) {
-    return DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS;
+    return null;
   }
   const raw = triageRules.requestTypeOptions;
   if (!Array.isArray(raw) || raw.length === 0) {
-    return DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS;
+    return null;
   }
   const options: IntakeRequestTypeOptionLike[] = [];
   for (const row of raw) {
@@ -100,5 +101,5 @@ export function parseOfficeRequestTypeOptionsFromTriageRules(
     }
     options.push({ value, label });
   }
-  return options.length > 0 ? options : DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS;
+  return options.length > 0 ? options : null;
 }

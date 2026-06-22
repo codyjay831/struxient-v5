@@ -1,5 +1,10 @@
 import { LeadCustomFieldType } from "@prisma/client";
 
+/**
+ * Blessed system atoms for intake forms.
+ * Custom org fields (LeadCustomFieldDef) are not composed here yet — see lead-intake-canon.
+ */
+
 export interface IntakeAtom {
   key: string;
   label: string;

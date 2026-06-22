@@ -1,17 +1,12 @@
-import type { Prisma } from "@prisma/client";
-import {
-  DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-  type PublicRequestTypeOption,
-} from "@/lib/public-request-settings-defaults";
-import { parseStoredRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
+import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /**
- * Reads `requestTypeOptions` from a public `IntakeFormDefinition.triageRules`.
- * Returns null when missing or empty so callers can apply legacy fallback.
+ * Reads `requestTypeOptions` from `IntakeFormDefinition.triageRules`.
+ * Returns null when missing or empty — no code-default fallback at runtime.
  */
 export function readPublicRequestTypeOptionsFromTriageRules(
   triageRules: unknown,
@@ -40,29 +35,13 @@ export function readPublicRequestTypeOptionsFromTriageRules(
 }
 
 /**
- * Runtime source of truth order:
- * 1) per-form `triageRules.requestTypeOptions`
- * 2) legacy org `PublicRequestSettings.requestTypeOptionsJson`
- * 3) code defaults
+ * Runtime resolver for public intake request/service type options.
+ * Source of truth: `IntakeFormDefinition.triageRules.requestTypeOptions` only.
+ * Returns null when triageRules are missing or empty — callers must fail safely.
+ * Code defaults belong in form provisioning (`ensureDefaultPublicIntakeFormDefinition`, create actions).
  */
 export function resolvePublicFormRequestTypeOptions(
   triageRules: unknown,
-  legacySettingsRequestTypeOptionsJson?: Prisma.JsonValue | null,
-): PublicRequestTypeOption[] {
-  const fromForm = readPublicRequestTypeOptionsFromTriageRules(triageRules);
-  if (fromForm) {
-    return fromForm;
-  }
-  if (legacySettingsRequestTypeOptionsJson !== undefined) {
-    console.warn("[intake] requestTypeOptions fallback", {
-      source: "legacyPublicRequestSettings",
-      reason: "missingPerFormTriageRulesRequestTypeOptions",
-    });
-    return parseStoredRequestTypeOptionsJson(legacySettingsRequestTypeOptionsJson);
-  }
-  console.warn("[intake] requestTypeOptions fallback", {
-    source: "codeDefaults",
-    reason: "missingPerFormAndLegacySettingsRequestTypeOptions",
-  });
-  return DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS;
+): PublicRequestTypeOption[] | null {
+  return readPublicRequestTypeOptionsFromTriageRules(triageRules);
 }

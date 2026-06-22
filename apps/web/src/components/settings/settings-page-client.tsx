@@ -26,7 +26,6 @@ import {
   updateWorkstationShowQuickActionsAction,
   updateWorkstationUrgentThresholdAction,
 } from "@/app/(workspace)/workstation/workstation-settings-actions";
-import { updatePublicRequestEnabledAction } from "@/app/(workspace)/settings/public-request-settings/public-request-settings-actions";
 
 type SaveFeedback = {
   state: SettingsSaveState;
@@ -44,11 +43,13 @@ export function SettingsPageClient({
   initialShowQuickActions,
   initialUrgentThresholdHours,
   initialPublicRequestEnabled,
+  canManageIntakeSettings = false,
   includeAppearance = true,
 }: {
   initialShowQuickActions: boolean;
   initialUrgentThresholdHours: number;
   initialPublicRequestEnabled: boolean;
+  canManageIntakeSettings?: boolean;
   includeAppearance?: boolean;
 }) {
   const router = useRouter();
@@ -59,13 +60,9 @@ export function SettingsPageClient({
 
   const [showQuickActions, setShowQuickActions] = useState(initialShowQuickActions);
   const [urgentThresholdHours, setUrgentThresholdHours] = useState(initialUrgentThresholdHours);
-  const [publicRequestEnabled, setPublicRequestEnabled] = useState(initialPublicRequestEnabled);
 
   const [showQuickActionsFeedback, setShowQuickActionsFeedback] = useState(INITIAL_SAVE_FEEDBACK);
   const [urgentThresholdFeedback, setUrgentThresholdFeedback] = useState(INITIAL_SAVE_FEEDBACK);
-  const [publicRequestFeedback, setPublicRequestFeedback] = useState(INITIAL_SAVE_FEEDBACK);
-
-  const [disablePublicConfirmOpen, setDisablePublicConfirmOpen] = useState(false);
 
   const availableSections: SettingsSectionKey[] = useMemo(
     () =>
@@ -131,25 +128,6 @@ export function SettingsPageClient({
 
     setUrgentThresholdFeedback({ state: "saved", errorMessage: null });
     setTimeout(() => setUrgentThresholdFeedback(INITIAL_SAVE_FEEDBACK), 1800);
-  }
-
-  async function savePublicRequestEnabled(nextValue: boolean) {
-    const previous = publicRequestEnabled;
-    setPublicRequestEnabled(nextValue);
-    setPublicRequestFeedback({ state: "saving", errorMessage: null });
-
-    const result = await updatePublicRequestEnabledAction(nextValue);
-    if (!result.success) {
-      setPublicRequestEnabled(previous);
-      setPublicRequestFeedback({
-        state: "error",
-        errorMessage: result.error ?? "Could not save this setting.",
-      });
-      return;
-    }
-
-    setPublicRequestFeedback({ state: "saved", errorMessage: null });
-    setTimeout(() => setPublicRequestFeedback(INITIAL_SAVE_FEEDBACK), 1800);
   }
 
   function handleSectionChange(section: SettingsSectionKey) {
@@ -227,62 +205,34 @@ export function SettingsPageClient({
         <div className="space-y-8">
           <SettingsSection
             title="Customer intake"
-            description="Set up public customer intake and internal staff intake from one control center."
+            description="Configure how customers and staff submit work requests."
           >
+            {!canManageIntakeSettings ? (
+              <div className="rounded-lg border border-border bg-surface px-4 py-3">
+                <p className="text-sm font-medium text-foreground">Admin only</p>
+                <p className="mt-1 text-xs text-foreground-muted">
+                  Intake configuration requires Owner or Admin. Contact an administrator to change
+                  intake forms or public page settings.
+                </p>
+              </div>
+            ) : null}
+
+            <div
+              id="row-customer-intake-status"
+              className="rounded-lg border border-border bg-surface px-4 py-3"
+            >
+              <p className="text-sm font-medium text-foreground">Public intake status</p>
+              <p className="mt-1 text-xs text-foreground-muted">
+                {initialPublicRequestEnabled ? "Accepting requests" : "Paused"} — change availability
+                in Customer intake settings.
+              </p>
+            </div>
+
             <SettingsManageRow
               rowId="row-manage-customer-intake-hub"
-              title="Customer intake control center"
-              description="See what is live, preview paths, and jump to customer or internal intake setup."
+              title="Open Customer Intake"
+              description="Live status, public link, and intake field setup."
               href="/settings/intake"
-            />
-
-            <SettingsToggleRow
-              rowId="row-accept-public-requests"
-              title="Accept public requests"
-              description="Allow customers to submit requests through your public customer intake page."
-              ariaLabel="Accept public requests"
-              checked={publicRequestEnabled}
-              onChange={(checked) => {
-                if (checked) {
-                  void savePublicRequestEnabled(true);
-                  return;
-                }
-                setDisablePublicConfirmOpen(true);
-              }}
-              status={
-                <>
-                  <p className="text-xs text-foreground-muted">
-                    Status: {publicRequestEnabled ? "Accepting requests" : "Paused"}
-                  </p>
-                  <SettingsSaveStatus
-                    state={publicRequestFeedback.state}
-                    errorMessage={publicRequestFeedback.errorMessage}
-                    className="mt-1"
-                  />
-                </>
-              }
-              highlight={highlightRowId === "row-accept-public-requests"}
-            />
-
-            <SettingsManageRow
-              rowId="row-manage-public-request-page"
-              title="Public page copy & availability"
-              description="Page title, intro, warning, submit button, and live/paused status."
-              href="/settings/public-request-settings"
-            />
-
-            <SettingsManageRow
-              rowId="row-manage-office-intake-form"
-              title="Default internal intake"
-              description="Staff intake fields for /leads/new."
-              href="/settings/intake/office"
-            />
-
-            <SettingsManageRow
-              rowId="row-manage-custom-intake-forms"
-              title="Specialized customer forms"
-              description="Optional additional public links for campaigns, trade pages, or service lines."
-              href="/settings/intake-forms"
             />
           </SettingsSection>
         </div>
@@ -333,64 +283,32 @@ export function SettingsPageClient({
   }
 
   return (
-    <>
-      <SettingsPageShell
-        searchSlot={
-          <SettingsSearch
-            value={searchQuery}
-            onChange={setSearchQuery}
-            results={searchResults}
-            onSelectResult={handleSearchResultSelect}
-          />
-        }
-        mobileCategorySlot={
-          <SettingsMobileCategorySelect
-            availableSections={availableSections}
-            value={activeSection}
-            onChange={handleSectionChange}
-          />
-        }
-        desktopCategorySlot={
-          <SettingsCategoryNav
-            availableSections={availableSections}
-            activeSection={activeSection}
-            sectionHref={(section) => nextSectionUrl(pathname, section)}
-            managementLinks={SETTINGS_MANAGEMENT_LINKS}
-          />
-        }
-      >
-        {renderSectionContent(activeSection)}
-      </SettingsPageShell>
-
-      {disablePublicConfirmOpen ? (
-        <dialog open className="fixed inset-0 z-50 m-0 h-full w-full bg-foreground/40 p-0">
-          <div className="mx-auto mt-[12vh] w-[min(92vw,28rem)] rounded-xl border border-border bg-surface p-5 shadow-xl">
-            <h2 className="text-lg font-semibold text-foreground">Turn off public requests?</h2>
-            <p className="mt-2 text-sm text-foreground-muted">
-              Customers will no longer be able to submit through your public request link.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDisablePublicConfirmOpen(false)}
-                className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDisablePublicConfirmOpen(false);
-                  void savePublicRequestEnabled(false);
-                }}
-                className="inline-flex min-h-11 items-center rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
-              >
-                Turn off
-              </button>
-            </div>
-          </div>
-        </dialog>
-      ) : null}
-    </>
+    <SettingsPageShell
+      searchSlot={
+        <SettingsSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          results={searchResults}
+          onSelectResult={handleSearchResultSelect}
+        />
+      }
+      mobileCategorySlot={
+        <SettingsMobileCategorySelect
+          availableSections={availableSections}
+          value={activeSection}
+          onChange={handleSectionChange}
+        />
+      }
+      desktopCategorySlot={
+        <SettingsCategoryNav
+          availableSections={availableSections}
+          activeSection={activeSection}
+          sectionHref={(section) => nextSectionUrl(pathname, section)}
+          managementLinks={SETTINGS_MANAGEMENT_LINKS}
+        />
+      }
+    >
+      {renderSectionContent(activeSection)}
+    </SettingsPageShell>
   );
 }

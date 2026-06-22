@@ -11,9 +11,11 @@ import { IntakeFlowMap } from "@/components/settings/intake-flow-map";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
-  INTAKE_CUSTOM_FORMS_PATH,
-  INTAKE_OFFICE_FORM_PATH,
+  INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_PUBLIC_COPY_PATH,
+  INTAKE_SPECIALIZED_PATH,
+  INTAKE_SPECIALIZED_NEW_PATH,
+  INTAKE_STAFF_PATH,
 } from "@/lib/intake-settings-hierarchy";
 import { OFFICE_INTAKE_FORM_WHERE, PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 import { buildPublicIntakeUrl } from "@/lib/public-intake-url";
@@ -113,7 +115,7 @@ export default async function IntakeSettingsHubPage() {
       />
       <PageHeader
         title="Customer intake"
-        description="Set up how customers request work and how your team logs leads. Every path creates structured lead data for review and quoting."
+        description="Configure how customers and staff submit work requests."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
@@ -153,32 +155,15 @@ export default async function IntakeSettingsHubPage() {
               tone={publicLive ? "approved" : "warning"}
             />
             {defaultPublicForm?.name ? (
-              <span className="text-xs text-foreground-muted truncate max-w-md">
+              <span className="max-w-md truncate text-xs text-foreground-muted">
                 Form: {defaultPublicForm.name}
               </span>
             ) : null}
             {publicSettings?.formTitle ? (
-              <span className="text-xs text-foreground-muted truncate max-w-md">
+              <span className="max-w-md truncate text-xs text-foreground-muted">
                 Page title: {publicSettings.formTitle}
               </span>
             ) : null}
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
-              <p className="text-xs font-semibold text-foreground">Page copy & availability</p>
-              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                Controls whether intake is live, plus the page title, intro, warning, and submit
-                button text around the form.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
-              <p className="text-xs font-semibold text-foreground">Intake fields</p>
-              <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                Controls what customers answer: contact, jobsite, scope, timing, service line, and
-                optional custom questions.
-              </p>
-            </div>
           </div>
 
           {!slug ? (
@@ -192,33 +177,21 @@ export default async function IntakeSettingsHubPage() {
           ) : null}
           {!publicLive ? (
             <SetupNotice tone="warning">
-              Public intake is paused. Customers opening your link will see an unavailable message
-              until you turn intake back on under page copy & availability.
-            </SetupNotice>
-          ) : null}
-          {!defaultPublicForm ? (
-            <SetupNotice tone="info">
-              The default customer form is created automatically on first use. You can edit fields
-              once it exists.
+              Public intake is paused. Turn intake back on under{" "}
+              <Link href={INTAKE_PUBLIC_COPY_PATH} className="text-accent hover:underline">
+                page copy & availability
+              </Link>
+              .
             </SetupNotice>
           ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={INTAKE_PUBLIC_COPY_PATH} className={primaryButtonClass}>
+            <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className={primaryButtonClass}>
+              Edit customer fields
+            </Link>
+            <Link href={INTAKE_PUBLIC_COPY_PATH} className={secondaryButtonClass}>
               Edit page copy & availability
             </Link>
-            {defaultPublicForm ? (
-              <Link
-                href={`/settings/intake-forms/${defaultPublicForm.id}`}
-                className={primaryButtonClass}
-              >
-                Edit customer intake fields
-              </Link>
-            ) : (
-              <Link href={INTAKE_CUSTOM_FORMS_PATH} className={secondaryButtonClass}>
-                Open customer forms
-              </Link>
-            )}
             {publicPreviewHref ? (
               <a
                 href={publicPreviewHref}
@@ -253,7 +226,7 @@ export default async function IntakeSettingsHubPage() {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge label="Always on" tone="approved" />
             {officeDefaultForm?.name ? (
-              <span className="text-xs text-foreground-muted truncate max-w-md">
+              <span className="max-w-md truncate text-xs text-foreground-muted">
                 Form: {officeDefaultForm.name}
               </span>
             ) : (
@@ -262,11 +235,6 @@ export default async function IntakeSettingsHubPage() {
               </span>
             )}
           </div>
-
-          <p className="mt-3 text-sm text-foreground-muted">
-            Customers never see this surface. Internal-only details like source channel and staff
-            notes stay on the new-lead page outside the form schema.
-          </p>
 
           {!officeFormProvisioned ? (
             <SetupNotice tone="info">
@@ -279,17 +247,9 @@ export default async function IntakeSettingsHubPage() {
           ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={INTAKE_OFFICE_FORM_PATH} className={primaryButtonClass}>
-              Manage internal intake
+            <Link href={INTAKE_STAFF_PATH} className={primaryButtonClass}>
+              Edit staff fields
             </Link>
-            {officeFormProvisioned && officeDefaultForm ? (
-              <Link
-                href={`/settings/intake-forms/${officeDefaultForm.id}`}
-                className={primaryButtonClass}
-              >
-                Edit internal intake fields
-              </Link>
-            ) : null}
             <Link href="/leads/new" className={secondaryButtonClass}>
               Preview on New intake
             </Link>
@@ -301,10 +261,6 @@ export default async function IntakeSettingsHubPage() {
             title="Specialized customer forms"
             description="Optional extra public links for campaigns, trade-specific landing pages, referral partners, or distinct service lines."
           />
-          <p className="mt-3 text-sm text-foreground-muted">
-            Most contractors only need the default customer intake. Specialized forms still create
-            leads in the same Lead Review and quote flow.
-          </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge
               label={`${specializedFormCount} specialized form${specializedFormCount === 1 ? "" : "s"}`}
@@ -312,10 +268,10 @@ export default async function IntakeSettingsHubPage() {
             />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={INTAKE_CUSTOM_FORMS_PATH} className={secondaryButtonClass}>
-              Manage specialized customer forms
+            <Link href={INTAKE_SPECIALIZED_PATH} className={primaryButtonClass}>
+              Manage specialized forms
             </Link>
-            <Link href={`${INTAKE_CUSTOM_FORMS_PATH}/new`} className={secondaryButtonClass}>
+            <Link href={INTAKE_SPECIALIZED_NEW_PATH} className={secondaryButtonClass}>
               Create specialized form
             </Link>
           </div>

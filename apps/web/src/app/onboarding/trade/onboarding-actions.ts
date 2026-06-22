@@ -11,5 +11,5 @@ export async function seedTradeStartersAction(tradeSlug: string) {
   if (!template) throw new Error("Template not found");
 
   const slug = encodeURIComponent(template.slug);
-  redirect(`/settings/intake-forms/new?starter=${slug}`);
+  redirect(`/settings/intake/specialized/new?starter=${slug}`);
 }

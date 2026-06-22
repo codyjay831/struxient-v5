@@ -1,8 +1,7 @@
 import { LeadChannel } from "@prisma/client";
 import {
-  INTAKE_CUSTOM_FORMS_PATH,
-  INTAKE_OFFICE_FORM_PATH,
   INTAKE_SETTINGS_HUB_PATH,
+  INTAKE_SPECIALIZED_PATH,
 } from "@/lib/intake-settings-hierarchy";
 
 export type IntakeEditorContext =
@@ -45,7 +44,7 @@ export function intakeEditorContextLabels(
         description:
           "Questions customers answer on your public request page. Page title, intro, and availability are edited separately under public page copy.",
         backHref: INTAKE_SETTINGS_HUB_PATH,
-        backLabel: "Back to customer intake",
+        backLabel: "Back to Customer intake",
         structureLabel: "Customer intake fields",
         breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "public",
@@ -56,12 +55,12 @@ export function intakeEditorContextLabels(
         title: "Specialized customer intake form",
         description:
           "Optional public entry point for campaigns, trade-specific pages, referral partners, or distinct service lines. Submissions follow the same Lead Review flow.",
-        backHref: INTAKE_CUSTOM_FORMS_PATH,
-        backLabel: "Back to specialized customer forms",
+        backHref: INTAKE_SPECIALIZED_PATH,
+        backLabel: "Back to specialized forms",
         structureLabel: "Specialized intake fields",
         breadcrumbParent: {
-          label: "Specialized customer forms",
-          href: INTAKE_CUSTOM_FORMS_PATH,
+          label: "Specialized forms",
+          href: INTAKE_SPECIALIZED_PATH,
         },
         surfaceMode: "public",
         layoutMode: "progressive",
@@ -71,10 +70,10 @@ export function intakeEditorContextLabels(
         title: "Default internal intake fields",
         description:
           "Staff-only form at /leads/new for phone, email, walk-in, and referral leads. Customers never see this surface.",
-        backHref: INTAKE_OFFICE_FORM_PATH,
-        backLabel: "Back to internal intake",
-        structureLabel: "Internal intake fields",
-        breadcrumbParent: { label: "Internal intake", href: INTAKE_OFFICE_FORM_PATH },
+        backHref: INTAKE_SETTINGS_HUB_PATH,
+        backLabel: "Back to Customer intake",
+        structureLabel: "Staff intake fields",
+        breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "staff",
         layoutMode: "compact",
       };

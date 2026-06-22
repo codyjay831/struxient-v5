@@ -130,8 +130,6 @@ model PublicRequestSettings {
   introMessage            String?
   emergencyWarningText    String?
   submitButtonText        String       @default("Send request")
-  /// JSON array of `{ "value": "slug-key", "label": "Customer label" }` — validated server-side.
-  requestTypeOptionsJson  Json         @default("[]")
   createdAt               DateTime     @default(now())
   updatedAt               DateTime     @updatedAt
   /// JSON object mapping requestType value to array of LineItemTemplate ids: `{ "roof-repair": ["id1", "id2"] }`

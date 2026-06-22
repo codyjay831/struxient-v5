@@ -1,5 +1,4 @@
 import type { Prisma } from "@prisma/client";
-import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
 import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
 
@@ -14,19 +13,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Validates `requestTypeOptionsJson` from the database or from a settings form payload.
- * Returns defaults when JSON is empty or unusable (safe read path).
+ * Validates intake form `triageRules.requestTypeOptions` payloads (public and office forms).
  */
-export function parseStoredRequestTypeOptionsJson(
-  raw: Prisma.JsonValue | null | undefined,
-): PublicRequestTypeOption[] {
-  const parsed = validateRequestTypeOptionsJson(raw);
-  if (parsed.ok) {
-    return parsed.options.length > 0 ? parsed.options : DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS;
-  }
-  return DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS;
-}
-
 export function validateRequestTypeOptionsJson(raw: unknown): ValidatedRequestTypeOptions {
   if (raw == null) {
     return { ok: true, options: [] };
@@ -132,13 +120,4 @@ export function parseInstantQuoteConfigJson(
     }
   }
   return out;
-}
-
-export function requestTypeLabelByValue(
-  options: PublicRequestTypeOption[],
-  value: string,
-): string | null {
-  const v = value.trim().toLowerCase();
-  const hit = options.find((o) => o.value === v);
-  return hit ? hit.label : null;
 }

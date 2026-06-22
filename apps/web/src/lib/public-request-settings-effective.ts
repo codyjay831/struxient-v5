@@ -3,13 +3,8 @@ import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
   DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-  DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-  type PublicRequestTypeOption,
 } from "@/lib/public-request-settings-defaults";
-import {
-  parseInstantQuoteConfigJson,
-  parseStoredRequestTypeOptionsJson,
-} from "@/lib/public-request-settings-validation";
+import { parseInstantQuoteConfigJson } from "@/lib/public-request-settings-validation";
 
 export type EffectivePublicRequestSettings = {
   enabled: boolean;
@@ -18,8 +13,6 @@ export type EffectivePublicRequestSettings = {
   introMessage: string | null;
   emergencyWarningText: string | null;
   submitButtonText: string;
-  /** Legacy org-level options; public runtime uses per-form triageRules via resolvePublicFormRequestTypeOptions. */
-  requestTypeOptions: PublicRequestTypeOption[];
   instantQuoteConfig: Record<string, string[]>;
   instantQuoteEnabled: boolean;
   showInstantQuoteDetails: boolean;
@@ -33,7 +26,6 @@ type PublicRequestSettingsRow = Pick<
   | "introMessage"
   | "emergencyWarningText"
   | "submitButtonText"
-  | "requestTypeOptionsJson"
   | "instantQuoteConfigJson"
   | "instantQuoteEnabled"
   | "showInstantQuoteDetails"
@@ -50,7 +42,6 @@ export function effectivePublicRequestSettingsFromRow(
       introMessage: DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
       emergencyWarningText: null,
       submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-      requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
       instantQuoteConfig: {},
       instantQuoteEnabled: true,
       showInstantQuoteDetails: true,
@@ -80,7 +71,6 @@ export function effectivePublicRequestSettingsFromRow(
     introMessage,
     emergencyWarningText,
     submitButtonText,
-    requestTypeOptions: parseStoredRequestTypeOptionsJson(row.requestTypeOptionsJson),
     instantQuoteConfig: parseInstantQuoteConfigJson(row.instantQuoteConfigJson),
     instantQuoteEnabled: row.instantQuoteEnabled,
     showInstantQuoteDetails: row.showInstantQuoteDetails,

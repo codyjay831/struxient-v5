@@ -3,6 +3,7 @@ import test from "node:test";
 import { LeadChannel } from "@prisma/client";
 import {
   formBelongsToIntakeSurface,
+  intakeFormDefinitionWhereForSurface,
   OFFICE_INTAKE_FORM_WHERE,
   PUBLIC_INTAKE_FORM_WHERE,
 } from "./intake-form-surface";
@@ -15,6 +16,11 @@ test("PUBLIC_INTAKE_FORM_WHERE matches WEB_FORM public forms", () => {
 test("OFFICE_INTAKE_FORM_WHERE matches MANUAL private forms", () => {
   assert.equal(OFFICE_INTAKE_FORM_WHERE.channel, LeadChannel.MANUAL);
   assert.equal(OFFICE_INTAKE_FORM_WHERE.isPublic, false);
+});
+
+test("intakeFormDefinitionWhereForSurface excludes archived forms", () => {
+  const where = intakeFormDefinitionWhereForSurface("public", "org_1", "form_1");
+  assert.equal(where.archivedAt, null);
 });
 
 test("formBelongsToIntakeSurface classifies public and office families", () => {

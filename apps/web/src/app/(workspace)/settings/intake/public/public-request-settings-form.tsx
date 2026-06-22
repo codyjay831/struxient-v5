@@ -13,7 +13,10 @@ import {
   type PublicRequestSettingsFormState,
 } from "./public-request-settings-actions";
 import { PublicPageCopyPreview } from "@/components/settings/public-page-copy-preview";
-import { INTAKE_SETTINGS_HUB_PATH } from "@/lib/intake-settings-hierarchy";
+import {
+  INTAKE_CUSTOMER_FIELDS_PATH,
+  INTAKE_SETTINGS_HUB_PATH,
+} from "@/lib/intake-settings-hierarchy";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -40,7 +43,6 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
     initialActionState,
   );
   const formId = useId();
-  const [offerings, setOfferings] = useState<string[]>(initial.offerings);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [formTitle, setFormTitle] = useState(initial.formTitle);
   const [introMessage, setIntroMessage] = useState(initial.introMessage);
@@ -49,6 +51,17 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
 
   return (
     <form action={formAction} className="space-y-8" id={formId}>
+      <input
+        type="hidden"
+        name="instantQuoteEnabled"
+        value={initial.instantQuoteEnabled ? "on" : "off"}
+      />
+      <input
+        type="hidden"
+        name="showInstantQuoteDetails"
+        value={initial.showInstantQuoteDetails ? "on" : "off"}
+      />
+      <input type="hidden" name="offerings" value={initial.offerings.join(", ")} />
       {state.error ? (
         <p
           className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
@@ -100,64 +113,6 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
           </span>
         </label>
       </section>
-
-      <details className="group rounded-lg border border-border bg-foreground/[0.02]">
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
-          <span className="flex items-center justify-between gap-2">
-            Optional — instant pricing & trust badges
-            <span className="text-xs font-normal text-foreground-subtle">Future</span>
-          </span>
-        </summary>
-        <div className="space-y-6 border-t border-border px-4 py-4">
-          <p className="text-sm text-foreground-muted">
-            Instant pricing automation is not expanded in this release. These controls are preserved
-            for a future update and do not change lead → quote handoff today.
-          </p>
-          <input
-            type="hidden"
-            name="instantQuoteEnabled"
-            value={initial.instantQuoteEnabled ? "on" : "off"}
-          />
-          <input
-            type="hidden"
-            name="showInstantQuoteDetails"
-            value={initial.showInstantQuoteDetails ? "on" : "off"}
-          />
-          <div className="space-y-3 rounded-lg border border-border bg-surface px-3 py-3 text-sm text-foreground-muted">
-            <p>
-              <span className={fieldLabelClass}>Instant quote</span>
-              <span className="mt-1 block">
-                {initial.instantQuoteEnabled ? "Enabled in stored settings" : "Disabled in stored settings"}
-                {" — "}
-                not shown to customers until this feature ships.
-              </span>
-            </p>
-            <p>
-              <span className={fieldLabelClass}>Line item details on estimate</span>
-              <span className="mt-1 block">
-                {initial.showInstantQuoteDetails ? "Would show line detail" : "Total only"}
-                {" (preserved, not editable here)."}
-              </span>
-            </p>
-          </div>
-          <div>
-            <label className="block">
-              <span className={fieldLabelClass}>Offerings (comma separated)</span>
-              <input
-                name="offerings"
-                type="text"
-                value={offerings.join(", ")}
-                onChange={(e) => setOfferings(e.target.value.split(",").map((s) => s.trim()))}
-                placeholder="e.g. Licensed, Insured, 24/7 Emergency"
-                className={controlClass}
-              />
-            </label>
-            <p className="mt-1.5 text-xs text-foreground-subtle">
-              Trust badges on the public page when configured.
-            </p>
-          </div>
-        </div>
-      </details>
 
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Page copy</h2>
@@ -233,11 +188,15 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       <section className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">Service lines / request types</h2>
         <p className="mt-1 text-sm text-foreground-muted">
-          Managed per customer intake form. Edit service lines on your{" "}
-          <Link href={INTAKE_SETTINGS_HUB_PATH} className="text-accent hover:underline">
-            customer intake
+          Managed on{" "}
+          <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className="text-accent hover:underline">
+            customer intake fields
           </Link>{" "}
-          default or specialized forms.
+          or specialized forms from{" "}
+          <Link href={INTAKE_SETTINGS_HUB_PATH} className="text-accent hover:underline">
+            Customer intake
+          </Link>
+          .
         </p>
       </section>
 

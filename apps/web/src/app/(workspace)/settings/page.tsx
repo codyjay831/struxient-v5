@@ -1,6 +1,7 @@
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { SettingsPageClient } from "@/components/settings/settings-page-client";
+import { canManageOrganizationSettings } from "@/lib/authz/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
       initialShowQuickActions={workstationSettings?.showQuickActions ?? true}
       initialUrgentThresholdHours={workstationSettings?.urgentThresholdHours ?? 24}
       initialPublicRequestEnabled={publicRequestSettings?.enabled ?? true}
+      canManageIntakeSettings={canManageOrganizationSettings(ctx.role)}
       includeAppearance
     />
   );

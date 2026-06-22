@@ -4,6 +4,7 @@ import {
   DEFAULT_INTAKE_FORM_SCHEMA,
   type IntakeFormDefinitionShape,
 } from "@/lib/intake/default-intake-form";
+import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
 import {
   INTAKE_FORM_DEFINITION_SELECT,
   PUBLIC_INTAKE_FORM_WHERE,
@@ -38,6 +39,9 @@ export async function ensureDefaultPublicIntakeFormDefinition(
   }
 
   const schemaJson = DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
+  const triageRulesJson = {
+    requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+  } as Prisma.InputJsonValue;
 
   const upserted = await db.intakeFormDefinition.upsert({
     where: {
@@ -54,6 +58,7 @@ export async function ensureDefaultPublicIntakeFormDefinition(
       isPublic: true,
       isDefault: true,
       schema: schemaJson,
+      triageRules: triageRulesJson,
     },
     update: {
       name: DEFAULT_PUBLIC_INTAKE_NAME,

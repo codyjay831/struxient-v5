@@ -1,17 +1,16 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { updateIntakeFormAction } from "../intake-form-actions";
+import { updateIntakeFormAction } from "../../intake-form-actions";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import type {
   IntakeFormFieldRef,
-  IntakeFormFieldVisibilityRule,
   IntakeFormSchema,
   IntakeFormSection,
 } from "@/lib/intake/default-intake-form";
 import { LeadChannel } from "@prisma/client";
 import Link from "next/link";
-import { ChevronLeft, Loader2, Save, Plus, Trash2, GripVertical, Info, Lock } from "lucide-react";
+import { ChevronLeft, Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
 import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
@@ -75,6 +74,8 @@ export function IntakeFormEditor({
   };
 }) {
   const labels = intakeEditorContextLabels(editorContext);
+  const isOfficeIntake = editorContext === "defaultInternalIntake";
+  const showRequestTypeEditor = isPublicIntakeForm || isOfficeIntake;
   const boundUpdate = updateIntakeFormAction.bind(null, formDefinition.id);
   const [state, formAction, isPending] = useActionState(boundUpdate, {});
 
@@ -153,16 +154,6 @@ export function IntakeFormEditor({
     setSchema({ ...schema, sections: newSections });
   };
 
-  const handleUpdateFieldVisibility = (
-    sectionIdx: number,
-    fieldIdx: number,
-    visibleIf: IntakeFormFieldVisibilityRule | undefined,
-  ) => {
-    const newSections = [...schema.sections];
-    newSections[sectionIdx].fields[fieldIdx].visibleIf = visibleIf;
-    setSchema({ ...schema, sections: newSections });
-  };
-
   return (
     <form action={formAction} className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -205,8 +196,7 @@ export function IntakeFormEditor({
               {labels.structureLabel}
             </h2>
             <p className="mb-6 text-xs text-foreground-muted">
-              Add construction intake building blocks by section. Use conditional visibility to keep
-              customer forms short while supporting different service lines.
+              Add construction intake building blocks by section.
             </p>
 
             <div className="space-y-6">
@@ -244,7 +234,6 @@ export function IntakeFormEditor({
                           key={`${field.key}_${fIdx}`}
                           className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3 shadow-sm"
                         >
-                          <GripVertical className="size-4 text-foreground-subtle" />
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium text-foreground">
@@ -258,38 +247,16 @@ export function IntakeFormEditor({
                               ) : null}
                             </div>
                             {field.visibleIf ? (
-                              <div className="mt-1 flex items-center gap-1.5 text-[0.6rem] font-bold uppercase tracking-wider text-accent">
-                                <Info className="size-2.5" />
-                                Visible if {field.visibleIf.fieldKey}{" "}
+                              <p className="mt-1 text-[0.6rem] text-foreground-subtle">
+                                Shown when {field.visibleIf.fieldKey}
                                 {field.visibleIf.equals !== undefined
-                                  ? `equals ${field.visibleIf.equals}`
+                                  ? ` is ${field.visibleIf.equals}`
                                   : field.visibleIf.notEmpty
-                                    ? "is not empty"
+                                    ? " has a value"
                                     : ""}
-                              </div>
+                              </p>
                             ) : null}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const fieldKey = prompt(
-                                "Enter field key to depend on (e.g. timing.bucket):",
-                              );
-                              if (!fieldKey) return;
-                              const equals = prompt(
-                                "Enter value it should equal (or leave blank for 'not empty'):",
-                              );
-                              handleUpdateFieldVisibility(
-                                sIdx,
-                                fIdx,
-                                equals ? { fieldKey, equals } : { fieldKey, notEmpty: true },
-                              );
-                            }}
-                            className="text-foreground-subtle transition-colors hover:text-accent"
-                            title="Add visibility rule"
-                          >
-                            <Info className="size-3.5" />
-                          </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveField(sIdx, fIdx)}
@@ -420,14 +387,15 @@ export function IntakeFormEditor({
             </div>
           </div>
 
-          {isPublicIntakeForm ? (
+          {showRequestTypeEditor ? (
             <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
               <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
-                Service lines / request types
+                {isOfficeIntake ? "Staff request types" : "Service lines / request types"}
               </h2>
               <p className="mb-4 text-xs text-foreground-muted">
-                Customer-facing choices for this form. These can drive follow-up questions and
-                future detail packs for different trades or scopes.
+                {isOfficeIntake
+                  ? "Choices staff see on /leads/new when logging a lead."
+                  : "Customer-facing choices for this form."}
               </p>
               <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
               <div className="space-y-3">

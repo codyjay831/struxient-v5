@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import {
   DEFAULT_OFFICE_INTAKE_FORM_SCHEMA,
   DEFAULT_OFFICE_INTAKE_FORM_SLUG,
+  DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS,
+  parseOfficeRequestTypeOptionsFromTriageRules,
 } from "@/lib/intake/default-office-intake-form";
 import type { IntakeFormDefinitionShape } from "@/lib/intake/default-intake-form";
 import {
@@ -27,13 +29,34 @@ export async function ensureDefaultOfficeIntakeFormDefinition(
       isDefault: true,
       archivedAt: null,
     },
-    select: INTAKE_FORM_DEFINITION_SELECT,
+    select: {
+      ...INTAKE_FORM_DEFINITION_SELECT,
+      triageRules: true,
+    },
     orderBy: { updatedAt: "desc" },
   });
 
   const shaped = existing ? toIntakeFormDefinitionShape(existing) : null;
-  if (shaped) {
+  const triageRulesJson = {
+    requestTypeOptions: DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS,
+  } as Prisma.InputJsonValue;
+  const hasRequestTypeOptions = parseOfficeRequestTypeOptionsFromTriageRules(
+    existing?.triageRules,
+  );
+  if (shaped && hasRequestTypeOptions) {
     return shaped;
+  }
+  if (shaped && existing) {
+    const repaired = await db.intakeFormDefinition.update({
+      where: { id: existing.id },
+      data: { triageRules: triageRulesJson },
+      select: INTAKE_FORM_DEFINITION_SELECT,
+    });
+    const result = toIntakeFormDefinitionShape(repaired);
+    if (!result) {
+      throw new Error("Failed to backfill default office intake triageRules.");
+    }
+    return result;
   }
 
   const schemaJson = DEFAULT_OFFICE_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
@@ -53,6 +76,7 @@ export async function ensureDefaultOfficeIntakeFormDefinition(
       isPublic: false,
       isDefault: true,
       schema: schemaJson,
+      triageRules: triageRulesJson,
     },
     update: {
       name: DEFAULT_OFFICE_INTAKE_NAME,
@@ -61,6 +85,7 @@ export async function ensureDefaultOfficeIntakeFormDefinition(
       isDefault: true,
       archivedAt: null,
       schema: schemaJson,
+      triageRules: triageRulesJson,
     },
     select: INTAKE_FORM_DEFINITION_SELECT,
   });

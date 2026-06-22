@@ -275,7 +275,7 @@ export type PublicRequestIntakeBundle = {
    * organizations that have not customized their public request form.
    */
   formDefinition: IntakeFormDefinitionShape;
-  /** Resolved from form `triageRules`, with legacy settings/default fallback. */
+  /** Resolved from form `triageRules`; only present when bundle is returned. */
   requestTypeOptions: PublicRequestTypeOption[];
 };
 
@@ -305,7 +305,6 @@ export async function getPublicRequestIntakeBundle(
           introMessage: true,
           emergencyWarningText: true,
           submitButtonText: true,
-          requestTypeOptionsJson: true,
           instantQuoteConfigJson: true,
           instantQuoteEnabled: true,
           showInstantQuoteDetails: true,
@@ -342,12 +341,15 @@ export async function getPublicRequestIntakeBundle(
   });
 
   let formDefinition: IntakeFormDefinitionShape;
+  let triageRules: unknown = null;
+
   const shaped = published ? toIntakeFormDefinitionShape(published) : null;
   if (shaped) {
     formDefinition = {
       ...shaped,
       schema: normalizePublicIntakeSchema(shaped.schema),
     };
+    triageRules = published?.triageRules;
   } else {
     if (formSlug) {
       return null;
@@ -355,19 +357,29 @@ export async function getPublicRequestIntakeBundle(
     // Default route: provision a real IntakeFormDefinition so submit/provenance stay consistent.
     try {
       formDefinition = await ensureDefaultPublicIntakeFormDefinition(org.id);
+      const provisioned = await db.intakeFormDefinition.findFirst({
+        where: { id: formDefinition.id, organizationId: org.id },
+        select: { triageRules: true },
+      });
+      triageRules = provisioned?.triageRules;
     } catch (error) {
       console.error(
         "[getPublicRequestIntakeBundle] ensureDefaultPublicIntakeFormDefinition failed; using synthetic fallback",
         { organizationId: org.id, companySlug: normalizedCompany, error },
       );
       formDefinition = DEFAULT_INTAKE_FORM_DEFINITION;
+      triageRules = null;
     }
   }
 
-  const requestTypeOptions = resolvePublicFormRequestTypeOptions(
-    published?.triageRules,
-    org.publicRequestSettings?.requestTypeOptionsJson,
-  );
+  const requestTypeOptions = resolvePublicFormRequestTypeOptions(triageRules);
+  if (!requestTypeOptions) {
+    console.error(
+      "[getPublicRequestIntakeBundle] intake form missing triageRules.requestTypeOptions",
+      { organizationId: org.id, companySlug: normalizedCompany, formId: formDefinition.id },
+    );
+    return null;
+  }
 
   return {
     organizationId: org.id,
