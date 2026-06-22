@@ -40,6 +40,9 @@ export type QuoteWorkspaceActionState = {
   error?: string;
   success?: boolean;
   revisedQuoteId?: string;
+  sendOutcome?: "sent" | "delivery_failed" | "ready_to_send" | "not_ready";
+  sendMessage?: string;
+  deliveryWarnings?: string[];
 };
 
 function revalidateQuoteCommercialSurfaces(quoteId: string) {
@@ -218,7 +221,12 @@ export async function sendQuoteWorkspaceAction(
     return { success: false, error: result.error };
   }
   revalidateQuoteCommercialSurfaces(quoteId);
-  return { success: true };
+  return {
+    success: true,
+    sendOutcome: result.outcome,
+    sendMessage: result.message,
+    deliveryWarnings: result.deliveryWarnings,
+  };
 }
 
 /**

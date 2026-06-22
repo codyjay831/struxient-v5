@@ -30,6 +30,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [lineage-and-prior-art.md](./lineage-and-prior-art.md) | Full_Cursor (genesis) + v2–v4: what to salvage; failure modes; Jobber-simple + execution-strong positioning |
 | [lead-intake-canon.md](./lead-intake-canon.md) | **Lead intake / public intake / Lead Review / Lead→Quote handoff** — source-of-truth, 5 slices, future intake chain guardrail |
 | [sales-site-visit-canon.md](./sales-site-visit-canon.md) | **Sales site visit workflow** — `LeadVisitRequest` ownership, lifecycle, access snapshots, permissions, audit, surface behavior, MVP split |
+| [customer-project-portal-canon.md](./customer-project-portal-canon.md) | **Customer Project Portal** — scoped customer access, portal identity/session boundaries, explicit visibility, customer-safe project hub, customer requests, audit, phased build order |
 | [experience-canon-lead-to-workstation.md](./experience-canon-lead-to-workstation.md) | Full experience requirements: lead → workstation |
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
 | [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |

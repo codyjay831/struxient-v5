@@ -1287,7 +1287,13 @@ export async function restoreQuoteToDraftAction(
   redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
-export type PerformQuoteCheckpointResult = { error?: string };
+export type PerformQuoteCheckpointResult = {
+  error?: string;
+  outcome?: "sent" | "delivery_failed" | "ready_to_send" | "not_ready";
+  message?: string;
+  deliveryWarnings?: string[];
+  signatureRequestId?: string;
+};
 
 /**
  * Org-scoped send checkpoint + SENT transition. Used by workstation actions.
@@ -1302,9 +1308,14 @@ export async function performQuoteSendCheckpoint(
 ): Promise<PerformQuoteCheckpointResult> {
   const result = await sendQuote(quoteId, options);
   if (!result.ok) {
-    return { error: result.error ?? "Failed to send quote." };
+    return { error: result.error ?? "Failed to send quote.", outcome: result.outcome };
   }
-  return {};
+  return {
+    outcome: result.outcome,
+    message: result.message,
+    deliveryWarnings: result.deliveryWarnings,
+    signatureRequestId: result.signatureRequestId,
+  };
 }
 
 /**

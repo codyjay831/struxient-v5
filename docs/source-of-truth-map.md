@@ -92,6 +92,25 @@
 | Platform access grant (current state) | **Stored** | `PlatformAccess` in `apps/web/prisma/schema.prisma` | Accidental auto-grants via seed or membership coupling |
 | Platform audit stream | **Stored (append-only)** | `PlatformAuditEvent` + `apps/web/src/lib/platform/platform-audit.ts` | Mutable audit rows or secret metadata leakage |
 
+## Customer Project Portal
+
+> **Canon:** [customer-project-portal-canon.md](./canon/customer-project-portal-canon.md). Customer portal auth/access is separate from staff `User`/`Membership`; do not add `Membership(role: CUSTOMER)`.
+
+| Concept | Stored or derived? | Canonical location | Risk if duplicated |
+|---------|-------------------|-------------------|-------------------|
+| Customer contact role | **Stored** | Planned `CustomerContact` model + customer portal access service | Treating a phone/email as both relationship context and verified auth identity |
+| Customer portal identity | **Stored** | Planned `CustomerPortalIdentity` model + portal identity/token services | Reusing staff `User` for external customers or collapsing identity into a single customer record |
+| Customer portal access grant | **Stored** | Planned `CustomerPortalAccess` model + `customer-portal-access-service.ts` | Customer sees another customer's job, revoked access still works, or access leaks across orgs/jobs |
+| Customer portal session | **Stored token hash + derived validation** | Planned `CustomerPortalSession` model + `customer-portal-session-service.ts` / `requireCustomerPortalAccess()` | Staff and customer sessions getting mixed, stale sessions surviving revocation |
+| Customer portal magic-link token | **Stored token hash + consumed/expired facts** | Planned `CustomerPortalMagicLinkToken` model + `customer-portal-token-service.ts`; current `/q/[token]` and `/co/[token]` token helpers migrate toward this boundary | Reusable bearer links, inconsistent token hashing, quote/CO/portal token drift |
+| Customer-visible resource | **Stored visibility grant** | Planned `CustomerVisibleResource` model + `customer-visible-resource-service.ts` | Internal documents/photos/schedule details exposed because UI serialized a raw object |
+| Customer request | **Stored request workflow fact** | Planned `CustomerRequest` model + `customer-request-service.ts` | Customer messages becoming unstructured chat or directly mutating job/schedule truth |
+| Customer portal event | **Stored append-only audit** | Planned `CustomerPortalEvent` model + `customer-portal-event-service.ts` | Missing accountability for link use, upload, acceptance, revoke, and portal access events |
+| Customer project status | **Derived** | Planned `customer-portal-presenter.ts` — `getCustomerProjectStatus()` from quote/job/task/schedule/payment/request facts | Stored customer-facing status drifting from real job/commercial/payment state |
+| Customer next action | **Derived** | Planned `customer-portal-presenter.ts` — `getCustomerNextAction()` from visible resources, quote/CO state, payments, schedule, and requests | Portal fails its main job or shows different next actions in cards vs header |
+| Customer-safe activity feed | **Derived projection** | Planned customer portal presenter reading `CustomerPortalEvent` plus approved customer-visible milestones | Internal task failures, cost notes, AI reasoning, or staff comments leaking into customer history |
+| Portal notification delivery | **Stored delivery attempt + event** | Planned `customerPortalNotificationService` + portal token/event services | Random UI-created emails/SMS with no token/audit/delivery lineage |
+
 ## Commercial pipeline
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
@@ -113,6 +132,9 @@
 | Pre-plan line draft tasks | **Stored (authoring seed)** | `QuoteLineExecutionTask` — not activation truth once whole-quote plan exists | Treating per-line drafts as reviewed activation plan |
 | Quote totals | **Stored** | `Quote.totalCents`, line items | Different totals in UI vs PDF vs checkpoint |
 | Approved commercial baseline | **Stored proof** | `QuoteCheckpoint` — see [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md) | “Version browser” UX or silent sold-truth mutation |
+| Quote signature request (Standard Acceptance / Verified E-Sign) | **Stored** | `QuoteSignatureRequest`, `QuoteSignatureRecipient`, `QuoteSignatureDelivery`, `QuoteSignatureEvent`, `QuoteSignatureArtifact` in `apps/web/src/lib/quote-signature/` | Duplicate send/accept audit or live-quote signer pages |
+| Signature request status / timeline labels | **Derived** | `timeline-presenter.ts`, `status-service.ts` in `quote-signature/` | Second signature status engine in UI |
+| Frozen sent quote snapshot + PDF hash | **Stored** | `QuoteSignatureRequest.frozenSnapshotJson`, `frozenSnapshotSha256`, sent artifact rows | Rendering signer page from live mutable quote rows |
 | Customer revision/change request intent | **Stored** | `QuoteChangeRequest` | Notes-only customer-change handling and missing revision loop context |
 
 ## Jobs, issues, recovery

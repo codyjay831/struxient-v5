@@ -228,3 +228,123 @@ export async function renderQuoteAcceptancePdf(
     <QuotePdfDocument document={document} {...metadata} />,
   );
 }
+
+function QuoteProposalPdfDocument({
+  document,
+}: {
+  document: QuoteCustomerPreviewDocument;
+}) {
+  const formatMoney = (cents: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.orgName}>{document.organizationDisplayName}</Text>
+          <Text style={styles.documentTitle}>{document.documentTitle}</Text>
+          <Text style={{ fontSize: 9, color: "#999" }}>
+            Updated: {new Date(document.updatedAt).toLocaleDateString()}
+          </Text>
+        </View>
+        <View style={styles.totalSection}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalAmount}>{formatMoney(document.totalCents)}</Text>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Scope of Work</Text>
+          {document.lineItems.map((line) => (
+            <View key={line.id} style={styles.lineItem}>
+              <Text style={styles.lineTitle}>{line.lineTitle}</Text>
+              {line.lineDetail ? <Text style={styles.lineDetail}>{line.lineDetail}</Text> : null}
+              <View style={styles.linePricing}>
+                <Text style={styles.lineQuantity}>
+                  {line.quantityDisplay} @ {formatMoney(line.unitAmountCents)}
+                </Text>
+                <Text style={styles.linePrice}>{formatMoney(line.lineTotalCents)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        <View style={styles.footer}>
+          <Text>Proposal document — review and accept electronically via secure link.</Text>
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+export async function renderQuoteProposalPdf(
+  document: QuoteCustomerPreviewDocument,
+): Promise<Buffer> {
+  return await renderToBuffer(<QuoteProposalPdfDocument document={document} />);
+}
+
+export type AuditPacketMetadata = {
+  quoteId: string;
+  signatureRequestId: string;
+  recipientId: string;
+  mode: string;
+  provider: string;
+  sentAtIso: string;
+  acceptedAtIso: string;
+  acceptedByName: string;
+  signerEmail?: string | null;
+  ip?: string;
+  userAgent?: string | null;
+  consentText: string;
+  consentVersion: string;
+  consentAcceptedAtIso: string;
+  frozenSnapshotSha256: string;
+  sentPdfSha256: string;
+  finalPdfSha256: string;
+  eventSummary: string[];
+};
+
+function AuditPacketDocument({
+  document,
+  metadata,
+}: {
+  document: QuoteCustomerPreviewDocument;
+  metadata: AuditPacketMetadata;
+}) {
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.orgName}>Audit Certificate</Text>
+          <Text style={styles.documentTitle}>{document.documentTitle}</Text>
+        </View>
+        <View style={styles.signatureSection}>
+          <Text style={styles.signatureTitle}>Standard Acceptance Record</Text>
+          <Text style={styles.signatureDetail}>Quote ID: {metadata.quoteId}</Text>
+          <Text style={styles.signatureDetail}>Request ID: {metadata.signatureRequestId}</Text>
+          <Text style={styles.signatureDetail}>Recipient ID: {metadata.recipientId}</Text>
+          <Text style={styles.signatureDetail}>Signed by: {metadata.acceptedByName}</Text>
+          <Text style={styles.signatureDetail}>
+            Accepted: {new Date(metadata.acceptedAtIso).toLocaleString("en-US")}
+          </Text>
+          <Text style={styles.signatureDetail}>Consent version: {metadata.consentVersion}</Text>
+          <Text style={styles.signatureDetail}>Frozen snapshot SHA-256: {metadata.frozenSnapshotSha256}</Text>
+          <Text style={styles.signatureDetail}>Sent PDF SHA-256: {metadata.sentPdfSha256}</Text>
+          <Text style={styles.signatureDetail}>Final PDF SHA-256: {metadata.finalPdfSha256}</Text>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Event Timeline</Text>
+          {metadata.eventSummary.map((line, i) => (
+            <Text key={i} style={{ fontSize: 9, marginBottom: 4 }}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+export async function renderQuoteAuditPacketPdf(
+  document: QuoteCustomerPreviewDocument,
+  metadata: AuditPacketMetadata,
+): Promise<Buffer> {
+  return await renderToBuffer(<AuditPacketDocument document={document} metadata={metadata} />);
+}

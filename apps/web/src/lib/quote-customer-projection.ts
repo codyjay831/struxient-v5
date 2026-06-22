@@ -3,6 +3,8 @@
  * Intentionally excludes internalNotes, template ids, and org ids.
  */
 
+import { resolveNonFinalScheduleItemCents } from "@/lib/payment-schedule-materialization";
+
 export type QuoteCustomerPreviewLine = {
   id: string;
   sortOrder: number;
@@ -114,6 +116,45 @@ function normalizeGroup(value: string | null | undefined): string | null {
   return t === "" ? null : t;
 }
 
+/** Resolves percentage and fixed milestones to cents for customer-facing views (matches job activation). */
+export function buildCustomerPreviewPaymentSchedule(
+  items: readonly QuoteCustomerPreviewPaymentMilestoneInput[],
+  quoteTotalCents: number,
+): QuoteCustomerPreviewPaymentMilestone[] {
+  let resolvedNonFinalSum = 0;
+  const resolvedNonFinalById = new Map<string, number>();
+
+  for (const item of items) {
+    if (item.anchorType === "FINAL_BALANCE") continue;
+
+    const resolved = resolveNonFinalScheduleItemCents(
+      {
+        title: item.title,
+        amountCents: item.amountCents,
+        percentage: item.percentage,
+      },
+      quoteTotalCents,
+    );
+    const amountCents = resolved.ok ? resolved.amountCents : (item.amountCents ?? 0);
+    resolvedNonFinalById.set(item.id, amountCents);
+    resolvedNonFinalSum += amountCents;
+  }
+
+  const remainderCents = Math.max(0, quoteTotalCents - resolvedNonFinalSum);
+
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    amountCents:
+      item.anchorType === "FINAL_BALANCE"
+        ? remainderCents
+        : (resolvedNonFinalById.get(item.id) ?? item.amountCents ?? 0),
+    anchorType: item.anchorType,
+    anchorStageName: item.anchorStageName,
+    sortOrder: item.sortOrder,
+  }));
+}
+
 function resolveLineTitle(input: QuoteCustomerPreviewLineInput): {
   lineTitle: string;
   usedInternalDescriptionForTitle: boolean;
@@ -180,21 +221,10 @@ export function buildCustomerQuotePreviewDocument(
     return a.id.localeCompare(b.id);
   });
 
-  const scheduledCents = quote.paymentSchedule.reduce((sum, item) => {
-    if (item.anchorType === "FINAL_BALANCE") return sum;
-    return sum + (item.amountCents ?? 0);
-  }, 0);
-
-  const remainderCents = Math.max(0, quote.totalCents - scheduledCents);
-
-  const paymentSchedule: QuoteCustomerPreviewPaymentMilestone[] = quote.paymentSchedule.map((item) => ({
-    id: item.id,
-    title: item.title,
-    amountCents: item.anchorType === "FINAL_BALANCE" ? remainderCents : (item.amountCents ?? 0),
-    anchorType: item.anchorType,
-    anchorStageName: item.anchorStageName,
-    sortOrder: item.sortOrder,
-  }));
+  const paymentSchedule = buildCustomerPreviewPaymentSchedule(
+    quote.paymentSchedule,
+    quote.totalCents,
+  );
 
   return {
     document: {

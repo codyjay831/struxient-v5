@@ -51,6 +51,12 @@ model Organization {
   quoteChangeRequests       QuoteChangeRequest[]
   quoteCheckpoints          QuoteCheckpoint[]
   quoteShareTokens          QuoteShareToken[]
+  quoteSignatureRequests    QuoteSignatureRequest[]
+  quoteSignatureRecipients  QuoteSignatureRecipient[]
+  quoteSignatureEvents      QuoteSignatureEvent[]
+  quoteSignatureDeliveries  QuoteSignatureDelivery[]
+  quoteSignatureArtifacts   QuoteSignatureArtifact[]
+  quoteSignatureProviderEnvelopes QuoteSignatureProviderEnvelope[]
   notificationEvents        NotificationEvent[]
   stages                    Stage[]
   taskTemplates             TaskTemplate[]
@@ -545,6 +551,7 @@ model Quote {
   executionPlanRevisions ExecutionPlanRevision[]
   changeOrders         ChangeOrder[]
   scopeDecisions       QuoteScopeDecision[]
+  signatureRequests    QuoteSignatureRequest[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -668,6 +675,188 @@ model QuoteCheckpoint {
   @@unique([quoteId, kind, sequence])
   @@index([organizationId])
   @@index([quoteId, kind])
+}
+
+/// Standard Acceptance / Verified E-Sign signature request for a quote version.
+model QuoteSignatureRequest {
+  id                    String                      @id @default(cuid())
+  organizationId        String
+  quoteId               String
+  mode                  QuoteSignatureMode
+  provider              SignatureProvider           @default(STRUXIENT)
+  status                QuoteSignatureRequestStatus @default(DRAFT)
+  requestedByUserId     String?
+  customMessage         String?
+  expiresAt             DateTime?
+  sentAt                DateTime?
+  acceptedAt            DateTime?
+  declinedAt            DateTime?
+  revokedAt             DateTime?
+  failedAt              DateTime?
+  frozenSnapshotJson    Json
+  frozenSnapshotSha256  String
+  sentPdfArtifactId     String?
+  sentPdfSha256         String?
+  finalPdfArtifactId    String?
+  finalPdfSha256        String?
+  auditPacketArtifactId String?
+  auditPacketSha256     String?
+  sendCheckpointId      String?
+  approvalCheckpointId  String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                 Quote                       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  recipients            QuoteSignatureRecipient[]
+  events                QuoteSignatureEvent[]
+  deliveries            QuoteSignatureDelivery[]
+  artifacts             QuoteSignatureArtifact[]
+  providerEnvelope      QuoteSignatureProviderEnvelope?
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([status])
+  @@index([quoteId, status])
+}
+
+/// Signer identity for a signature request — not a delivery attempt.
+model QuoteSignatureRecipient {
+  id                       String                        @id @default(cuid())
+  organizationId           String
+  signatureRequestId       String
+  quoteId                  String
+  status                   QuoteSignatureRecipientStatus @default(PENDING)
+  recipientName            String?
+  recipientEmail           String?
+  recipientPhone           String?
+  preferredDeliveryChannel SignatureDeliveryChannel?
+  tokenHash                String                        @unique
+  tokenExpiresAt           DateTime?
+  tokenRevokedAt           DateTime?
+  sentAt                   DateTime?
+  deliveredAt              DateTime?
+  lastViewedAt             DateTime?
+  acceptedAt               DateTime?
+  acceptedByName           String?
+  acceptedConsentAt        DateTime?
+  consentText              String?
+  consentVersion           String?
+  acceptedFromIp           String?
+  acceptedUserAgent        String?
+  declinedAt               DateTime?
+  declineReason            String?
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest         QuoteSignatureRequest         @relation(fields: [signatureRequestId], references: [id], onDelete: Cascade)
+  deliveries               QuoteSignatureDelivery[]
+  events                   QuoteSignatureEvent[]
+  artifacts                QuoteSignatureArtifact[]
+
+  @@index([organizationId])
+  @@index([signatureRequestId])
+  @@index([quoteId])
+  @@index([tokenHash])
+}
+
+/// Append-only audit events for quote signature flows.
+model QuoteSignatureEvent {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  quoteId            String
+  signatureRequestId String?
+  recipientId        String?
+  actorType          SignatureActorType
+  actorUserId        String?
+  eventType          QuoteSignatureEventType
+  occurredAt         DateTime                @default(now())
+  ipAddress          String?
+  userAgent          String?
+  provider           SignatureProvider?
+  providerEventId    String?
+  metadataJson       Json?
+  createdAt          DateTime                @default(now())
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest   QuoteSignatureRequest?  @relation(fields: [signatureRequestId], references: [id], onDelete: SetNull)
+  recipient          QuoteSignatureRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([organizationId])
+  @@index([quoteId, occurredAt])
+  @@index([signatureRequestId, occurredAt])
+  @@index([recipientId, occurredAt])
+}
+
+/// Delivery attempt for a signer (email/SMS) — channel lives here, not on recipient.
+model QuoteSignatureDelivery {
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  quoteId            String
+  signatureRequestId String
+  recipientId        String
+  channel            SignatureDeliveryChannel
+  provider           String
+  providerMessageId  String?
+  destinationMasked  String
+  status             String
+  attemptedAt        DateTime                 @default(now())
+  completedAt        DateTime?
+  errorCode          String?
+  errorMessage       String?
+  metadataJson       Json?
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest   QuoteSignatureRequest    @relation(fields: [signatureRequestId], references: [id], onDelete: Cascade)
+  recipient          QuoteSignatureRecipient  @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([signatureRequestId])
+  @@index([recipientId])
+  @@index([providerMessageId])
+}
+
+/// Signature artifact linkage with content hash.
+model QuoteSignatureArtifact {
+  id                 String                     @id @default(cuid())
+  organizationId     String
+  quoteId            String
+  signatureRequestId String
+  recipientId        String?
+  attachmentId       String
+  kind               QuoteSignatureArtifactKind
+  sha256             String
+  generatedAt        DateTime                   @default(now())
+  metadataJson       Json?
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest   QuoteSignatureRequest      @relation(fields: [signatureRequestId], references: [id], onDelete: Cascade)
+  recipient          QuoteSignatureRecipient?   @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([quoteId])
+  @@index([signatureRequestId])
+  @@index([attachmentId])
+}
+
+/// Provider-ready envelope storage for Verified E-Sign (DocuSign etc.).
+model QuoteSignatureProviderEnvelope {
+  id                 String                @id @default(cuid())
+  organizationId     String
+  quoteId            String
+  signatureRequestId String                @unique
+  provider           SignatureProvider
+  providerEnvelopeId String
+  providerStatus     String
+  providerUrl        String?
+  lastWebhookAt      DateTime?
+  completedAt        DateTime?
+  voidedAt           DateTime?
+  metadataJson       Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest   QuoteSignatureRequest @relation(fields: [signatureRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([provider, providerEnvelopeId])
 }
 
 model ChangeOrderCheckpoint {
@@ -2141,6 +2330,105 @@ enum PaymentScheduleAnchorType {
 enum QuoteCheckpointSource {
   STAFF
   CUSTOMER_PORTAL
+}
+
+enum QuoteSignatureMode {
+  STANDARD_ACCEPTANCE
+  VERIFIED_ESIGN
+}
+
+enum SignatureProvider {
+  STRUXIENT
+  DOCUSIGN
+  ADOBE_SIGN
+  DROPBOX_SIGN
+}
+
+enum QuoteSignatureRequestStatus {
+  DRAFT
+  READY_TO_SEND
+  SENT
+  PARTIALLY_VIEWED
+  VIEWED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
+  DELIVERY_FAILED
+  FAILED
+}
+
+enum QuoteSignatureRecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  VIEWED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
+  FAILED
+}
+
+enum SignatureDeliveryChannel {
+  EMAIL
+  SMS
+}
+
+enum QuoteSignatureEventType {
+  SIGNATURE_REQUEST_CREATED
+  SIGNATURE_REQUEST_SENT
+  SIGNATURE_REQUEST_FAILED
+  SIGNATURE_REQUEST_RESENT
+  SIGNATURE_REQUEST_REVOKED
+  QUOTE_SENT_EMAIL
+  QUOTE_SENT_SMS
+  EMAIL_QUEUED
+  EMAIL_SENT
+  EMAIL_DELIVERED
+  EMAIL_BOUNCED
+  EMAIL_FAILED
+  EMAIL_OPENED
+  EMAIL_CLICKED
+  SMS_QUEUED
+  SMS_SENT
+  SMS_DELIVERED
+  SMS_FAILED
+  SMS_OPTED_OUT
+  SIGNER_LINK_COPIED
+  SIGNER_LINK_MANUALLY_DELIVERED
+  SIGNER_LINK_OPENED
+  QUOTE_VIEWED
+  PDF_DOWNLOADED
+  CHANGE_REQUESTED
+  CONSENT_CHECKED
+  TYPED_NAME_SUBMITTED
+  QUOTE_ACCEPTED
+  QUOTE_DECLINED
+  TOKEN_EXPIRED
+  TOKEN_REVOKED
+  FINAL_PDF_GENERATED
+  PROVIDER_ENVELOPE_CREATED
+  PROVIDER_ENVELOPE_SENT
+  PROVIDER_ENVELOPE_COMPLETED
+  PROVIDER_ENVELOPE_DECLINED
+  PROVIDER_ENVELOPE_VOIDED
+  PROVIDER_WEBHOOK_RECEIVED
+}
+
+enum QuoteSignatureArtifactKind {
+  SENT_PDF
+  FINAL_SIGNED_PDF
+  AUDIT_CERTIFICATE
+  FINAL_AUDIT_PACKET
+  PROVIDER_CERTIFICATE
+}
+
+enum SignatureActorType {
+  STAFF
+  CUSTOMER_SIGNER
+  SYSTEM
+  PROVIDER
 }
 
 /// Lightweight task meaning for library entries — categories inform UX only until behavior is earned later.

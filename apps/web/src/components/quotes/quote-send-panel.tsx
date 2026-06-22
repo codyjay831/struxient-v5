@@ -33,6 +33,7 @@ export type QuoteSendPanelProps = {
     recipientEmails: string[];
     expiresInDays: string;
     shareUrl: string;
+    deliveryFailed?: boolean;
   }) => void;
   onCancel: () => void;
 };
@@ -64,12 +65,22 @@ export function QuoteSendPanel({
   useEffect(() => {
     if (state.success && handledKeyRef.current !== state) {
       handledKeyRef.current = state;
-      toast.success("Quote sent successfully.");
+      if (state.sendOutcome === "delivery_failed") {
+        toast.warning(state.sendMessage ?? "Quote frozen, but email was not sent.");
+        if (state.deliveryWarnings?.length) {
+          state.deliveryWarnings.forEach((w) => toast.error(w));
+        }
+      } else if (state.sendOutcome === "sent") {
+        toast.success(state.sendMessage ?? "Quote sent and email queued.");
+      } else {
+        toast.success(state.sendMessage ?? "Quote prepared for signature.");
+      }
       onSuccess({
         recipientCount: recipients.length,
         recipientEmails: recipients.map((recipient) => recipient.email),
         expiresInDays,
         shareUrl,
+        deliveryFailed: state.sendOutcome === "delivery_failed",
       });
     }
   }, [state, onSuccess, recipients, expiresInDays, shareUrl]);
@@ -110,6 +121,13 @@ export function QuoteSendPanel({
       </div>
 
       <form action={formAction} className="space-y-5">
+        {/* Acceptance method */}
+        <div className="space-y-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
+          <label className={workspaceFormFieldLabelClass}>Acceptance method</label>
+          <p className="text-xs text-foreground-muted">Standard Acceptance (typed-name electronic acceptance)</p>
+          <p className="text-[10px] text-foreground-subtle">Verified E-Sign — coming soon</p>
+        </div>
+
         {/* Recipients */}
         <div className="space-y-3">
           <label className={workspaceFormFieldLabelClass}>Recipients</label>

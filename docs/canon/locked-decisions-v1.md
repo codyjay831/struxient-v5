@@ -159,11 +159,16 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 9. Customer portal v1
 
+**Canon:** [customer-project-portal-canon.md](./customer-project-portal-canon.md). The product surface is **Customer Project Portal**, not "Customer Login."
+
 | Topic | v1 decision |
 |--------|-------------|
-| **Access** | **Link-first** (magic / SMS) as **primary**; **optional customer password account** may ship shortly after if needed. |
-| **Uploads** | **When enabled per quote/job request** (office toggles); **virus scan / size limit** (see §12). |
-| **E-sign** | **Vendor acceptable** (HelloSign / Dropbox Sign / DocuSign, etc.) with **Struxient-owned** redirect and return URLs and **in-app status**—compliant with **I18** (no Clerk; **your** UX owns the journey). |
+| **Access** | **Link-first** (magic / SMS) as **primary**; portal identity/session/access remain separate from staff `User`/`Membership`. Do not add `Membership(role: CUSTOMER)`. |
+| **Project hub** | First customer-side product is a scoped project hub: current status, next action, schedule, quote/change orders, payments, documents/photos, structured requests, and customer-safe activity. |
+| **Visibility** | Explicit customer-visible resource records control disclosure. Nothing becomes customer-visible merely because it exists internally. |
+| **Customer actions** | Customer actions create acceptance records, events, uploads, or structured requests; they do not directly mutate internal job/task/schedule truth. |
+| **Uploads** | **When enabled per quote/job request** (office toggles); customer uploads require review before becoming approved internal job docs; **virus scan / size limit** (see §12). |
+| **E-sign** | **Vendor acceptable** (HelloSign / Dropbox Sign / DocuSign, etc.) with **Struxient-owned** redirect and return URLs and **in-app status** - compliant with **I18** (no Clerk; **your** UX owns the journey). |
 
 ---
 

@@ -111,6 +111,7 @@ import {
 } from "@/components/quotes/quote-authoring-surface";
 import { QuoteRequestedWorkCard } from "@/components/quotes/quote-requested-work-card";
 import { QuoteSendPanel } from "@/components/quotes/quote-send-panel";
+import { QuoteSignatureTimelinePanel } from "@/components/quotes/quote-signature-timeline-panel";
 import {
   QuoteArchivedRestorePanel,
   QuoteDraftArchivePanel,
@@ -2129,12 +2130,13 @@ function SendAcceptTab({
   onMutated?: () => void;
   embeddedInLead?: boolean;
 }) {
-  const { isArchived, sendCheckpoints, approvalCheckpoints } = workspaceTabs;
+  const { isArchived, sendCheckpoints, approvalCheckpoints, signatureTimeline, signatureArtifacts, canViewSignatureRawAudit } = workspaceTabs;
   const [lastSendSummary, setLastSendSummary] = useState<{
     recipientCount: number;
     recipientEmails: string[];
     expiresInDays: string;
     shareUrl: string;
+    deliveryFailed?: boolean;
   } | null>(null);
 
   const canSend = workflow.canSend;
@@ -2215,9 +2217,19 @@ function SendAcceptTab({
   return (
     <div className="space-y-4">
       {lastSendSummary ? (
-        <div className="rounded-lg border border-success/35 bg-success/[0.08] px-3 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-success">
-            Quote sent
+        <div
+          className={`rounded-lg border px-3 py-3 ${
+            lastSendSummary.deliveryFailed
+              ? "border-warning/35 bg-warning/[0.08]"
+              : "border-success/35 bg-success/[0.08]"
+          }`}
+        >
+          <p
+            className={`text-xs font-semibold uppercase tracking-wide ${
+              lastSendSummary.deliveryFailed ? "text-warning" : "text-success"
+            }`}
+          >
+            {lastSendSummary.deliveryFailed ? "Quote frozen — email not sent" : "Quote sent"}
           </p>
           <p className="mt-1 text-sm text-foreground">
             Sent to {lastSendSummary.recipientCount} recipient
@@ -2412,6 +2424,12 @@ function SendAcceptTab({
           </Link>
         </div>
       </div>
+
+      <QuoteSignatureTimelinePanel
+        timeline={signatureTimeline}
+        artifacts={signatureArtifacts}
+        canViewRawAudit={canViewSignatureRawAudit}
+      />
 
       {/* History — secondary */}
       <details className="rounded-xl border border-border bg-background p-4">

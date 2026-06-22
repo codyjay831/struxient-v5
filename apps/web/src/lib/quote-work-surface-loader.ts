@@ -47,6 +47,12 @@ import { LineClarificationAnswersSchema } from "@/lib/clarification/clarificatio
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { listQuoteScopeDecisionsForQuote } from "@/lib/quote-scope-decision-service";
+import {
+  loadSignatureArtifactsForQuote,
+  loadSignatureTimelineForQuote,
+} from "@/lib/quote-signature/timeline-loader";
+import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
+import { canViewSignatureRawAuditFields } from "@/lib/quote-signature/permissions";
 import { opportunityWorkspaceHref, quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader-types";
 
@@ -718,6 +724,15 @@ export async function loadQuoteWorkSurface(
     activityItems,
   });
 
+  const [signatureTimeline, signatureArtifacts] = await Promise.all([
+    loadSignatureTimelineForQuote(row.id, orgId),
+    loadSignatureArtifactsForQuote(row.id, orgId),
+  ]);
+  const actorCtx = await getCommercialRequestContextOrNull();
+  const canViewSignatureRawAudit = actorCtx
+    ? canViewSignatureRawAuditFields(actorCtx.role)
+    : false;
+
   const workspaceTabs: QuoteWorkspaceTabData = {
     isCommercialEditable,
     isExecutionEditable,
@@ -742,6 +757,9 @@ export async function loadQuoteWorkSurface(
     lead: leadPayload,
     sendCheckpoints,
     approvalCheckpoints,
+    signatureTimeline,
+    signatureArtifacts,
+    canViewSignatureRawAudit,
     createdAtIso: row.createdAt.toISOString(),
     createdAtLabel: row.createdAt.toLocaleDateString("en-US", dateOpts),
     updatedAtIso: row.updatedAt.toISOString(),

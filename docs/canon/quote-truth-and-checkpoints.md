@@ -60,7 +60,9 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 
 - **`QuoteStatus`:** `DRAFT` (commercial editing), `SENT` (commercial locked immutable issued version), `APPROVED` (commercial acceptance immutable issued version), `ARCHIVED` (read-only historical).
 - **`QuoteCheckpointKind.SEND`:** hidden staff proof of **commercial proposal projection** at send; does not include internal execution planning.
-- **`QuoteCheckpointKind.APPROVAL`:** hidden staff proof of **commercial acceptance** (same projection shape as send in v1; no e-sign provider yet—staff-recorded acceptance).
+- **`QuoteCheckpointKind.APPROVAL`:** hidden staff proof of **commercial acceptance** (same projection shape as send in v1; customer portal **Standard Acceptance** or staff-recorded acceptance; **Verified E-Sign** via external provider is a later mode on the same signature-request architecture).
+- **Standard Acceptance:** Struxient first-party typed-name electronic acceptance — signer-specific link, frozen snapshot/PDF, consent, audit events, final packet.
+- **Verified E-Sign:** external provider-backed signature (DocuSign / Adobe Sign / Dropbox Sign) through the same `QuoteSignatureRequest` / event / artifact timeline; not required for ordinary quotes.
 - **Execution Review** remains an **internal** pre-activation step; **Job** runtime is still separate materialization.
 - **Accepted whole-quote execution plan** is the v1 internal gate before job activation (`QuoteExecutionPlan.status = ACCEPTED` with matching planning-input hash).
 

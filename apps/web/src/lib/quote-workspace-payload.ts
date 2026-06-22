@@ -8,6 +8,15 @@ import type { QuoteLineDraftExecutionTaskRow } from "@/components/quotes/quote-l
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 
+/** Signature artifact summary for staff timeline. */
+export type SignatureTimelineArtifact = {
+  id: string;
+  kind: string;
+  sha256: string;
+  attachmentId: string;
+  generatedAt: string;
+};
+
 /** Send / Approval checkpoint summary (serialized — no `Date`). */
 export type QuoteWorkspaceCheckpointPayload = {
   id: string;
@@ -70,6 +79,9 @@ export type QuoteWorkspaceTabData = {
   /* Approval tab */
   sendCheckpoints: QuoteWorkspaceCheckpointPayload[];
   approvalCheckpoints: QuoteWorkspaceCheckpointPayload[];
+  signatureTimeline: import("@/lib/quote-signature/timeline-presenter").SignatureTimelineDto | null;
+  signatureArtifacts: SignatureTimelineArtifact[];
+  canViewSignatureRawAudit: boolean;
 
   /* Record tab + Overview record-details disclosure */
   createdAtIso: string;
