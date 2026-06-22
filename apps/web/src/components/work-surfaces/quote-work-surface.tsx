@@ -97,6 +97,7 @@ import {
   type QuoteReadinessAction,
   type QuoteReadinessActionKind,
 } from "@/lib/quote-readiness";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 import type { QuoteWorkflowPresentation } from "@/lib/quote-workflow-presenter";
 import type { QuoteWorkSurfaceData } from "@/lib/quote-work-surface-data";
 import { JobsiteCard } from "@/components/site-details/jobsite-card";
@@ -605,11 +606,13 @@ function ApproveQuoteInlineButton({
 
 function ReviseByCloneInlineButton({
   quoteId,
+  leadId,
   variant,
   label,
   onMutated,
 }: {
   quoteId: string;
+  leadId?: string | null;
   variant: "primary" | "secondary";
   label: string;
   onMutated?: () => void;
@@ -625,12 +628,12 @@ function ReviseByCloneInlineButton({
     if (state.success && handledKeyRef.current !== state) {
       handledKeyRef.current = state;
       if (state.revisedQuoteId) {
-        router.push(`/quotes/${state.revisedQuoteId}`);
+        router.push(quoteAuthoringHref({ quoteId: state.revisedQuoteId, leadId }));
         router.refresh();
       }
       onMutated?.();
     }
-  }, [state, onMutated, router]);
+  }, [state, leadId, onMutated, router]);
 
   const cls = variant === "primary" ? primaryBtnClass : secondaryBtnClass;
 
@@ -839,6 +842,7 @@ function renderAction({
     return (
       <ReviseByCloneInlineButton
         quoteId={quote.id}
+        leadId={quote.leadId}
         variant={variant}
         label={action.label}
         onMutated={onMutated}
@@ -881,7 +885,10 @@ function renderAction({
   }
 
   /* External link — preview / execution review / activate / open job. */
-  const href = resolveQuoteReadinessActionHref(action, { quoteId: quote.id });
+  const href = resolveQuoteReadinessActionHref(action, {
+    quoteId: quote.id,
+    leadId: quote.leadId,
+  });
   return (
     <ButtonLink href={href} variant={variant === "primary" ? "primary" : "secondary"} size="sm">
       <Icon className="size-3.5 opacity-80" strokeWidth={2} />
@@ -1335,7 +1342,7 @@ function OverviewTab({
         <QuoteFactsGrid quote={quote} workflow={workflow} onSwitchToTab={onSwitchToTab} />
       </section>
 
-      <QuoteRequestedWorkCard lead={workspaceTabs.lead} />
+      <QuoteRequestedWorkCard lead={workspaceTabs.lead} showOpportunityLink={!embeddedInLead} />
 
       <JobsiteSnapshot
         quote={quote}
@@ -1540,6 +1547,7 @@ function ScopeTab({
   quote,
   workspaceTabs,
   workflow,
+  embeddedInLead,
   shouldFocusAddForm,
   onAddFormFocusConsumed,
   shouldOpenScopeLibraryPicker,
@@ -1550,6 +1558,7 @@ function ScopeTab({
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   workflow: QuoteWorkflowPresentation;
+  embeddedInLead?: boolean;
   shouldFocusAddForm: boolean;
   onAddFormFocusConsumed: () => void;
   shouldOpenScopeLibraryPicker: boolean;
@@ -1597,6 +1606,7 @@ function ScopeTab({
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
         onScopeLibraryPickerOpenConsumed={onScopeLibraryPickerOpenConsumed}
         showFullPageEscapeLink={showFullPageEscapeLink}
+        showOpportunityLink={!embeddedInLead}
         onMutated={onMutated ?? (() => {})}
       />
     );
@@ -1605,7 +1615,7 @@ function ScopeTab({
   /* non-DRAFT — read-only line list with execution-edit summaries. */
   return (
     <div className="space-y-4">
-      <QuoteRequestedWorkCard lead={workspaceTabs.lead} />
+      <QuoteRequestedWorkCard lead={workspaceTabs.lead} showOpportunityLink={!embeddedInLead} />
 
       {workflow.canBuildExecutionPlan ? (
         <div className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
@@ -2751,6 +2761,7 @@ export function QuoteWorkSurface({
           shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}
           onScopeLibraryPickerOpenConsumed={handleScopeLibraryPickerOpenConsumed}
           onMutated={handleSurfaceMutated}
+          embeddedInLead={embeddedInLead}
           showFullPageEscapeLink={showFullPageEscapeLink}
         />
       )}

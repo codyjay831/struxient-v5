@@ -14,6 +14,24 @@ export function opportunityWorkspaceHref(
   return `${url}${normalized}`;
 }
 
+export function quoteAuthoringHref({
+  quoteId,
+  leadId,
+  hash,
+}: {
+  quoteId: string;
+  leadId?: string | null;
+  hash?: string;
+}): string {
+  if (leadId) {
+    return opportunityWorkspaceHref(leadId, "quote", hash);
+  }
+  const url = `/quotes/${quoteId}`;
+  if (!hash) return url;
+  const normalized = hash.startsWith("#") ? hash : `#${hash}`;
+  return `${url}${normalized}`;
+}
+
 export function parseOpportunityWorkspaceTab(
   value: string | string[] | undefined | null,
 ): OpportunityWorkspaceTab {

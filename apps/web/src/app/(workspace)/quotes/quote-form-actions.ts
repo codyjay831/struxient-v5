@@ -432,7 +432,7 @@ export async function createQuoteDraftAction(
       return { error: promoted.error };
     }
     revalidatePath("/leads");
-    redirect(`/quotes/${promoted.quoteId}`);
+    redirect(quoteAuthoringHref({ quoteId: promoted.quoteId, leadId: formLeadId }));
   }
 
   const result = await createQuoteDraft({
@@ -447,7 +447,7 @@ export async function createQuoteDraftAction(
   }
 
   revalidatePath("/leads");
-  redirect(`/quotes/${result.quoteId}`);
+  redirect(quoteAuthoringHref({ quoteId: result.quoteId }));
 }
 
 async function normalizeQuoteLineSortOrdersTx(tx: QuoteRollupTx, quoteId: string) {
@@ -560,7 +560,7 @@ export async function updateDraftQuoteDetailsAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 /**
@@ -655,9 +655,20 @@ export type PerformQuoteLineItemResult =
 
 import { performReviseQuoteByClone } from "@/lib/quote/revise-by-clone";
 export type { PerformReviseQuoteResult } from "@/lib/quote/revise-by-clone";
-import { opportunityWorkspaceHref } from "@/lib/opportunity-tab-routing";
+import { opportunityWorkspaceHref, quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 type ParsedQuoteLineInput = ParsedQuoteLineInputLib;
+
+async function resolveQuoteAuthoringRedirectHref(quoteId: string): Promise<string> {
+  const id = quoteId.trim();
+  if (!id) return "/quotes";
+  const ctx = await getCommercialRequestContextOrThrow();
+  const quote = await db.quote.findFirst({
+    where: { id, organizationId: ctx.organizationId },
+    select: { leadId: true },
+  });
+  return quoteAuthoringHref({ quoteId: id, leadId: quote?.leadId });
+}
 
 /**
  * Org-scoped add of a quote line item. No redirect, no revalidate — composable
@@ -753,7 +764,7 @@ export async function addQuoteLineItemAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 /**
@@ -849,7 +860,7 @@ export async function updateQuoteLineItemAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${qid}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(qid));
 }
 
 /**
@@ -928,7 +939,7 @@ export async function deleteQuoteLineItemAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${qid}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(qid));
 }
 
 /**
@@ -987,7 +998,7 @@ export async function createLineItemTemplateAction(
   });
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${rid}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(rid));
 }
 
 /**
@@ -1171,7 +1182,7 @@ export async function archiveLineItemTemplateAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${rid}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(rid));
 }
 
 /**
@@ -1238,7 +1249,7 @@ export async function applyLineItemTemplateToQuoteAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${qid}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(qid));
 }
 
 /**
@@ -1273,7 +1284,7 @@ export async function restoreQuoteToDraftAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 export type PerformQuoteCheckpointResult = { error?: string };
@@ -1334,7 +1345,7 @@ export async function recordQuoteSendCheckpointAction(
 
   const id = quoteId.trim();
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 /**
@@ -1353,7 +1364,7 @@ export async function markQuoteApprovedAction(
 
   const id = quoteId.trim();
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 /**
@@ -1388,7 +1399,7 @@ export async function archiveQuoteAction(
   }
 
   revalidatePath(`/leads`);
-  redirect(`/quotes/${id}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(id));
 }
 
 export { performReviseQuoteByClone };
@@ -1412,5 +1423,5 @@ export async function reviseQuoteByCloneAction(
   if (leadRow?.leadId) {
     redirect(opportunityWorkspaceHref(leadRow.leadId, "quote"));
   }
-  redirect(`/quotes/${result.revisedQuoteId}`);
+  redirect(await resolveQuoteAuthoringRedirectHref(result.revisedQuoteId));
 }

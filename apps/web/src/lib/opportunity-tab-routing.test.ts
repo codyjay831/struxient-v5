@@ -5,6 +5,7 @@ import {
   opportunityActionOpensQuoteTab,
   opportunityWorkspaceHref,
   parseOpportunityWorkspaceTab,
+  quoteAuthoringHref,
 } from "./opportunity-tab-routing";
 
 test("parseOpportunityWorkspaceTab defaults to review", () => {
@@ -20,6 +21,19 @@ test("opportunityWorkspaceHref builds tab URLs", () => {
     opportunityWorkspaceHref("lead-1", "quote", "commercial-send-acceptance"),
     "/leads/lead-1?tab=quote#commercial-send-acceptance",
   );
+});
+
+test("quoteAuthoringHref prefers the opportunity quote tab for linked quotes", () => {
+  assert.equal(
+    quoteAuthoringHref({ quoteId: "q-1", leadId: "lead-1" }),
+    "/leads/lead-1?tab=quote",
+  );
+  assert.equal(
+    quoteAuthoringHref({ quoteId: "q-1", leadId: "lead-1", hash: "line-items" }),
+    "/leads/lead-1?tab=quote#line-items",
+  );
+  assert.equal(quoteAuthoringHref({ quoteId: "q-1", leadId: null }), "/quotes/q-1");
+  assert.equal(quoteAuthoringHref({ quoteId: "q-1" }), "/quotes/q-1");
 });
 
 test("quote actions open the embedded quote tab in the opportunity workspace", () => {

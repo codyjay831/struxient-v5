@@ -27,7 +27,7 @@ import {
   type OpportunityAction,
   type OpportunityFlowView,
 } from "@/lib/opportunity-flow";
-import { opportunityActionOpensQuoteTab } from "@/lib/opportunity-tab-routing";
+import { opportunityActionOpensQuoteTab, quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 import { StartQuoteFromLeadButton } from "@/components/leads/start-quote-from-lead-button";
 import { workstationTelemetry } from "@/lib/workstation/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -681,9 +681,24 @@ export function LeadCommercialSurface({
           <p className="text-xs text-foreground-muted">Request details and quote progress</p>
         </div>
         {activeQuote ? (
-          <ButtonLink href={`/quotes/${activeQuote.id}`} variant="secondary" size="sm">
-            Open quote
-          </ButtonLink>
+          onNavigateToQuoteTab ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onNavigateToQuoteTab(activeQuote.id)}
+            >
+              Open quote
+            </Button>
+          ) : (
+            <ButtonLink
+              href={quoteAuthoringHref({ quoteId: activeQuote.id, leadId: lead.id })}
+              variant="secondary"
+              size="sm"
+            >
+              Open quote
+            </ButtonLink>
+          )
         ) : null}
       </div>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.6fr)]">
@@ -737,9 +752,26 @@ export function LeadCommercialSurface({
                 {activeQuote._count.lineItems === 1 ? "" : "s"}
               </p>
               <div className="mt-3 flex flex-col gap-2">
-                <ButtonLink href={`/quotes/${activeQuote.id}`} variant="primary" size="sm" className="w-full justify-center">
-                  {activeQuote.status === "DRAFT" ? "Continue quote" : "Open quote"}
-                </ButtonLink>
+                {onNavigateToQuoteTab ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    className="w-full justify-center"
+                    onClick={() => onNavigateToQuoteTab(activeQuote.id)}
+                  >
+                    {activeQuote.status === "DRAFT" ? "Continue quote" : "Open quote"}
+                  </Button>
+                ) : (
+                  <ButtonLink
+                    href={quoteAuthoringHref({ quoteId: activeQuote.id, leadId: lead.id })}
+                    variant="primary"
+                    size="sm"
+                    className="w-full justify-center"
+                  >
+                    {activeQuote.status === "DRAFT" ? "Continue quote" : "Open quote"}
+                  </ButtonLink>
+                )}
               </div>
             </>
           ) : (

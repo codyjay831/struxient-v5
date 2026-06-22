@@ -22,6 +22,7 @@ import {
 } from "@/lib/quote-display";
 import { FileText } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -119,13 +120,14 @@ export default async function QuoteLiveProposalPreviewPage({
   const asOfLabel = new Date(preview.updatedAt).toLocaleString();
   const createdLabel = new Date(preview.createdAt).toLocaleString();
   const showTitleFallbackWarning = staffOnly.anyLineUsesInternalDescriptionForTitle;
+  const quoteHref = quoteAuthoringHref({ quoteId: preview.quoteId, leadId: row.leadId });
 
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales", href: "/leads" },
-          { label: row.title, href: `/quotes/${preview.quoteId}` },
+          { label: row.title, href: quoteHref },
           { label: "Live proposal preview" },
         ]}
       />
@@ -136,7 +138,7 @@ export default async function QuoteLiveProposalPreviewPage({
         description="Staff-only view of optional proposal wording from the saved working quote—not delivery, not a portal, and not approval capture."
         actions={
           <>
-            <Link href={`/quotes/${preview.quoteId}`} className={listLinkClass}>
+            <Link href={quoteHref} className={listLinkClass}>
               ← Back to quote
             </Link>
             <Link href="/leads" className={listLinkClass}>

@@ -7,6 +7,7 @@ import { workstationReturnHref } from "@/lib/workstation-return-href";
 import { loadQuoteWorkSurface } from "@/lib/quote-work-surface-loader";
 import { FileText } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,10 @@ export default async function QuoteDetailPage({
         </EmptyState>
       </div>
     );
+  }
+
+  if (result.quote.leadId) {
+    redirect(result.quote.quoteHref);
   }
 
   return (

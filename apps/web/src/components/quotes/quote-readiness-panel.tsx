@@ -67,12 +67,14 @@ export function QuoteReadinessIconStrip({
 
 interface QuoteReadinessPanelProps {
   quoteId: string;
+  leadId?: string | null;
   quoteStatus: QuoteStatus;
   readiness: QuoteReadiness;
 }
 
 export function QuoteReadinessPanel({
   quoteId,
+  leadId,
   readiness,
 }: QuoteReadinessPanelProps) {
   const {
@@ -104,7 +106,7 @@ export function QuoteReadinessPanel({
 
     return {
       label: action.label,
-      href: resolveQuoteReadinessActionHref(action, { quoteId }),
+      href: resolveQuoteReadinessActionHref(action, { quoteId, leadId }),
       icon: iconMap[action.kind] || ArrowRight,
     };
   };

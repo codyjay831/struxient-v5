@@ -8,6 +8,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { jobDetailPath } from "@/lib/change-order-flow";
 import { loadChangeOrderWorkspace } from "@/lib/change-order-loader";
 import { FileText } from "lucide-react";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,10 @@ export default async function JobChangeOrdersPage({
               ← Back to job
             </ButtonLink>
             <ButtonLink
-              href={`/quotes/${workspace.quoteId}`}
+              href={quoteAuthoringHref({
+                quoteId: workspace.quoteId,
+                leadId: workspace.quoteLeadId,
+              })}
               variant="muted"
               size="sm"
             >

@@ -58,6 +58,7 @@ type GapTaskChoice = {
 
 export function QuoteExecutionReviewPreviewView({
   quoteId,
+  quoteHref,
   executionPlanningEditable,
   model,
   activation,
@@ -72,6 +73,7 @@ export function QuoteExecutionReviewPreviewView({
   draftTaskCount,
 }: {
   quoteId: string;
+  quoteHref: string;
   executionPlanningEditable: boolean;
   model: QuoteExecutionReviewPreviewModel;
   activation: QuoteActivationStatus;
@@ -131,7 +133,12 @@ export function QuoteExecutionReviewPreviewView({
             lineLabelById={lineLabelById}
           />
 
-          <ActivationPanel activation={activation} quoteId={quoteId} hardOrphanCount={summary.hardOrphanCount} />
+          <ActivationPanel
+            activation={activation}
+            quoteId={quoteId}
+            quoteHref={quoteHref}
+            hardOrphanCount={summary.hardOrphanCount}
+          />
 
           {blockedReadiness ? (
             <QuoteExecutionReadinessChecklist
@@ -145,7 +152,12 @@ export function QuoteExecutionReviewPreviewView({
           ) : null}
         </>
       ) : (
-        <ActivationPanel activation={activation} quoteId={quoteId} hardOrphanCount={0} />
+        <ActivationPanel
+          activation={activation}
+          quoteId={quoteId}
+          quoteHref={quoteHref}
+          hardOrphanCount={0}
+        />
       )}
 
       {summary.totalLines === 0 ? (
@@ -155,7 +167,7 @@ export function QuoteExecutionReviewPreviewView({
             title="Add line items before building the execution plan"
             description="This quote does not have any scope rows yet. Return to the quote, add line items, then build the execution plan."
           >
-            <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+            <Link href={quoteHref} className={listLinkClass}>
               ← Back to quote
             </Link>
           </EmptyState>
@@ -437,10 +449,12 @@ function TaskProtectionButton({
 function ActivationPanel({
   activation,
   quoteId,
+  quoteHref,
   hardOrphanCount,
 }: {
   activation: QuoteActivationStatus;
   quoteId: string;
+  quoteHref: string;
   hardOrphanCount: number;
 }) {
   if (activation.state === "activated") {
@@ -485,6 +499,7 @@ function ActivationPanel({
   return (
     <QuoteBlockedActivationPanel
       quoteId={quoteId}
+      quoteHref={quoteHref}
       readiness={activation.readiness}
       quoteIsApproved={activation.quoteIsApproved}
       hardOrphanCount={hardOrphanCount}

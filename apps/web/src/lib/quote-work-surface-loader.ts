@@ -13,7 +13,7 @@ import {
   loadQuotePlanContext,
 } from "@/lib/quote-plan/quote-plan-context";
 import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
-import { getQuoteReadiness, type QuoteReadiness } from "@/lib/quote-readiness";
+import { getQuoteReadiness } from "@/lib/quote-readiness";
 import {
   formatQuoteStatus,
   quoteStatusBadgeTone,
@@ -39,7 +39,6 @@ import type {
 import { isActiveQuoteScopeDecisionStatus } from "@/lib/quote-scope-decision-types";
 import {
   getQuoteWorkflowPresentation,
-  type QuoteWorkflowPresentation,
 } from "@/lib/quote-workflow-presenter";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { formatPhoneForDisplay } from "@/lib/format-phone-display";
@@ -48,6 +47,8 @@ import { LineClarificationAnswersSchema } from "@/lib/clarification/clarificatio
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { listQuoteScopeDecisionsForQuote } from "@/lib/quote-scope-decision-service";
+import { opportunityWorkspaceHref, quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
+import type { QuoteWorkSurfaceLoaderResult } from "@/lib/quote-work-surface-loader-types";
 
 const dateOpts: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -437,7 +438,7 @@ export async function loadQuoteWorkSurface(
     customerHref: customer ? `/customers/${customer.id}` : null,
     leadId: lead?.id ?? null,
     leadTitle: lead?.title ?? null,
-    leadHref: lead ? `/leads/${lead.id}` : null,
+    leadHref: lead ? opportunityWorkspaceHref(lead.id, "review") : null,
     totalCents: row.totalCents,
     subtotalCents: row.subtotalCents,
     lineItemCount: row.lineItems.length,
@@ -445,7 +446,7 @@ export async function loadQuoteWorkSurface(
     updatedAtLabel: row.updatedAt.toLocaleDateString("en-US", dateOpts),
     activatedJobId: job?.id ?? null,
     activatedJobStatus: job?.status ?? null,
-    quoteHref: `/quotes/${row.id}`,
+    quoteHref: quoteAuthoringHref({ quoteId: row.id, leadId: lead?.id }),
     proposalPreviewHref: `/quotes/${row.id}/preview`,
     executionReviewHref: `/quotes/${row.id}/execution-review`,
     jobsiteAddressLine,

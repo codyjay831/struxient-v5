@@ -32,6 +32,7 @@ export type LoadedChangeOrderWorkspace = {
   jobPlanVersion: number;
   quoteId: string;
   quoteTitle: string;
+  quoteLeadId: string | null;
   permissions: ChangeOrderPermissions;
   pageBlocked: boolean;
   pageBlockedMessage: string | null;
@@ -66,6 +67,7 @@ export async function loadChangeOrderWorkspace(input: {
         select: {
           id: true,
           title: true,
+          leadId: true,
         },
       },
       scopeItems: {
@@ -176,6 +178,7 @@ export async function loadChangeOrderWorkspace(input: {
     jobPlanVersion: job.jobPlanVersion,
     quoteId: job.quote?.id ?? job.quoteId ?? "",
     quoteTitle: job.quote?.title ?? "Quote",
+    quoteLeadId: job.quote?.leadId ?? null,
     permissions,
     pageBlocked: blockReason != null,
     pageBlockedMessage: blockReason ? changeOrderPageBlockMessage(blockReason) : null,

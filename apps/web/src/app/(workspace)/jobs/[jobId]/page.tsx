@@ -58,6 +58,7 @@ import { parseJobIssueCreateIntent } from "@/lib/job-issue-intent";
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { jobChangeOrdersPath } from "@/lib/change-order-flow";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -145,7 +146,7 @@ export default async function JobDetailPage({
             },
           },
         },
-        quote: { select: { id: true, title: true, organizationId: true } },
+        quote: { select: { id: true, title: true, leadId: true, organizationId: true } },
         customer: {
           select: {
             id: true,
@@ -517,7 +518,10 @@ export default async function JobDetailPage({
               tasks={job.stages.flatMap(s => s.tasks.map(t => ({ id: t.id, title: t.title, stageTitle: s.title })))} 
             />
             {safeQuote ? (
-              <Link href={`/quotes/${safeQuote.id}`} className={listLinkClass}>
+              <Link
+                href={quoteAuthoringHref({ quoteId: safeQuote.id, leadId: safeQuote.leadId })}
+                className={listLinkClass}
+              >
                 Source quote
               </Link>
             ) : null}
@@ -577,7 +581,10 @@ export default async function JobDetailPage({
             <dt className="font-medium uppercase tracking-wide text-foreground-subtle">Source quote</dt>
             <dd className="mt-0.5 text-foreground">
               {safeQuote ? (
-                <Link href={`/quotes/${safeQuote.id}`} className="underline-offset-4 hover:underline">
+                <Link
+                  href={quoteAuthoringHref({ quoteId: safeQuote.id, leadId: safeQuote.leadId })}
+                  className="underline-offset-4 hover:underline"
+                >
                   {safeQuote.title}
                 </Link>
               ) : (
@@ -700,7 +707,11 @@ export default async function JobDetailPage({
       <section id="execution-stages">
       {job.stages.length === 0 ? (
         <JobExecutionEmptyState
-          quoteHref={safeQuote ? `/quotes/${safeQuote.id}` : null}
+          quoteHref={
+            safeQuote
+              ? quoteAuthoringHref({ quoteId: safeQuote.id, leadId: safeQuote.leadId })
+              : null
+          }
         />
       ) : (
         <JobExecutionShell

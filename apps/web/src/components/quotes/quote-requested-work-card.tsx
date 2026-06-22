@@ -6,13 +6,18 @@ export type QuoteRequestedWorkCardProps = {
   lead: Pick<QuoteWorkspaceLead, "scopeSummary" | "notes" | "href" | "title"> | null;
   /** When true, omit outer card chrome for embedding inside another panel. */
   embedded?: boolean;
+  showOpportunityLink?: boolean;
 };
 
 /**
  * Read-only display of customer-stated requested work from the linked lead.
  * Source context only — quote line items remain the reviewed commercial truth.
  */
-export function QuoteRequestedWorkCard({ lead, embedded = false }: QuoteRequestedWorkCardProps) {
+export function QuoteRequestedWorkCard({
+  lead,
+  embedded = false,
+  showOpportunityLink = true,
+}: QuoteRequestedWorkCardProps) {
   if (!lead) return null;
 
   const scopeSummary = lead.scopeSummary?.trim() || null;
@@ -35,12 +40,14 @@ export function QuoteRequestedWorkCard({ lead, embedded = false }: QuoteRequeste
             <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
               Requested work
             </p>
-            <Link
-              href={lead.href}
-              className="text-[0.65rem] font-medium text-accent underline-offset-2 hover:underline"
-            >
-              View opportunity
-            </Link>
+            {showOpportunityLink ? (
+              <Link
+                href={lead.href}
+                className="text-[0.65rem] font-medium text-accent underline-offset-2 hover:underline"
+              >
+                View opportunity
+              </Link>
+            ) : null}
           </div>
 
           {scopeSummary ? (

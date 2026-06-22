@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ButtonLink } from "@/components/ui/button";
 import { Briefcase } from "lucide-react";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function JobsPage() {
         status: true,
         activatedAt: true,
         quoteId: true,
-        quote: { select: { id: true, title: true, organizationId: true } },
+        quote: { select: { id: true, title: true, leadId: true, organizationId: true } },
         customer: { select: { id: true, displayName: true, organizationId: true } },
         lead: { select: { id: true, title: true, organizationId: true } },
         _count: { select: { tasks: true, stages: true } },
@@ -122,7 +123,10 @@ export default async function JobsPage() {
                       <p className="mt-1 text-xs text-foreground-muted">
                         From quote:{" "}
                         <Link
-                          href={`/quotes/${safeQuote.id}`}
+                          href={quoteAuthoringHref({
+                            quoteId: safeQuote.id,
+                            leadId: safeQuote.leadId,
+                          })}
                           className="underline decoration-border underline-offset-4 hover:decoration-foreground"
                         >
                           {safeQuote.title}

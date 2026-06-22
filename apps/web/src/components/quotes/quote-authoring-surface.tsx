@@ -724,6 +724,7 @@ export type QuoteAuthoringSurfaceProps = {
    * Hidden on the full quote page itself.
    */
   showFullPageEscapeLink?: boolean;
+  showOpportunityLink?: boolean;
   onMutated: () => void;
 };
 
@@ -747,6 +748,7 @@ export function QuoteAuthoringSurface({
   shouldOpenScopeLibraryPicker = false,
   onScopeLibraryPickerOpenConsumed,
   showFullPageEscapeLink = false,
+  showOpportunityLink = true,
   onMutated,
 }: QuoteAuthoringSurfaceProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
@@ -1349,7 +1351,7 @@ export function QuoteAuthoringSurface({
           />
 
           <div className="mt-4 space-y-4">
-            <QuoteRequestedWorkCard lead={lead} />
+            <QuoteRequestedWorkCard lead={lead} showOpportunityLink={showOpportunityLink} />
             <QuoteInternalNotesSidebarForm
               quoteId={quoteId}
               initialTitle={initialTitle}

@@ -137,7 +137,7 @@ export function buildQuoteRecordActionState(input: {
         surface: primaryWorkstationInline ? "workstation-inline" : "full-record",
         href: primaryWorkstationInline
           ? undefined
-          : resolveQuoteReadinessActionHref(primary, { quoteId }),
+          : resolveQuoteReadinessActionHref(primary, { quoteId, leadId }),
       }
     : null;
 
@@ -148,7 +148,7 @@ export function buildQuoteRecordActionState(input: {
       label: secondary.label,
       description: "Opens the full quote record.",
       surface: "full-record",
-      href: resolveQuoteReadinessActionHref(secondary, { quoteId }),
+      href: resolveQuoteReadinessActionHref(secondary, { quoteId, leadId }),
     });
   }
 

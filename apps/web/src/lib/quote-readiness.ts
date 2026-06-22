@@ -3,6 +3,7 @@ import {
   type QuoteStatus,
 } from "@prisma/client";
 import type { StatusBadgeTone } from "@/components/ui/status-badge";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 /**
  * Derived readiness story for a Quote, computed from existing Quote + Line Items +
@@ -282,16 +283,20 @@ function mapSignals(input: QuoteReadinessInput): QuoteReadiness["signals"] {
  */
 export function resolveQuoteReadinessActionHref(
   action: QuoteReadinessAction,
-  ctx: { quoteId: string },
+  ctx: { quoteId: string; leadId?: string | null },
 ): string {
   switch (action.kind) {
     case "ADD_LINE_ITEM":
     case "ADD_FROM_SCOPE_LIBRARY":
     case "CONTINUE_EDITING":
-      return `/quotes/${ctx.quoteId}#line-items`;
+      return quoteAuthoringHref({ quoteId: ctx.quoteId, leadId: ctx.leadId, hash: "line-items" });
     case "SEND_QUOTE":
     case "MARK_APPROVED":
-      return `/quotes/${ctx.quoteId}#commercial-send-acceptance`;
+      return quoteAuthoringHref({
+        quoteId: ctx.quoteId,
+        leadId: ctx.leadId,
+        hash: "commercial-send-acceptance",
+      });
     case "OPEN_PROPOSAL_PREVIEW":
       return `/quotes/${ctx.quoteId}/preview`;
     case "OPEN_EXECUTION_REVIEW":
@@ -300,6 +305,10 @@ export function resolveQuoteReadinessActionHref(
     case "OPEN_JOB":
       return action.targetJobId ? `/jobs/${action.targetJobId}` : "/jobs";
     case "RESTORE_TO_DRAFT":
-      return `/quotes/${ctx.quoteId}#archive-restore`;
+      return quoteAuthoringHref({
+        quoteId: ctx.quoteId,
+        leadId: ctx.leadId,
+        hash: "archive-restore",
+      });
   }
 }

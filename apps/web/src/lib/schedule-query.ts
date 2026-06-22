@@ -28,15 +28,16 @@ import {
   hasAccessSnapshotContent,
   LeadVisitAccessSnapshotSchema,
 } from "@/lib/scheduling/lead-visit-schemas";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 function scopeHrefForLeadQuotes(
   quotes: Array<{ id: string; status: string }>,
   leadId: string,
 ): string {
   const draft = quotes.find((quote) => quote.status === "DRAFT");
-  if (draft) return `/quotes/${draft.id}`;
+  if (draft) return quoteAuthoringHref({ quoteId: draft.id, leadId });
   const working = quotes[0];
-  if (working) return `/quotes/${working.id}`;
+  if (working) return quoteAuthoringHref({ quoteId: working.id, leadId });
   return `/leads/${leadId}`;
 }
 

@@ -12,7 +12,7 @@ const primaryButtonClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-4 py-2 text-xs font-medium text-accent-contrast opacity-50 cursor-not-allowed";
 
 function getBlockReasonAction(
-  quoteId: string,
+  quoteHref: string,
   code: QuoteJobActivationReadiness["blockReasons"][number]["code"],
 ): { href: string; label: string } | null {
   switch (code) {
@@ -21,11 +21,11 @@ function getBlockReasonAction(
     case "HARD_SIGNAL_NO_PROVIDER":
       return { href: "#execution-dependency-gaps", label: "Fix dependency gaps below" };
     case "APPROVAL_CHECKPOINT_MISSING":
-      return { href: `/quotes/${quoteId}`, label: "Record approval checkpoint on quote" };
+      return { href: quoteHref, label: "Record approval checkpoint on quote" };
     case "PAYMENT_MILESTONE_MISSING_AMOUNT":
     case "PAYMENT_MILESTONE_INVALID_PERCENTAGE":
     case "PAYMENT_SCHEDULE_EXCEEDS_QUOTE_TOTAL":
-      return { href: `/quotes/${quoteId}`, label: "Review payment schedule" };
+      return { href: quoteHref, label: "Review payment schedule" };
     case "PLAN_NOT_ACCEPTED":
     case "PLAN_STALE":
     case "NO_EXECUTION_TASKS":
@@ -56,11 +56,13 @@ function getBlockReasonSeverity(
 
 export function QuoteBlockedActivationPanel({
   quoteId,
+  quoteHref,
   readiness,
   quoteIsApproved,
   hardOrphanCount,
 }: {
   quoteId: string;
+  quoteHref: string;
   readiness: QuoteJobActivationReadiness;
   quoteIsApproved: boolean;
   hardOrphanCount: number;
@@ -99,7 +101,7 @@ export function QuoteBlockedActivationPanel({
 
       <ul className="space-y-3">
         {readiness.blockReasons.map((reason) => {
-          const action = getBlockReasonAction(quoteId, reason.code);
+          const action = getBlockReasonAction(quoteHref, reason.code);
           const severity = getBlockReasonSeverity(reason.code);
           const severityClass =
             severity === "BLOCKING"

@@ -13,6 +13,7 @@ import {
 } from "@/lib/quote-checkpoint-snapshot";
 import { FileText } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -70,23 +71,30 @@ export default async function QuoteCheckpointViewPage({
     );
   }
 
-  const checkpoint = await db.quoteCheckpoint.findFirst({
-    where: {
-      id: checkpointId,
-      quoteId,
-      organizationId: ctx.organizationId,
-      kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
-    },
-    select: {
-      id: true,
-      kind: true,
-      sequence: true,
-      schemaVersion: true,
-      snapshotJson: true,
-      staffOnlyJson: true,
-      createdAt: true,
-    },
-  });
+  const [checkpoint, quote] = await Promise.all([
+    db.quoteCheckpoint.findFirst({
+      where: {
+        id: checkpointId,
+        quoteId,
+        organizationId: ctx.organizationId,
+        kind: { in: [QuoteCheckpointKind.SEND, QuoteCheckpointKind.APPROVAL] },
+      },
+      select: {
+        id: true,
+        kind: true,
+        sequence: true,
+        schemaVersion: true,
+        snapshotJson: true,
+        staffOnlyJson: true,
+        createdAt: true,
+      },
+    }),
+    db.quote.findFirst({
+      where: { id: quoteId, organizationId: ctx.organizationId },
+      select: { leadId: true },
+    }),
+  ]);
+  const quoteHref = quoteAuthoringHref({ quoteId, leadId: quote?.leadId });
 
   if (!checkpoint) {
     return (
@@ -94,7 +102,7 @@ export default async function QuoteCheckpointViewPage({
         <WorkspaceBreadcrumb
           items={[
             { label: "Sales", href: "/leads" },
-            { label: "Quote", href: `/quotes/${quoteId}` },
+            { label: "Quote", href: quoteHref },
             { label: "Not found" },
           ]}
         />
@@ -103,7 +111,7 @@ export default async function QuoteCheckpointViewPage({
           title="Checkpoint"
           description="No checkpoint exists for this id in your organization, or it belongs to another quote."
           actions={
-            <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+            <Link href={quoteHref} className={listLinkClass}>
               ← Back to quote
             </Link>
           }
@@ -113,7 +121,7 @@ export default async function QuoteCheckpointViewPage({
           title="Checkpoint not found"
           description="Check the link or open the quote and pick a record from the commercial send & acceptance list."
         >
-          <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+          <Link href={quoteHref} className={listLinkClass}>
             Back to quote
           </Link>
         </EmptyState>
@@ -131,7 +139,7 @@ export default async function QuoteCheckpointViewPage({
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales", href: "/leads" },
-          { label: "Quote", href: `/quotes/${quoteId}` },
+          { label: "Quote", href: quoteHref },
           { label: `${labels.breadcrumbTail}${checkpoint.sequence}` },
         ]}
       />
@@ -142,7 +150,7 @@ export default async function QuoteCheckpointViewPage({
         description={labels.description}
         actions={
           <>
-            <Link href={`/quotes/${quoteId}`} className={listLinkClass}>
+            <Link href={quoteHref} className={listLinkClass}>
               ← Back to quote
             </Link>
             <Link href="/leads" className={listLinkClass}>

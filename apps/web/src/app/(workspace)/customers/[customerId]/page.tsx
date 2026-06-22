@@ -23,6 +23,7 @@ import { Phone, UserRound, Mail, History, Briefcase, FileText, ChevronRight, Arr
 import { resolveSiteDetailsForServiceLocation } from "@/lib/site-details/resolver";
 import { siteDetailsPayloadFromResolved } from "@/lib/site-details/presentation";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -162,6 +163,7 @@ export default async function CustomerDetailPage({
       status: true,
       totalCents: true,
       updatedAt: true,
+      leadId: true,
     },
   });
 
@@ -339,7 +341,7 @@ export default async function CustomerDetailPage({
                     {openQuotes.map((q) => (
                       <li key={q.id}>
                         <Link
-                          href={`/quotes/${q.id}`}
+                          href={quoteAuthoringHref({ quoteId: q.id, leadId: q.leadId })}
                           className="flex items-center justify-between px-4 py-3 hover:bg-foreground/[0.01] transition-colors"
                         >
                           <div className="min-w-0 flex-1">
@@ -516,7 +518,7 @@ export default async function CustomerDetailPage({
                       {linkedQuotes.map((q) => (
                         <li key={q.id} className="flex items-center justify-between px-3 py-2.5">
                           <div className="min-w-0 flex-1">
-                            <Link href={`/quotes/${q.id}`} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
+                            <Link href={quoteAuthoringHref({ quoteId: q.id, leadId: q.leadId })} className="text-sm font-medium text-foreground hover:underline underline-offset-4">
                               {q.title}
                             </Link>
                             <p className="text-[10px] text-foreground-subtle mt-0.5">

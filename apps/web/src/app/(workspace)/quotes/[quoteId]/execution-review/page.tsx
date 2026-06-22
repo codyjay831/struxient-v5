@@ -25,6 +25,7 @@ import {
 } from "@/lib/quote-plan/quote-plan-context";
 import { computeQuotePlanningInputHash } from "@/lib/quote-plan/planning-input-hash";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
+import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function QuoteExecutionReviewPreviewPage({
       select: {
         id: true,
         title: true,
+        leadId: true,
         status: true,
         totalCents: true,
         job: { select: { id: true } },
@@ -263,13 +265,14 @@ export default async function QuoteExecutionReviewPreviewPage({
     currentPlanningInputHash !== null &&
     row.executionPlan !== null &&
     currentPlanningInputHash !== row.executionPlan.planningInputHash;
+  const quoteHref = quoteAuthoringHref({ quoteId: qid, leadId: row.leadId });
 
   return (
     <div className="mx-auto max-w-5xl">
       <WorkspaceBreadcrumb
         items={[
           { label: "Sales", href: "/leads" },
-          { label: row.title, href: `/quotes/${qid}` },
+          { label: row.title, href: quoteHref },
           { label: "Build execution plan" },
         ]}
       />
@@ -284,7 +287,7 @@ export default async function QuoteExecutionReviewPreviewPage({
               : `Plan how “${row.title}” will execute after customer approval.`
         }
         actions={
-          <Link href={`/quotes/${qid}`} className={listLinkClass}>
+          <Link href={quoteHref} className={listLinkClass}>
             ← Back to quote
           </Link>
         }
@@ -292,6 +295,7 @@ export default async function QuoteExecutionReviewPreviewPage({
 
       <QuoteExecutionReviewPreviewView
         quoteId={qid}
+        quoteHref={quoteHref}
         executionPlanningEditable={executionPlanningEditable}
         model={model}
         activation={activation}
