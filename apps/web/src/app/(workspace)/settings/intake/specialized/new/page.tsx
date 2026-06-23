@@ -9,7 +9,6 @@ import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageBackLink } from "@/components/ui/page-back-link";
 import { INTAKE_SPECIALIZED_PATH } from "@/lib/intake-settings-hierarchy";
-import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 type TradeStarter = (typeof TRADE_STARTERS)[number];
 
@@ -34,7 +33,7 @@ export default function NewSpecializedIntakeFormPage() {
   const [slugValue, setSlugValue] = useState(initialTemplate?.slug ?? "");
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <PageHeader
         title="Create request link"
         description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines."
@@ -42,9 +41,9 @@ export default function NewSpecializedIntakeFormPage() {
           <PageBackLink href={INTAKE_SPECIALIZED_PATH}>← Specialized request links</PageBackLink>
         }
       />
-      <CustomerIntakeModuleNav className="mb-6" />
 
-      <form action={formAction} className="max-w-3xl space-y-8">
+      <form action={formAction} className="space-y-8">
+        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         {state.error && (
           <p
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
@@ -130,7 +129,8 @@ export default function NewSpecializedIntakeFormPage() {
             Create & Continue
           </button>
         </div>
+        </div>
       </form>
-    </div>
+    </>
   );
 }

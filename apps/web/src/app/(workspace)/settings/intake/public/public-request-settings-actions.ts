@@ -6,6 +6,7 @@ import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { PUBLIC_REQUEST_SETTINGS_LIMITS } from "@/lib/public-request-settings-limits";
 import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+  DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
 } from "@/lib/public-request-settings-defaults";
 import { INTAKE_SETTINGS_HUB_PATH } from "@/lib/intake-settings-hierarchy";
@@ -40,13 +41,33 @@ function revalidatePublicRequestSettingsPaths() {
   revalidatePath("/settings");
 }
 
+function settingsSaveErrorMessage(error: unknown): string {
+  const base = "Settings could not be saved. Please try again.";
+  if (process.env.NODE_ENV === "production") {
+    return base;
+  }
+  if (error instanceof Error && error.message) {
+    return `${base} (${error.message})`;
+  }
+  return base;
+}
+
 export async function updatePublicRequestSettingsAction(
   _prevState: PublicRequestSettingsFormState,
   formData: FormData,
 ): Promise<PublicRequestSettingsFormState> {
   void _prevState;
 
-  const ctx = await getSettingsRequestContextOrThrow();
+  let ctx;
+  try {
+    ctx = await getSettingsRequestContextOrThrow();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "You do not have permission to change organization settings.";
+    return { error: message };
+  }
 
   const enabled = formData.get("publicRequestEnabled") === "on";
   const instantQuoteEnabled =
@@ -138,8 +159,9 @@ export async function updatePublicRequestSettingsAction(
         offerings,
       },
     });
-  } catch {
-    return { error: "Settings could not be saved. Please try again." };
+  } catch (error) {
+    console.error("Failed to save public request settings:", error);
+    return { error: settingsSaveErrorMessage(error) };
   }
 
   revalidatePublicRequestSettingsPaths();
@@ -161,6 +183,7 @@ export async function updatePublicRequestEnabledAction(enabled: boolean) {
         organizationId: ctx.organizationId,
         enabled,
         formTitle: DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+        introMessage: DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
         submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
       },
       update: {

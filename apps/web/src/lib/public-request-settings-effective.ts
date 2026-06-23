@@ -104,3 +104,67 @@ export function toPublicIntakeFormViewModel(
     offerings: effective.offerings,
   };
 }
+
+/** Row fields needed to seed the settings editor form. */
+export type PublicRequestSettingsEditorRow = Pick<
+  PublicRequestSettings,
+  | "enabled"
+  | "formTitle"
+  | "introMessage"
+  | "emergencyWarningText"
+  | "submitButtonText"
+  | "instantQuoteEnabled"
+  | "showInstantQuoteDetails"
+  | "offerings"
+  | "updatedAt"
+>;
+
+export type PublicRequestSettingsFormInitial = {
+  enabled: boolean;
+  formTitle: string;
+  introMessage: string;
+  emergencyWarningText: string;
+  submitButtonText: string;
+  instantQuoteEnabled: boolean;
+  showInstantQuoteDetails: boolean;
+  offerings: string[];
+};
+
+export type PublicRequestSettingsEditorInitial = PublicRequestSettingsFormInitial & {
+  formKey: string;
+};
+
+/**
+ * Editor initial values for `/settings/intake/public`.
+ * When no row exists, pre-fills defaults so first save persists them.
+ * When a row exists with null intro, editor intro is empty (not a misleading placeholder).
+ */
+export function resolvePublicRequestSettingsEditorInitial(
+  row: PublicRequestSettingsEditorRow | null,
+): PublicRequestSettingsEditorInitial {
+  if (!row) {
+    return {
+      enabled: true,
+      formTitle: DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+      introMessage: DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
+      emergencyWarningText: "",
+      submitButtonText: DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+      instantQuoteEnabled: true,
+      showInstantQuoteDetails: true,
+      offerings: [],
+      formKey: "new",
+    };
+  }
+
+  return {
+    enabled: row.enabled,
+    formTitle: row.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+    introMessage: row.introMessage ?? "",
+    emergencyWarningText: row.emergencyWarningText ?? "",
+    submitButtonText: row.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+    instantQuoteEnabled: row.instantQuoteEnabled ?? true,
+    showInstantQuoteDetails: row.showInstantQuoteDetails ?? true,
+    offerings: row.offerings ?? [],
+    formKey: row.updatedAt.toISOString(),
+  };
+}

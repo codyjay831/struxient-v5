@@ -14,14 +14,17 @@ export function PublicPageCopyPreview({
   enabled,
 }: PublicPageCopyPreviewProps) {
   return (
-    <div className="rounded-lg border border-border bg-foreground/[0.02] p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-        Customer request page preview
-      </p>
-      <p className="mt-1 text-xs text-foreground-muted">
-        This is the customer-facing shell around your intake fields — not the questions themselves.
-      </p>
-      <div className="mt-4 rounded-lg border border-border bg-surface px-4 py-4">
+    <div className="rounded-xl border border-border bg-surface shadow-sm">
+      <div className="border-b border-border px-4 py-3 sm:px-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          Live preview
+        </p>
+        <p className="mt-1 text-sm text-foreground-muted">
+          Preview only — this is the customer-facing shell around your intake fields.
+        </p>
+      </div>
+
+      <div className="px-4 py-4 sm:px-5">
         <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
           Customer Request
         </p>

@@ -22,6 +22,7 @@ import {
   type IntakeEditorContext,
 } from "@/lib/intake/intake-editor-context";
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
+import { PageHeader } from "@/components/ui/page-header";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -157,22 +158,20 @@ export function IntakeFormEditor({
 
   return (
     <form action={formAction} className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">{labels.title}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-            {labels.description}
-          </p>
-        </div>
-        <button type="submit" className={primaryButtonClass} disabled={isPending}>
-          {isPending ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 size-4" />
-          )}
-          Save changes
-        </button>
-      </div>
+      <PageHeader
+        title={labels.title}
+        description={labels.description}
+        actions={
+          <button type="submit" className={primaryButtonClass} disabled={isPending}>
+            {isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 size-4" />
+            )}
+            Save changes
+          </button>
+        }
+      />
 
       {state.error ? (
         <p

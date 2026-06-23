@@ -1,18 +1,7 @@
-import { PageHeader } from "@/components/ui/page-header";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import {
-  DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-  DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
-  DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-} from "@/lib/public-request-settings-defaults";
-import {
-  PublicRequestSettingsForm,
-  type PublicRequestSettingsFormInitial,
-} from "./public-request-settings-form";
-import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
-import { INTAKE_SETTINGS_HUB_PATH } from "@/lib/intake-settings-hierarchy";
+import { resolvePublicRequestSettingsEditorInitial } from "@/lib/public-request-settings-effective";
+import { PublicRequestSettingsForm } from "./public-request-settings-form";
 
 export const dynamic = "force-dynamic";
 
@@ -29,33 +18,12 @@ export default async function PublicIntakeSettingsPage() {
       instantQuoteEnabled: true,
       showInstantQuoteDetails: true,
       offerings: true,
+      updatedAt: true,
     },
   });
 
-  const introFieldValue = !row ? DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE : (row.introMessage ?? "");
+  const editorInitial = resolvePublicRequestSettingsEditorInitial(row);
+  const { formKey, ...initial } = editorInitial;
 
-  const initial: PublicRequestSettingsFormInitial = {
-    enabled: row?.enabled ?? true,
-    formTitle: row?.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-    introMessage: introFieldValue,
-    emergencyWarningText: row?.emergencyWarningText ?? "",
-    submitButtonText: row?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-    instantQuoteEnabled: row?.instantQuoteEnabled ?? true,
-    showInstantQuoteDetails: row?.showInstantQuoteDetails ?? true,
-    offerings: row?.offerings ?? [],
-  };
-
-  return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader
-        title="Customer request page"
-        description="Control whether your public request link is live and how the customer-facing page reads."
-      />
-      <CustomerIntakeModuleNav className="mb-6" />
-
-      <WorkspacePanel>
-        <PublicRequestSettingsForm initial={initial} />
-      </WorkspacePanel>
-    </div>
-  );
+  return <PublicRequestSettingsForm key={formKey} initial={initial} />;
 }

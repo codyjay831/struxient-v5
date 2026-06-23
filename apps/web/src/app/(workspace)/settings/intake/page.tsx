@@ -1,7 +1,6 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
 import { PublicRequestSharingGuidance } from "@/components/settings/public-request-sharing-guidance";
-import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 import { IntakeFlowMap } from "@/components/settings/intake-flow-map";
 import { IntakeOverviewSetupChecklist } from "@/components/settings/intake-overview-setup-checklist";
 import { PublicRequestEnabledToggle } from "@/components/settings/public-request-enabled-toggle";
@@ -73,13 +72,12 @@ export default async function IntakeSettingsHubPage() {
   const customerFieldCount = countIntakeFormFields(publicIntakeForm.schema);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <>
       <PageHeader
         title="Customer intake"
         description="Share your customer link, then tune the page and questions when you're ready."
         actions={<PublicRequestEnabledToggle initialEnabled={publicLive} compact />}
       />
-      <CustomerIntakeModuleNav className="mb-6" />
 
       <div className="space-y-5">
         <PublicRequestLinkPanel
@@ -107,6 +105,6 @@ export default async function IntakeSettingsHubPage() {
 
         <PublicRequestSharingGuidance url={absoluteUrl} />
       </div>
-    </div>
+    </>
   );
 }

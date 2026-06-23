@@ -19,7 +19,6 @@ import {
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
 } from "@/lib/public-request-settings-defaults";
 import { IntakeFormEditor } from "../forms/[formId]/intake-form-editor";
-import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 import { PageBackLink } from "@/components/ui/page-back-link";
 
 export async function IntakeFormEditorPage({ formId }: { formId: string }) {
@@ -62,8 +61,7 @@ export async function IntakeFormEditorPage({ formId }: { formId: string }) {
   const labels = intakeEditorContextLabels(editorContext);
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <CustomerIntakeModuleNav className="mb-6" />
+    <>
       {labels.showBackLink ? (
         <div className="mb-6">
           <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
@@ -98,6 +96,6 @@ export async function IntakeFormEditorPage({ formId }: { formId: string }) {
             : undefined
         }
       />
-    </div>
+    </>
   );
 }

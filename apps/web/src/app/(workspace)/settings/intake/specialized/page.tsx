@@ -6,13 +6,8 @@ import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
-import {
-  INTAKE_SETTINGS_HUB_PATH,
-  INTAKE_SPECIALIZED_NEW_PATH,
-  intakeFormEditorPath,
-} from "@/lib/intake-settings-hierarchy";
+import { INTAKE_SPECIALIZED_NEW_PATH, intakeFormEditorPath } from "@/lib/intake-settings-hierarchy";
 import { ArchiveIntakeFormButton } from "@/components/settings/archive-intake-form-button";
-import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 export default async function SpecializedIntakeFormsPage() {
   const ctx = await getRequestContextOrThrow();
@@ -36,7 +31,7 @@ export default async function SpecializedIntakeFormsPage() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <PageHeader
         title="Specialized request links"
         description="Optional public entry points that still create leads in the same Lead Review and quote flow."
@@ -50,7 +45,6 @@ export default async function SpecializedIntakeFormsPage() {
           </Link>
         }
       />
-      <CustomerIntakeModuleNav className="mb-6" />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -113,6 +107,6 @@ export default async function SpecializedIntakeFormsPage() {
           ) : null}
         </div>
       </div>
-    </div>
+    </>
   );
 }

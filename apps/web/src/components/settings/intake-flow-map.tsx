@@ -25,7 +25,7 @@ const steps = [
 
 export function IntakeFlowMap() {
   return (
-    <div className="rounded-lg border border-border bg-foreground/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
         How intake works
       </p>
