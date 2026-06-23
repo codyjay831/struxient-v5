@@ -10,7 +10,7 @@ import type {
 } from "@/lib/intake/default-intake-form";
 import { LeadChannel } from "@prisma/client";
 import Link from "next/link";
-import { ChevronLeft, Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
 import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
@@ -75,6 +75,7 @@ export function IntakeFormEditor({
 }) {
   const labels = intakeEditorContextLabels(editorContext);
   const isOfficeIntake = editorContext === "defaultInternalIntake";
+  const showPublicFormToggles = editorContext === "specializedCustomerForm";
   const showRequestTypeEditor = isPublicIntakeForm || isOfficeIntake;
   const boundUpdate = updateIntakeFormAction.bind(null, formDefinition.id);
   const [state, formAction, isPending] = useActionState(boundUpdate, {});
@@ -158,13 +159,6 @@ export function IntakeFormEditor({
     <form action={formAction} className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link
-            href={labels.backHref}
-            className="mb-4 inline-flex items-center text-xs font-bold text-foreground-subtle transition-colors hover:text-foreground"
-          >
-            <ChevronLeft className="mr-1 size-3" />
-            {labels.backLabel}
-          </Link>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{labels.title}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-foreground-muted">
             {labels.description}
@@ -325,7 +319,7 @@ export function IntakeFormEditor({
 
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-foreground">
-              Form settings
+              {showPublicFormToggles ? "Link settings" : "Form settings"}
             </h2>
 
             <div className="space-y-6">
@@ -340,7 +334,7 @@ export function IntakeFormEditor({
                 />
               </label>
 
-              {editorContext !== "defaultInternalIntake" ? (
+              {showPublicFormToggles ? (
                 <div className="space-y-4">
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
@@ -376,11 +370,12 @@ export function IntakeFormEditor({
                 </div>
               ) : (
                 <>
-                  <input type="hidden" name="isPublic" value="off" />
+                  <input type="hidden" name="isPublic" value={isOfficeIntake ? "off" : "on"} />
                   <input type="hidden" name="isDefault" value="on" />
                   <p className="text-xs leading-relaxed text-foreground-muted">
-                    Internal intake is staff-only and always uses your default internal form at
-                    /leads/new.
+                    {isOfficeIntake
+                      ? "Internal intake is staff-only and always uses your default internal form at /leads/new."
+                      : "This is your main customer intake form and remains the default request link."}
                   </p>
                 </>
               )}
@@ -390,7 +385,7 @@ export function IntakeFormEditor({
           {showRequestTypeEditor ? (
             <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
               <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
-                {isOfficeIntake ? "Staff request types" : "Service lines / request types"}
+                {isOfficeIntake ? "Staff request types" : "Service types customers can pick"}
               </h2>
               <p className="mb-4 text-xs text-foreground-muted">
                 {isOfficeIntake
@@ -444,7 +439,7 @@ export function IntakeFormEditor({
                 className={`${secondaryButtonClass} mt-3`}
                 onClick={addRequestType}
               >
-                Add service line
+                Add service type
               </button>
             </div>
           ) : null}

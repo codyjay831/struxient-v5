@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   IntakeFormRenderer,
   type IntakeRequestTypeOption,
@@ -7,6 +8,7 @@ import {
 } from "@/components/intake/intake-form-renderer";
 import type { IntakeFormDefinitionShape } from "@/lib/intake/default-intake-form";
 import type { IntakeEditorContext } from "@/lib/intake/intake-editor-context";
+import { INTAKE_PUBLIC_COPY_PATH } from "@/lib/intake-settings-hierarchy";
 
 async function previewSubmitAction(
   _prev: IntakeSubmitState,
@@ -51,6 +53,13 @@ export function IntakeFormPreviewPanel({
 
       {isPublic && (formTitle || introMessage || emergencyWarningText) ? (
         <div className="space-y-3 border-b border-border px-4 py-4 sm:px-5">
+          <p className="text-xs text-foreground-muted">
+            Page copy is read-only here. Edit it on{" "}
+            <Link href={INTAKE_PUBLIC_COPY_PATH} className="text-accent hover:underline">
+              Customer request page
+            </Link>
+            .
+          </p>
           {formTitle ? (
             <p className="text-lg font-semibold tracking-tight text-foreground">{formTitle}</p>
           ) : null}

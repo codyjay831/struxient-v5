@@ -73,7 +73,7 @@ export async function IntakeFormEditorPage({
     ...(editorContext === "specializedCustomerForm"
       ? [{ label: labels.breadcrumbParent.label, href: labels.breadcrumbParent.href }]
       : editorContext === "defaultCustomerIntake"
-        ? [{ label: "Customer fields", href: "/settings/intake/customer-fields" }]
+        ? [{ label: "Customer questions", href: "/settings/intake/customer-fields" }]
         : editorContext === "defaultInternalIntake"
           ? [{ label: "Staff intake", href: "/settings/intake/staff" }]
           : []),

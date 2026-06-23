@@ -28,6 +28,7 @@ export type IntakeEditorContextLabels = {
   description: string;
   backHref: string;
   backLabel: string;
+  showBackLink: boolean;
   structureLabel: string;
   breadcrumbParent: { label: string; href: string };
   surfaceMode: "public" | "staff";
@@ -40,26 +41,28 @@ export function intakeEditorContextLabels(
   switch (context) {
     case "defaultCustomerIntake":
       return {
-        title: "Customer fields",
+        title: "Customer questions",
         description:
-          "Questions customers answer on your public request page. Page title, intro, and availability are edited under Public page.",
+          "Questions customers answer on your main customer request page. Page title, intro, and availability are edited under Customer request page.",
         backHref: INTAKE_SETTINGS_HUB_PATH,
         backLabel: "Back to overview",
-        structureLabel: "Customer fields",
+        showBackLink: false,
+        structureLabel: "Customer questions",
         breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "public",
         layoutMode: "progressive",
       };
     case "specializedCustomerForm":
       return {
-        title: "Specialized form fields",
+        title: "Questions for this link",
         description:
           "Optional public entry point for campaigns, trade-specific pages, referral partners, or distinct service lines. Submissions follow the same Lead Review flow.",
         backHref: INTAKE_SPECIALIZED_PATH,
-        backLabel: "Back to specialized forms",
-        structureLabel: "Specialized form fields",
+        backLabel: "Back to specialized request links",
+        showBackLink: false,
+        structureLabel: "Questions for this link",
         breadcrumbParent: {
-          label: "Specialized forms",
+          label: "Specialized request links",
           href: INTAKE_SPECIALIZED_PATH,
         },
         surfaceMode: "public",
@@ -72,6 +75,7 @@ export function intakeEditorContextLabels(
           "Staff-only form at /leads/new for phone, email, walk-in, and referral leads. Customers never see this surface.",
         backHref: INTAKE_SETTINGS_HUB_PATH,
         backLabel: "Back to overview",
+        showBackLink: false,
         structureLabel: "Staff intake fields",
         breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "staff",

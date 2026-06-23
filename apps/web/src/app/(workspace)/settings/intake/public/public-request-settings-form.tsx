@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useId, useState } from "react";
-import Link from "next/link";
 import {
   DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
   DEFAULT_PUBLIC_REQUEST_INTRO_MESSAGE,
@@ -13,10 +12,6 @@ import {
   type PublicRequestSettingsFormState,
 } from "./public-request-settings-actions";
 import { PublicPageCopyPreview } from "@/components/settings/public-page-copy-preview";
-import {
-  INTAKE_CUSTOMER_FIELDS_PATH,
-  INTAKE_SETTINGS_HUB_PATH,
-} from "@/lib/intake-settings-hierarchy";
 
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
@@ -77,17 +72,9 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
           role="status"
           aria-live="polite"
         >
-          Public page settings saved.
+          Customer request page settings saved.
         </p>
       ) : null}
-
-      <PublicPageCopyPreview
-        enabled={enabled}
-        formTitle={formTitle}
-        introMessage={introMessage}
-        emergencyWarningText={emergencyWarningText}
-        submitButtonText={submitButtonText}
-      />
 
       <section className="space-y-4">
         <div>
@@ -113,6 +100,21 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
           </span>
         </label>
       </section>
+
+      <details className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
+          Preview customer request page
+        </summary>
+        <div className="mt-4">
+          <PublicPageCopyPreview
+            enabled={enabled}
+            formTitle={formTitle}
+            introMessage={introMessage}
+            emergencyWarningText={emergencyWarningText}
+            submitButtonText={submitButtonText}
+          />
+        </div>
+      </details>
 
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Page copy</h2>
@@ -183,21 +185,6 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
             />
           </label>
         </div>
-      </section>
-
-      <section className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Service lines / request types</h2>
-        <p className="mt-1 text-sm text-foreground-muted">
-          Managed on{" "}
-          <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className="text-accent hover:underline">
-            customer intake fields
-          </Link>{" "}
-          or specialized forms from{" "}
-          <Link href={INTAKE_SETTINGS_HUB_PATH} className="text-accent hover:underline">
-            Customer intake
-          </Link>
-          .
-        </p>
       </section>
 
       <div className="flex flex-wrap gap-3 border-t border-border pt-6">

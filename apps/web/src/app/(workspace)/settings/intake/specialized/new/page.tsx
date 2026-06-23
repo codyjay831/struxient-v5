@@ -3,8 +3,7 @@
 import { useActionState, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createIntakeFormAction } from "../../intake-form-actions";
-import Link from "next/link";
-import { ChevronLeft, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { TradeTemplatePicker } from "@/components/intake/trade-template-picker";
 import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
@@ -43,24 +42,15 @@ export default function NewSpecializedIntakeFormPage() {
         items={[
           { label: "Settings", href: "/settings" },
           { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-          { label: "Specialized forms", href: INTAKE_SPECIALIZED_PATH },
+          { label: "Specialized request links", href: INTAKE_SPECIALIZED_PATH },
           { label: "New" },
         ]}
       />
-      <CustomerIntakeModuleNav />
       <PageHeader
-        title="Create specialized form"
+        title="Create request link"
         description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines."
-        actions={
-          <Link
-            href={INTAKE_SPECIALIZED_PATH}
-            className="inline-flex items-center text-xs font-bold text-foreground-subtle transition-colors hover:text-foreground"
-          >
-            <ChevronLeft className="mr-1 size-3" />
-            Back to specialized forms
-          </Link>
-        }
       />
+      <CustomerIntakeModuleNav className="mb-6" />
 
       <form action={formAction} className="max-w-3xl space-y-8">
         {state.error && (
@@ -72,28 +62,31 @@ export default function NewSpecializedIntakeFormPage() {
           </p>
         )}
 
-        <div className="space-y-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Sparkles className="size-4 text-accent" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              Choose a Starter Template
-            </h2>
+        <details className="rounded-lg border border-border bg-foreground/[0.02] px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Start from template (optional)
+          </summary>
+          <div className="mt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-accent" />
+              <h2 className="text-sm font-bold text-foreground">Starter templates</h2>
+            </div>
+            <TradeTemplatePicker
+              selectedSlug={selectedTemplate?.slug}
+              onSelect={(t) => {
+                setSelectedTemplate(t);
+                setNameValue(t.name);
+                setSlugValue(t.slug);
+              }}
+            />
           </div>
-          <TradeTemplatePicker
-            selectedSlug={selectedTemplate?.slug}
-            onSelect={(t) => {
-              setSelectedTemplate(t);
-              setNameValue(t.name);
-              setSlugValue(t.slug);
-            }}
-          />
-          <input type="hidden" name="templateSlug" value={selectedTemplate?.slug || ""} />
-        </div>
+        </details>
+        <input type="hidden" name="templateSlug" value={selectedTemplate?.slug || ""} />
 
         <div className="grid gap-6 border-t border-border pt-8 sm:grid-cols-2">
           <div className="col-span-full">
             <label className="block">
-              <span className={fieldLabelClass}>Form Name</span>
+              <span className={fieldLabelClass}>Link Name</span>
               <input
                 name="name"
                 type="text"
@@ -108,7 +101,7 @@ export default function NewSpecializedIntakeFormPage() {
 
           <div>
             <label className="block">
-              <span className={fieldLabelClass}>URL Slug</span>
+              <span className={fieldLabelClass}>Link Slug</span>
               <div className="mt-1 flex items-center">
                 <span className="mr-1 text-xs text-foreground-subtle">
                   /request/your-company-slug/

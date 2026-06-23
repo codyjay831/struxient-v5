@@ -214,7 +214,7 @@ export function SettingsPageClient({
                 <p className="text-sm font-medium text-foreground">Admin only</p>
                 <p className="mt-1 text-xs text-foreground-muted">
                   Intake configuration requires Owner or Admin. Contact an administrator to change
-                  intake forms or public page settings.
+                  intake questions or customer request page settings.
                 </p>
               </div>
             ) : null}
@@ -228,21 +228,21 @@ export function SettingsPageClient({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">Customer intake</p>
                   <p className="mt-1 text-xs text-foreground-muted">
-                    Set up your public request page, customer questions, and staff intake form.
+                    Set up your customer request page, customer questions, and staff intake.
                   </p>
                   <div className="mt-2">
                     <StatusBadge
                       label={
                         initialPublicRequestEnabled
-                          ? "Public intake: Accepting"
-                          : "Public intake: Paused"
+                          ? "Accepting requests"
+                          : "Not accepting requests"
                       }
                       tone={initialPublicRequestEnabled ? "approved" : "warning"}
                     />
                   </div>
                 </div>
                 <span className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast">
-                  Open Customer Intake
+                  Configure intake
                 </span>
               </div>
             </Link>

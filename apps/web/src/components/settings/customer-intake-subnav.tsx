@@ -23,13 +23,13 @@ const NAV_ITEMS: NavItem[] = [
     isActive: (pathname) => pathname === INTAKE_SETTINGS_HUB_PATH,
   },
   {
-    label: "Public page",
+    label: "Customer request page",
     href: INTAKE_PUBLIC_COPY_PATH,
     isActive: (pathname) =>
       pathname === INTAKE_PUBLIC_COPY_PATH || pathname.startsWith(`${INTAKE_PUBLIC_COPY_PATH}/`),
   },
   {
-    label: "Customer fields",
+    label: "Customer questions",
     href: INTAKE_CUSTOMER_FIELDS_PATH,
     isActive: (pathname) =>
       pathname === INTAKE_CUSTOMER_FIELDS_PATH ||
@@ -42,7 +42,7 @@ const NAV_ITEMS: NavItem[] = [
       pathname === INTAKE_STAFF_PATH || pathname.startsWith(`${INTAKE_STAFF_PATH}/`),
   },
   {
-    label: "Specialized forms",
+    label: "Specialized request links",
     href: INTAKE_SPECIALIZED_PATH,
     isActive: (pathname) =>
       pathname === INTAKE_SPECIALIZED_PATH ||
@@ -58,7 +58,7 @@ export function CustomerIntakeSubnav({ className = "" }: { className?: string })
     <nav
       aria-label="Customer intake"
       className={[
-        "flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border pb-3 text-sm font-medium",
+        "flex items-center gap-4 overflow-x-auto border-b border-border pb-3 text-sm font-medium [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
         className,
       ]
         .filter(Boolean)
@@ -70,11 +70,11 @@ export function CustomerIntakeSubnav({ className = "" }: { className?: string })
           <Link
             key={item.href}
             href={item.href}
-            className={
+            className={`shrink-0 ${
               active
                 ? "text-foreground underline decoration-accent underline-offset-4"
                 : "text-foreground-muted transition-colors hover:text-foreground"
-            }
+            }`}
             aria-current={active ? "page" : undefined}
           >
             {item.label}

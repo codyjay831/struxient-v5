@@ -16,7 +16,7 @@ export function PublicPageCopyPreview({
   return (
     <div className="rounded-lg border border-border bg-foreground/[0.02] p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-        Page wrapper preview
+        Customer request page preview
       </p>
       <p className="mt-1 text-xs text-foreground-muted">
         This is the customer-facing shell around your intake fields — not the questions themselves.

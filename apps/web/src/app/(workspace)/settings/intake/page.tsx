@@ -1,60 +1,21 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspacePanel } from "@/components/ui/workspace-panel";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
 import { PublicRequestSharingGuidance } from "@/components/settings/public-request-sharing-guidance";
 import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
+import { IntakeFlowMap } from "@/components/settings/intake-flow-map";
+import { IntakeOverviewSetupChecklist } from "@/components/settings/intake-overview-setup-checklist";
+import { PublicRequestEnabledToggle } from "@/components/settings/public-request-enabled-toggle";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
-import {
-  INTAKE_CUSTOMER_FIELDS_PATH,
-  INTAKE_PUBLIC_COPY_PATH,
-  INTAKE_SPECIALIZED_PATH,
-  INTAKE_STAFF_PATH,
-} from "@/lib/intake-settings-hierarchy";
+import { ensureDefaultPublicIntakeFormDefinition } from "@/lib/intake/ensure-default-public-intake-form";
+import { countIntakeFormFields } from "@/lib/intake/count-intake-form-fields";
+import { resolvePublicPageCopyDisplay } from "@/lib/intake/public-page-copy-status";
 import { OFFICE_INTAKE_FORM_WHERE, PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 import { buildPublicIntakeUrl } from "@/lib/public-intake-url";
 import { isSyntheticDefaultOfficeIntakeFormDefinitionId } from "@/lib/intake/default-office-intake-form";
 
 export const dynamic = "force-dynamic";
-
-const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90";
-
-const secondaryButtonClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
-
-const mutedLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
-
-function ConfigCard({
-  title,
-  description,
-  status,
-  primaryAction,
-  secondaryAction,
-}: {
-  title: string;
-  description: string;
-  status?: ReactNode;
-  primaryAction: ReactNode;
-  secondaryAction?: ReactNode;
-}) {
-  return (
-    <WorkspacePanel padding="compact">
-      <SectionHeading title={title} description={description} />
-      {status ? <div className="mt-3 flex flex-wrap items-center gap-2">{status}</div> : null}
-      <div className="mt-4 flex flex-wrap gap-2">
-        {primaryAction}
-        {secondaryAction}
-      </div>
-    </WorkspacePanel>
-  );
-}
 
 export default async function IntakeSettingsHubPage() {
   const ctx = await getRequestContextOrThrow();
@@ -63,11 +24,17 @@ export default async function IntakeSettingsHubPage() {
     organization,
     specializedFormCount,
     officeDefaultForm,
-    defaultPublicForm,
+    publicIntakeForm,
   ] = await Promise.all([
     db.publicRequestSettings.findUnique({
       where: { organizationId: ctx.organizationId },
-      select: { enabled: true },
+      select: {
+        enabled: true,
+        formTitle: true,
+        introMessage: true,
+        emergencyWarningText: true,
+        submitButtonText: true,
+      },
     }),
     db.organization.findUnique({
       where: { id: ctx.organizationId },
@@ -90,16 +57,7 @@ export default async function IntakeSettingsHubPage() {
       },
       select: { id: true, name: true },
     }),
-    db.intakeFormDefinition.findFirst({
-      where: {
-        organizationId: ctx.organizationId,
-        archivedAt: null,
-        ...PUBLIC_INTAKE_FORM_WHERE,
-        isDefault: true,
-      },
-      select: { id: true, name: true },
-      orderBy: { updatedAt: "desc" },
-    }),
+    ensureDefaultPublicIntakeFormDefinition(ctx.organizationId),
   ]);
 
   const publicLive = publicSettings?.enabled ?? true;
@@ -108,9 +66,12 @@ export default async function IntakeSettingsHubPage() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const publicPreviewHref =
     slug && publicLive ? buildPublicIntakeUrl({ baseUrl, companySlug: slug }) : null;
+  const absoluteUrl =
+    slug && baseUrl ? buildPublicIntakeUrl({ baseUrl, companySlug: slug }) : null;
   const officeFormProvisioned =
     officeDefaultForm && !isSyntheticDefaultOfficeIntakeFormDefinitionId(officeDefaultForm.id);
-  const defaultFormName = defaultPublicForm?.name ?? "Default customer form";
+  const pageCopy = resolvePublicPageCopyDisplay(publicSettings);
+  const customerFieldCount = countIntakeFormFields(publicIntakeForm.schema);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -120,112 +81,39 @@ export default async function IntakeSettingsHubPage() {
           { label: "Customer intake" },
         ]}
       />
-      <CustomerIntakeModuleNav />
       <PageHeader
-        variant="compact"
         title="Customer intake"
-        actions={
-          <Link href="/settings" className={mutedLinkClass}>
-            ← Settings
-          </Link>
-        }
+        description="Share your customer link, then tune the page and questions when you're ready."
+        actions={<PublicRequestEnabledToggle initialEnabled={publicLive} compact />}
       />
-      <p className="-mt-2 mb-4 text-sm text-foreground-muted">
-        Set up your public request page, customer questions, and staff intake form.
-      </p>
+      <CustomerIntakeModuleNav className="mb-6" />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <StatusBadge
-          label={`Public intake: ${publicLive ? "Accepting" : "Paused"}`}
-          tone={publicLive ? "approved" : "warning"}
+      <div className="space-y-5">
+        <PublicRequestLinkPanel
+          organizationName={orgName}
+          slug={slug}
+          baseUrl={baseUrl}
+          publicRequestLive={publicLive}
+          previewHref={publicPreviewHref}
+          specializedFormCount={specializedFormCount}
         />
-        <StatusBadge label={`Default form: ${defaultFormName}`} tone="neutral" />
-        <StatusBadge
-          label={`Staff intake: ${officeFormProvisioned ? "On" : "Needs setup"}`}
-          tone={officeFormProvisioned ? "approved" : "warning"}
+
+        <IntakeOverviewSetupChecklist
+          slug={slug}
+          publicLive={publicLive}
+          formTitle={pageCopy.formTitle}
+          hasIntro={pageCopy.hasIntro}
+          hasSettingsRow={Boolean(publicSettings)}
+          pageCopyCustomized={pageCopy.customized}
+          customerFieldCount={customerFieldCount}
+          officeFormProvisioned={Boolean(officeFormProvisioned)}
+          specializedFormCount={specializedFormCount}
         />
+
+        <IntakeFlowMap />
+
+        <PublicRequestSharingGuidance url={absoluteUrl} />
       </div>
-
-      <PublicRequestLinkPanel
-        organizationName={orgName}
-        slug={slug}
-        baseUrl={baseUrl}
-        publicRequestLive={publicLive}
-        previewHref={publicPreviewHref}
-        editCopyHref={INTAKE_PUBLIC_COPY_PATH}
-        className="mb-5"
-      />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <ConfigCard
-          title="Customer fields"
-          description="Main public request questions and request types."
-          status={
-            <>
-              <StatusBadge
-                label={publicLive ? "Accepting" : "Paused"}
-                tone={publicLive ? "approved" : "warning"}
-              />
-              {defaultPublicForm?.name ? (
-                <span className="max-w-full truncate text-xs text-foreground-muted">
-                  {defaultPublicForm.name}
-                </span>
-              ) : null}
-            </>
-          }
-          primaryAction={
-            <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className={primaryButtonClass}>
-              Edit customer fields
-            </Link>
-          }
-        />
-
-        <ConfigCard
-          title="Staff intake"
-          description="Internal form used by office staff at /leads/new."
-          status={
-            <>
-              <StatusBadge
-                label={officeFormProvisioned ? "On" : "Needs setup"}
-                tone={officeFormProvisioned ? "approved" : "warning"}
-              />
-              {officeDefaultForm?.name ? (
-                <span className="max-w-full truncate text-xs text-foreground-muted">
-                  {officeDefaultForm.name}
-                </span>
-              ) : null}
-            </>
-          }
-          primaryAction={
-            <Link href={INTAKE_STAFF_PATH} className={primaryButtonClass}>
-              Edit staff fields
-            </Link>
-          }
-          secondaryAction={
-            <Link href="/leads/new" className={secondaryButtonClass}>
-              Preview staff intake
-            </Link>
-          }
-        />
-
-        <ConfigCard
-          title="Specialized forms"
-          description="Extra public request links for campaigns, trades, or service lines."
-          status={
-            <StatusBadge
-              label={`${specializedFormCount} active specialized form${specializedFormCount === 1 ? "" : "s"}`}
-              tone={specializedFormCount > 0 ? "approved" : "neutral"}
-            />
-          }
-          primaryAction={
-            <Link href={INTAKE_SPECIALIZED_PATH} className={primaryButtonClass}>
-              Manage specialized forms
-            </Link>
-          }
-        />
-      </div>
-
-      <PublicRequestSharingGuidance className="mt-6" />
     </div>
   );
 }
