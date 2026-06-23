@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { updateIntakeFormAction } from "../../intake-form-actions";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import type {
@@ -21,6 +22,7 @@ import {
   intakeEditorContextLabels,
   type IntakeEditorContext,
 } from "@/lib/intake/intake-editor-context";
+import { INTAKE_EDITOR_TOOLBAR_PORTAL_ID } from "../../intake-settings-layout-client";
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
 import { PageBackLink } from "@/components/ui/page-back-link";
 import {
@@ -34,8 +36,8 @@ import type { CSSProperties } from "react";
 
 const SAVE_FORM_ID = "intake-form-editor-save";
 const PROGRAMMATIC_SCROLL_MS = 400;
-/** Bounded editor shell height at xl+ (workspace padding, intake nav, toolbar). */
-const EDITOR_SHELL_HEIGHT = "calc(100dvh - 10rem)";
+/** Bounded editor shell height at xl+ (workspace padding, intake nav row). */
+const EDITOR_SHELL_HEIGHT = "calc(100dvh - 8rem)";
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
 const controlClass =
@@ -177,7 +179,12 @@ export function IntakeFormEditor({
   const [formSettingsOpen, setFormSettingsOpen] = useState(false);
   const [serviceTypesOpen, setServiceTypesOpen] = useState(false);
   const [publicLinkOpen, setPublicLinkOpen] = useState(false);
+  const [toolbarPortal, setToolbarPortal] = useState<HTMLElement | null>(null);
   const showPublicLinkEditor = isPublic && editorContext !== "defaultInternalIntake";
+
+  useEffect(() => {
+    setToolbarPortal(document.getElementById(INTAKE_EDITOR_TOOLBAR_PORTAL_ID));
+  }, []);
 
   const publicIntakeUrl =
     organizationSlug &&
@@ -242,64 +249,66 @@ export function IntakeFormEditor({
     [scrollEditorToSection],
   );
 
+  const toolbar = (
+    <>
+      {labels.showBackLink ? (
+        <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
+      ) : null}
+      <button
+        type="submit"
+        form={SAVE_FORM_ID}
+        className={primaryButtonClass}
+        disabled={isPending}
+      >
+        {isPending ? (
+          <Loader2 className="mr-2 size-4 animate-spin" />
+        ) : (
+          <Save className="mr-2 size-4" />
+        )}
+        Save changes
+      </button>
+    </>
+  );
+
   return (
     <div
-      className="flex flex-col gap-8 xl:min-h-0 xl:gap-6 xl:overflow-hidden xl:h-[var(--editor-shell-height)]"
+      className="flex flex-col gap-4 xl:min-h-0 xl:gap-4 xl:overflow-hidden xl:h-[var(--editor-shell-height)]"
       style={{ "--editor-shell-height": EDITOR_SHELL_HEIGHT } as CSSProperties}
     >
-      <div className="shrink-0 space-y-4">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {labels.showBackLink ? (
-            <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
-          ) : null}
-          <button
-            type="submit"
-            form={SAVE_FORM_ID}
-            className={primaryButtonClass}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 size-4" />
-            )}
-            Save changes
-          </button>
-        </div>
+      {toolbarPortal ? createPortal(toolbar, toolbarPortal) : null}
 
-        {state.error ? (
-          <p
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
-            role="alert"
-          >
-            {state.error}
-          </p>
-        ) : null}
+      {state.error ? (
+        <p
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+          role="alert"
+        >
+          {state.error}
+        </p>
+      ) : null}
 
-        <form id={SAVE_FORM_ID} action={formAction} className="hidden" aria-hidden tabIndex={-1}>
-          <input type="hidden" name="name" value={name} readOnly />
-          <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
-          <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
-          {showPublicFormToggles ? (
-            <>
-              {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
-              {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
-            </>
-          ) : (
-            <>
-              <input
-                type="hidden"
-                name="isPublic"
-                value={isOfficeIntake ? "off" : "on"}
-                readOnly
-              />
-              <input type="hidden" name="isDefault" value="on" readOnly />
-            </>
-          )}
-        </form>
-      </div>
+      <form id={SAVE_FORM_ID} action={formAction} className="hidden" aria-hidden tabIndex={-1}>
+        <input type="hidden" name="name" value={name} readOnly />
+        <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
+        <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
+        {showPublicFormToggles ? (
+          <>
+            {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
+            {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
+          </>
+        ) : (
+          <>
+            <input
+              type="hidden"
+              name="isPublic"
+              value={isOfficeIntake ? "off" : "on"}
+              readOnly
+            />
+            <input type="hidden" name="isDefault" value="on" readOnly />
+          </>
+        )}
+      </form>
 
-      <div className="grid min-h-0 gap-8 xl:grid-cols-2 xl:flex-1 xl:items-stretch xl:gap-6">
+      <div className="grid min-h-0 gap-4 xl:grid-cols-2 xl:flex-1 xl:items-stretch xl:gap-4">
         <div
           ref={leftScrollRef}
           className="space-y-6 pr-1 xl:h-full xl:min-h-0 xl:overflow-y-auto"

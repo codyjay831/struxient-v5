@@ -51,14 +51,22 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export function CustomerIntakeSubnav({ className = "" }: { className?: string }) {
+export function CustomerIntakeSubnav({
+  className = "",
+  variant = "standalone",
+}: {
+  className?: string;
+  variant?: "standalone" | "embedded";
+}) {
   const pathname = usePathname();
+  const isEmbedded = variant === "embedded";
 
   return (
     <nav
       aria-label="Customer intake"
       className={[
-        "flex items-center gap-4 overflow-x-auto border-b border-border pb-3 text-sm font-medium [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+        "flex items-center gap-4 overflow-x-auto text-sm font-medium [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+        isEmbedded ? "" : "border-b border-border pb-3",
         className,
       ]
         .filter(Boolean)
