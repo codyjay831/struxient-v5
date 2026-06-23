@@ -28,6 +28,9 @@ export function IntakeFormPreviewPanel({
   formTitle,
   introMessage,
   emergencyWarningText,
+  controlledStep,
+  onPreviewStepSelect,
+  previewBrowseMode = true,
 }: {
   formDefinition: IntakeFormDefinitionShape;
   organizationDisplayName: string;
@@ -37,6 +40,9 @@ export function IntakeFormPreviewPanel({
   formTitle?: string | null;
   introMessage?: string | null;
   emergencyWarningText?: string | null;
+  controlledStep?: number;
+  onPreviewStepSelect?: (step: number) => void;
+  previewBrowseMode?: boolean;
 }) {
   const isPublic = editorContext !== "defaultInternalIntake";
 
@@ -47,7 +53,9 @@ export function IntakeFormPreviewPanel({
           Live preview
         </p>
         <p className="mt-1 text-sm text-foreground-muted">
-          Preview only — submitting here does not create a lead.
+          {previewBrowseMode
+            ? "Scroll sections on the left to preview each step. Customer validation is disabled here."
+            : "Preview only — submitting here does not create a lead."}
         </p>
       </div>
 
@@ -89,6 +97,9 @@ export function IntakeFormPreviewPanel({
           surfaceMode={isPublic ? "public" : "staff"}
           layoutMode={isPublic ? "progressive" : "compact"}
           previewMode
+          previewBrowseMode={previewBrowseMode}
+          controlledStep={controlledStep}
+          onPreviewStepSelect={onPreviewStepSelect}
         />
       </div>
     </div>

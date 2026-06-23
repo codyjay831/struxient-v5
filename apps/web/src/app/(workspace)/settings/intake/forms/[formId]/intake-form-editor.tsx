@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { updateIntakeFormAction } from "../../intake-form-actions";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import type {
@@ -24,6 +24,8 @@ import {
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
 import { PageHeader } from "@/components/ui/page-header";
 
+const SAVE_FORM_ID = "intake-form-editor-save";
+const PROGRAMMATIC_SCROLL_MS = 400;
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
 const controlClass =
@@ -156,13 +158,79 @@ export function IntakeFormEditor({
     setSchema({ ...schema, sections: newSections });
   };
 
+  const leftScrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const programmaticScrollUntil = useRef(0);
+  const sectionCount = schema.sections?.length ?? 0;
+  const [activePreviewStep, setActivePreviewStep] = useState(1);
+  const previewStep = sectionCount > 0 ? Math.min(activePreviewStep, sectionCount) : 1;
+
+  useEffect(() => {
+    const root = leftScrollRef.current;
+    if (!root || sectionCount === 0) {
+      return;
+    }
+
+    const observed = sectionRefs.current.slice(0, sectionCount).filter(Boolean) as HTMLDivElement[];
+    if (observed.length === 0) {
+      return;
+    }
+
+    const ratios = new Map<Element, number>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (Date.now() < programmaticScrollUntil.current) {
+          return;
+        }
+        for (const entry of entries) {
+          ratios.set(entry.target, entry.intersectionRatio);
+        }
+        let bestIdx = 0;
+        let bestRatio = -1;
+        observed.forEach((el, idx) => {
+          const ratio = ratios.get(el) ?? 0;
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            bestIdx = idx;
+          }
+        });
+        setActivePreviewStep(bestIdx + 1);
+      },
+      { root, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
+    );
+
+    for (const el of observed) {
+      observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [sectionCount, schema.sections]);
+
+  const scrollEditorToSection = useCallback((sectionIndex: number) => {
+    programmaticScrollUntil.current = Date.now() + PROGRAMMATIC_SCROLL_MS;
+    setActivePreviewStep(sectionIndex + 1);
+    sectionRefs.current[sectionIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const handlePreviewStepSelect = useCallback(
+    (step: number) => {
+      scrollEditorToSection(step - 1);
+    },
+    [scrollEditorToSection],
+  );
+
   return (
-    <form action={formAction} className="space-y-8">
+    <div className="space-y-8">
       <PageHeader
         title={labels.title}
         description={labels.description}
         actions={
-          <button type="submit" className={primaryButtonClass} disabled={isPending}>
+          <button
+            type="submit"
+            form={SAVE_FORM_ID}
+            className={primaryButtonClass}
+            disabled={isPending}
+          >
             {isPending ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
@@ -183,7 +251,10 @@ export function IntakeFormEditor({
       ) : null}
 
       <div className="grid gap-8 xl:grid-cols-2">
-        <div className="space-y-6">
+        <div
+          ref={leftScrollRef}
+          className="max-h-[calc(100vh-8rem)] space-y-6 overflow-y-auto pr-1"
+        >
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
               {labels.structureLabel}
@@ -196,7 +267,11 @@ export function IntakeFormEditor({
               {schema.sections?.map((section: IntakeFormSection, sIdx: number) => (
                 <div
                   key={section.key}
-                  className="group relative rounded-lg border border-border bg-foreground/[0.01] p-4"
+                  ref={(el) => {
+                    sectionRefs.current[sIdx] = el;
+                  }}
+                  data-section-index={sIdx}
+                  className="group relative scroll-mt-4 rounded-lg border border-border bg-foreground/[0.01] p-4"
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <input
@@ -305,81 +380,87 @@ export function IntakeFormEditor({
         </div>
 
         <div className="space-y-6">
-          <IntakeFormPreviewPanel
-            formDefinition={previewFormDefinition}
-            organizationDisplayName={organizationDisplayName}
-            requestTypeOptions={requestTypes.filter((row) => row.value && row.label)}
-            submitButtonLabel={publicPageCopy?.submitButtonText ?? "Submit Request"}
-            editorContext={editorContext}
-            formTitle={publicPageCopy?.formTitle}
-            introMessage={publicPageCopy?.introMessage}
-            emergencyWarningText={publicPageCopy?.emergencyWarningText}
-          />
-
-          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-            <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-foreground">
-              {showPublicFormToggles ? "Link settings" : "Form settings"}
-            </h2>
-
-            <div className="space-y-6">
-              <label className="block">
-                <span className={fieldLabelClass}>Form name</span>
-                <input
-                  name="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={controlClass}
-                />
-              </label>
-
-              {showPublicFormToggles ? (
-                <div className="space-y-4">
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      name="isPublic"
-                      checked={isPublic}
-                      onChange={(e) => setIsPublic(e.target.checked)}
-                      className="size-4 rounded border-border text-accent focus:ring-accent"
-                    />
-                    <div>
-                      <p className="text-sm font-bold text-foreground">Public customer form</p>
-                      <p className="text-[0.65rem] text-foreground-subtle">
-                        Accessible via a public customer link
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      name="isDefault"
-                      checked={isDefault}
-                      onChange={(e) => setIsDefault(e.target.checked)}
-                      className="size-4 rounded border-border text-accent focus:ring-accent"
-                    />
-                    <div>
-                      <p className="text-sm font-bold text-foreground">Default customer form</p>
-                      <p className="text-[0.65rem] text-foreground-subtle">
-                        Primary form for your main customer request link
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              ) : (
-                <>
-                  <input type="hidden" name="isPublic" value={isOfficeIntake ? "off" : "on"} />
-                  <input type="hidden" name="isDefault" value="on" />
-                  <p className="text-xs leading-relaxed text-foreground-muted">
-                    {isOfficeIntake
-                      ? "Internal intake is staff-only and always uses your default internal form at /leads/new."
-                      : "This is your main customer intake form and remains the default request link."}
-                  </p>
-                </>
-              )}
-            </div>
+          <div className="xl:sticky xl:top-6 xl:self-start">
+            <IntakeFormPreviewPanel
+              formDefinition={previewFormDefinition}
+              organizationDisplayName={organizationDisplayName}
+              requestTypeOptions={requestTypes.filter((row) => row.value && row.label)}
+              submitButtonLabel={publicPageCopy?.submitButtonText ?? "Submit Request"}
+              editorContext={editorContext}
+              formTitle={publicPageCopy?.formTitle}
+              introMessage={publicPageCopy?.introMessage}
+              emergencyWarningText={publicPageCopy?.emergencyWarningText}
+              controlledStep={previewStep}
+              onPreviewStepSelect={handlePreviewStepSelect}
+              previewBrowseMode
+            />
           </div>
+
+          <form id={SAVE_FORM_ID} action={formAction} className="space-y-6">
+            <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+              <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-foreground">
+                {showPublicFormToggles ? "Link settings" : "Form settings"}
+              </h2>
+
+              <div className="space-y-6">
+                <label className="block">
+                  <span className={fieldLabelClass}>Form name</span>
+                  <input
+                    name="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={controlClass}
+                  />
+                </label>
+
+                {showPublicFormToggles ? (
+                  <div className="space-y-4">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        name="isPublic"
+                        checked={isPublic}
+                        onChange={(e) => setIsPublic(e.target.checked)}
+                        className="size-4 rounded border-border text-accent focus:ring-accent"
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-foreground">Public customer form</p>
+                        <p className="text-[0.65rem] text-foreground-subtle">
+                          Accessible via a public customer link
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        name="isDefault"
+                        checked={isDefault}
+                        onChange={(e) => setIsDefault(e.target.checked)}
+                        className="size-4 rounded border-border text-accent focus:ring-accent"
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-foreground">Default customer form</p>
+                        <p className="text-[0.65rem] text-foreground-subtle">
+                          Primary form for your main customer request link
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <>
+                    <input type="hidden" name="isPublic" value={isOfficeIntake ? "off" : "on"} />
+                    <input type="hidden" name="isDefault" value="on" />
+                    <p className="text-xs leading-relaxed text-foreground-muted">
+                      {isOfficeIntake
+                        ? "Internal intake is staff-only and always uses your default internal form at /leads/new."
+                        : "This is your main customer intake form and remains the default request link."}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
 
           {showRequestTypeEditor ? (
             <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
@@ -496,10 +577,11 @@ export function IntakeFormEditor({
               )}
             </div>
           ) : null}
+
+            <input type="hidden" name="schema" value={JSON.stringify(schema)} />
+          </form>
         </div>
       </div>
-
-      <input type="hidden" name="schema" value={JSON.stringify(schema)} />
-    </form>
+    </div>
   );
 }

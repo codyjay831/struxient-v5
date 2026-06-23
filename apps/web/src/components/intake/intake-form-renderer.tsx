@@ -111,6 +111,12 @@ export type IntakeFormRendererProps = {
   internalDetailsSlot?: ReactNode;
   /** When true, submit shows preview-only confirmation and never persists a lead. */
   previewMode?: boolean;
+  /** Settings editor browse mode: no validation, no nav buttons, controlled step from parent. */
+  previewBrowseMode?: boolean;
+  /** 1-based step driven by editor scroll sync when `previewBrowseMode` is true. */
+  controlledStep?: number;
+  /** Clicking a stepper label in browse mode scrolls the editor to that section. */
+  onPreviewStepSelect?: (step: number) => void;
 };
 
 export function IntakeFormRenderer({
@@ -125,6 +131,9 @@ export function IntakeFormRenderer({
   layoutMode = "progressive",
   internalDetailsSlot,
   previewMode = false,
+  previewBrowseMode = false,
+  controlledStep,
+  onPreviewStepSelect,
 }: IntakeFormRendererProps) {
   const [state, formAction, isPending] = useActionState<IntakeSubmitState, FormData>(
     submitAction,
@@ -133,7 +142,10 @@ export function IntakeFormRenderer({
   const containerRef = useRef<HTMLElement>(null);
   const headingId = useId();
 
-  const [step, setStep] = useState(1);
+  const [internalStep, setInternalStep] = useState(1);
+  const isControlledBrowse = previewBrowseMode && controlledStep !== undefined;
+  const step = isControlledBrowse ? controlledStep : internalStep;
+  const setStep = isControlledBrowse ? () => {} : setInternalStep;
   const [stepError, setStepError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({});
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
@@ -195,6 +207,9 @@ export function IntakeFormRenderer({
 
   /** Public progressive: block Next when the active step includes request.type and it is empty. */
   const validatePublicRequestTypeForStep = (stepIndex: number): string | null => {
+    if (previewBrowseMode) {
+      return null;
+    }
     if (surfaceMode !== "public" || !isProgressive) {
       return null;
     }
@@ -209,6 +224,9 @@ export function IntakeFormRenderer({
 
   /** Public forms: block submit when schema includes request.type and it is empty. */
   const validatePublicRequestTypeBeforeSubmit = (): string | null => {
+    if (previewBrowseMode) {
+      return null;
+    }
     if (surfaceMode !== "public" || !schemaIncludesRequestType) {
       return null;
     }
@@ -283,6 +301,9 @@ export function IntakeFormRenderer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (previewBrowseMode) {
+      return;
+    }
     // Prevent Enter from submitting the form prematurely if we are not on the last step.
     // We only allow Enter to submit if we are on the last step and not in a textarea.
     if (e.key === "Enter") {
@@ -401,16 +422,30 @@ export function IntakeFormRenderer({
       {isProgressive && (
         <div className="mb-10">
           <div className="flex items-center justify-between mb-2 px-1">
-            {sections.map((section, idx) => (
-              <span
-                key={section.key}
-                className={`text-[0.65rem] font-bold uppercase tracking-widest transition-colors duration-300 ${
-                  idx + 1 <= step ? "text-accent" : "text-foreground-subtle"
-                }`}
-              >
-                {section.title}
-              </span>
-            ))}
+            {sections.map((section, idx) => {
+              const stepNumber = idx + 1;
+              const isActive = stepNumber <= step;
+              const labelClass = `text-[0.65rem] font-bold uppercase tracking-widest transition-colors duration-300 ${
+                isActive ? "text-accent" : "text-foreground-subtle"
+              }`;
+              if (previewBrowseMode && onPreviewStepSelect) {
+                return (
+                  <button
+                    key={section.key}
+                    type="button"
+                    onClick={() => onPreviewStepSelect(stepNumber)}
+                    className={`${labelClass} cursor-pointer text-left hover:opacity-80`}
+                  >
+                    {section.title}
+                  </button>
+                );
+              }
+              return (
+                <span key={section.key} className={labelClass}>
+                  {section.title}
+                </span>
+              );
+            })}
           </div>
           <div className="flex items-center gap-2">
             {sections.map((section, idx) => (
@@ -737,7 +772,7 @@ export function IntakeFormRenderer({
 
       {internalDetailsSlot ? <div>{internalDetailsSlot}</div> : null}
 
-      {sections.length > 0 && (
+      {sections.length > 0 && !previewBrowseMode && (
         <div className="flex flex-col gap-3 sm:flex-row pt-4">
           {isProgressive && step > 1 && (
             <button
