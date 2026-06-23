@@ -1,4 +1,4 @@
-import { IntakeFormEditorPage } from "../_lib/intake-form-editor-page";
+import { IntakeFormEditorPage } from "../../_lib/intake-form-editor-page";
 
 export default async function IntakeFormEditorRoutePage({
   params,

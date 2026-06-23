@@ -10,7 +10,7 @@ import type {
 } from "@/lib/intake/default-intake-form";
 import { LeadChannel } from "@prisma/client";
 import Link from "next/link";
-import { Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Lock, Settings, List, Link2 } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
 import type { PublicRequestTypeOption } from "@/lib/public-request-settings-defaults";
@@ -23,9 +23,19 @@ import {
 } from "@/lib/intake/intake-editor-context";
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { CSSProperties } from "react";
 
 const SAVE_FORM_ID = "intake-form-editor-save";
 const PROGRAMMATIC_SCROLL_MS = 400;
+/** Shared max height for left/right editor panes at xl+. */
+const EDITOR_PANE_MAX_HEIGHT = "calc(100vh - 10rem)";
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
 const controlClass =
@@ -164,6 +174,19 @@ export function IntakeFormEditor({
   const sectionCount = schema.sections?.length ?? 0;
   const [activePreviewStep, setActivePreviewStep] = useState(1);
   const previewStep = sectionCount > 0 ? Math.min(activePreviewStep, sectionCount) : 1;
+  const [formSettingsOpen, setFormSettingsOpen] = useState(false);
+  const [serviceTypesOpen, setServiceTypesOpen] = useState(false);
+  const [publicLinkOpen, setPublicLinkOpen] = useState(false);
+  const showPublicLinkEditor = isPublic && editorContext !== "defaultInternalIntake";
+
+  const publicIntakeUrl =
+    organizationSlug &&
+    buildPublicIntakeUrlForForm({
+      baseUrl,
+      companySlug: organizationSlug,
+      formSlug: formDefinition.slug,
+      isDefault: formDefinition.isDefault,
+    });
 
   useEffect(() => {
     const root = leftScrollRef.current;
@@ -250,10 +273,35 @@ export function IntakeFormEditor({
         </p>
       ) : null}
 
-      <div className="grid gap-8 xl:grid-cols-2">
+      <form id={SAVE_FORM_ID} action={formAction} className="hidden" aria-hidden tabIndex={-1}>
+        <input type="hidden" name="name" value={name} readOnly />
+        <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
+        <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
+        {showPublicFormToggles ? (
+          <>
+            {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
+            {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
+          </>
+        ) : (
+          <>
+            <input
+              type="hidden"
+              name="isPublic"
+              value={isOfficeIntake ? "off" : "on"}
+              readOnly
+            />
+            <input type="hidden" name="isDefault" value="on" readOnly />
+          </>
+        )}
+      </form>
+
+      <div
+        className="grid gap-8 xl:grid-cols-2 xl:items-start"
+        style={{ "--editor-pane-max-height": EDITOR_PANE_MAX_HEIGHT } as CSSProperties}
+      >
         <div
           ref={leftScrollRef}
-          className="max-h-[calc(100vh-8rem)] space-y-6 overflow-y-auto pr-1"
+          className="space-y-6 pr-1 xl:max-h-[var(--editor-pane-max-height)] xl:overflow-y-auto"
         >
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
@@ -379,209 +427,220 @@ export function IntakeFormEditor({
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="xl:sticky xl:top-6 xl:self-start">
-            <IntakeFormPreviewPanel
-              formDefinition={previewFormDefinition}
-              organizationDisplayName={organizationDisplayName}
-              requestTypeOptions={requestTypes.filter((row) => row.value && row.label)}
-              submitButtonLabel={publicPageCopy?.submitButtonText ?? "Submit Request"}
-              editorContext={editorContext}
-              formTitle={publicPageCopy?.formTitle}
-              introMessage={publicPageCopy?.introMessage}
-              emergencyWarningText={publicPageCopy?.emergencyWarningText}
-              controlledStep={previewStep}
-              onPreviewStepSelect={handlePreviewStepSelect}
-              previewBrowseMode
-            />
-          </div>
-
-          <form id={SAVE_FORM_ID} action={formAction} className="space-y-6">
-            <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-              <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-foreground">
-                {showPublicFormToggles ? "Link settings" : "Form settings"}
-              </h2>
-
-              <div className="space-y-6">
-                <label className="block">
-                  <span className={fieldLabelClass}>Form name</span>
-                  <input
-                    name="name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className={controlClass}
-                  />
-                </label>
-
-                {showPublicFormToggles ? (
-                  <div className="space-y-4">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        name="isPublic"
-                        checked={isPublic}
-                        onChange={(e) => setIsPublic(e.target.checked)}
-                        className="size-4 rounded border-border text-accent focus:ring-accent"
-                      />
-                      <div>
-                        <p className="text-sm font-bold text-foreground">Public customer form</p>
-                        <p className="text-[0.65rem] text-foreground-subtle">
-                          Accessible via a public customer link
-                        </p>
-                      </div>
-                    </label>
-
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        name="isDefault"
-                        checked={isDefault}
-                        onChange={(e) => setIsDefault(e.target.checked)}
-                        className="size-4 rounded border-border text-accent focus:ring-accent"
-                      />
-                      <div>
-                        <p className="text-sm font-bold text-foreground">Default customer form</p>
-                        <p className="text-[0.65rem] text-foreground-subtle">
-                          Primary form for your main customer request link
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                ) : (
-                  <>
-                    <input type="hidden" name="isPublic" value={isOfficeIntake ? "off" : "on"} />
-                    <input type="hidden" name="isDefault" value="on" />
-                    <p className="text-xs leading-relaxed text-foreground-muted">
-                      {isOfficeIntake
-                        ? "Internal intake is staff-only and always uses your default internal form at /leads/new."
-                        : "This is your main customer intake form and remains the default request link."}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-
-          {showRequestTypeEditor ? (
-            <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
-                {isOfficeIntake ? "Staff request types" : "Service types customers can pick"}
-              </h2>
-              <p className="mb-4 text-xs text-foreground-muted">
-                {isOfficeIntake
-                  ? "Choices staff see on /leads/new when logging a lead."
-                  : "Customer-facing choices for this form."}
-              </p>
-              <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
-              <div className="space-y-3">
-                {requestTypes.map((row, index) => (
-                  <div
-                    key={index}
-                    className="flex flex-col gap-3 rounded-lg border border-border bg-foreground/[0.02] p-3 sm:flex-row sm:items-end"
-                  >
-                    <label className="block flex-1">
-                      <span className={fieldLabelClass}>Internal key</span>
-                      <input
-                        type="text"
-                        value={row.value}
-                        onChange={(e) => updateRequestType(index, { value: e.target.value })}
-                        maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeValue}
-                        autoComplete="off"
-                        className={controlClass}
-                        placeholder="e.g. roofing"
-                      />
-                    </label>
-                    <label className="block flex-[2]">
-                      <span className={fieldLabelClass}>Customer label</span>
-                      <input
-                        type="text"
-                        value={row.label}
-                        onChange={(e) => updateRequestType(index, { label: e.target.value })}
-                        maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeLabel}
-                        autoComplete="off"
-                        className={controlClass}
-                        placeholder="e.g. Roofing repair"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className={`${secondaryButtonClass} shrink-0`}
-                      onClick={() => removeRequestType(index)}
-                      disabled={requestTypes.length <= 1}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
+        <div>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFormSettingsOpen(true)}
+              className={secondaryButtonClass}
+            >
+              <Settings className="mr-1.5 size-3.5" />
+              {showPublicFormToggles ? "Link settings" : "Form settings"}
+            </button>
+            {showRequestTypeEditor ? (
               <button
                 type="button"
-                className={`${secondaryButtonClass} mt-3`}
-                onClick={addRequestType}
+                onClick={() => setServiceTypesOpen(true)}
+                className={secondaryButtonClass}
               >
-                Add service type
+                <List className="mr-1.5 size-3.5" />
+                {isOfficeIntake ? "Staff request types" : "Service types"}
               </button>
-            </div>
-          ) : null}
-
-          {isPublic && editorContext !== "defaultInternalIntake" ? (
-            <div className="rounded-xl border border-border bg-foreground/[0.01] p-6">
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
+            ) : null}
+            {showPublicLinkEditor ? (
+              <button
+                type="button"
+                onClick={() => setPublicLinkOpen(true)}
+                className={secondaryButtonClass}
+              >
+                <Link2 className="mr-1.5 size-3.5" />
                 Public link
-              </h2>
-              {!organizationSlug ? (
-                <p className="text-xs leading-relaxed text-foreground-muted">
-                  Configure a{" "}
-                  <Link href="/settings/organization" className="text-accent hover:underline">
-                    company slug
-                  </Link>{" "}
-                  to enable public links for your forms.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-sm">
-                    <p className="mb-1 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                      {baseUrl ? "Full URL" : "Path"}
-                    </p>
-                    <p className="truncate font-mono text-xs text-foreground">
-                      {buildPublicIntakeUrlForForm({
-                        baseUrl,
-                        companySlug: organizationSlug,
-                        formSlug: formDefinition.slug,
-                        isDefault: formDefinition.isDefault,
-                      })}
-                    </p>
-                  </div>
-                  {baseUrl ? (
-                    <CopyPublicRequestUrlButton
-                      url={buildPublicIntakeUrlForForm({
-                        baseUrl,
-                        companySlug: organizationSlug,
-                        formSlug: formDefinition.slug,
-                        isDefault: formDefinition.isDefault,
-                      })}
-                    />
-                  ) : null}
-                  {formDefinition.isDefault ? (
-                    <p className="text-[0.65rem] leading-relaxed text-foreground-muted">
-                      This is your main customer link at /request/{organizationSlug}. Share it on
-                      your website and marketing.
-                    </p>
-                  ) : (
-                    <p className="text-[0.65rem] leading-relaxed text-foreground-muted">
-                      Specialized form link. Use for campaigns, trade pages, or distinct service
-                      lines.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : null}
-
-            <input type="hidden" name="schema" value={JSON.stringify(schema)} />
-          </form>
+              </button>
+            ) : null}
+          </div>
+          <IntakeFormPreviewPanel
+            formDefinition={previewFormDefinition}
+            organizationDisplayName={organizationDisplayName}
+            requestTypeOptions={requestTypes.filter((row) => row.value && row.label)}
+            submitButtonLabel={publicPageCopy?.submitButtonText ?? "Submit Request"}
+            editorContext={editorContext}
+            formTitle={publicPageCopy?.formTitle}
+            introMessage={publicPageCopy?.introMessage}
+            emergencyWarningText={publicPageCopy?.emergencyWarningText}
+            controlledStep={previewStep}
+            onPreviewStepSelect={handlePreviewStepSelect}
+            previewBrowseMode
+          />
         </div>
       </div>
+
+      <Dialog open={formSettingsOpen} onOpenChange={setFormSettingsOpen} className="max-w-lg">
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{showPublicFormToggles ? "Link settings" : "Form settings"}</DialogTitle>
+            <DialogDescription>
+              {showPublicFormToggles
+                ? "Name and visibility for this specialized customer form."
+                : "Internal name for this intake form."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <label className="block">
+              <span className={fieldLabelClass}>Form name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={controlClass}
+              />
+            </label>
+            {showPublicFormToggles ? (
+              <div className="space-y-4">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="size-4 rounded border-border text-accent focus:ring-accent"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Public customer form</p>
+                    <p className="text-[0.65rem] text-foreground-subtle">
+                      Accessible via a public customer link
+                    </p>
+                  </div>
+                </label>
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isDefault}
+                    onChange={(e) => setIsDefault(e.target.checked)}
+                    className="size-4 rounded border-border text-accent focus:ring-accent"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Default customer form</p>
+                    <p className="text-[0.65rem] text-foreground-subtle">
+                      Primary form for your main customer request link
+                    </p>
+                  </div>
+                </label>
+              </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-foreground-muted">
+                {isOfficeIntake
+                  ? "Internal intake is staff-only and always uses your default internal form at /leads/new."
+                  : "This is your main customer intake form and remains the default request link."}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {showRequestTypeEditor ? (
+        <Dialog open={serviceTypesOpen} onOpenChange={setServiceTypesOpen} className="max-w-2xl">
+          <DialogContent className="max-h-[min(32rem,calc(100vh-6rem))] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {isOfficeIntake ? "Staff request types" : "Service types customers can pick"}
+              </DialogTitle>
+              <DialogDescription>
+                {isOfficeIntake
+                  ? "Choices staff see on /leads/new when logging a lead."
+                  : "Customer-facing choices for this form. Save changes when you are done editing."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {requestTypes.map((row, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col gap-3 rounded-lg border border-border bg-foreground/[0.02] p-3 sm:flex-row sm:items-end"
+                >
+                  <label className="block flex-1">
+                    <span className={fieldLabelClass}>Internal key</span>
+                    <input
+                      type="text"
+                      value={row.value}
+                      onChange={(e) => updateRequestType(index, { value: e.target.value })}
+                      maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeValue}
+                      autoComplete="off"
+                      className={controlClass}
+                      placeholder="e.g. roofing"
+                    />
+                  </label>
+                  <label className="block flex-[2]">
+                    <span className={fieldLabelClass}>Customer label</span>
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => updateRequestType(index, { label: e.target.value })}
+                      maxLength={PUBLIC_REQUEST_SETTINGS_LIMITS.requestTypeLabel}
+                      autoComplete="off"
+                      className={controlClass}
+                      placeholder="e.g. Roofing repair"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={`${secondaryButtonClass} shrink-0`}
+                    onClick={() => removeRequestType(index)}
+                    disabled={requestTypes.length <= 1}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className={`${secondaryButtonClass} mt-3`} onClick={addRequestType}>
+              Add service type
+            </button>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {showPublicLinkEditor ? (
+        <Dialog open={publicLinkOpen} onOpenChange={setPublicLinkOpen} className="max-w-lg">
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Public link</DialogTitle>
+              <DialogDescription>
+                Share this URL with customers to submit requests through this form.
+              </DialogDescription>
+            </DialogHeader>
+            {!organizationSlug ? (
+              <p className="text-xs leading-relaxed text-foreground-muted">
+                Configure a{" "}
+                <Link href="/settings/organization" className="text-accent hover:underline">
+                  company slug
+                </Link>{" "}
+                to enable public links for your forms.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-sm">
+                  <p className="mb-1 text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
+                    {baseUrl ? "Full URL" : "Path"}
+                  </p>
+                  <p className="break-all font-mono text-xs text-foreground">{publicIntakeUrl}</p>
+                </div>
+                {baseUrl && publicIntakeUrl ? (
+                  <CopyPublicRequestUrlButton url={publicIntakeUrl} />
+                ) : null}
+                {formDefinition.isDefault ? (
+                  <p className="text-[0.65rem] leading-relaxed text-foreground-muted">
+                    This is your main customer link at /request/{organizationSlug}. Share it on
+                    your website and marketing.
+                  </p>
+                ) : (
+                  <p className="text-[0.65rem] leading-relaxed text-foreground-muted">
+                    Specialized form link. Use for campaigns, trade pages, or distinct service
+                    lines.
+                  </p>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
