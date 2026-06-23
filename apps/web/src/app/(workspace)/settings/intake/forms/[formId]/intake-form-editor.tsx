@@ -22,7 +22,7 @@ import {
   type IntakeEditorContext,
 } from "@/lib/intake/intake-editor-context";
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
-import { PageHeader } from "@/components/ui/page-header";
+import { PageBackLink } from "@/components/ui/page-back-link";
 import {
   Dialog,
   DialogContent,
@@ -34,8 +34,8 @@ import type { CSSProperties } from "react";
 
 const SAVE_FORM_ID = "intake-form-editor-save";
 const PROGRAMMATIC_SCROLL_MS = 400;
-/** Shared max height for left/right editor panes at xl+. */
-const EDITOR_PANE_MAX_HEIGHT = "calc(100vh - 10rem)";
+/** Bounded editor shell height at xl+ (workspace padding, intake nav, toolbar). */
+const EDITOR_SHELL_HEIGHT = "calc(100dvh - 10rem)";
 const fieldLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
 const controlClass =
@@ -243,11 +243,15 @@ export function IntakeFormEditor({
   );
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title={labels.title}
-        description={labels.description}
-        actions={
+    <div
+      className="flex flex-col gap-8 xl:min-h-0 xl:gap-6 xl:overflow-hidden xl:h-[var(--editor-shell-height)]"
+      style={{ "--editor-shell-height": EDITOR_SHELL_HEIGHT } as CSSProperties}
+    >
+      <div className="shrink-0 space-y-4">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {labels.showBackLink ? (
+            <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
+          ) : null}
           <button
             type="submit"
             form={SAVE_FORM_ID}
@@ -261,56 +265,46 @@ export function IntakeFormEditor({
             )}
             Save changes
           </button>
-        }
-      />
+        </div>
 
-      {state.error ? (
-        <p
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
-          role="alert"
-        >
-          {state.error}
-        </p>
-      ) : null}
+        {state.error ? (
+          <p
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger"
+            role="alert"
+          >
+            {state.error}
+          </p>
+        ) : null}
 
-      <form id={SAVE_FORM_ID} action={formAction} className="hidden" aria-hidden tabIndex={-1}>
-        <input type="hidden" name="name" value={name} readOnly />
-        <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
-        <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
-        {showPublicFormToggles ? (
-          <>
-            {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
-            {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
-          </>
-        ) : (
-          <>
-            <input
-              type="hidden"
-              name="isPublic"
-              value={isOfficeIntake ? "off" : "on"}
-              readOnly
-            />
-            <input type="hidden" name="isDefault" value="on" readOnly />
-          </>
-        )}
-      </form>
+        <form id={SAVE_FORM_ID} action={formAction} className="hidden" aria-hidden tabIndex={-1}>
+          <input type="hidden" name="name" value={name} readOnly />
+          <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
+          <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
+          {showPublicFormToggles ? (
+            <>
+              {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
+              {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
+            </>
+          ) : (
+            <>
+              <input
+                type="hidden"
+                name="isPublic"
+                value={isOfficeIntake ? "off" : "on"}
+                readOnly
+              />
+              <input type="hidden" name="isDefault" value="on" readOnly />
+            </>
+          )}
+        </form>
+      </div>
 
-      <div
-        className="grid gap-8 xl:grid-cols-2 xl:items-start"
-        style={{ "--editor-pane-max-height": EDITOR_PANE_MAX_HEIGHT } as CSSProperties}
-      >
+      <div className="grid min-h-0 gap-8 xl:grid-cols-2 xl:flex-1 xl:items-stretch xl:gap-6">
         <div
           ref={leftScrollRef}
-          className="space-y-6 pr-1 xl:max-h-[var(--editor-pane-max-height)] xl:overflow-y-auto"
+          className="space-y-6 pr-1 xl:h-full xl:min-h-0 xl:overflow-y-auto"
         >
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-foreground">
-              {labels.structureLabel}
-            </h2>
-            <p className="mb-6 text-xs text-foreground-muted">
-              Add construction intake building blocks by section.
-            </p>
-
             <div className="space-y-6">
               {schema.sections?.map((section: IntakeFormSection, sIdx: number) => (
                 <div
@@ -427,7 +421,7 @@ export function IntakeFormEditor({
           </div>
         </div>
 
-        <div>
+        <div className="xl:h-full xl:min-h-0 xl:overflow-y-auto">
           <div className="mb-3 flex flex-wrap gap-2">
             <button
               type="button"

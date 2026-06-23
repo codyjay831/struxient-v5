@@ -11,7 +11,6 @@ import {
 } from "@/lib/intake/default-office-intake-form";
 import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
 import {
-  intakeEditorContextLabels,
   resolveIntakeEditorContext,
 } from "@/lib/intake/intake-editor-context";
 import {
@@ -19,7 +18,6 @@ import {
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
 } from "@/lib/public-request-settings-defaults";
 import { IntakeFormEditor } from "../forms/[formId]/intake-form-editor";
-import { PageBackLink } from "@/components/ui/page-back-link";
 
 export async function IntakeFormEditorPage({ formId }: { formId: string }) {
   const ctx = await getRequestContextOrThrow();
@@ -58,44 +56,36 @@ export async function IntakeFormEditorPage({ formId }: { formId: string }) {
     : (parseOfficeRequestTypeOptionsFromTriageRules(form.triageRules) ??
       DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS);
   const editorContext = resolveIntakeEditorContext(form);
-  const labels = intakeEditorContextLabels(editorContext);
 
   return (
-    <>
-      {labels.showBackLink ? (
-        <div className="mb-6">
-          <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
-        </div>
-      ) : null}
-      <IntakeFormEditor
-        formDefinition={{
-          id: form.id,
-          name: form.name,
-          organizationId: form.organizationId,
-          slug: form.slug,
-          channel: form.channel,
-          isPublic: form.isPublic,
-          isDefault: form.isDefault,
-          schema: editorSchema,
-        }}
-        editorContext={editorContext}
-        isPublicIntakeForm={isPublicIntakeForm}
-        initialRequestTypeOptions={initialRequestTypeOptions}
-        organizationSlug={organization?.slug ?? null}
-        organizationDisplayName={organization?.name ?? "Your company"}
-        baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
-        publicPageCopy={
-          isPublicIntakeForm
-            ? {
-                formTitle: publicSettings?.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-                introMessage: publicSettings?.introMessage ?? null,
-                emergencyWarningText: publicSettings?.emergencyWarningText ?? null,
-                submitButtonText:
-                  publicSettings?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-              }
-            : undefined
-        }
-      />
-    </>
+    <IntakeFormEditor
+      formDefinition={{
+        id: form.id,
+        name: form.name,
+        organizationId: form.organizationId,
+        slug: form.slug,
+        channel: form.channel,
+        isPublic: form.isPublic,
+        isDefault: form.isDefault,
+        schema: editorSchema,
+      }}
+      editorContext={editorContext}
+      isPublicIntakeForm={isPublicIntakeForm}
+      initialRequestTypeOptions={initialRequestTypeOptions}
+      organizationSlug={organization?.slug ?? null}
+      organizationDisplayName={organization?.name ?? "Your company"}
+      baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+      publicPageCopy={
+        isPublicIntakeForm
+          ? {
+              formTitle: publicSettings?.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+              introMessage: publicSettings?.introMessage ?? null,
+              emergencyWarningText: publicSettings?.emergencyWarningText ?? null,
+              submitButtonText:
+                publicSettings?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+            }
+          : undefined
+      }
+    />
   );
 }
