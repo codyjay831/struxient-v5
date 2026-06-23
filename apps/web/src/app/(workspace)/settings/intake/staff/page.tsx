@@ -4,6 +4,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { getOfficeIntakeFormBundle } from "@/lib/intake/load-office-intake-form";
 import { isSyntheticDefaultOfficeIntakeFormDefinitionId } from "@/lib/intake/default-office-intake-form";
 import { IntakeFormEditorPage } from "../_lib/intake-form-editor-page";
+import { STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID } from "../intake-settings-layout-client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,9 @@ export default async function StaffIntakeFieldsPage() {
     return (
       <>
         <PageHeader
+          variant="settingsCompact"
           title="Staff intake"
-          description="Internal form for phone, walk-in, email, and referral leads."
+          description="Internal form for phone, walk-in, and referral leads."
         />
         <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
           <p className="text-sm text-foreground-muted">
@@ -33,5 +35,23 @@ export default async function StaffIntakeFieldsPage() {
     );
   }
 
-  return <IntakeFormEditorPage formId={form.id} />;
+  return (
+    <>
+      <PageHeader
+        variant="settingsCompact"
+        title="Staff intake"
+        description="Internal form for phone, walk-in, and referral leads."
+        actions={
+          <div
+            id={STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID}
+            className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+          />
+        }
+      />
+      <IntakeFormEditorPage
+        formId={form.id}
+        editorShellHeight="calc(100dvh - 12rem)"
+      />
+    </>
+  );
 }

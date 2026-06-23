@@ -20,6 +20,7 @@ export default function NewSpecializedIntakeFormPage() {
   return (
     <>
       <PageHeader
+        variant="settingsCompact"
         title="Create request link"
         description="Additional public link for a campaign, trade page, or service line."
         actions={
@@ -27,7 +28,7 @@ export default function NewSpecializedIntakeFormPage() {
         }
       />
 
-      <form action={formAction} className="space-y-8">
+      <form action={formAction} className="space-y-6">
         <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
           {state.error ? (
             <p

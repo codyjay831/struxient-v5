@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { CustomerIntakeSubnav } from "@/components/settings/customer-intake-subnav";
 
 export const INTAKE_EDITOR_TOOLBAR_PORTAL_ID = "intake-editor-toolbar";
+/** Staff intake tab: Save portals into the compact PageHeader actions row. */
+export const STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID = "staff-intake-header-actions";
 
 export function IntakeSettingsLayoutClient({ children }: { children: ReactNode }) {
   return (

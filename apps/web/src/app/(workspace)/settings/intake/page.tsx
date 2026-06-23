@@ -74,8 +74,9 @@ export default async function IntakeSettingsHubPage() {
   return (
     <>
       <PageHeader
+        variant="settingsCompact"
         title="Customer intake"
-        description="Share your customer link, then tune the page and questions when you're ready."
+        description="Share your link, then tune availability and setup when you're ready."
         actions={<PublicRequestEnabledToggle initialEnabled={publicLive} compact />}
       />
 

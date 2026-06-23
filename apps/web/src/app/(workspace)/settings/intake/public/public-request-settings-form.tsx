@@ -35,7 +35,7 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
   const [submitButtonText, setSubmitButtonText] = useState(initial.submitButtonText);
 
   return (
-    <form action={formAction} className="space-y-8">
+    <form action={formAction} className="space-y-6">
       <input
         type="hidden"
         name="instantQuoteEnabled"
@@ -49,8 +49,9 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
       <input type="hidden" name="offerings" value={initial.offerings.join(", ")} />
 
       <PageHeader
+        variant="settingsCompact"
         title="Customer request page"
-        description="Control whether your public request link is live and how the customer-facing page reads."
+        description="Public page copy and whether the request link is live."
         actions={
           <button type="submit" className={primaryButtonClass} disabled={isPending}>
             {isPending ? (
@@ -58,7 +59,7 @@ export function PublicRequestSettingsForm({ initial }: { initial: PublicRequestS
             ) : (
               <Save className="mr-2 size-4" />
             )}
-            Save page settings
+            Save changes
           </button>
         }
       />

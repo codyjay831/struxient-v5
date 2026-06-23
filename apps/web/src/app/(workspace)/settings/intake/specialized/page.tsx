@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Plus, ChevronRight } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
+import { PageHeader } from "@/components/ui/page-header";
 import { PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 import { INTAKE_SPECIALIZED_NEW_PATH, intakeFormEditorPath } from "@/lib/intake-settings-hierarchy";
 import { ArchiveIntakeFormButton } from "@/components/settings/archive-intake-form-button";
@@ -48,23 +49,20 @@ export default async function SpecializedIntakeFormsPage() {
 
   return (
     <>
-      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Customer request links
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-muted">
-            Primary link plus optional campaign or service-line URLs.
-          </p>
-        </div>
-        <Link
-          href={INTAKE_SPECIALIZED_NEW_PATH}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
-        >
-          <Plus className="mr-2 size-4" />
-          Create request link
-        </Link>
-      </header>
+      <PageHeader
+        variant="settingsCompact"
+        title="Customer request links"
+        description="Primary link plus optional campaign or service-line URLs."
+        actions={
+          <Link
+            href={INTAKE_SPECIALIZED_NEW_PATH}
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
+          >
+            <Plus className="mr-2 size-4" />
+            Create request link
+          </Link>
+        }
+      />
 
       <div className="space-y-6">
         <div className="space-y-3">

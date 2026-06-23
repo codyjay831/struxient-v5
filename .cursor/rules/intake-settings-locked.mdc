@@ -1,0 +1,34 @@
+---
+description: Intake settings UI is locked — no AI edits without explicit user approval
+globs: apps/web/src/app/(workspace)/settings/intake/**/*
+alwaysApply: false
+---
+
+# Intake settings locked
+
+Customer intake **settings surfaces are locked** after the request-links cleanup and compact-hero pass (June 2026). Do **not** change this area unless the user explicitly asks for intake settings work in the current task.
+
+## Protected scope
+
+Treat as locked when the task touches:
+
+- `apps/web/src/app/(workspace)/settings/intake/**`
+- Intake settings components: `customer-intake-subnav`, `intake-overview-setup-checklist`, `intake-form-preview-panel`, `intake-flow-map`, `archive-intake-form-button`, `restore-intake-form-button`, `public-request-enabled-toggle`, `public-page-copy-preview`
+- `apps/web/src/lib/intake-settings-hierarchy.ts`
+- Intake settings server actions: `intake-form-actions.ts`, `public-request-settings-actions.ts`
+
+Canon helpers under `apps/web/src/lib/intake/` (provisioning, archive, slug reuse, public URL) may still be edited for **non-settings** bugs (e.g. public `/request` route) if the user asks — but do not reshape settings IA or UX without permission.
+
+## Required process
+
+1. **Stop** if the user did not explicitly request intake settings changes.
+2. Do not drive refactors, new tabs, route renames, hero/layout experiments, or product model changes (Primary vs additional links, archive/restore, signup provisioning) on your own initiative.
+3. If the user reports a **specific bug** in intake settings, fix only that bug — minimal diff, no drive-by polish.
+4. If intake settings changes seem necessary, **state what you would change and wait for approval** before editing.
+
+## Recently stabilized (do not churn)
+
+- One Primary link at signup; additional links archivable with slug reuse
+- `settingsCompact` hero on Overview, Customer request page, Staff intake, Customer request links
+- Staff Save in hero actions; customer form editors use subnav toolbar portal
+- Collapsible Archived section on Customer request links list

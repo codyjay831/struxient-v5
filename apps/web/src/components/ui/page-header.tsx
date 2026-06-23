@@ -4,10 +4,12 @@ import { MetaLabel } from "@/components/ui/meta-label";
 /**
  * compact   – top-level operational surfaces (Schedule, Jobs, Customers…).
  *             One concise h1, actions on the same row, no border, tight spacing.
+ * settingsCompact – nested settings tabs (e.g. Customer intake subnav).
+ *             text-lg title, optional one-line description, mb-4, no border.
  * instructional – settings, onboarding, and configuration pages that need
  *             a brief explanation or decision context.
  */
-export type PageHeaderVariant = "compact" | "instructional";
+export type PageHeaderVariant = "compact" | "settingsCompact" | "instructional";
 
 export type PageHeaderProps = {
   variant?: PageHeaderVariant;
@@ -32,6 +34,22 @@ export function PageHeader({
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {title}
           </h1>
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
+      </header>
+    );
+  }
+
+  if (variant === "settingsCompact") {
+    return (
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">{title}</h1>
+          {description ? (
+            <p className="mt-0.5 text-sm text-foreground-muted">{description}</p>
+          ) : null}
         </div>
         {actions ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>

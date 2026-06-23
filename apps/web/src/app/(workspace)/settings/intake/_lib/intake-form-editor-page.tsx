@@ -19,7 +19,13 @@ import {
 } from "@/lib/public-request-settings-defaults";
 import { IntakeFormEditor } from "../forms/[formId]/intake-form-editor";
 
-export async function IntakeFormEditorPage({ formId }: { formId: string }) {
+export async function IntakeFormEditorPage({
+  formId,
+  editorShellHeight,
+}: {
+  formId: string;
+  editorShellHeight?: string;
+}) {
   const ctx = await getRequestContextOrThrow();
 
   const [form, organization, publicSettings] = await Promise.all([
@@ -86,6 +92,7 @@ export async function IntakeFormEditorPage({ formId }: { formId: string }) {
             }
           : undefined
       }
+      editorShellHeight={editorShellHeight}
     />
   );
 }

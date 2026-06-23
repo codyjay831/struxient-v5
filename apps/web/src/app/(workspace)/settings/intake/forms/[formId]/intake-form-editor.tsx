@@ -22,7 +22,7 @@ import {
   intakeEditorContextLabels,
   type IntakeEditorContext,
 } from "@/lib/intake/intake-editor-context";
-import { INTAKE_EDITOR_TOOLBAR_PORTAL_ID } from "../../intake-settings-layout-client";
+import { INTAKE_EDITOR_TOOLBAR_PORTAL_ID, STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID } from "../../intake-settings-layout-client";
 import { IntakeFormPreviewPanel } from "@/components/settings/intake-form-preview-panel";
 import { PageBackLink } from "@/components/ui/page-back-link";
 import {
@@ -73,6 +73,7 @@ export function IntakeFormEditor({
   organizationDisplayName,
   baseUrl,
   publicPageCopy,
+  editorShellHeight,
 }: {
   formDefinition: IntakeFormEditorDefinition;
   editorContext: IntakeEditorContext;
@@ -87,6 +88,7 @@ export function IntakeFormEditor({
     emergencyWarningText: string | null;
     submitButtonText: string;
   };
+  editorShellHeight?: string;
 }) {
   const labels = intakeEditorContextLabels(editorContext);
   const isOfficeIntake = editorContext === "defaultInternalIntake";
@@ -181,9 +183,14 @@ export function IntakeFormEditor({
   const [toolbarPortal, setToolbarPortal] = useState<HTMLElement | null>(null);
   const showPublicLinkEditor = isPublic && editorContext !== "defaultInternalIntake";
 
+  const toolbarPortalId =
+    editorContext === "defaultInternalIntake"
+      ? STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID
+      : INTAKE_EDITOR_TOOLBAR_PORTAL_ID;
+
   useEffect(() => {
-    setToolbarPortal(document.getElementById(INTAKE_EDITOR_TOOLBAR_PORTAL_ID));
-  }, []);
+    setToolbarPortal(document.getElementById(toolbarPortalId));
+  }, [toolbarPortalId]);
 
   const publicIntakeUrl =
     organizationSlug &&
@@ -272,7 +279,11 @@ export function IntakeFormEditor({
   return (
     <div
       className="flex flex-col gap-4 xl:min-h-0 xl:gap-4 xl:overflow-hidden xl:h-[var(--editor-shell-height)]"
-      style={{ "--editor-shell-height": EDITOR_SHELL_HEIGHT } as CSSProperties}
+      style={
+        {
+          "--editor-shell-height": editorShellHeight ?? EDITOR_SHELL_HEIGHT,
+        } as CSSProperties
+      }
     >
       {toolbarPortal ? createPortal(toolbar, toolbarPortal) : null}
 
