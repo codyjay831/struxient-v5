@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { DailyJobLogStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { generateDailyJobLogDraft } from "@/lib/daily-job-log-helper";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
+import { canWriteDailyLogInternalNotes } from "@/lib/authz/daily-log-visibility";
 
 export type CreateOrUpdateDailyJobLogDraftInput = {
   jobId: string;
@@ -13,111 +15,161 @@ export type CreateOrUpdateDailyJobLogDraftInput = {
   internalNotes?: string;
 };
 
-export async function createOrUpdateDailyJobLogDraftAction(input: CreateOrUpdateDailyJobLogDraftInput) {
-  const session = await requireMutableSession();
+export type DailyLogActionState = {
+  error?: string;
+  success?: boolean;
+  logId?: string;
+};
+
+export async function createOrUpdateDailyJobLogDraftAction(
+  input: CreateOrUpdateDailyJobLogDraftInput,
+): Promise<DailyLogActionState> {
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const includesInternalNotes = Boolean(input.internalNotes?.trim());
 
-  // Verify job belongs to organization
-  const job = await db.job.findFirst({
-    where: { id: input.jobId, organizationId },
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.DAILY_LOG_DRAFT_UPSERT,
+    resourceType: "job",
+    resourceId: input.jobId.trim(),
+    metadata: { includesInternalNotes },
   });
-
-  if (!job) {
-    throw new Error("Job not found or access denied.");
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
 
-  // Normalize logDate to midnight
-  const logDate = new Date(input.logDate);
-  logDate.setHours(0, 0, 0, 0);
-
-  let summary = input.summary;
-  if (!summary) {
-    summary = await generateDailyJobLogDraft({
-      organizationId,
-      jobId: input.jobId,
-      logDate,
+  try {
+    const job = await db.job.findFirst({
+      where: { id: input.jobId.trim(), organizationId },
     });
-  }
 
-  const log = await db.dailyJobLog.upsert({
-    where: {
-      jobId_logDate: {
-        jobId: input.jobId,
+    if (!job) {
+      return { error: "Job not found or access denied." };
+    }
+
+    const logDate = new Date(input.logDate);
+    logDate.setHours(0, 0, 0, 0);
+
+    let summary = input.summary;
+    if (!summary) {
+      summary = await generateDailyJobLogDraft({
+        organizationId,
+        jobId: input.jobId.trim(),
         logDate,
+      });
+    }
+
+    const writeInternalNotes = canWriteDailyLogInternalNotes(session.role);
+
+    const log = await db.dailyJobLog.upsert({
+      where: {
+        jobId_logDate: {
+          jobId: input.jobId.trim(),
+          logDate,
+        },
       },
-    },
-    update: {
-      summary,
-      internalNotes: input.internalNotes,
-      // Only allow editing if not VOID. 
-      // If REVIEWED, editing reverts it to DRAFT or we could keep it REVIEWED.
-      // Canon says "staff review/edit", so let's allow editing but keep status if already REVIEWED?
-      // Actually, usually editing a reviewed log should probably require re-review.
-      status: {
-        set: DailyJobLogStatus.DRAFT
-      }
-    },
-    create: {
-      organizationId,
-      jobId: input.jobId,
-      logDate,
-      summary,
-      internalNotes: input.internalNotes,
-      status: DailyJobLogStatus.DRAFT,
-    },
-  });
+      update: {
+        summary,
+        ...(writeInternalNotes ? { internalNotes: input.internalNotes } : {}),
+        status: {
+          set: DailyJobLogStatus.DRAFT,
+        },
+      },
+      create: {
+        organizationId,
+        jobId: input.jobId.trim(),
+        logDate,
+        summary,
+        internalNotes: writeInternalNotes ? input.internalNotes : null,
+        status: DailyJobLogStatus.DRAFT,
+      },
+    });
 
-  revalidatePath(`/jobs/${input.jobId}`);
-  revalidatePath("/workstation");
-  return { success: true, logId: log.id };
+    revalidatePath(`/jobs/${input.jobId.trim()}`);
+    revalidatePath("/workstation");
+    return { success: true, logId: log.id };
+  } catch (e) {
+    console.error("Failed to save daily log draft", e);
+    return { error: "Failed to save daily log. Please try again." };
+  }
 }
 
-export async function markDailyJobLogReviewedAction(logId: string) {
-  const session = await requireMutableSession();
+export async function markDailyJobLogReviewedAction(
+  logId: string,
+): Promise<DailyLogActionState> {
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
-  const log = await db.dailyJobLog.findFirst({
-    where: { id: logId, organizationId },
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.DAILY_LOG_REVIEW,
+    resourceType: "dailyJobLog",
+    resourceId: logId.trim(),
   });
-
-  if (!log) {
-    throw new Error("Daily log not found or access denied.");
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
 
-  await db.dailyJobLog.update({
-    where: { id: logId },
-    data: {
-      status: DailyJobLogStatus.REVIEWED,
-      reviewedByUserId: session.userId,
-      reviewedAt: new Date(),
-    },
-  });
+  try {
+    const log = await db.dailyJobLog.findFirst({
+      where: { id: logId.trim(), organizationId },
+    });
 
-  revalidatePath(`/jobs/${log.jobId}`);
-  revalidatePath("/workstation");
-  return { success: true };
+    if (!log) {
+      return { error: "Daily log not found or access denied." };
+    }
+
+    await db.dailyJobLog.update({
+      where: { id: logId.trim() },
+      data: {
+        status: DailyJobLogStatus.REVIEWED,
+        reviewedByUserId: session.userId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    revalidatePath(`/jobs/${log.jobId}`);
+    revalidatePath("/workstation");
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to mark daily log reviewed", e);
+    return { error: "Failed to mark daily log reviewed. Please try again." };
+  }
 }
 
-export async function voidDailyJobLogAction(logId: string) {
-  const session = await requireMutableSession();
+export async function voidDailyJobLogAction(logId: string): Promise<DailyLogActionState> {
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
-  const log = await db.dailyJobLog.findFirst({
-    where: { id: logId, organizationId },
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.DAILY_LOG_VOID,
+    resourceType: "dailyJobLog",
+    resourceId: logId.trim(),
   });
-
-  if (!log) {
-    throw new Error("Daily log not found or access denied.");
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
 
-  await db.dailyJobLog.update({
-    where: { id: logId },
-    data: {
-      status: DailyJobLogStatus.VOID,
-    },
-  });
+  try {
+    const log = await db.dailyJobLog.findFirst({
+      where: { id: logId.trim(), organizationId },
+    });
 
-  revalidatePath(`/jobs/${log.jobId}`);
-  revalidatePath("/workstation");
-  return { success: true };
+    if (!log) {
+      return { error: "Daily log not found or access denied." };
+    }
+
+    await db.dailyJobLog.update({
+      where: { id: logId.trim() },
+      data: {
+        status: DailyJobLogStatus.VOID,
+      },
+    });
+
+    revalidatePath(`/jobs/${log.jobId}`);
+    revalidatePath("/workstation");
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to void daily log", e);
+    return { error: "Failed to void daily log. Please try again." };
+  }
 }

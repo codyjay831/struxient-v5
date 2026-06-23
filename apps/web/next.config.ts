@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   experimental: {
     authInterrupts: true,
+    serverActions: {
+      // Match attachment-actions.ts 10MB file cap (local direct-upload path).
+      bodySizeLimit: "10mb",
+    },
   },
   turbopack: {
     root: resolvedRoot,

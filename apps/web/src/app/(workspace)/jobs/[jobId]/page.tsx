@@ -17,7 +17,7 @@ import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import { JobJobsitePanel } from "@/components/jobs/job-jobsite-panel";
 import { JobIssueManager } from "@/components/jobs/job-issue-manager";
-import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
+import { JobPaymentManager, PaymentExecutionHoldNotice } from "@/components/jobs/job-payment-manager";
 import { JobActivityFeed } from "@/components/jobs/job-activity-feed";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
 import { JobScheduleEventsPanel } from "@/components/jobs/job-schedule-events-panel";
@@ -30,6 +30,21 @@ import {
   loadPendingScheduleCleanupEvents,
 } from "@/lib/scheduling/job-cancel-cleanup";
 import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
+import { canReadCustomerCoordination } from "@/lib/customer-portal/authorize";
+import {
+  canReadPaymentDetails,
+  redactPaymentActivityForRole,
+  sanitizeExecutionHealthForRole,
+  sanitizeTaskPaymentHoldForRole,
+} from "@/lib/authz/payment-visibility";
+import {
+  canManageDailyLogCoordination,
+  canReadDailyLogInternalNotes,
+  canWriteDailyLogInternalNotes,
+  dailyJobLogSelectForRole,
+  redactDailyLogsForRole,
+} from "@/lib/authz/daily-log-visibility";
+import { JobArchiveButton } from "@/components/jobs/job-archive-button";
 import { JobEventButton } from "@/components/jobs/job-event-button";
 import { JobIssueSeverity, JobIssueStatus, JobStatus } from "@prisma/client";
 import { getLiveSignals } from "@/lib/signal-bus";
@@ -82,7 +97,29 @@ export default async function JobDetailPage({
 
   const ctx = await getRequestContextOrThrow();
   const jobVisibilityWhere = getJobVisibilityWhere(ctx.role, ctx.userId);
+  const paymentDetailsReadable = canReadPaymentDetails(ctx.role);
+  const customerCoordinationReadable = canReadCustomerCoordination(ctx.role);
   const createIssueIntent = parseJobIssueCreateIntent(parsedSearchParams);
+
+  const paymentRequirementSelect = {
+    id: true,
+    title: true,
+    status: true,
+    requiredBeforeStageId: true,
+    sourcePaymentScheduleItemId: true,
+    requiredBeforeStage: { select: { title: true, sortOrder: true } },
+    paidAt: true,
+    waivedAt: true,
+    canceledAt: true,
+    ...(paymentDetailsReadable
+      ? {
+          amountCents: true,
+          notes: true,
+          paymentUrl: true,
+          paymentUrlLabel: true,
+        }
+      : {}),
+  } as const;
 
   const [job, liveSignals, portalManagement] = await Promise.all([
     db.job.findFirst({
@@ -293,21 +330,7 @@ export default async function JobDetailPage({
         },
         paymentRequirements: {
           orderBy: [{ createdAt: "desc" }],
-          select: {
-            id: true,
-            title: true,
-            amountCents: true,
-            status: true,
-            notes: true,
-            paymentUrl: true,
-            paymentUrlLabel: true,
-            requiredBeforeStageId: true,
-            sourcePaymentScheduleItemId: true,
-            requiredBeforeStage: { select: { title: true, sortOrder: true } },
-            paidAt: true,
-            waivedAt: true,
-            canceledAt: true,
-          },
+          select: paymentRequirementSelect,
         },
         activities: {
           orderBy: [{ createdAt: "desc" }],
@@ -325,20 +348,12 @@ export default async function JobDetailPage({
         dailyJobLogs: {
           orderBy: [{ logDate: "desc" }],
           take: 30,
-          select: {
-            id: true,
-            logDate: true,
-            summary: true,
-            internalNotes: true,
-            status: true,
-            reviewedAt: true,
-            reviewedByUser: { select: { name: true, email: true } },
-          },
+          select: dailyJobLogSelectForRole(ctx.role),
         },
       },
     }),
     getLiveSignals(id),
-    loadJobPortalManagementData(id),
+    customerCoordinationReadable ? loadJobPortalManagementData(id) : Promise.resolve(null),
   ]);
 
   if (!job) {
@@ -420,46 +435,49 @@ export default async function JobDetailPage({
       : [];
   const scheduleCleanupReviewItems = buildScheduleCleanupReviewItems(pendingCleanupEvents);
 
-  const executionHealth = deriveJobExecutionHealth(
-    buildJobExecutionContextFromJob(
-      {
-        id: job.id,
-        status: job.status,
-        stages: job.stages.map((s) => ({
-          id: s.id,
-          title: s.title,
-          sortOrder: s.sortOrder,
-          stageId: s.stageId,
-          issues: s.issues,
-          tasks: s.tasks.map((t) => ({
-            id: t.id,
-            status: t.status,
-            completedAt: t.completedAt,
-            completionNote: t.completionNote,
-            completionRequirementsJson: t.completionRequirementsJson,
-            attachments: t.attachments,
-            requiresSignals: t.requiresSignals,
-            recoveryFlowId: t.recoveryFlowId,
-            recoveryFlow: t.recoveryFlow,
-            sortOrder: t.sortOrder,
-            issues: t.issues.map((i) => ({
-              id: i.id,
-              status: i.status,
-              severity: i.severity,
+  const executionHealth = sanitizeExecutionHealthForRole(
+    deriveJobExecutionHealth(
+      buildJobExecutionContextFromJob(
+        {
+          id: job.id,
+          status: job.status,
+          stages: job.stages.map((s) => ({
+            id: s.id,
+            title: s.title,
+            sortOrder: s.sortOrder,
+            stageId: s.stageId,
+            issues: s.issues,
+            tasks: s.tasks.map((t) => ({
+              id: t.id,
+              status: t.status,
+              completedAt: t.completedAt,
+              completionNote: t.completionNote,
+              completionRequirementsJson: t.completionRequirementsJson,
+              attachments: t.attachments,
+              requiresSignals: t.requiresSignals,
+              recoveryFlowId: t.recoveryFlowId,
+              recoveryFlow: t.recoveryFlow,
+              sortOrder: t.sortOrder,
+              issues: t.issues.map((i) => ({
+                id: i.id,
+                status: i.status,
+                severity: i.severity,
+              })),
             })),
           })),
-        })),
-        issues: job.issues.map((i) => ({
-          id: i.id,
-          title: i.title,
-          status: i.status,
-          severity: i.severity,
-          recoveryFlow: i.recoveryFlow,
-        })),
-        paymentRequirements: paymentRequirementsWithAnchors,
-      },
-      liveSignals,
+          issues: job.issues.map((i) => ({
+            id: i.id,
+            title: i.title,
+            status: i.status,
+            severity: i.severity,
+            recoveryFlow: i.recoveryFlow,
+          })),
+          paymentRequirements: paymentRequirementsWithAnchors,
+        },
+        liveSignals,
+      ),
     ),
+    ctx.role,
   );
   const showExecutionHealthBanner = isExecutionHealthBannerEnabled();
   const executionView = parseJobExecutionViewMode(parsedSearchParams.executionView);
@@ -487,8 +505,14 @@ export default async function JobDetailPage({
   const paymentHoldByStageId = Object.fromEntries(
     job.stages.map((stage) => [
       stage.id,
-      deriveTaskPaymentHold(stage.id, paymentRequirementsWithAnchors, paymentDueContext),
+      sanitizeTaskPaymentHoldForRole(
+        deriveTaskPaymentHold(stage.id, paymentRequirementsWithAnchors, paymentDueContext),
+        ctx.role,
+      ),
     ]),
+  );
+  const redactedActivities = job.activities.map((activity) =>
+    redactPaymentActivityForRole(activity, ctx.role),
   );
 
   const jobContextLabel =
@@ -640,9 +664,11 @@ export default async function JobDetailPage({
           <a href="#job-issues" className={listLinkClass}>
             Create recovery work
           </a>
-          <a href="#job-payments" className={listLinkClass}>
-            Review payment impact
-          </a>
+          {paymentDetailsReadable ? (
+            <a href="#job-payments" className={listLinkClass}>
+              Review payment impact
+            </a>
+          ) : null}
           {safeQuote ? (
             <Link href={jobChangeOrdersPath(job.id)} className={listLinkClass}>
               Change scope (Change Order)
@@ -660,16 +686,22 @@ export default async function JobDetailPage({
         />
       </section>
 
-      <section id="job-payments">
-        <JobPaymentManager
-          jobId={job.id}
-          initialRequirements={paymentRequirementsWithAnchors}
-          stages={job.stages}
-          effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
-        />
-      </section>
+      {paymentDetailsReadable ? (
+        <section id="job-payments">
+          <JobPaymentManager
+            jobId={job.id}
+            initialRequirements={paymentRequirementsWithAnchors}
+            stages={job.stages}
+            effectivelyDueRequirementIds={effectivelyDueRequirements.map((r) => r.id)}
+          />
+        </section>
+      ) : effectivelyDueRequirements.length > 0 ? (
+        <div id="job-payments">
+          <PaymentExecutionHoldNotice />
+        </div>
+      ) : null}
 
-      {portalManagement ? (
+      {portalManagement && customerCoordinationReadable ? (
         <WorkspacePanel id="job-customer-portal" padding="compact" className="mb-6">
           <JobCustomerPortalPanel jobId={job.id} {...portalManagement} />
         </WorkspacePanel>
@@ -707,11 +739,14 @@ export default async function JobDetailPage({
         )}
       />
 
-      <JobActivityFeed activities={job.activities} />
+      <JobActivityFeed activities={redactedActivities} />
 
       <DailyJobLogManager
         jobId={job.id}
-        initialLogs={job.dailyJobLogs}
+        initialLogs={redactDailyLogsForRole(job.dailyJobLogs, ctx.role)}
+        canAccessInternalNotes={canReadDailyLogInternalNotes(ctx.role)}
+        canWriteInternalNotes={canWriteDailyLogInternalNotes(ctx.role)}
+        canManageDailyLogCoordination={canManageDailyLogCoordination(ctx.role)}
       />
 
       <section id="execution-stages">

@@ -45,6 +45,8 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 - **Customer/public links:** customer token channel is separate from staff membership authorization and must remain scoped, expiring, and revocable.
 - **Owner/Admin boundary:** Owner-only actions include owner transfer, org deletion, and final-owner destructive changes; Admin manages non-owner staff but cannot perform owner-only destructive actions.
 
+> **Runtime authorization detail:** Named staff actions, assignment-scoped execution vs office coordination, payment/portal read visibility, and quote Execution Builder boundaries are canon in [execution-aware-authorization-canon.md](./execution-aware-authorization-canon.md).
+
 ---
 
 ## 2. Lifecycle naming — leads, quotes, jobs

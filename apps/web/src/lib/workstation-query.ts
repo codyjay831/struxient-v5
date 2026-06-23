@@ -84,6 +84,7 @@ import {
   getTaskVisibilityWhere,
 } from "@/lib/authz/resource-access";
 import { canReadCommercial } from "@/lib/authz/capabilities";
+import { getWorkstationPaymentHoldLabel } from "@/lib/authz/payment-visibility";
 import {
   evaluateCustomerMatchGate,
   loadOrgCustomersForMatchGate,
@@ -1544,7 +1545,9 @@ export async function queryWorkstationWorkItems(
         actionLabel: taskRecoveryRoute?.actionLabel,
         actionIssueId: taskRecoveryRoute?.actionIssueId,
         actionTaskId: taskRecoveryRoute?.actionTaskId,
-        ...(paymentHold ? { paymentHoldLabel: paymentHold.title } : {}),
+        ...(paymentHold
+          ? { paymentHoldLabel: getWorkstationPaymentHoldLabel(paymentHold.title, role) }
+          : {}),
       });
     }
 
@@ -1701,7 +1704,8 @@ export async function queryWorkstationWorkItems(
     });
   }
 
-  // 5. Job Payment Requirements (effectively due — single emission path)
+  // 5. Job Payment Requirements (effectively due — office/commercial read only)
+  if (commercialReadable) {
   const paymentCandidates = await db.jobPaymentRequirement.findMany({
     where: {
       organizationId,
@@ -1817,6 +1821,7 @@ export async function queryWorkstationWorkItems(
       href: `/jobs/${payment.jobId}`,
       updatedAt: payment.updatedAt,
     });
+  }
   }
 
   // 6. Daily Job Logs (Needing Review)

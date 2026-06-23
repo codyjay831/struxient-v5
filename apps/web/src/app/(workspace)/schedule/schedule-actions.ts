@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 import {
   confirmLeadVisitRequest,
@@ -42,8 +42,8 @@ import {
   linkTasksToScheduleEvent,
   unlinkTasksFromScheduleEvent,
 } from "@/lib/scheduling/event-link-service";
-import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
 import { queryOrganizationSchedule, type ScheduleEvent } from "@/lib/schedule-query";
+import { authorizeStaffAction, STAFF_ACTIONS, type StaffAction } from "@/lib/authz/staff-actions";
 
 type ScheduleActionState = {
   error?: string;
@@ -60,18 +60,28 @@ export type LeadVisitScheduleContextResult =
   | { success: true; events: LeadVisitScheduleContextEvent[] }
   | { success: false; error: string };
 
-function requireSchedulePermission(
-  role: import("@prisma/client").StaffRole,
-  permission: import("@/lib/scheduling/schedule-permissions").SchedulePermission,
-): string | null {
-  const gate = assertSchedulePermission(role, permission);
-  return gate.ok ? null : gate.error;
+async function denyUnlessAuthorizedScheduleAction(
+  session: Awaited<ReturnType<typeof requireCurrentSession>>,
+  action: StaffAction,
+  resource: {
+    resourceType: "job" | "jobScheduleEvent" | "scheduleBlock" | "jobTask" | "leadVisitRequest";
+    resourceId: string;
+  },
+  metadata?: Parameters<typeof authorizeStaffAction>[1]["metadata"],
+): Promise<string | null> {
+  const authorization = await authorizeStaffAction(session, {
+    action,
+    resourceType: resource.resourceType,
+    resourceId: resource.resourceId,
+    metadata,
+  });
+  return authorization.ok ? null : authorization.message;
 }
 
 export async function getLeadVisitScheduleContextAction(
   range: { startAt: Date; endAt: Date },
 ): Promise<LeadVisitScheduleContextResult> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
 
   try {
     const schedule = await queryOrganizationSchedule(
@@ -122,7 +132,13 @@ export async function confirmLeadVisitRequestAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_SCHEDULE_CONFIRM,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
 
   try {
     const result = await db.$transaction(async (tx) =>
@@ -162,7 +178,13 @@ export async function cancelLeadVisitRequestAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_SCHEDULE_CANCEL,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
 
   try {
     const result = await db.$transaction(async (tx) =>
@@ -202,7 +224,13 @@ export async function rescheduleLeadVisitRequestAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_SCHEDULE_RESCHEDULE,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
 
   try {
     const result = await db.$transaction(async (tx) =>
@@ -244,7 +272,14 @@ export async function completeLeadVisitRequestAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_COMPLETE,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
+
   try {
     const result = await db.$transaction(async (tx) =>
       completeLeadVisitRequest(
@@ -285,7 +320,14 @@ export async function markLeadVisitNoShowAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_NO_SHOW,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
+
   try {
     const result = await db.$transaction(async (tx) =>
       markLeadVisitNoShow(
@@ -326,7 +368,14 @@ export async function updateLeadVisitOutcomeAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_OUTCOME_UPDATE,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
+
   try {
     const result = await db.$transaction(async (tx) =>
       updateLeadVisitOutcome(
@@ -366,7 +415,14 @@ export async function updateLeadVisitAccessDetailsAction(
     expectedUpdatedAt?: Date;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(
+    session,
+    STAFF_ACTIONS.LEAD_VISIT_ACCESS_DETAILS_UPDATE,
+    { resourceType: "leadVisitRequest", resourceId: requestId },
+  );
+  if (denied) return { error: denied };
+
   try {
     const result = await db.$transaction(async (tx) =>
       updateLeadVisitAccessDetails(
@@ -406,12 +462,13 @@ export async function rescheduleJobScheduleEventFromScheduleAction(
     externalWindowEndAt?: Date | null;
   },
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(
-    session.role,
-    "reschedule_confirmed",
-  );
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_UPDATE, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
+  // Central authorizeStaffAction replaces action-layer assertSchedulePermission for reschedule.
   const result = await rescheduleScheduleEvent({
     organizationId: session.organizationId,
     eventId,
@@ -434,8 +491,11 @@ export async function cancelJobScheduleEventFromScheduleAction(
   eventId: string,
   reason: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "cancel");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_CANCEL, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
   const result = await cancelScheduleEvent({
     organizationId: session.organizationId,
@@ -456,9 +516,13 @@ export async function completeJobScheduleEventFromScheduleAction(
   outcome: JobScheduleEventCompletionOutcome,
   reason?: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "complete");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_COMPLETE, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
+  // Central authorizeStaffAction replaces action-layer assertSchedulePermission for completion.
   const result = await completeScheduleEvent({
     organizationId: session.organizationId,
     eventId,
@@ -493,8 +557,11 @@ export async function createJobScheduleEventAction(input: {
   externalWindowSource?: string;
   customerVisible?: boolean;
 }): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "create_tentative");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_CREATE, {
+    resourceType: "job",
+    resourceId: input.jobId,
+  });
   if (denied) return { error: denied };
 
   const created = await db.$transaction(async (tx) => {
@@ -548,8 +615,11 @@ export async function createJobScheduleEventAction(input: {
 export async function confirmJobScheduleEventAction(
   eventId: string,
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "confirm");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_CONFIRM, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
   const result = await confirmScheduleEvent({
     organizationId: session.organizationId,
@@ -568,8 +638,11 @@ export async function linkTasksToScheduleEventAction(
   eventId: string,
   taskIds: string[],
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_LINK_TASKS, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
   const result = await linkTasksToScheduleEvent({
     organizationId: session.organizationId,
@@ -589,8 +662,11 @@ export async function unlinkTasksFromScheduleEventAction(
   eventId: string,
   taskIds: string[],
 ): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "link_unlink_tasks");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_EVENT_UNLINK_TASKS, {
+    resourceType: "jobScheduleEvent",
+    resourceId: eventId,
+  });
   if (denied) return { error: denied };
   const result = await unlinkTasksFromScheduleEvent({
     organizationId: session.organizationId,
@@ -616,7 +692,12 @@ export async function upsertScheduleBlockAction(data: {
   userId?: string | null;
   notes?: string;
 }): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.SCHEDULE_BLOCK_UPSERT, {
+    resourceType: "scheduleBlock",
+    resourceId: data.blockId ?? "new",
+  });
+  if (denied) return { error: denied };
 
   try {
     const result = await db.$transaction(async (tx) =>
@@ -655,8 +736,11 @@ export async function updateTaskScheduleFromCalendarAction(data: {
   scheduledEndAt?: Date | null;
   assignedUserId?: string | null;
 }): Promise<ScheduleActionState> {
-  const session = await requireMutableSession();
-  const denied = requireSchedulePermission(session.role, "deadline_set_recalc");
+  const session = await requireCurrentSession();
+  const denied = await denyUnlessAuthorizedScheduleAction(session, STAFF_ACTIONS.TASK_SCHEDULE_UPDATE, {
+    resourceType: "jobTask",
+    resourceId: data.taskId,
+  });
   if (denied) return { error: denied };
   if (data.taskId.startsWith("schedule-event-")) {
     return { error: "Task schedule update targeted a schedule event instead of a task." };

@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { JobActivityType, AttachmentStatus } from "@prisma/client";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 
 export type UploadAttachmentState = {
   error?: string;
@@ -23,7 +24,7 @@ export async function uploadTaskAttachmentAction(
   taskId: string,
   formData: FormData,
 ): Promise<UploadAttachmentState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();
@@ -47,6 +48,15 @@ export async function uploadTaskAttachmentAction(
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   if (!allowedTypes.includes(file.type)) {
     return { error: "File type not supported. Please upload an image or PDF." };
+  }
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.TASK_PROOF_UPLOAD_COMPLETE,
+    resourceType: "jobTask",
+    resourceId: taskId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
 
   try {
@@ -131,7 +141,7 @@ export async function getTaskAttachmentUploadUrlAction(
   contentType: string,
   fileSize: number,
 ): Promise<UploadAttachmentState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();
@@ -144,6 +154,15 @@ export async function getTaskAttachmentUploadUrlAction(
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   if (!allowedTypes.includes(contentType)) {
     return { error: "File type not supported." };
+  }
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.TASK_PROOF_UPLOAD_PREPARE,
+    resourceType: "jobTask",
+    resourceId: taskId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
 
   try {
@@ -210,7 +229,7 @@ export async function getTaskAttachmentUploadUrlAction(
 export async function completeTaskAttachmentUploadAction(
   attachmentId: string,
 ): Promise<UploadAttachmentState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
   const provider = getStorageProvider();
@@ -222,6 +241,19 @@ export async function completeTaskAttachmentUploadAction(
 
     if (!attachment) {
       return { error: "Attachment not found." };
+    }
+
+    if (!attachment.jobTaskId) {
+      return { error: "Attachment is not linked to a task." };
+    }
+
+    const authorization = await authorizeStaffAction(session, {
+      action: STAFF_ACTIONS.TASK_PROOF_UPLOAD_COMPLETE,
+      resourceType: "jobTask",
+      resourceId: attachment.jobTaskId,
+    });
+    if (!authorization.ok) {
+      return { error: authorization.message };
     }
 
     if (attachment.status === AttachmentStatus.READY) {

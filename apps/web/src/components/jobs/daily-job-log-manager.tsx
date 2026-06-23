@@ -22,6 +22,7 @@ import {
   markDailyJobLogReviewedAction, 
   voidDailyJobLogAction 
 } from "@/app/(workspace)/jobs/daily-log-actions";
+import { getActionErrorMessage } from "./action-error-message";
 
 type DailyJobLog = {
   id: string;
@@ -41,11 +42,19 @@ export function DailyJobLogManager({
   initialLogs,
   variant = "page",
   focusId,
+  canAccessInternalNotes = false,
+  canWriteInternalNotes = false,
+  canManageDailyLogCoordination = false,
 }: {
   jobId: string;
   initialLogs: DailyJobLog[];
   variant?: "page" | "embedded";
   focusId?: string;
+  /** Office/commercial read roles may see internal notes. */
+  canAccessInternalNotes?: boolean;
+  /** OWNER/ADMIN/OFFICE may edit internal notes. */
+  canWriteInternalNotes?: boolean;
+  canManageDailyLogCoordination?: boolean;
 }) {
   const isEmbedded = variant === "embedded";
   const router = useRouter();
@@ -54,6 +63,10 @@ export function DailyJobLogManager({
   const [editSummary, setEditSummary] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const displayedLogs = isEmbedded && focusId
     ? initialLogs.filter((log) => log.id === focusId)
@@ -65,7 +78,9 @@ export function DailyJobLogManager({
     if (focusedLog) {
       setLastSyncedFocusId(focusId);
       setEditSummary(focusedLog.summary);
-      setEditNotes(focusedLog.internalNotes || "");
+      if (canWriteInternalNotes) {
+        setEditNotes(focusedLog.internalNotes || "");
+      }
       setExpandedLogId(focusId);
     }
   }
@@ -76,16 +91,22 @@ export function DailyJobLogManager({
 
   const handleCreateDraft = async () => {
     setIsSaving(true);
+    setActionMessage(null);
     try {
-      await createOrUpdateDailyJobLogDraftAction({
+      const result = await createOrUpdateDailyJobLogDraftAction({
         jobId,
         logDate: new Date(),
       });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+        return;
+      }
       setIsCreating(false);
+      setActionMessage({ tone: "success", text: "Daily log draft created." });
       refreshAfterAction();
     } catch (error) {
       console.error("Failed to create draft:", error);
-      alert("Failed to create draft. Check console for details.");
+      setActionMessage({ tone: "error", text: "Failed to create draft. Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -93,18 +114,24 @@ export function DailyJobLogManager({
 
   const handleSaveEdit = async (log: DailyJobLog) => {
     setIsSaving(true);
+    setActionMessage(null);
     try {
-      await createOrUpdateDailyJobLogDraftAction({
+      const result = await createOrUpdateDailyJobLogDraftAction({
         jobId,
         logDate: log.logDate,
         summary: editSummary,
-        internalNotes: editNotes,
+        ...(canWriteInternalNotes ? { internalNotes: editNotes } : {}),
       });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+        return;
+      }
       setExpandedLogId(isEmbedded ? focusId ?? null : null);
+      setActionMessage({ tone: "success", text: "Daily log saved." });
       refreshAfterAction();
     } catch (error) {
       console.error("Failed to save edit:", error);
-      alert("Failed to save edit.");
+      setActionMessage({ tone: "error", text: "Failed to save daily log. Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -113,12 +140,18 @@ export function DailyJobLogManager({
   const handleMarkReviewed = async (logId: string) => {
     if (!confirm("Mark this daily log as reviewed and official?")) return;
     setIsSaving(true);
+    setActionMessage(null);
     try {
-      await markDailyJobLogReviewedAction(logId);
+      const result = await markDailyJobLogReviewedAction(logId);
+      if (result.error) {
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+        return;
+      }
+      setActionMessage({ tone: "success", text: "Daily log marked reviewed." });
       refreshAfterAction();
     } catch (error) {
       console.error("Failed to mark reviewed:", error);
-      alert("Failed to mark reviewed.");
+      setActionMessage({ tone: "error", text: "Failed to mark reviewed. Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -127,12 +160,18 @@ export function DailyJobLogManager({
   const handleVoid = async (logId: string) => {
     if (!confirm("Are you sure you want to void this log? It will remain in history but marked as invalid.")) return;
     setIsSaving(true);
+    setActionMessage(null);
     try {
-      await voidDailyJobLogAction(logId);
+      const result = await voidDailyJobLogAction(logId);
+      if (result.error) {
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+        return;
+      }
+      setActionMessage({ tone: "success", text: "Daily log voided." });
       refreshAfterAction();
     } catch (error) {
       console.error("Failed to void log:", error);
-      alert("Failed to void log.");
+      setActionMessage({ tone: "error", text: "Failed to void log. Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -140,7 +179,9 @@ export function DailyJobLogManager({
 
   const startEditing = (log: DailyJobLog) => {
     setEditSummary(log.summary);
-    setEditNotes(log.internalNotes || "");
+    if (canWriteInternalNotes) {
+      setEditNotes(log.internalNotes || "");
+    }
     setExpandedLogId(log.id);
   };
 
@@ -216,19 +257,27 @@ export function DailyJobLogManager({
                       />
                     </div>
 
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-                        Internal Notes
-                      </label>
-                      <textarea
-                        value={editNotes}
-                        onChange={(e) => setEditNotes(e.target.value)}
-                        disabled={log.status === "VOID"}
-                        rows={2}
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none disabled:opacity-60"
-                        placeholder="Staff-only notes..."
-                      />
-                    </div>
+                    {canAccessInternalNotes ? (
+                      <div>
+                        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+                          Internal Notes
+                        </label>
+                        {canWriteInternalNotes ? (
+                          <textarea
+                            value={editNotes}
+                            onChange={(e) => setEditNotes(e.target.value)}
+                            disabled={log.status === "VOID"}
+                            rows={2}
+                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 focus:border-border-strong focus:outline-none disabled:opacity-60"
+                            placeholder="Staff-only notes..."
+                          />
+                        ) : (
+                          <p className="rounded-md border border-border bg-surface/50 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
+                            {log.internalNotes?.trim() || "None"}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
 
                     <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                       <div className="flex gap-2">
@@ -242,7 +291,7 @@ export function DailyJobLogManager({
                               <Save className="size-3.5" />
                               Save changes
                             </button>
-                            {log.status === "DRAFT" && (
+                            {canManageDailyLogCoordination && log.status === "DRAFT" && (
                               <button
                                 onClick={() => handleMarkReviewed(log.id)}
                                 disabled={isSaving}
@@ -256,7 +305,7 @@ export function DailyJobLogManager({
                         )}
                       </div>
                       
-                      {log.status !== "VOID" && (
+                      {canManageDailyLogCoordination && log.status !== "VOID" && (
                         <button
                           onClick={() => handleVoid(log.id)}
                           disabled={isSaving}
@@ -275,8 +324,25 @@ export function DailyJobLogManager({
     </div>
   );
 
+  const actionMessageBanner = actionMessage ? (
+    <div
+      className={`mb-3 rounded-lg border px-3 py-2 text-xs ${
+        actionMessage.tone === "success"
+          ? "border-success/20 bg-success/[0.04] text-success"
+          : "border-danger/20 bg-danger/[0.04] text-danger"
+      }`}
+    >
+      {actionMessage.text}
+    </div>
+  ) : null;
+
   if (isEmbedded) {
-    return logList;
+    return (
+      <>
+        {actionMessageBanner}
+        {logList}
+      </>
+    );
   }
 
   return (
@@ -321,6 +387,8 @@ export function DailyJobLogManager({
           </div>
         </WorkspacePanel>
       )}
+
+      {actionMessageBanner}
 
       {logList}
     </section>

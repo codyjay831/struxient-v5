@@ -35,6 +35,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { RecoveryFlowBuilder, type RecoveryBuilderContext } from "./recovery-flow-builder";
+import { getActionErrorMessage } from "./action-error-message";
 import type { JobIssueCreateIntent } from "@/lib/job-issue-intent";
 
 type Issue = {
@@ -76,7 +77,11 @@ export function JobIssueManager({
   const searchParams = useSearchParams();
   const [isAddingManual, setIsAddingManual] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending] = useTransition();
+  const [actionMessage, setActionMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
   const isAdding = !!createIssueIntent?.isRequested || isAddingManual;
 
   const clearCreateIssueIntent = (opts?: { routeToTask?: boolean }) => {
@@ -104,13 +109,19 @@ export function JobIssueManager({
   const resolvedIssues = initialIssues.filter((i) => i.status !== JobIssueStatus.OPEN);
 
   const handleResolve = async (issueId: string, resolutionNote?: string) => {
-    startTransition(async () => {
-      try {
-        await resolveJobIssueAction({ issueId, resolutionNote });
-      } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to resolve issue");
+    try {
+      const result = await resolveJobIssueAction({ issueId, resolutionNote });
+      if (result.error) {
+        return getActionErrorMessage(result.error);
       }
-    });
+      setActionMessage({ tone: "success", text: "Issue resolved." });
+      router.refresh();
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? getActionErrorMessage(error.message)
+        : "Failed to resolve issue.";
+    }
   };
 
   return (
@@ -153,6 +164,8 @@ export function JobIssueManager({
             onSuccess={() => {
               setIsAddingManual(false);
               clearCreateIssueIntent();
+              setActionMessage({ tone: "success", text: "Issue recorded." });
+              router.refresh();
             }}
             onCancel={() => {
               setIsAddingManual(false);
@@ -160,6 +173,18 @@ export function JobIssueManager({
             }}
           />
         </WorkspacePanel>
+      )}
+
+      {actionMessage && (
+        <div
+          className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+            actionMessage.tone === "success"
+              ? "border-success/20 bg-success/[0.04] text-success"
+              : "border-danger/20 bg-danger/[0.04] text-danger"
+          }`}
+        >
+          {actionMessage.text}
+        </div>
       )}
 
       <div className="space-y-4">
@@ -215,16 +240,19 @@ function IssueCard({
   jobId,
 }: {
   issue: Issue;
-  onResolve?: (note?: string) => void;
+  onResolve?: (note?: string) => Promise<string | null>;
   isPending?: boolean;
   isResolved?: boolean;
   jobId: string;
 }) {
+  const router = useRouter();
   const [isResolving, setIsResolving] = useState(false);
+  const [isResolvePending, startTransition] = useTransition();
   const [isBuildingFlow, setIsBuildingFlow] = useState(false);
   const [note, setNote] = useState("");
   const [isResuming, setIsResuming] = useState(false);
   const [isForceResolving, setIsForceResolving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const recoveryContext: RecoveryBuilderContext = {
     sourceTaskTitle: issue.jobTask?.title ?? issue.jobStage?.title ?? null,
     issueTitle: issue.title,
@@ -274,17 +302,39 @@ function IssueCard({
       return;
     }
     setIsForceResolving(true);
+    setActionError(null);
     try {
-      await forceResolveJobIssueAction({
+      const result = await forceResolveJobIssueAction({
         issueId: issue.id,
         resolutionNote: forceResolveNote,
       });
+      if (result.error) {
+        setActionError(getActionErrorMessage(result.error));
+        return;
+      }
       setIsResolving(false);
+      router.refresh();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to force resolve issue");
+      setActionError(
+        error instanceof Error
+          ? getActionErrorMessage(error.message)
+          : "Failed to force resolve issue",
+      );
     } finally {
       setIsForceResolving(false);
     }
+  };
+
+  const handleStandardResolve = () => {
+    setActionError(null);
+    startTransition(async () => {
+      const error = await onResolve?.(note);
+      if (error) {
+        setActionError(error);
+        return;
+      }
+      setIsResolving(false);
+    });
   };
 
   return (
@@ -418,6 +468,12 @@ function IssueCard({
               />
             </div>
           )}
+
+          {actionError && (
+            <div className="mt-3 rounded-md border border-danger/20 bg-danger/[0.04] px-3 py-2 text-xs text-danger">
+              {actionError}
+            </div>
+          )}
         </div>
 
         {!isResolved && !isBuildingFlow && (
@@ -510,11 +566,11 @@ function IssueCard({
                       Cancel
                     </button>
                     <button
-                      onClick={() => onResolve?.(note)}
-                      disabled={isPending}
+                      onClick={handleStandardResolve}
+                      disabled={isPending || isResolvePending}
                       className="rounded bg-foreground px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-background hover:bg-foreground/90 disabled:opacity-50"
                     >
-                      {isPending ? "Saving..." : "Confirm"}
+                      {isPending || isResolvePending ? "Saving..." : "Confirm"}
                     </button>
                   </div>
                 </div>
@@ -541,6 +597,7 @@ function CreateIssueForm({
   onCancel: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState<{
     title: string;
     type: JobIssueType;
@@ -562,8 +619,9 @@ function CreateIssueForm({
     if (!formData.title) return;
 
     startTransition(async () => {
+      setErrorMessage(null);
       try {
-        await createJobIssueAction({
+        const result = await createJobIssueAction({
           jobId,
           title: formData.title,
           type: formData.type,
@@ -572,15 +630,27 @@ function CreateIssueForm({
           jobStageId: formData.jobStageId || undefined,
           jobTaskId: formData.jobTaskId || undefined,
         });
+        if (result.error) {
+          setErrorMessage(getActionErrorMessage(result.error));
+          return;
+        }
         onSuccess();
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to create issue");
+        setErrorMessage(
+          error instanceof Error ? getActionErrorMessage(error.message) : "Failed to create issue",
+        );
       }
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {errorMessage && (
+        <div className="rounded-md border border-danger/20 bg-danger/[0.04] px-3 py-2 text-xs text-danger">
+          {errorMessage}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label className="text-[0.65rem] font-bold uppercase tracking-wider text-foreground-subtle">

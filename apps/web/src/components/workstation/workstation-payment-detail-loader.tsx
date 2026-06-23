@@ -1,4 +1,6 @@
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { canReadPaymentDetails } from "@/lib/authz/payment-visibility";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
 import { db } from "@/lib/db";
 import { JobPaymentManager } from "@/components/jobs/job-payment-manager";
 import {
@@ -19,11 +21,16 @@ export async function WorkstationPaymentDetailLoader({
 }: WorkstationPaymentDetailLoaderProps) {
   const ctx = await getRequestContextOrThrow();
 
+  if (!canReadPaymentDetails(ctx.role)) {
+    return null;
+  }
+
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: {
       id: requirementId,
       jobId,
       organizationId: ctx.organizationId,
+      job: getJobVisibilityWhere(ctx.role, ctx.userId),
     },
     select: { id: true },
   });
@@ -31,7 +38,11 @@ export async function WorkstationPaymentDetailLoader({
   if (!requirement) return null;
 
   const job = await db.job.findFirst({
-    where: { id: jobId, organizationId: ctx.organizationId },
+    where: {
+      id: jobId,
+      organizationId: ctx.organizationId,
+      ...getJobVisibilityWhere(ctx.role, ctx.userId),
+    },
     include: {
       stages: {
         orderBy: { sortOrder: "asc" },

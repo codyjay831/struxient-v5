@@ -23,6 +23,7 @@ These guardrails exist to **steer implementation** toward the architecture alrea
 | Document | Scope |
 |----------|--------|
 | [source-of-truth-map.md](./source-of-truth-map.md) | Stored vs derived concepts and canonical helpers |
+| [canon/execution-aware-authorization-canon.md](./canon/execution-aware-authorization-canon.md) | Staff authZ: capabilities, staff actions, payment/portal read gates |
 | [canon/scheduling-canon.md](./canon/scheduling-canon.md) | Deadlines, job schedule events, lifecycle, timezone, AI boundaries |
 | [plans/scheduling-implementation-plan.md](./plans/scheduling-implementation-plan.md) | Scheduling migration, slices, matrices, completion checklist |
 | [workstation-guardrails.md](./workstation-guardrails.md) | Workstation as cockpit; attention vs editors |

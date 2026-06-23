@@ -51,13 +51,31 @@ import { getCustomerProjectStatusLabel } from "@/lib/customer-portal/presenter";
 assert.equal(getCustomerProjectStatusLabel("WAITING_FOR_APPROVAL"), "Waiting for your approval");
 assert.equal(getCustomerProjectStatusLabel("COMPLETE"), "Complete");
 
-import { canManageCustomerPortal } from "@/lib/customer-portal/authorize";
+import { canManageCustomerPortal, canReadCustomerCoordination } from "@/lib/customer-portal/authorize";
 import { portalAuditEventLabel } from "@/lib/customer-portal/event-service";
-import { CustomerPortalEventType } from "@prisma/client";
+import { CustomerPortalEventType, StaffRole } from "@prisma/client";
 
-assert.equal(canManageCustomerPortal("OWNER"), true);
-assert.equal(canManageCustomerPortal("OFFICE"), true);
-assert.equal(canManageCustomerPortal("FIELD"), false);
+assert.equal(canManageCustomerPortal(StaffRole.OWNER), true);
+assert.equal(canManageCustomerPortal(StaffRole.OFFICE), true);
+assert.equal(canManageCustomerPortal(StaffRole.FIELD), false);
+assert.equal(canManageCustomerPortal(StaffRole.SUBCONTRACTOR), false);
+assert.equal(canManageCustomerPortal(StaffRole.VIEWER), false);
+
+for (const role of [StaffRole.OWNER, StaffRole.ADMIN, StaffRole.OFFICE, StaffRole.VIEWER] as const) {
+  assert.equal(
+    canReadCustomerCoordination(role),
+    true,
+    `${role} should read customer coordination`,
+  );
+}
+
+for (const role of [StaffRole.FIELD, StaffRole.SUBCONTRACTOR] as const) {
+  assert.equal(
+    canReadCustomerCoordination(role),
+    false,
+    `${role} should not read customer coordination`,
+  );
+}
 
 assert.equal(portalAuditEventLabel(CustomerPortalEventType.MAGIC_LINK_SENT), "Link sent");
 assert.equal(portalAuditEventLabel(CustomerPortalEventType.PAYMENT_LINK_OPENED), "Payment link opened");

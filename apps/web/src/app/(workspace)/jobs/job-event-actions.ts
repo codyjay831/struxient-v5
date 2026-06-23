@@ -1,9 +1,10 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { JobActivityType, JobTaskStatus, LineItemTemplateTaskSource } from "@prisma/client";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 import {
   getFieldEventSignal,
   isRemovableFieldEventTask,
@@ -28,8 +29,17 @@ export async function addJobEventAction(
   description: string,
   targetTaskIds: string[],
 ): Promise<JobEventActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_FIELD_HOLD_CREATE,
+    resourceType: "job",
+    resourceId: jobId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   try {
     const job = await db.job.findFirst({
@@ -119,8 +129,17 @@ export async function removeJobEventAction(
   jobId: string,
   eventTaskId: string,
 ): Promise<JobEventActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_FIELD_HOLD_CANCEL,
+    resourceType: "jobTask",
+    resourceId: eventTaskId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   try {
     const task = await db.jobTask.findFirst({

@@ -18,7 +18,9 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { CreditCard, Plus, Check, Ban, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { CreditCard, Plus, Check, Ban, Trash2, ChevronDown, ChevronUp, Lock } from "lucide-react";
+import { getActionErrorMessage } from "@/components/jobs/action-error-message";
+import { FIELD_PAYMENT_HOLD_REASON } from "@/lib/authz/payment-visibility";
 
 type PaymentRequirement = {
   id: string;
@@ -149,6 +151,21 @@ export function JobPaymentManager({
   );
 }
 
+export function PaymentExecutionHoldNotice() {
+  return (
+    <section className="mb-8">
+      <SectionHeading
+        title="Payment hold"
+        description="Office must clear a payment requirement before work on this job can continue."
+      />
+      <div className="flex gap-3 rounded-lg border border-danger/30 bg-danger/5 p-4">
+        <Lock className="mt-0.5 size-5 shrink-0 text-danger" />
+        <p className="text-sm leading-relaxed text-foreground-muted">{FIELD_PAYMENT_HOLD_REASON}</p>
+      </div>
+    </section>
+  );
+}
+
 function RequirementCard({
   requirement,
   isPending,
@@ -162,6 +179,7 @@ function RequirementCard({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const refreshAfterAction = () => {
     if (embedded) router.refresh();
@@ -169,7 +187,12 @@ function RequirementCard({
 
   const onMarkPaid = () => {
     startTransition(async () => {
-      await markJobPaymentRequirementPaidAction(requirement.id);
+      setActionError(null);
+      const result = await markJobPaymentRequirementPaidAction(requirement.id);
+      if (result.error) {
+        setActionError(getActionErrorMessage(result.error));
+        return;
+      }
       refreshAfterAction();
     });
   };
@@ -177,7 +200,12 @@ function RequirementCard({
   const onWaive = () => {
     if (!confirm("Are you sure you want to waive this payment requirement?")) return;
     startTransition(async () => {
-      await waiveJobPaymentRequirementAction(requirement.id);
+      setActionError(null);
+      const result = await waiveJobPaymentRequirementAction(requirement.id);
+      if (result.error) {
+        setActionError(getActionErrorMessage(result.error));
+        return;
+      }
       refreshAfterAction();
     });
   };
@@ -185,7 +213,12 @@ function RequirementCard({
   const onCancel = () => {
     if (!confirm("Are you sure you want to cancel this payment requirement?")) return;
     startTransition(async () => {
-      await cancelJobPaymentRequirementAction(requirement.id);
+      setActionError(null);
+      const result = await cancelJobPaymentRequirementAction(requirement.id);
+      if (result.error) {
+        setActionError(getActionErrorMessage(result.error));
+        return;
+      }
       refreshAfterAction();
     });
   };
@@ -267,6 +300,11 @@ function RequirementCard({
           </div>
         )}
       </div>
+      {actionError ? (
+        <p className="mt-2 text-xs text-danger" role="alert">
+          {actionError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -283,6 +321,7 @@ function CreateRequirementForm({
   onSuccess: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [formError, setFormError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     amountCents: "",
@@ -296,7 +335,8 @@ function CreateRequirementForm({
     if (!formData.title) return;
 
     startTransition(async () => {
-      await createJobPaymentRequirementAction({
+      setFormError(null);
+      const result = await createJobPaymentRequirementAction({
         jobId,
         title: formData.title,
         amountCents: formData.amountCents ? Math.round(parseFloat(formData.amountCents) * 100) : undefined,
@@ -304,6 +344,10 @@ function CreateRequirementForm({
         requiredBeforeStageId: formData.requiredBeforeStageId || undefined,
         notes: formData.notes || undefined,
       });
+      if (result.error) {
+        setFormError(getActionErrorMessage(result.error));
+        return;
+      }
       onSuccess();
     });
   };
@@ -403,6 +447,11 @@ function CreateRequirementForm({
             {isPending ? "Creating..." : "Save requirement"}
           </button>
         </div>
+        {formError ? (
+          <p className="text-xs text-danger" role="alert">
+            {formError}
+          </p>
+        ) : null}
       </form>
     </WorkspacePanel>
   );
@@ -420,6 +469,7 @@ function PaymentPortalLinkEditor({
   const [url, setUrl] = useState(requirement.paymentUrl ?? "");
   const [label, setLabel] = useState(requirement.paymentUrlLabel ?? "");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   return (
     <div className="mt-3 space-y-2 rounded-lg border border-border bg-surface-elevated/30 p-3">
@@ -445,11 +495,17 @@ function PaymentPortalLinkEditor({
         disabled={pending || isPending}
         onClick={() =>
           startTransition(async () => {
-            await updateJobPaymentRequirementPortalLinkAction(
+            setSaveError(null);
+            setSaved(false);
+            const result = await updateJobPaymentRequirementPortalLinkAction(
               requirement.id,
               url || null,
               label || null,
             );
+            if (result.error) {
+              setSaveError(getActionErrorMessage(result.error));
+              return;
+            }
             setSaved(true);
             router.refresh();
           })
@@ -458,6 +514,11 @@ function PaymentPortalLinkEditor({
       >
         {pending ? "Saving…" : "Save portal link"}
       </button>
+      {saveError ? (
+        <p className="text-xs text-danger" role="alert">
+          {saveError}
+        </p>
+      ) : null}
       {saved ? (
         <p className="text-xs text-success" role="status">
           Portal link saved.

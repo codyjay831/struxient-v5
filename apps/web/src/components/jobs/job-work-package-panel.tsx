@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { getActionErrorMessage } from "@/components/jobs/action-error-message";
 import {
   createJobWorkPackageAction,
   setTaskWorkPackageAction,
@@ -35,6 +37,7 @@ export function JobWorkPackagePanel({
   workPackages: WorkPackageRow[];
   tasks: WorkPackageTask[];
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [title, setTitle] = useState("");
   const [workType, setWorkType] = useState("");
@@ -141,7 +144,7 @@ export function JobWorkPackagePanel({
               source: "manual-job-panel",
             });
             if (result.error) {
-              setMessage(result.error);
+              setMessage(getActionErrorMessage(result.error));
               return;
             }
             setMessage("Work group created.");
@@ -212,14 +215,22 @@ export function JobWorkPackagePanel({
                   <select
                     className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
                     value={task.workPackageId ?? ""}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextPackageId = event.target.value || null;
                       startTransition(async () => {
-                        await setTaskWorkPackageAction(
+                        const result = await setTaskWorkPackageAction(
                           task.id,
-                          event.target.value || null,
+                          nextPackageId,
                         );
-                      })
-                    }
+                        if (result.error) {
+                          setMessage(getActionErrorMessage(result.error));
+                          router.refresh();
+                          return;
+                        }
+                        setMessage("Task reassigned.");
+                        router.refresh();
+                      });
+                    }}
                   >
                     <option value="">Ungrouped</option>
                     {workPackages.map((group) => (

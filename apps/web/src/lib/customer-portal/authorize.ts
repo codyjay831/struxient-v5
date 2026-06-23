@@ -2,8 +2,10 @@ import {
   CustomerPortalAccessLevel,
   CustomerPortalAccessStatus,
   CustomerVisibleResourceType,
+  StaffRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { canReadCommercial } from "@/lib/authz/capabilities";
 import {
   getCustomerPortalSessionTokenFromCookie,
   resolveCustomerPortalSession,
@@ -110,6 +112,13 @@ export async function requireCustomerPortalAccess(input?: {
   };
 }
 
-export function canManageCustomerPortal(role: import("@prisma/client").StaffRole): boolean {
-  return role === "OWNER" || role === "ADMIN" || role === "OFFICE";
+export function canManageCustomerPortal(role: StaffRole): boolean {
+  return (
+    role === StaffRole.OWNER || role === StaffRole.ADMIN || role === StaffRole.OFFICE
+  );
+}
+
+/** Office and viewer commercial-read roles may see portal access metadata and coordination UI. */
+export function canReadCustomerCoordination(role: StaffRole): boolean {
+  return canReadCommercial(role);
 }

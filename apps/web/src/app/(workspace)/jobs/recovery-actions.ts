@@ -11,7 +11,7 @@ import {
   JobActivityType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { resolveJobIssueWithRecoveryHandling } from "@/lib/resolve-job-issue-core";
 import {
@@ -24,8 +24,25 @@ import {
   buildAiMeteringContext,
   runMeteredAiFeature,
 } from "@/lib/billing/run-metered-ai-feature";
+import { authorizeStaffAction, STAFF_ACTIONS, type StaffAction } from "@/lib/authz/staff-actions";
 
 const CORRECTIONS_STAGE_NAME = "Corrections";
+
+async function requireAuthorizedRecoveryAction(
+  session: Awaited<ReturnType<typeof requireCurrentSession>>,
+  action: StaffAction,
+  resourceType: "jobIssue" | "jobRecoveryFlow",
+  resourceId: string,
+) {
+  const authorization = await authorizeStaffAction(session, {
+    action,
+    resourceType,
+    resourceId,
+  });
+  if (!authorization.ok) {
+    throw new Error(authorization.message);
+  }
+}
 
 export type CreateRecoveryFlowInput = {
   jobIssueId: string;
@@ -51,8 +68,14 @@ export type CreateAndActivateRecoveryFlowInput = {
 export async function createAndActivateRecoveryFlowWithTasksAction(
   input: CreateAndActivateRecoveryFlowInput,
 ) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_REQUEST,
+    "jobIssue",
+    input.jobIssueId,
+  );
 
   const normalizedTasks = validateRecoveryFlowTasksInput(input.tasks);
 
@@ -130,8 +153,14 @@ export async function createAndActivateRecoveryFlowWithTasksAction(
  * Do not compose with addRecoveryTaskAction for UI submit — use createAndActivateRecoveryFlowWithTasksAction.
  */
 export async function createRecoveryFlowAction(input: CreateRecoveryFlowInput) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_REQUEST,
+    "jobIssue",
+    input.jobIssueId,
+  );
 
   // Verify issue belongs to organization
   const issue = await db.jobIssue.findFirst({
@@ -195,8 +224,14 @@ export type AddRecoveryTaskInput = {
  * Not used for initial recovery path creation from the UI.
  */
 export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_MANAGE,
+    "jobRecoveryFlow",
+    input.flowId,
+  );
 
   const flow = await db.jobRecoveryFlow.findFirst({
     where: { id: input.flowId, organizationId },
@@ -281,8 +316,14 @@ export async function addRecoveryTaskAction(input: AddRecoveryTaskInput) {
  * Not used for initial recovery path creation from the UI.
  */
 export async function activateRecoveryFlowAction(flowId: string) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_MANAGE,
+    "jobRecoveryFlow",
+    flowId,
+  );
 
   const flow = await db.jobRecoveryFlow.findFirst({
     where: { id: flowId, organizationId },
@@ -317,8 +358,14 @@ export async function activateRecoveryFlowAction(flowId: string) {
  * This unmutes the original path.
  */
 export async function resolveIssueAndResumeAction(jobIssueId: string, resolutionNote?: string) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_RESUME,
+    "jobIssue",
+    jobIssueId,
+  );
 
   const issue = await db.jobIssue.findFirst({
     where: { id: jobIssueId, organizationId },
@@ -355,8 +402,14 @@ export async function resolveIssueAndResumeAction(jobIssueId: string, resolution
 }
 
 export async function suggestRecoveryPathAction(jobIssueId: string) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  await requireAuthorizedRecoveryAction(
+    session,
+    STAFF_ACTIONS.RECOVERY_SUGGEST,
+    "jobIssue",
+    jobIssueId,
+  );
 
   const issue = await db.jobIssue.findFirst({
     where: { id: jobIssueId, organizationId },

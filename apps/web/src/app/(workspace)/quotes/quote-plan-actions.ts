@@ -4,7 +4,10 @@ import { Prisma, TaskTemplateCategory } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { AIService, type AIQuoteExecutionPlanProposal } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
-import { getMutableRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialRequestContextOrThrow,
+  getExecutionPlanEditorContextOrThrow,
+} from "@/lib/auth-context";
 import {
   buildAiMeteringContext,
   runMeteredAiFeature,
@@ -616,7 +619,7 @@ export async function generateQuoteExecutionPlanProposalAction(
 ): Promise<QuotePlanGenerateResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
   const [quote, planContext, stages] = await Promise.all([
     loadEditableQuoteWithDraftTasks(db, qid, ctx.organizationId),
     loadQuotePlanContext(qid, ctx.organizationId),
@@ -712,7 +715,7 @@ export async function applyQuoteExecutionPlanProposalAction(
 ): Promise<QuotePlanApplyResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
   const parsed = QuotePlanProposalSchema.safeParse(proposal);
   if (!parsed.success) {
     return { ok: false, error: "Proposal shape is invalid." };
@@ -774,14 +777,14 @@ export async function previewUncoordinatedDraftProposalAction(
 ): Promise<QuotePlanPreviewResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   return buildUncoordinatedDraftProposalForQuote(qid, ctx.organizationId);
 }
 
 export async function seedUncoordinatedDraftAction(quoteId: string): Promise<QuotePlanSeedResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
   const built = await buildUncoordinatedDraftProposalForQuote(qid, ctx.organizationId);
   if (!built.ok) return built;
   const applied = await applyQuoteExecutionPlanProposalAction(qid, built.proposal, {
@@ -829,7 +832,7 @@ export async function addQuotePlanTaskManualAction(params: {
     return { ok: false, error: "Select at least one scope line for this task." };
   }
 
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
   const result = await db.$transaction(async (tx) => {
     const created = await createQuoteExecutionTaskInTx(tx, {
       quoteId: qid,
@@ -877,7 +880,7 @@ export async function acceptQuoteExecutionPlanAction(
 ): Promise<AcceptQuotePlanResult> {
   const qid = quoteId.trim();
   if (!qid) return { ok: false, error: "Missing quote id." };
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const permission = assertExecutionPlanPermission(ctx.role, "accept_plan");
   if (!permission.ok) return { ok: false, error: permission.error };
   const result = await db.$transaction(async (tx) => {
@@ -1070,7 +1073,7 @@ export async function toggleQuoteExecutionTaskProtectionAction(
   if (!qid || !tid) {
     return { ok: false, error: "Missing quote id or task id." };
   }
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getCommercialRequestContextOrThrow();
   const permission = assertExecutionPlanPermission(ctx.role, "protect_unprotect_task");
   if (!permission.ok) return { ok: false, error: permission.error };
 
@@ -1145,7 +1148,7 @@ export async function addQuotePlanDependencyProviderTaskAction(params: {
     return { ok: false, error: "Missing quote, task, or signal." };
   }
 
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuotePlanTask(
@@ -1250,7 +1253,7 @@ export async function connectQuotePlanDependencyGapToTaskAction(params: {
     return { ok: false, error: "Selected task cannot provide its own missing dependency." };
   }
 
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const [, providerTask] = await Promise.all([
@@ -1296,7 +1299,7 @@ export async function removeQuotePlanDependencyRequirementAction(params: {
     return { ok: false, error: "Missing quote, task, or signal." };
   }
 
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
 
   const ok = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuotePlanTask(
@@ -1342,7 +1345,7 @@ export async function relaxQuotePlanDependencyHardSignalAction(params: {
     return { ok: false, error: "Missing quote or task." };
   }
 
-  const ctx = await getMutableRequestContextOrThrow();
+  const ctx = await getExecutionPlanEditorContextOrThrow();
 
   const outcome = await db.$transaction(async (tx) => {
     const consumerTask = await loadEditableQuotePlanTask(

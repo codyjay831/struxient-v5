@@ -51,6 +51,8 @@ Use `LANE_ORDER` from `workstation/rank.ts`. Sorting by `withinLaneRank` alone i
 
 Role feed specs adjust **emphasis and landing**; they are **not** the security boundary. Never hide unauthorized records with CSS or client-only filters alone.
 
+**Authorization canon:** [canon/execution-aware-authorization-canon.md](./canon/execution-aware-authorization-canon.md) — runtime mutations via `authorizeStaffAction`; commercial read via `canReadCommercial()` / payment and portal visibility helpers.
+
 ### Quick actions
 
 Workstation quick actions (New lead, New quote, Sales link, settings) must respect capabilities:

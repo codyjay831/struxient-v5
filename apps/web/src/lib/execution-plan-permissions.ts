@@ -1,6 +1,7 @@
 import { StaffRole } from "@prisma/client";
 
 export type ExecutionPlanPermission =
+  | "edit_execution_plan"
   | "accept_plan"
   | "approve_scope_revision"
   | "apply_scope_revision"
@@ -12,6 +13,7 @@ export type ExecutionPlanPermission =
 
 const EXECUTION_PLAN_PERMISSION_MATRIX: Record<StaffRole, Set<ExecutionPlanPermission>> = {
   [StaffRole.OWNER]: new Set<ExecutionPlanPermission>([
+    "edit_execution_plan",
     "accept_plan",
     "approve_scope_revision",
     "apply_scope_revision",
@@ -22,6 +24,7 @@ const EXECUTION_PLAN_PERMISSION_MATRIX: Record<StaffRole, Set<ExecutionPlanPermi
     "adjust_payments",
   ]),
   [StaffRole.ADMIN]: new Set<ExecutionPlanPermission>([
+    "edit_execution_plan",
     "accept_plan",
     "approve_scope_revision",
     "apply_scope_revision",
@@ -32,6 +35,7 @@ const EXECUTION_PLAN_PERMISSION_MATRIX: Record<StaffRole, Set<ExecutionPlanPermi
     "adjust_payments",
   ]),
   [StaffRole.OFFICE]: new Set<ExecutionPlanPermission>([
+    "edit_execution_plan",
     "accept_plan",
     "approve_scope_revision",
     "apply_scope_revision",
@@ -46,6 +50,7 @@ const EXECUTION_PLAN_PERMISSION_MATRIX: Record<StaffRole, Set<ExecutionPlanPermi
 };
 
 const EXECUTION_PLAN_PERMISSION_ERROR_COPY: Record<ExecutionPlanPermission, string> = {
+  edit_execution_plan: "You do not have permission to edit quote execution plans.",
   accept_plan: "You do not have permission to accept execution plans.",
   approve_scope_revision: "You do not have permission to approve scope revisions.",
   apply_scope_revision: "You do not have permission to apply scope revisions.",

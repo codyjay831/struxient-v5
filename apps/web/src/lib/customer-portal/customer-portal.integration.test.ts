@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CustomerPortalEventType } from "@prisma/client";
-import { canManageCustomerPortal } from "@/lib/customer-portal/authorize";
+import { CustomerPortalEventType, StaffRole } from "@prisma/client";
+import { canManageCustomerPortal, canReadCustomerCoordination } from "@/lib/customer-portal/authorize";
 import { portalAuditEventLabel, listPortalAuditEventsForJob } from "@/lib/customer-portal/event-service";
 import { isPortalEmailConfigured } from "@/lib/customer-portal/notification-service";
 import { db } from "@/lib/db";
 
 test("permission: FIELD staff cannot manage customer portal", () => {
-  assert.equal(canManageCustomerPortal("FIELD"), false);
-  assert.equal(canManageCustomerPortal("ADMIN"), true);
+  assert.equal(canManageCustomerPortal(StaffRole.FIELD), false);
+  assert.equal(canManageCustomerPortal(StaffRole.ADMIN), true);
+});
+
+test("permission: FIELD/SUB cannot read customer coordination metadata", () => {
+  assert.equal(canReadCustomerCoordination(StaffRole.FIELD), false);
+  assert.equal(canReadCustomerCoordination(StaffRole.SUBCONTRACTOR), false);
+  assert.equal(canReadCustomerCoordination(StaffRole.VIEWER), true);
+  assert.equal(canReadCustomerCoordination(StaffRole.OFFICE), true);
 });
 
 test("integration: portal audit events are scoped to organization and job", async () => {

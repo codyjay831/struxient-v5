@@ -1,6 +1,13 @@
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { DailyJobLogManager } from "@/components/jobs/daily-job-log-manager";
+import {
+  canManageDailyLogCoordination,
+  canReadDailyLogInternalNotes,
+  canWriteDailyLogInternalNotes,
+  dailyJobLogSelectForRole,
+  redactDailyLogsForRole,
+} from "@/lib/authz/daily-log-visibility";
 
 type WorkstationDailyLogDetailLoaderProps = {
   logId: string;
@@ -12,6 +19,7 @@ export async function WorkstationDailyLogDetailLoader({
   jobId,
 }: WorkstationDailyLogDetailLoaderProps) {
   const ctx = await getRequestContextOrThrow();
+  const logSelect = dailyJobLogSelectForRole(ctx.role);
 
   const log = await db.dailyJobLog.findFirst({
     where: {
@@ -27,25 +35,18 @@ export async function WorkstationDailyLogDetailLoader({
   const logs = await db.dailyJobLog.findMany({
     where: { jobId, organizationId: ctx.organizationId },
     orderBy: { logDate: "desc" },
-    select: {
-      id: true,
-      logDate: true,
-      summary: true,
-      internalNotes: true,
-      status: true,
-      reviewedAt: true,
-      reviewedByUser: {
-        select: { name: true, email: true },
-      },
-    },
+    select: logSelect,
   });
 
   return (
     <DailyJobLogManager
       jobId={jobId}
-      initialLogs={logs}
+      initialLogs={redactDailyLogsForRole(logs, ctx.role)}
       variant="embedded"
       focusId={logId}
+      canAccessInternalNotes={canReadDailyLogInternalNotes(ctx.role)}
+      canWriteInternalNotes={canWriteDailyLogInternalNotes(ctx.role)}
+      canManageDailyLogCoordination={canManageDailyLogCoordination(ctx.role)}
     />
   );
 }

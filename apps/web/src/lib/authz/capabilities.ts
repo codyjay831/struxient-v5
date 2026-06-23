@@ -1,21 +1,33 @@
 import { StaffRole } from "@prisma/client";
 
 export const CAPABILITIES = [
-  "mutate.general",
-  "read.commercial",
-  "manage.organization_settings",
+  "read.org_wide",
   "read.assignment_scoped",
+  "read.commercial",
+  "mutate.commercial",
+  "mutate.office_work",
+  "mutate.field_work",
+  "mutate.subcontractor_work",
+  "manage.organization_settings",
+  "manage.team",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
 
-const ROLE_CAPABILITIES: Record<StaffRole, readonly Capability[]> = {
+export const ROLE_CAPABILITIES: Record<StaffRole, readonly Capability[]> = {
   [StaffRole.OWNER]: CAPABILITIES,
   [StaffRole.ADMIN]: CAPABILITIES,
-  [StaffRole.OFFICE]: ["mutate.general", "read.commercial", "read.assignment_scoped"],
-  [StaffRole.FIELD]: ["mutate.general", "read.assignment_scoped"],
-  [StaffRole.VIEWER]: ["read.commercial"],
-  [StaffRole.SUBCONTRACTOR]: ["read.assignment_scoped"],
+  [StaffRole.OFFICE]: [
+    "read.org_wide",
+    "read.assignment_scoped",
+    "read.commercial",
+    "mutate.commercial",
+    "mutate.office_work",
+    "mutate.field_work",
+  ],
+  [StaffRole.FIELD]: ["read.assignment_scoped", "mutate.field_work"],
+  [StaffRole.VIEWER]: ["read.org_wide", "read.commercial"],
+  [StaffRole.SUBCONTRACTOR]: ["read.assignment_scoped", "mutate.subcontractor_work"],
 };
 
 export function hasCapability(role: StaffRole, capability: Capability): boolean {
@@ -23,7 +35,11 @@ export function hasCapability(role: StaffRole, capability: Capability): boolean 
 }
 
 export function canMutate(role: StaffRole): boolean {
-  return hasCapability(role, "mutate.general");
+  return (
+    hasCapability(role, "mutate.commercial") ||
+    hasCapability(role, "mutate.office_work") ||
+    hasCapability(role, "mutate.field_work")
+  );
 }
 
 export function canReadCommercial(role: StaffRole): boolean {
@@ -32,4 +48,8 @@ export function canReadCommercial(role: StaffRole): boolean {
 
 export function canManageOrganizationSettings(role: StaffRole): boolean {
   return hasCapability(role, "manage.organization_settings");
+}
+
+export function canManageTeam(role: StaffRole): boolean {
+  return hasCapability(role, "manage.team");
 }

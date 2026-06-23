@@ -9,6 +9,7 @@ import type {
 import type { ScheduleUrlView } from "@/lib/scheduling/schedule-url-state";
 import { parseDatetimeLocalInTimezone } from "@/lib/scheduling/deadline-timezone";
 import { upsertScheduleBlockAction } from "@/app/(workspace)/schedule/schedule-actions";
+import { getActionErrorMessage } from "@/components/jobs/action-error-message";
 import {
   ScheduleAddBlockButton,
   ScheduleAssigneeFilter,
@@ -51,6 +52,7 @@ export function ScheduleBoard({
   );
   const [blockStart, setBlockStart] = useState("");
   const [blockEnd, setBlockEnd] = useState("");
+  const [blockMessage, setBlockMessage] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [trayOpen, setTrayOpen] = useState(true);
 
@@ -96,33 +98,43 @@ export function ScheduleBoard({
         }
         blockForm={
           showBlockForm ? (
-            <ScheduleBlockForm
-              blockTitle={blockTitle}
-              blockType={blockType}
-              blockStart={blockStart}
-              blockEnd={blockEnd}
-              isPending={isPending}
-              onTitleChange={setBlockTitle}
-              onTypeChange={setBlockType}
-              onStartChange={setBlockStart}
-              onEndChange={setBlockEnd}
-              onSave={() =>
-                startTransition(async () => {
-                  await upsertScheduleBlockAction({
-                    title: blockTitle,
-                    type: blockType,
-                    startAt: parseDatetimeLocalInTimezone(blockStart, timeZone),
-                    endAt: blockEnd
-                      ? parseDatetimeLocalInTimezone(blockEnd, timeZone)
-                      : undefined,
-                  });
-                  setBlockTitle("");
-                  setBlockStart("");
-                  setBlockEnd("");
-                  setShowBlockForm(false);
-                })
-              }
-            />
+            <div className="space-y-2">
+              {blockMessage ? (
+                <p className="text-xs text-destructive">{blockMessage}</p>
+              ) : null}
+              <ScheduleBlockForm
+                blockTitle={blockTitle}
+                blockType={blockType}
+                blockStart={blockStart}
+                blockEnd={blockEnd}
+                isPending={isPending}
+                onTitleChange={setBlockTitle}
+                onTypeChange={setBlockType}
+                onStartChange={setBlockStart}
+                onEndChange={setBlockEnd}
+                onSave={() =>
+                  startTransition(async () => {
+                    setBlockMessage(null);
+                    const result = await upsertScheduleBlockAction({
+                      title: blockTitle,
+                      type: blockType,
+                      startAt: parseDatetimeLocalInTimezone(blockStart, timeZone),
+                      endAt: blockEnd
+                        ? parseDatetimeLocalInTimezone(blockEnd, timeZone)
+                        : undefined,
+                    });
+                    if (result.error) {
+                      setBlockMessage(getActionErrorMessage(result.error));
+                      return;
+                    }
+                    setBlockTitle("");
+                    setBlockStart("");
+                    setBlockEnd("");
+                    setShowBlockForm(false);
+                  })
+                }
+              />
+            </div>
           ) : null
         }
         trayPanel={

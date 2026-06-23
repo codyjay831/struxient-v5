@@ -21,7 +21,7 @@ import {
   getCommercialRequestContextOrThrow,
   getRequestContextOrThrow,
 } from "@/lib/auth-context";
-import { canManageCustomerPortal } from "@/lib/customer-portal/authorize";
+import { canManageCustomerPortal, canReadCustomerCoordination } from "@/lib/customer-portal/authorize";
 import {
   createCustomerPortalAccess,
   revokeCustomerPortalAccess,
@@ -238,6 +238,10 @@ export async function resolveCustomerRequestAction(
 
 export async function loadJobPortalManagementData(jobId: string) {
   const ctx = await getRequestContextOrThrow();
+  if (!canReadCustomerCoordination(ctx.role)) {
+    return null;
+  }
+
   const canManage = canManageCustomerPortal(ctx.role);
 
   const job = await db.job.findFirst({

@@ -36,6 +36,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |
 | [workstation-canon.md](./workstation-canon.md) | Workstation as **action-discovery destination**; cockpit / “what’s next” deep rules |
 | [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) | Non-negotiables, default decisions, **engineering delivery standards (I22)**, **light/dark appearance (I23)** |
+| [execution-aware-authorization-canon.md](./execution-aware-authorization-canon.md) | **Staff authorization**: role vs assignment, runtime `authorizeStaffAction`, coordination vs execution, payment/portal read visibility, Execution Builder boundaries |
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | v1 product locks: RBAC, states, money, portal, issues, Workstation, phasing |
 | [issue-recovery-canon.md](./issue-recovery-canon.md) | Canonical mitigation model for `BLOCKS_WORK` issues (RecoveryFlow-only) |
 | [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md) | **Working quote vs hidden checkpoints**, job as execution, activity layer; UX/naming guardrails (current-state-first) |
@@ -55,7 +56,7 @@ When scheduling docs conflict, use this precedence:
 ## Reading order (suggested)
 
 1. `overview.md` + [product-philosophy.md](./product-philosophy.md) + `lineage-and-prior-art.md` (context from earlier repos)  
-2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `quote-truth-and-checkpoints.md`  
+2. `invariants-and-decision-rules.md` + `locked-decisions-v1.md` + `execution-aware-authorization-canon.md` + `quote-truth-and-checkpoints.md`
 3. `conceptual-model.md` + `domains-and-boundaries.md` + [business-profile-and-ai-context-canon.md](./business-profile-and-ai-context-canon.md) + `templates-and-execution-planning.md` + `execution-engine-canon.md`  
 4. `experience-canon-lead-to-workstation.md` + `sales-site-visit-canon.md` + `workstation-canon.md` (+ optional `journey-contractor-intake-to-completion.md` for storytelling)  
 5. `glossary.md` as reference  

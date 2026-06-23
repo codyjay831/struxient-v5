@@ -17,6 +17,7 @@ import {
   linkTasksToScheduleEventAction,
   rescheduleJobScheduleEventFromScheduleAction,
 } from "@/app/(workspace)/schedule/schedule-actions";
+import { getActionErrorMessage } from "@/components/jobs/action-error-message";
 
 type ScheduleTask = { id: string; title: string; status: "TODO" | "DONE" | "CANCELED" };
 
@@ -164,7 +165,7 @@ export function JobScheduleEventsPanel({
               customerVisible,
             });
             if (result.error) {
-              setMessage(result.error);
+              setMessage(getActionErrorMessage(result.error));
               return;
             }
             setMessage("Event created.");
@@ -213,7 +214,12 @@ export function JobScheduleEventsPanel({
                       disabled={isPending}
                       onClick={() =>
                         startTransition(async () => {
-                          await confirmJobScheduleEventAction(event.id);
+                          const result = await confirmJobScheduleEventAction(event.id);
+                          if (result.error) {
+                            setMessage(getActionErrorMessage(result.error));
+                            return;
+                          }
+                          setMessage("Event confirmed.");
                         })
                       }
                     >
@@ -228,10 +234,15 @@ export function JobScheduleEventsPanel({
                       disabled={isPending}
                       onClick={() =>
                         startTransition(async () => {
-                          await cancelJobScheduleEventFromScheduleAction(
+                          const result = await cancelJobScheduleEventFromScheduleAction(
                             event.id,
                             "Canceled from job panel.",
                           );
+                          if (result.error) {
+                            setMessage(getActionErrorMessage(result.error));
+                            return;
+                          }
+                          setMessage("Event canceled.");
                         })
                       }
                     >
@@ -246,11 +257,16 @@ export function JobScheduleEventsPanel({
                         disabled={isPending}
                         onClick={() =>
                           startTransition(async () => {
-                            await completeJobScheduleEventFromScheduleAction(
+                            const result = await completeJobScheduleEventFromScheduleAction(
                               event.id,
                               JobScheduleEventCompletionOutcome.PARTIAL_WORK,
                               "Partial work recorded from job panel.",
                             );
+                            if (result.error) {
+                              setMessage(getActionErrorMessage(result.error));
+                              return;
+                            }
+                            setMessage("Event marked partial.");
                           })
                         }
                       >
@@ -262,11 +278,16 @@ export function JobScheduleEventsPanel({
                         disabled={isPending}
                         onClick={() =>
                           startTransition(async () => {
-                            await completeJobScheduleEventFromScheduleAction(
+                            const result = await completeJobScheduleEventFromScheduleAction(
                               event.id,
                               JobScheduleEventCompletionOutcome.WORK_COMPLETED,
                               "Work completed.",
                             );
+                            if (result.error) {
+                              setMessage(getActionErrorMessage(result.error));
+                              return;
+                            }
+                            setMessage("Event completed.");
                           })
                         }
                       >
@@ -292,11 +313,21 @@ export function JobScheduleEventsPanel({
                             endAt: new Date(Date.now() + 26 * 60 * 60 * 1000),
                             status: JobScheduleEventStatus.TENTATIVE,
                           });
-                          if (created.error || !created.eventId) return;
-                          await linkTasksToScheduleEventAction(
+                          if (created.error || !created.eventId) {
+                            if (created.error) {
+                              setMessage(getActionErrorMessage(created.error));
+                            }
+                            return;
+                          }
+                          const linkResult = await linkTasksToScheduleEventAction(
                             created.eventId,
                             remainingTaskIds,
                           );
+                          if (linkResult.error) {
+                            setMessage(getActionErrorMessage(linkResult.error));
+                            return;
+                          }
+                          setMessage("Return work event created.");
                         })
                       }
                     >
@@ -311,11 +342,16 @@ export function JobScheduleEventsPanel({
                       disabled={isPending}
                       onClick={() =>
                         startTransition(async () => {
-                          await rescheduleJobScheduleEventFromScheduleAction(event.id, {
+                          const result = await rescheduleJobScheduleEventFromScheduleAction(event.id, {
                             startAt: new Date(event.startAt.getTime() + 24 * 60 * 60 * 1000),
                             endAt: new Date(event.endAt.getTime() + 24 * 60 * 60 * 1000),
                             reason: "Shifted by one day from job panel.",
                           });
+                          if (result.error) {
+                            setMessage(getActionErrorMessage(result.error));
+                            return;
+                          }
+                          setMessage("Event rescheduled.");
                         })
                       }
                     >

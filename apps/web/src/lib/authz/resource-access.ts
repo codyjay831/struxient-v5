@@ -38,3 +38,43 @@ export function getTaskVisibilityWhere(role: StaffRole, userId: string) {
     OR: [{ assignedUserId: userId }, getCrewLinkedAssigneeWhere(userId)],
   };
 }
+
+/** Schedule event execution mutation scope — event lead only. */
+export function getScheduleEventExecutionAssignmentWhere(role: StaffRole, userId: string) {
+  if (role === StaffRole.SUBCONTRACTOR || role === StaffRole.FIELD) {
+    return { leadUserId: userId };
+  }
+
+  return {};
+}
+
+/** Visit execution mutation scope — direct assignee or schedule lead for this visit. */
+export function getVisitExecutionAssignmentWhere(
+  role: StaffRole,
+  userId: string,
+  visitId: string,
+) {
+  if (role === StaffRole.SUBCONTRACTOR) {
+    return { assignedUserId: userId };
+  }
+
+  if (role !== StaffRole.FIELD) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { assignedUserId: userId },
+      {
+        job: {
+          scheduleEvents: {
+            some: {
+              leadUserId: userId,
+              legacyVisitId: visitId,
+            },
+          },
+        },
+      },
+    ],
+  };
+}

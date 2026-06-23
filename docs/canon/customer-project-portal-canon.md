@@ -735,9 +735,9 @@ Permissions:
 |------|----------------|
 | `OWNER` / `ADMIN` | Full portal controls |
 | `OFFICE` | Invite/revoke customer access, manage visible resources, resolve customer requests |
-| `FIELD` | May see customer access notes or request docs/photos later if explicitly allowed; no access management |
-| `VIEWER` | Read-only internal view |
-| `SUBCONTRACTOR` | No portal management |
+| `FIELD` | **No** portal panel or coordination metadata on job page; execution-safe jobsite/customer context only (see [execution-aware-authorization-canon.md](./execution-aware-authorization-canon.md) §6) |
+| `VIEWER` | Read-only internal coordination view where `read.commercial` applies |
+| `SUBCONTRACTOR` | **No** portal management or coordination metadata |
 
 ## Notification Boundary
 

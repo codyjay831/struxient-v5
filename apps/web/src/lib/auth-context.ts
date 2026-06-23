@@ -5,6 +5,7 @@ import {
   denyUnlessCanManageOrgSettings,
   denyUnlessCanMutate,
 } from "./staff-authz";
+import { assertExecutionPlanPermission } from "./execution-plan-permissions";
 import {
   getJobVisibilityWhere,
   getTaskVisibilityWhere,
@@ -57,6 +58,19 @@ export async function getCommercialRequestContextOrNull(): Promise<RequestContex
   } catch {
     return null;
   }
+}
+
+/**
+ * Requires commercial read access plus permission to mutate quote execution plans.
+ * Blocks FIELD, SUBCONTRACTOR, and VIEWER.
+ */
+export async function getExecutionPlanEditorContextOrThrow(): Promise<RequestContext> {
+  const ctx = await getCommercialRequestContextOrThrow();
+  const permission = assertExecutionPlanPermission(ctx.role, "edit_execution_plan");
+  if (!permission.ok) {
+    throw new Error(permission.error);
+  }
+  return ctx;
 }
 
 /**

@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 import {
   assignTaskWorkPackage,
   createWorkPackage,
 } from "@/lib/scheduling/work-package-service";
-import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
 
 type WorkPackageActionState = {
   error?: string;
@@ -24,9 +24,16 @@ export async function createJobWorkPackageAction(input: {
   source?: string | null;
   taskIds?: string[];
 }): Promise<WorkPackageActionState> {
-  const session = await requireMutableSession();
-  const permission = assertSchedulePermission(session.role, "create_tentative");
-  if (!permission.ok) return { error: permission.error };
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.WORK_PACKAGE_CREATE,
+    resourceType: "job",
+    resourceId: input.jobId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const created = await createWorkPackage(
@@ -72,9 +79,16 @@ export async function setTaskWorkPackageAction(
   taskId: string,
   workPackageId: string | null,
 ): Promise<WorkPackageActionState> {
-  const session = await requireMutableSession();
-  const permission = assertSchedulePermission(session.role, "link_unlink_tasks");
-  if (!permission.ok) return { error: permission.error };
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.WORK_PACKAGE_TASK_ASSIGN,
+    resourceType: "jobTask",
+    resourceId: taskId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const assigned = await assignTaskWorkPackage(

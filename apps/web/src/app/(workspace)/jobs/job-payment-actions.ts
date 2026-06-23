@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { JobPaymentRequirementStatus, JobActivityType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { formatCents } from "@/lib/job-payment-display";
 import { publishSignal } from "@/lib/signal-bus";
-import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
 
 export type CreateJobPaymentRequirementInput = {
   jobId: string;
@@ -18,20 +18,32 @@ export type CreateJobPaymentRequirementInput = {
   notes?: string;
 };
 
-export async function createJobPaymentRequirementAction(input: CreateJobPaymentRequirementInput) {
-  const session = await requireMutableSession();
-  const organizationId = session.organizationId;
-  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
-  if (!permission.ok) {
-    throw new Error(permission.error);
+type JobPaymentActionResult =
+  | { success: true; requirementId?: string }
+  | { error: string };
+
+export async function createJobPaymentRequirementAction(
+  input: CreateJobPaymentRequirementInput,
+): Promise<JobPaymentActionResult> {
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_PAYMENT_REQUIREMENT_CREATE,
+    resourceType: "job",
+    resourceId: input.jobId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
+
+  const organizationId = session.organizationId;
 
   const job = await db.job.findFirst({
     where: { id: input.jobId, organizationId },
   });
 
   if (!job) {
-    throw new Error("Job not found or access denied.");
+    return { error: "Job not found or access denied." };
   }
 
   if (input.requiredBeforeStageId) {
@@ -39,7 +51,7 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
       where: { id: input.requiredBeforeStageId, jobId: input.jobId },
     });
     if (!stage) {
-      throw new Error("Job stage not found or does not belong to this job.");
+      return { error: "Job stage not found or does not belong to this job." };
     }
   }
 
@@ -76,20 +88,28 @@ export async function createJobPaymentRequirementAction(input: CreateJobPaymentR
   return { success: true, requirementId: requirement.id };
 }
 
-export async function markJobPaymentRequirementPaidAction(requirementId: string) {
-  const session = await requireMutableSession();
-  const organizationId = session.organizationId;
-  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
-  if (!permission.ok) {
-    throw new Error(permission.error);
+export async function markJobPaymentRequirementPaidAction(
+  requirementId: string,
+): Promise<JobPaymentActionResult> {
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_PAYMENT_REQUIREMENT_MARK_PAID,
+    resourceType: "jobPaymentRequirement",
+    resourceId: requirementId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
+
+  const organizationId = session.organizationId;
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
   });
 
   if (!requirement) {
-    throw new Error("Payment requirement not found or access denied.");
+    return { error: "Payment requirement not found or access denied." };
   }
 
   await db.jobPaymentRequirement.update({
@@ -122,20 +142,28 @@ export async function markJobPaymentRequirementPaidAction(requirementId: string)
   return { success: true };
 }
 
-export async function waiveJobPaymentRequirementAction(requirementId: string) {
-  const session = await requireMutableSession();
-  const organizationId = session.organizationId;
-  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
-  if (!permission.ok) {
-    throw new Error(permission.error);
+export async function waiveJobPaymentRequirementAction(
+  requirementId: string,
+): Promise<JobPaymentActionResult> {
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_PAYMENT_REQUIREMENT_WAIVE,
+    resourceType: "jobPaymentRequirement",
+    resourceId: requirementId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
+
+  const organizationId = session.organizationId;
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
   });
 
   if (!requirement) {
-    throw new Error("Payment requirement not found or access denied.");
+    return { error: "Payment requirement not found or access denied." };
   }
 
   await db.jobPaymentRequirement.update({
@@ -167,20 +195,28 @@ export async function waiveJobPaymentRequirementAction(requirementId: string) {
   return { success: true };
 }
 
-export async function cancelJobPaymentRequirementAction(requirementId: string) {
-  const session = await requireMutableSession();
-  const organizationId = session.organizationId;
-  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
-  if (!permission.ok) {
-    throw new Error(permission.error);
+export async function cancelJobPaymentRequirementAction(
+  requirementId: string,
+): Promise<JobPaymentActionResult> {
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_PAYMENT_REQUIREMENT_CANCEL,
+    resourceType: "jobPaymentRequirement",
+    resourceId: requirementId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
+
+  const organizationId = session.organizationId;
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
   });
 
   if (!requirement) {
-    throw new Error("Payment requirement not found or access denied.");
+    return { error: "Payment requirement not found or access denied." };
   }
 
   await db.jobPaymentRequirement.update({
@@ -211,19 +247,25 @@ export async function updateJobPaymentRequirementPortalLinkAction(
   requirementId: string,
   paymentUrl: string | null,
   paymentUrlLabel: string | null,
-) {
-  const session = await requireMutableSession();
-  const organizationId = session.organizationId;
-  const permission = assertExecutionPlanPermission(session.role, "adjust_payments");
-  if (!permission.ok) {
-    throw new Error(permission.error);
+): Promise<JobPaymentActionResult> {
+  const session = await requireCurrentSession();
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_PAYMENT_REQUIREMENT_PORTAL_LINK_UPDATE,
+    resourceType: "jobPaymentRequirement",
+    resourceId: requirementId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
   }
+
+  const organizationId = session.organizationId;
 
   const requirement = await db.jobPaymentRequirement.findFirst({
     where: { id: requirementId, organizationId },
   });
   if (!requirement) {
-    throw new Error("Payment requirement not found or access denied.");
+    return { error: "Payment requirement not found or access denied." };
   }
 
   const trimmedUrl = paymentUrl?.trim() || null;
@@ -231,10 +273,10 @@ export async function updateJobPaymentRequirementPortalLinkAction(
     try {
       const parsed = new URL(trimmedUrl);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        throw new Error("Invalid URL");
+        return { error: "Enter a valid payment URL (https://…)." };
       }
     } catch {
-      throw new Error("Enter a valid payment URL (https://…).");
+      return { error: "Enter a valid payment URL (https://…)." };
     }
   }
 

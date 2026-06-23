@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
+import { getJobVisibilityWhere } from "@/lib/authz/resource-access";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 import {
   buildScheduleCleanupReviewItems,
   executeScheduleCleanupBatch,
@@ -21,8 +23,17 @@ export async function confirmJobScheduleCleanupAction(input: {
   selections: ScheduleCleanupSelection[];
   spawnExternalFollowUpTasks?: boolean;
 }): Promise<JobScheduleCleanupActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_SCHEDULE_CLEANUP_CONFIRM,
+    resourceType: "job",
+    resourceId: input.jobId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   try {
     const result = await db.$transaction(async (tx) =>
@@ -54,11 +65,15 @@ export async function confirmJobScheduleCleanupAction(input: {
 }
 
 export async function loadJobScheduleCleanupReviewAction(jobId: string) {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
   const job = await db.job.findFirst({
-    where: { id: jobId, organizationId },
+    where: {
+      id: jobId,
+      organizationId,
+      ...getJobVisibilityWhere(session.role, session.userId),
+    },
     select: { id: true, title: true, status: true },
   });
   if (!job) return null;

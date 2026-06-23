@@ -9,7 +9,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db, type ExtendedTransactionClient } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { enqueueNotification } from "@/lib/notifications/notification-outbox";
 import {
@@ -18,6 +18,7 @@ import {
   createScheduleEvent,
   rescheduleScheduleEvent,
 } from "@/lib/scheduling/event-service";
+import { authorizeStaffAction, STAFF_ACTIONS, type StaffAction } from "@/lib/authz/staff-actions";
 
 async function findCanonicalVisitEvent(
   organizationId: string,
@@ -39,6 +40,19 @@ function isVisitTerminal(status: JobVisitStatus): boolean {
   return status === JobVisitStatus.CANCELED || status === JobVisitStatus.COMPLETED;
 }
 
+async function denyUnlessAuthorizedJobVisitAction(
+  session: Awaited<ReturnType<typeof requireCurrentSession>>,
+  action: StaffAction,
+  resource: { resourceType: "job" | "jobVisit"; resourceId: string },
+): Promise<string | null> {
+  const authorization = await authorizeStaffAction(session, {
+    action,
+    resourceType: resource.resourceType,
+    resourceId: resource.resourceId,
+  });
+  return authorization.ok ? null : authorization.message;
+}
+
 export async function createJobVisitAction(
   jobId: string,
   data: {
@@ -46,10 +60,18 @@ export async function createJobVisitAction(
     scheduledEndAt?: Date;
     assignedUserId?: string;
     notes?: string;
-  }
+  },
 ): Promise<JobVisitActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const denied = await denyUnlessAuthorizedJobVisitAction(session, STAFF_ACTIONS.VISIT_SCHEDULE_CREATE, {
+    resourceType: "job",
+    resourceId: jobId.trim(),
+  });
+  if (denied) {
+    return { error: denied };
+  }
 
   if (data.scheduledEndAt && data.scheduledEndAt <= data.scheduledStartAt) {
     return { error: "End time must be after start time." };
@@ -57,7 +79,7 @@ export async function createJobVisitAction(
 
   try {
     const job = await db.job.findFirst({
-      where: { id: jobId, organizationId },
+      where: { id: jobId.trim(), organizationId },
       select: { id: true, title: true },
     });
 
@@ -73,7 +95,7 @@ export async function createJobVisitAction(
       const created = await createScheduleEvent(
         {
           organizationId,
-          jobId,
+          jobId: job.id,
           kind: JobScheduleEventKind.SITE_VISIT,
           startAt: data.scheduledStartAt,
           endAt,
@@ -91,7 +113,7 @@ export async function createJobVisitAction(
       await recordJobActivity(
         {
           organizationId,
-          jobId,
+          jobId: job.id,
           type: JobActivityType.VISIT_SCHEDULED,
           title: `Visit scheduled: ${data.scheduledStartAt.toLocaleString()}`,
           details:
@@ -114,7 +136,7 @@ export async function createJobVisitAction(
           payloadJson: {
             visitId: null,
             scheduleEventId: created.eventId,
-            jobId,
+            jobId: job.id,
             scheduledStartAt: data.scheduledStartAt.toISOString(),
             scheduledEndAt: data.scheduledEndAt?.toISOString() ?? null,
             assignedUserId: data.assignedUserId ?? null,
@@ -125,7 +147,7 @@ export async function createJobVisitAction(
       );
     });
 
-    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath(`/jobs/${jobId.trim()}`);
     revalidatePath("/schedule");
     revalidatePath("/workstation");
     revalidatePath("/workstation/schedule");
@@ -143,10 +165,18 @@ export async function rescheduleJobVisitAction(
     scheduledStartAt: Date;
     scheduledEndAt?: Date;
     notes?: string;
-  }
+  },
 ): Promise<JobVisitActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const denied = await denyUnlessAuthorizedJobVisitAction(session, STAFF_ACTIONS.VISIT_SCHEDULE_UPDATE, {
+    resourceType: "jobVisit",
+    resourceId: visitId.trim(),
+  });
+  if (denied) {
+    return { error: denied };
+  }
 
   if (data.scheduledEndAt && data.scheduledEndAt <= data.scheduledStartAt) {
     return { error: "End time must be after start time." };
@@ -154,7 +184,7 @@ export async function rescheduleJobVisitAction(
 
   try {
     const visit = await db.jobVisit.findFirst({
-      where: { id: visitId, organizationId },
+      where: { id: visitId.trim(), organizationId },
       select: { id: true, jobId: true, status: true },
     });
 
@@ -167,7 +197,7 @@ export async function rescheduleJobVisitAction(
 
     await db.$transaction(async (tx) => {
       await tx.jobVisit.update({
-        where: { id: visitId },
+        where: { id: visitId.trim() },
         data: {
           scheduledStartAt: data.scheduledStartAt,
           scheduledEndAt: data.scheduledEndAt,
@@ -186,7 +216,7 @@ export async function rescheduleJobVisitAction(
           entityId: visit.id,
           actorUserId: session.userId,
         },
-        tx
+        tx,
       );
 
       const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);
@@ -243,14 +273,22 @@ export async function rescheduleJobVisitAction(
 
 export async function cancelJobVisitAction(
   visitId: string,
-  reason?: string
+  reason?: string,
 ): Promise<JobVisitActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const denied = await denyUnlessAuthorizedJobVisitAction(session, STAFF_ACTIONS.VISIT_CANCEL, {
+    resourceType: "jobVisit",
+    resourceId: visitId.trim(),
+  });
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const visit = await db.jobVisit.findFirst({
-      where: { id: visitId, organizationId },
+      where: { id: visitId.trim(), organizationId },
       select: { id: true, jobId: true, scheduledStartAt: true, status: true },
     });
 
@@ -263,7 +301,7 @@ export async function cancelJobVisitAction(
 
     await db.$transaction(async (tx) => {
       await tx.jobVisit.update({
-        where: { id: visitId },
+        where: { id: visitId.trim() },
         data: { status: JobVisitStatus.CANCELED },
       });
 
@@ -278,7 +316,7 @@ export async function cancelJobVisitAction(
           entityId: visit.id,
           actorUserId: session.userId,
         },
-        tx
+        tx,
       );
 
       const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);
@@ -328,14 +366,22 @@ export async function cancelJobVisitAction(
 
 export async function completeJobVisitAction(
   visitId: string,
-  notes?: string
+  notes?: string,
 ): Promise<JobVisitActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const denied = await denyUnlessAuthorizedJobVisitAction(session, STAFF_ACTIONS.VISIT_COMPLETE, {
+    resourceType: "jobVisit",
+    resourceId: visitId.trim(),
+  });
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const visit = await db.jobVisit.findFirst({
-      where: { id: visitId, organizationId },
+      where: { id: visitId.trim(), organizationId },
       select: { id: true, jobId: true, scheduledStartAt: true, status: true },
     });
 
@@ -348,8 +394,8 @@ export async function completeJobVisitAction(
 
     await db.$transaction(async (tx) => {
       await tx.jobVisit.update({
-        where: { id: visitId },
-        data: { 
+        where: { id: visitId.trim() },
+        data: {
           status: JobVisitStatus.COMPLETED,
           notes: notes || undefined,
         },
@@ -366,7 +412,7 @@ export async function completeJobVisitAction(
           entityId: visit.id,
           actorUserId: session.userId,
         },
-        tx
+        tx,
       );
 
       const canonical = await findCanonicalVisitEvent(organizationId, visit.id, tx);

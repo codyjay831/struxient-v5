@@ -1,4 +1,5 @@
 import { getRequestContextOrThrow } from "@/lib/auth-context";
+import { canReadPaymentDetails } from "@/lib/authz/payment-visibility";
 import { db } from "@/lib/db";
 import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
@@ -35,6 +36,8 @@ export async function WorkstationPanelContent({
 
   if (item.kind === "investigate" && item.filterCategory === "payments") {
     if (!item.parentRecordId) return null;
+    const ctx = await getRequestContextOrThrow();
+    if (!canReadPaymentDetails(ctx.role)) return null;
     return (
       <WorkstationPaymentDetailLoader
         requirementId={item.recordId}
@@ -88,7 +91,7 @@ export async function WorkstationPanelContent({
 
 async function WorkstationTaskDetail({ taskId }: { taskId: string }) {
   const ctx = await getRequestContextOrThrow();
-  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId);
+  const payload = await loadJobTaskExecutionPayload(taskId, ctx.organizationId, ctx.role);
 
   if (!payload) return null;
 

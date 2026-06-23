@@ -1,6 +1,7 @@
-import { JobIssueSeverity, JobIssueStatus } from "@prisma/client";
+import { JobIssueSeverity, JobIssueStatus, StaffRole } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { JobTaskExecutionPayload } from "@/components/jobs/job-task-execution-types";
+import { sanitizeTaskPaymentHoldForRole } from "@/lib/authz/payment-visibility";
 import { resolveJobsiteLineForQuoteOrJob } from "@/lib/jobsite-address";
 import { deriveLeadTitle } from "@/lib/lead/lead-projection";
 import {
@@ -17,6 +18,7 @@ import {
 export async function loadJobTaskExecutionPayload(
   taskId: string,
   organizationId: string,
+  role: StaffRole,
 ): Promise<JobTaskExecutionPayload | null> {
   const task = await db.jobTask.findFirst({
     where: { id: taskId, job: { organizationId } },
@@ -221,10 +223,9 @@ export async function loadJobTaskExecutionPayload(
     paymentRequirements: paymentRequirementsWithAnchors,
   });
 
-  const paymentHold = deriveTaskPaymentHold(
-    task.jobStageId,
-    paymentRequirementsWithAnchors,
-    paymentCtx,
+  const paymentHold = sanitizeTaskPaymentHoldForRole(
+    deriveTaskPaymentHold(task.jobStageId, paymentRequirementsWithAnchors, paymentCtx),
+    role,
   );
 
   const crewEvent = task.scheduleEventLinks[0]?.jobScheduleEvent;

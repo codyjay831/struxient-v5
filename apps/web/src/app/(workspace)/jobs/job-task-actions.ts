@@ -12,7 +12,7 @@ import {
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import {
   deriveTaskState,
@@ -41,7 +41,7 @@ import {
   setManualTaskDeadline,
 } from "@/lib/scheduling/deadline-service";
 import { TaskDueAnchor, TaskDueGranularity } from "@prisma/client";
-import { assertSchedulePermission } from "@/lib/scheduling/schedule-permissions";
+import { authorizeStaffAction, STAFF_ACTIONS, type StaffAction } from "@/lib/authz/staff-actions";
 
 export type JobTaskActionState = {
   error?: string;
@@ -57,11 +57,34 @@ export type JobTaskScheduleActionInput = {
   assignedUserId?: string | null;
 };
 
+async function denyUnlessAuthorizedJobTaskAction(
+  session: Awaited<ReturnType<typeof requireCurrentSession>>,
+  action: StaffAction,
+  taskId: string,
+  metadata?: Parameters<typeof authorizeStaffAction>[1]["metadata"],
+): Promise<string | null> {
+  const authorization = await authorizeStaffAction(session, {
+    action,
+    resourceType: "jobTask",
+    resourceId: taskId,
+    metadata,
+  });
+  return authorization.ok ? null : authorization.message;
+}
+
 export async function addJobTaskAction(
   input: AddJobTaskInput,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.TASK_CREATE,
+    resourceType: "jobStage",
+    resourceId: input.jobStageId.trim(),
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   try {
     const jobStage = await db.jobStage.findFirst({
@@ -160,8 +183,16 @@ export async function saveJobTaskCompletionNoteAction(
   taskId: string,
   completionNote: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_COMPLETION_NOTE_SAVE,
+    taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const task = await db.jobTask.findFirst({
@@ -200,8 +231,12 @@ export async function completeJobTaskAction(
   taskId: string,
   completionNote?: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const denied = await denyUnlessAuthorizedJobTaskAction(session, STAFF_ACTIONS.TASK_COMPLETE, taskId);
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const task = await db.jobTask.findFirst({
@@ -330,13 +365,23 @@ export async function updateJobTaskStatusAction(
   taskId: string,
   status: JobTaskStatus,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
 
   if (status === JobTaskStatus.DONE) {
     return {
       error: "Use the complete task action to mark a task done with proper readiness checks.",
     };
+  }
+
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_STATUS_UPDATE,
+    taskId,
+    { targetStatus: status },
+  );
+  if (denied) {
+    return { error: denied };
   }
 
   try {
@@ -435,8 +480,16 @@ export async function overrideJobTaskReadinessAction(
   taskId: string,
   completionNote?: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_READINESS_OVERRIDE,
+    taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const task = await db.jobTask.findFirst({
@@ -533,10 +586,17 @@ export async function overrideJobTaskReadinessAction(
 export async function updateJobTaskScheduleAction(
   input: JobTaskScheduleActionInput,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
-  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
-  if (!permission.ok) return { error: permission.error };
+
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_SCHEDULE_UPDATE,
+    input.taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const updateResult = await db.$transaction(async (tx) => {
@@ -585,9 +645,16 @@ export async function setJobTaskManualDeadlineAction(input: {
   granularity: TaskDueGranularity;
   dateOnlyInput?: string;
 }): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
-  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
-  if (!permission.ok) return { error: permission.error };
+  const session = await requireCurrentSession();
+
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_DEADLINE_UPDATE,
+    input.taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const deadline = await setManualTaskDeadline(
@@ -625,9 +692,16 @@ export async function setJobTaskDerivedDeadlineRuleAction(input: {
   offsetDays: number;
   granularity: TaskDueGranularity;
 }): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
-  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
-  if (!permission.ok) return { error: permission.error };
+  const session = await requireCurrentSession();
+
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_DEADLINE_UPDATE,
+    input.taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const deadline = await setDerivedDeadlineRule(
@@ -663,9 +737,16 @@ export async function recalculateJobTaskDerivedDeadlineAction(
   taskId: string,
   reason: string,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
-  const permission = assertSchedulePermission(session.role, "deadline_set_recalc");
-  if (!permission.ok) return { error: permission.error };
+  const session = await requireCurrentSession();
+
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_DEADLINE_UPDATE,
+    taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const deadline = await recalculateDerivedDeadline(
@@ -700,8 +781,16 @@ export async function toggleJobTaskChecklistItemAction(
   checklistItemId: string,
   completed: boolean,
 ): Promise<JobTaskActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+  const denied = await denyUnlessAuthorizedJobTaskAction(
+    session,
+    STAFF_ACTIONS.TASK_CHECKLIST_TOGGLE,
+    taskId,
+  );
+  if (denied) {
+    return { error: denied };
+  }
 
   try {
     const task = await db.jobTask.findFirst({

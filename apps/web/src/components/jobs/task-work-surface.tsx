@@ -47,6 +47,8 @@ import {
   shouldShowReviewRecoveryPlanAffordance,
 } from "@/lib/recovery-issue-ui-flow";
 import { RecoveryFlowBuilder, type RecoveryBuilderContext } from "./recovery-flow-builder";
+import { formatPaymentHoldMessage } from "@/lib/authz/payment-visibility";
+import { getActionErrorMessage } from "./action-error-message";
 import {
   Dialog,
   DialogContent,
@@ -149,6 +151,12 @@ export function TaskWorkSurface({
   const noteDirtyRef = useRef(false);
   const lastSavedNoteRef = useRef(initialTask.completionNote || "");
   const saveNoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+    issueId?: string;
+    issueSeverity?: JobIssueSeverity;
+  } | null>(null);
 
   const [dueAtInput, setDueAtInput] = useState(toDateTimeLocalValue(initialTask.dueAt));
   const [scheduledStartInput, setScheduledStartInput] = useState(
@@ -213,8 +221,12 @@ export function TaskWorkSurface({
 
     saveNoteTimerRef.current = setTimeout(() => {
       void (async () => {
-        const result = await saveJobTaskCompletionNoteAction(task.id, noteRef.current);
-        if (!result.error) {
+        try {
+          const result = await saveJobTaskCompletionNoteAction(task.id, noteRef.current);
+          if (result.error) {
+            setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+            return;
+          }
           const saved = noteRef.current.trim() || "";
           lastSavedNoteRef.current = saved;
           noteDirtyRef.current = false;
@@ -222,6 +234,11 @@ export function TaskWorkSurface({
             ...t,
             completionNote: saved || null,
           }));
+        } catch (error) {
+          setActionMessage({
+            tone: "error",
+            text: error instanceof Error ? error.message : "Failed to save completion note.",
+          });
         }
       })();
     }, 700);
@@ -238,16 +255,18 @@ export function TaskWorkSurface({
     return () => {
       if (saveNoteTimerRef.current) clearTimeout(saveNoteTimerRef.current);
       if (noteDirtyRef.current && taskStatus !== JobTaskStatus.DONE) {
-        void saveJobTaskCompletionNoteAction(taskId, noteRef.current);
+        void saveJobTaskCompletionNoteAction(taskId, noteRef.current)
+          .then((result) => {
+            if (result.error) {
+              console.error("Failed to flush completion note draft", result.error);
+            }
+          })
+          .catch((error) => {
+            console.error("Failed to flush completion note draft", error);
+          });
       }
     };
   }, [task.id, task.status]);
-  const [actionMessage, setActionMessage] = useState<{
-    tone: "success" | "error";
-    text: string;
-    issueId?: string;
-    issueSeverity?: JobIssueSeverity;
-  } | null>(null);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const hasJobsite = Boolean(jobsiteAddressLine?.trim());
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
@@ -336,7 +355,7 @@ export function TaskWorkSurface({
     startTransition(async () => {
       const result = await completeJobTaskAction(task.id, note);
       if (result.error) {
-        setActionMessage({ tone: "error", text: result.error });
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
       } else {
         setShowForm(false);
         setActionMessage({ tone: "success", text: "Task completed." });
@@ -359,7 +378,7 @@ export function TaskWorkSurface({
     startTransition(async () => {
       const result = await overrideJobTaskReadinessAction(task.id, note);
       if (result.error) {
-        setActionMessage({ tone: "error", text: result.error });
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
       } else {
         setShowForm(false);
         setActionMessage({ tone: "success", text: "Task completed via manager override." });
@@ -388,7 +407,7 @@ export function TaskWorkSurface({
       const prep = await getTaskAttachmentUploadUrlAction(task.id, file.name, file.type, file.size);
 
       if (prep.error) {
-        setActionMessage({ tone: "error", text: prep.error });
+        setActionMessage({ tone: "error", text: getActionErrorMessage(prep.error) });
         setIsUploading(false);
         return;
       }
@@ -398,7 +417,7 @@ export function TaskWorkSurface({
         formData.append("file", file);
         const result = await uploadTaskAttachmentAction(task.id, formData);
         if (result.error) {
-          setActionMessage({ tone: "error", text: result.error });
+          setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
         } else {
           setActionMessage({ tone: "success", text: "Attachment added." });
           refreshAfterMutation();
@@ -418,7 +437,7 @@ export function TaskWorkSurface({
 
         const result = await completeTaskAttachmentUploadAction(prep.attachmentId!);
         if (result.error) {
-          setActionMessage({ tone: "error", text: result.error });
+          setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
         } else {
           setActionMessage({ tone: "success", text: "Attachment added." });
           refreshAfterMutation();
@@ -450,6 +469,10 @@ export function TaskWorkSurface({
         severity: reportSeverity,
         description: reportDescription.trim() || undefined,
       });
+      if (result.error) {
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
+        return;
+      }
       setReportTitle("");
       setReportDescription("");
       setShowReportForm(false);
@@ -494,7 +517,7 @@ export function TaskWorkSurface({
     startTransition(async () => {
       const result = await removeJobEventAction(jobId, task.id);
       if (result.error) {
-        setActionMessage({ tone: "error", text: result.error });
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
         setShowCancelHoldConfirm(false);
         return;
       }
@@ -512,7 +535,7 @@ export function TaskWorkSurface({
     startTransition(async () => {
       const result = await toggleJobTaskChecklistItemAction(task.id, itemId, completed);
       if (result.error) {
-        setActionMessage({ tone: "error", text: result.error });
+        setActionMessage({ tone: "error", text: getActionErrorMessage(result.error) });
       } else {
         refreshAfterMutation();
       }
@@ -930,9 +953,6 @@ export function TaskWorkSurface({
             const showRecoveryProgress =
               (!!recoveryFlowInProgress || recoveryFlowCompleted) &&
               totalRecoveryTasks > 0;
-            const allRecoveryTasksDone =
-              totalRecoveryTasks > 0 &&
-              recoveryTasks.every((t) => t.status === JobTaskStatus.DONE);
             const canResumeAfterRecovery = shouldShowResumeOriginalPathAction(issue);
             const recoveryProgressMessage = getRecoveryProgressMessage(issue);
 
@@ -1065,7 +1085,7 @@ export function TaskWorkSurface({
               <div className="min-w-0 flex-1">
                 <h4 className="text-sm font-bold text-foreground">Payment Required</h4>
                 <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-                  {paymentHold.reason}: {paymentHold.title}
+                  {formatPaymentHoldMessage(paymentHold)}
                 </p>
               </div>
             </div>

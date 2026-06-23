@@ -135,7 +135,7 @@ Customers are usually **not** rows in the same “staff User + membership” mod
 
 - **Never rely on UI alone** to hide buttons; **always** enforce org + role + resource rules **on the server**.  
 - **Separate channels** — staff session vs customer token are **different permission systems** that can share infrastructure (same app, same auth library) but **must not** confuse customer scope with staff scope.  
-- **Exact role matrix** — locked for v1 in [locked-decisions-v1.md](./locked-decisions-v1.md) §1 (adjust via canon changelog when needed).
+- **Exact role matrix** — locked for v1 in [locked-decisions-v1.md](./locked-decisions-v1.md) §1; **runtime execution-aware detail** (staff actions, payment/portal read gates, Execution Builder boundaries) in [execution-aware-authorization-canon.md](./execution-aware-authorization-canon.md).
 - **Stale-session posture** — role/status/membership changes must take effect on protected server requests immediately; treat JWT as a transport hint and revalidate current user + membership from DB.
 - **Active-org posture** — selected org hints (session/cookie) must always validate against active membership; invalid context fails closed.
 - **Role vs permission split** — role selects default product surface; capability + resource relationship checks decide data/action access.

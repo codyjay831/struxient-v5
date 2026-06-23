@@ -3,8 +3,9 @@
 import { JobActivityType, JobStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireMutableSession } from "@/lib/session";
+import { requireCurrentSession } from "@/lib/session";
 import { recordJobActivity } from "@/lib/job-activity-helper";
+import { authorizeStaffAction, STAFF_ACTIONS } from "@/lib/authz/staff-actions";
 
 export type JobLifecycleActionState = {
   error?: string;
@@ -15,8 +16,17 @@ export async function archiveJobAction(
   jobId: string,
   reason?: string,
 ): Promise<JobLifecycleActionState> {
-  const session = await requireMutableSession();
+  const session = await requireCurrentSession();
   const organizationId = session.organizationId;
+
+  const authorization = await authorizeStaffAction(session, {
+    action: STAFF_ACTIONS.JOB_ARCHIVE,
+    resourceType: "job",
+    resourceId: jobId,
+  });
+  if (!authorization.ok) {
+    return { error: authorization.message };
+  }
 
   try {
     const job = await db.job.findFirst({

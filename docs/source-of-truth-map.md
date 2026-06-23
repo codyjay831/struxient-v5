@@ -81,12 +81,18 @@
 
 ## Authentication & authorization
 
+> **Staff authorization canon:** [execution-aware-authorization-canon.md](./canon/execution-aware-authorization-canon.md)
+
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
-| Actor context (`userId`, `organizationId`, `role`) | **Derived at request time** | `apps/web/src/lib/auth-context.ts` (moving to `lib/authz/context.ts`) | JWT stale-role leaks or wrong-tenant reads |
-| Role capability map | **Derived from role enum** | `apps/web/src/lib/staff-authz.ts` (moving to `lib/authz/capabilities.ts`) | Conflicting permission behavior across routes/actions |
-| Resource visibility predicate (`job/task/schedule`) | **Derived** | Authz resource helpers + query builders (`workstation-query.ts`, schedule/jobs queries) | Field/subcontractor overexposure on list/count/search |
-| Public token access scope | **Stored token metadata + derived checks** | `/q/[token]`, `/co/[token]` actions and token helpers (moving to dedicated public-token service) | Raw bearer token misuse and replay scope drift |
+| Actor context (`userId`, `organizationId`, `role`) | **Derived at request time** | `apps/web/src/lib/auth-context.ts` | JWT stale-role leaks or wrong-tenant reads |
+| Role capability map | **Derived from role enum** | `apps/web/src/lib/authz/capabilities.ts` | Conflicting permission behavior across routes/actions |
+| Runtime staff action authorization | **Derived at request time** | `apps/web/src/lib/authz/staff-actions.ts` — `authorizeStaffAction()`, `STAFF_ACTIONS` | Scattered role checks; FIELD/SUB over-mutation |
+| Resource visibility predicate (job/task) | **Derived** | `apps/web/src/lib/authz/resource-access.ts` + query builders | Field/sub overexposure on list/count/search |
+| Payment read visibility | **Derived from role** | `apps/web/src/lib/authz/payment-visibility.ts` — `canReadPaymentDetails()` | Dollar amounts / portal links leaking to FIELD/SUB |
+| Customer portal staff read/manage gates | **Derived from role** | `apps/web/src/lib/customer-portal/authorize.ts` | Portal access metadata leaking to FIELD/SUB |
+| Quote execution plan permissions | **Derived from role** | `apps/web/src/lib/execution-plan-permissions.ts` | Runtime job auth confused with quote planning auth |
+| Public token access scope | **Stored token metadata + derived checks** | `/q/[token]`, `/co/[token]` actions and token helpers | Raw bearer token misuse and replay scope drift |
 | Security audit stream | **Stored** | Dedicated security audit events (planned), not `JobActivity` | Lost accountability for role/invite/session/token actions |
 | Platform operator context | **Derived at request time** | `apps/web/src/lib/platform/platform-context.ts` (`getPlatformContext()`) | Platform authority leaking through contractor session or JWT role claims |
 | Platform access grant (current state) | **Stored** | `PlatformAccess` in `apps/web/prisma/schema.prisma` | Accidental auto-grants via seed or membership coupling |
@@ -190,7 +196,7 @@
 
 *Created 2026-05-16 — Guardrails v1 Pass 1.*  
 *Updated 2026-06-11 — Scheduling SoT boundaries aligned to revised canon lock (work group, event outcome, derived attention rules, legacy bridge posture).*  
-*Updated 2026-06-14 — Added Authentication & authorization SoT section (actor context, capability mapping, resource visibility, public token scope, security audit ownership).*  
+*Updated 2026-06-24 — Execution-aware authorization SoT: staff-actions, payment-visibility, portal authorize helpers; retired staff-authz / requireMutableSession references.*
 *Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
 *Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*  
 *Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*  

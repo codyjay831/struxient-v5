@@ -13,6 +13,7 @@ import {
 import { TaskWorkSurface } from "@/components/jobs/task-work-surface";
 import type { JobTaskExecutionTask } from "@/components/jobs/job-task-execution-types";
 import type { TaskPaymentHold } from "@/lib/job-payment-readiness";
+import { formatPaymentHoldMessage } from "@/lib/authz/payment-visibility";
 import { getSignalBlockedWaitingCopy, isFieldEventTaskTitle } from "@/lib/field-event-ui";
 import { includesEquivalentSignal } from "@/lib/signal-key";
 import { ChevronRight, Lock, Zap } from "lucide-react";
@@ -132,7 +133,7 @@ export function JobTaskCard({
                 {paymentHold && (
                   <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-danger-strong">
                     <Lock className="size-3 shrink-0" />
-                    Payment: {paymentHold.title}
+                    {formatPaymentHoldMessage(paymentHold)}
                   </p>
                 )}
                 {isBlockedByIssue && !paymentHold && (
