@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_PUBLIC_COPY_PATH,
   INTAKE_SETTINGS_HUB_PATH,
   INTAKE_SPECIALIZED_PATH,
@@ -29,24 +28,18 @@ const NAV_ITEMS: NavItem[] = [
       pathname === INTAKE_PUBLIC_COPY_PATH || pathname.startsWith(`${INTAKE_PUBLIC_COPY_PATH}/`),
   },
   {
-    label: "Customer questions",
-    href: INTAKE_CUSTOMER_FIELDS_PATH,
-    isActive: (pathname) =>
-      pathname === INTAKE_CUSTOMER_FIELDS_PATH ||
-      pathname.startsWith(`${INTAKE_CUSTOMER_FIELDS_PATH}/`),
-  },
-  {
     label: "Staff intake",
     href: INTAKE_STAFF_PATH,
     isActive: (pathname) =>
       pathname === INTAKE_STAFF_PATH || pathname.startsWith(`${INTAKE_STAFF_PATH}/`),
   },
   {
-    label: "Specialized request links",
+    label: "Customer request links",
     href: INTAKE_SPECIALIZED_PATH,
     isActive: (pathname) =>
       pathname === INTAKE_SPECIALIZED_PATH ||
       pathname.startsWith(`${INTAKE_SPECIALIZED_PATH}/`) ||
+      pathname.startsWith("/settings/intake/customer-fields") ||
       pathname.startsWith("/settings/intake/forms/"),
   },
 ];

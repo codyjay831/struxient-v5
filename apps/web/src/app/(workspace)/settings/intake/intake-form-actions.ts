@@ -5,22 +5,22 @@ import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
 import {
   normalizePublicIntakeFormSlug,
   publicIntakeCreateDefaults,
 } from "@/lib/intake/public-intake-form-constraints";
+import { clonePrimaryPublicIntakeFormSchema } from "@/lib/intake/ensure-default-public-intake-form";
+import { formBelongsToIntakeSurface } from "@/lib/intake/intake-form-surface";
 import {
-  clearOtherDefaultsForIntakeSurface,
-  formBelongsToIntakeSurface,
-} from "@/lib/intake/intake-form-surface";
-import { canArchiveSpecializedIntakeForm } from "@/lib/intake/intake-form-archive";
+  canArchiveSpecializedIntakeForm,
+  canRestoreSpecializedIntakeForm,
+} from "@/lib/intake/intake-form-archive";
+import { resolveIntakeFormSlugOnCreate } from "@/lib/intake/intake-form-slug-create";
 import { validateRequestTypeOptionsJson } from "@/lib/public-request-settings-validation";
 import { validatePublicIntakeSchema } from "@/lib/intake/public-intake-schema-invariants";
 import type { IntakeFormSchema } from "@/lib/intake/default-intake-form";
 import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
 import {
-  INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_SETTINGS_HUB_PATH,
   INTAKE_SPECIALIZED_PATH,
   INTAKE_STAFF_PATH,
@@ -40,7 +40,6 @@ import {
 function revalidateIntakeFormPaths(formId: string, surface: "public" | "office" | null) {
   revalidatePath(INTAKE_SETTINGS_HUB_PATH);
   revalidatePath(INTAKE_SPECIALIZED_PATH);
-  revalidatePath(INTAKE_CUSTOMER_FIELDS_PATH);
   revalidatePath(INTAKE_STAFF_PATH);
   revalidatePath(intakeFormEditorPath(formId));
   revalidatePath("/settings/intake/public");
@@ -99,7 +98,6 @@ export async function createIntakeFormAction(
   const name = formData.get("name") as string;
   const slugRaw = formData.get("slug") as string | null;
   const slug = normalizePublicIntakeFormSlug(slugRaw);
-  const templateSlug = formData.get("templateSlug") as string;
 
   if (!name) {
     return { error: "Name and slug are required." };
@@ -114,47 +112,62 @@ export async function createIntakeFormAction(
     };
   }
   const defaults = publicIntakeCreateDefaults();
+  const schema = await clonePrimaryPublicIntakeFormSchema(ctx.organizationId);
+  const triageRules = {
+    requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+  } as Prisma.InputJsonValue;
 
-  const template = templateSlug ? TRADE_STARTERS.find((s) => s.slug === templateSlug) : null;
+  let formId: string;
 
   try {
-    const form = await db.intakeFormDefinition.create({
-      data: {
+    const existingBySlug = await db.intakeFormDefinition.findFirst({
+      where: {
         organizationId: ctx.organizationId,
-        name,
         slug,
-        channel: defaults.channel,
-        isPublic: defaults.isPublic,
-        schema: (template?.schema || {
-          sections: [
-            {
-              key: "contact",
-              title: "Contact Information",
-              fields: [
-                { key: "contact.name" },
-                { key: "contact.email" },
-                { key: "contact.phone" },
-              ],
-            },
-            {
-              key: "project",
-              title: "Project Details",
-              fields: [
-                { key: "address.service" },
-                { key: "request.type" },
-                { key: "scope.text" },
-              ],
-            },
-          ],
-        }) as Prisma.InputJsonValue,
-        triageRules: {
-          requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-        } as Prisma.InputJsonValue,
+      },
+      select: {
+        id: true,
+        archivedAt: true,
+        isDefault: true,
       },
     });
 
-    revalidatePath(INTAKE_SPECIALIZED_PATH);
-    redirect(intakeFormEditorPath(form.id));
+    const slugAction = resolveIntakeFormSlugOnCreate(existingBySlug);
+    if (slugAction === "error_active") {
+      return { error: "A form with this slug already exists." };
+    }
+
+    if (slugAction === "restore_archived" && existingBySlug) {
+      const restored = await db.intakeFormDefinition.update({
+        where: { id: existingBySlug.id, organizationId: ctx.organizationId },
+        data: {
+          name,
+          archivedAt: null,
+          channel: defaults.channel,
+          isPublic: defaults.isPublic,
+          isDefault: false,
+          schema: schema as Prisma.InputJsonValue,
+          triageRules,
+        },
+      });
+
+      formId = restored.id;
+    } else {
+      const form = await db.intakeFormDefinition.create({
+        data: {
+          organizationId: ctx.organizationId,
+          name,
+          slug,
+          channel: defaults.channel,
+          isPublic: defaults.isPublic,
+          isDefault: false,
+          schema: schema as Prisma.InputJsonValue,
+          triageRules,
+        },
+      });
+
+      formId = form.id;
+    }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "A form with this slug already exists." };
@@ -162,6 +175,9 @@ export async function createIntakeFormAction(
     console.error("Failed to create intake form", e);
     return { error: "Failed to create intake form." };
   }
+
+  revalidatePath(INTAKE_SPECIALIZED_PATH);
+  redirect(intakeFormEditorPath(formId));
 }
 
 export async function updateIntakeFormAction(
@@ -173,7 +189,6 @@ export async function updateIntakeFormAction(
 
   const name = formData.get("name") as string;
   const isPublic = formData.get("isPublic") === "on";
-  const isDefault = formData.get("isDefault") === "on";
   const schemaJson = formData.get("schema") as string;
   const requestTypesJson = formData.get("requestTypesJson") as string | null;
 
@@ -184,7 +199,7 @@ export async function updateIntakeFormAction(
   try {
     const existing = await db.intakeFormDefinition.findFirst({
       where: { id: formId, organizationId: ctx.organizationId },
-      select: { channel: true, isPublic: true, triageRules: true },
+      select: { channel: true, isPublic: true, triageRules: true, isDefault: true },
     });
     if (!existing) {
       return { error: "Form not found." };
@@ -198,8 +213,8 @@ export async function updateIntakeFormAction(
 
     const data: Prisma.IntakeFormDefinitionUpdateInput = {
       name,
-      isPublic,
-      isDefault,
+      isPublic: surface === "public" ? true : isPublic,
+      isDefault: existing.isDefault,
     };
 
     if (schemaJson) {
@@ -214,7 +229,6 @@ export async function updateIntakeFormAction(
     }
 
     if (surface === "public") {
-      data.isPublic = true;
       const mergedTypes = parseAndMergeRequestTypeOptions(existing.triageRules, requestTypesJson);
       if (!mergedTypes.ok) {
         return { error: mergedTypes.error };
@@ -228,15 +242,9 @@ export async function updateIntakeFormAction(
       data.triageRules = mergedTypes.triageRules;
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.intakeFormDefinition.update({
-        where: { id: formId, organizationId: ctx.organizationId },
-        data,
-      });
-
-      if (isDefault && surface) {
-        await clearOtherDefaultsForIntakeSurface(tx, ctx.organizationId, surface, formId);
-      }
+    await db.intakeFormDefinition.update({
+      where: { id: formId, organizationId: ctx.organizationId },
+      data,
     });
 
     revalidateIntakeFormPaths(formId, surface);
@@ -275,6 +283,41 @@ export async function archiveIntakeFormAction(formId: string): Promise<IntakeFor
   await db.intakeFormDefinition.update({
     where: { id: formId, organizationId: ctx.organizationId },
     data: { archivedAt: new Date() },
+  });
+
+  revalidateIntakeFormPaths(formId, "public");
+
+  return {};
+}
+
+export async function restoreIntakeFormAction(formId: string): Promise<IntakeFormState> {
+  const ctx = await getSettingsRequestContextOrThrow();
+
+  const form = await db.intakeFormDefinition.findFirst({
+    where: {
+      id: formId,
+      organizationId: ctx.organizationId,
+      archivedAt: { not: null },
+    },
+    select: {
+      id: true,
+      isDefault: true,
+      channel: true,
+      isPublic: true,
+    },
+  });
+
+  if (!form) {
+    return { error: "Form not found." };
+  }
+
+  if (!canRestoreSpecializedIntakeForm(form)) {
+    return { error: "Only archived additional customer request links can be restored." };
+  }
+
+  await db.intakeFormDefinition.update({
+    where: { id: formId, organizationId: ctx.organizationId },
+    data: { archivedAt: null },
   });
 
   revalidateIntakeFormPaths(formId, "public");

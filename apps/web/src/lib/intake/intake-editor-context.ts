@@ -43,9 +43,9 @@ export function intakeEditorContextLabels(
         title: "Customer questions",
         description:
           "Questions customers answer on your main customer request page. Page title, intro, and availability are edited under Customer request page.",
-        backHref: INTAKE_SETTINGS_HUB_PATH,
-        backLabel: "← Customer intake",
-        showBackLink: false,
+        backHref: INTAKE_SPECIALIZED_PATH,
+        backLabel: "← Customer request links",
+        showBackLink: true,
         structureLabel: "Customer questions",
         surfaceMode: "public",
         layoutMode: "progressive",
@@ -56,7 +56,7 @@ export function intakeEditorContextLabels(
         description:
           "Optional public entry point for campaigns, trade-specific pages, referral partners, or distinct service lines. Submissions follow the same Lead Review flow.",
         backHref: INTAKE_SPECIALIZED_PATH,
-        backLabel: "← Specialized request links",
+        backLabel: "← Customer request links",
         showBackLink: true,
         structureLabel: "Questions for this link",
         surfaceMode: "public",

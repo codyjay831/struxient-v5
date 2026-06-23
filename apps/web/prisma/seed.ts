@@ -22,12 +22,11 @@ import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedClarificationQuestionSets } from "./seeds/clarification-question-sets";
 import { seedJourneyFixtures } from "./seeds/journey-fixtures";
 import { seedSiteDetailsKnowledge } from "./seeds/site-details-knowledge";
-import { DEFAULT_INTAKE_FORM_SCHEMA } from "../src/lib/intake/default-intake-form";
 import {
   DEFAULT_OFFICE_INTAKE_FORM_SCHEMA,
   DEFAULT_OFFICE_REQUEST_TYPE_OPTIONS,
 } from "../src/lib/intake/default-office-intake-form";
-import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "../src/lib/public-request-settings-defaults";
+import { provisionDefaultPublicIntakeFormForOrganization } from "../src/lib/intake/ensure-default-public-intake-form";
 
 const prisma = new PrismaClient();
 
@@ -72,42 +71,7 @@ async function seedPublicRequestSettings() {
 }
 
 async function seedDefaultIntakeFormDefinition() {
-  const slug = "default";
-  const existing = await prisma.intakeFormDefinition.findUnique({
-    where: { organizationId_slug: { organizationId: DEV_ORG_ID, slug } },
-    select: { id: true },
-  });
-  if (existing) {
-    await prisma.intakeFormDefinition.update({
-      where: { id: existing.id },
-      data: {
-        name: "Service Request",
-        channel: LeadChannel.WEB_FORM,
-        isPublic: true,
-        isDefault: true,
-        archivedAt: null,
-        schema: DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
-        triageRules: {
-          requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-        } as Prisma.InputJsonValue,
-      },
-    });
-    return;
-  }
-  await prisma.intakeFormDefinition.create({
-    data: {
-      organizationId: DEV_ORG_ID,
-      slug,
-      name: "Service Request",
-      channel: LeadChannel.WEB_FORM,
-      isPublic: true,
-      isDefault: true,
-      schema: DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue,
-      triageRules: {
-        requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-      } as Prisma.InputJsonValue,
-    },
-  });
+  await provisionDefaultPublicIntakeFormForOrganization(DEV_ORG_ID, prisma);
 }
 
 async function seedDefaultOfficeIntakeFormDefinition() {

@@ -1,8 +1,9 @@
 import { LeadChannel, Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import {
   DEFAULT_INTAKE_FORM_SCHEMA,
   type IntakeFormDefinitionShape,
+  type IntakeFormSchema,
 } from "@/lib/intake/default-intake-form";
 import { DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS } from "@/lib/public-request-settings-defaults";
 import { resolvePublicFormRequestTypeOptions } from "@/lib/intake/public-intake-request-types";
@@ -12,8 +13,83 @@ import {
   toIntakeFormDefinitionShape,
 } from "@/lib/intake/intake-form-surface";
 
-const DEFAULT_PUBLIC_INTAKE_SLUG = "default";
-const DEFAULT_PUBLIC_INTAKE_NAME = "Service Request";
+export const DEFAULT_PRIMARY_INTAKE_SLUG = "default";
+export const DEFAULT_PRIMARY_INTAKE_NAME = "Customer request";
+
+type IntakeFormDb = Pick<ExtendedTransactionClient, "intakeFormDefinition">;
+
+function defaultTriageRulesJson(): Prisma.InputJsonValue {
+  return {
+    requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
+  } as Prisma.InputJsonValue;
+}
+
+function defaultSchemaJson(): Prisma.InputJsonValue {
+  return DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
+}
+
+/**
+ * Idempotent Primary customer request link for a new org (signup) or slug `default` row.
+ * Does not overwrite an existing form name or schema on update.
+ */
+export async function provisionDefaultPublicIntakeFormForOrganization(
+  organizationId: string,
+  tx: IntakeFormDb = db,
+): Promise<IntakeFormDefinitionShape> {
+  const upserted = await tx.intakeFormDefinition.upsert({
+    where: {
+      organizationId_slug: {
+        organizationId,
+        slug: DEFAULT_PRIMARY_INTAKE_SLUG,
+      },
+    },
+    create: {
+      organizationId,
+      slug: DEFAULT_PRIMARY_INTAKE_SLUG,
+      name: DEFAULT_PRIMARY_INTAKE_NAME,
+      channel: LeadChannel.WEB_FORM,
+      isPublic: true,
+      isDefault: true,
+      schema: defaultSchemaJson(),
+      triageRules: defaultTriageRulesJson(),
+    },
+    update: {
+      channel: LeadChannel.WEB_FORM,
+      isPublic: true,
+      isDefault: true,
+      archivedAt: null,
+    },
+    select: INTAKE_FORM_DEFINITION_SELECT,
+  });
+
+  const result = toIntakeFormDefinitionShape(upserted);
+  if (!result) {
+    throw new Error("Failed to provision default public intake form definition.");
+  }
+  return result;
+}
+
+/** Deep-clone Primary link schema for copy-on-create additional links. */
+export async function clonePrimaryPublicIntakeFormSchema(
+  organizationId: string,
+): Promise<IntakeFormSchema> {
+  const primary = await db.intakeFormDefinition.findFirst({
+    where: {
+      organizationId,
+      ...PUBLIC_INTAKE_FORM_WHERE,
+      isDefault: true,
+      archivedAt: null,
+    },
+    select: { schema: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (primary?.schema && typeof primary.schema === "object") {
+    return JSON.parse(JSON.stringify(primary.schema)) as IntakeFormSchema;
+  }
+
+  return JSON.parse(JSON.stringify(DEFAULT_INTAKE_FORM_SCHEMA)) as IntakeFormSchema;
+}
 
 /**
  * Ensures the org has a published default public WEB_FORM definition.
@@ -38,9 +114,7 @@ export async function ensureDefaultPublicIntakeFormDefinition(
   });
 
   const shaped = existing ? toIntakeFormDefinitionShape(existing) : null;
-  const triageRulesJson = {
-    requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
-  } as Prisma.InputJsonValue;
+  const triageRulesJson = defaultTriageRulesJson();
   const hasRequestTypeOptions = resolvePublicFormRequestTypeOptions(existing?.triageRules);
   if (shaped && hasRequestTypeOptions) {
     return shaped;
@@ -58,40 +132,5 @@ export async function ensureDefaultPublicIntakeFormDefinition(
     return result;
   }
 
-  const schemaJson = DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
-
-  const upserted = await db.intakeFormDefinition.upsert({
-    where: {
-      organizationId_slug: {
-        organizationId,
-        slug: DEFAULT_PUBLIC_INTAKE_SLUG,
-      },
-    },
-    create: {
-      organizationId,
-      slug: DEFAULT_PUBLIC_INTAKE_SLUG,
-      name: DEFAULT_PUBLIC_INTAKE_NAME,
-      channel: LeadChannel.WEB_FORM,
-      isPublic: true,
-      isDefault: true,
-      schema: schemaJson,
-      triageRules: triageRulesJson,
-    },
-    update: {
-      name: DEFAULT_PUBLIC_INTAKE_NAME,
-      channel: LeadChannel.WEB_FORM,
-      isPublic: true,
-      isDefault: true,
-      archivedAt: null,
-      schema: schemaJson,
-      triageRules: triageRulesJson,
-    },
-    select: INTAKE_FORM_DEFINITION_SELECT,
-  });
-
-  const result = toIntakeFormDefinitionShape(upserted);
-  if (!result) {
-    throw new Error("Failed to provision default public intake form definition.");
-  }
-  return result;
+  return provisionDefaultPublicIntakeFormForOrganization(organizationId);
 }

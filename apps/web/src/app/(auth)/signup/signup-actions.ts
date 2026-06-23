@@ -13,6 +13,7 @@ import { isBetaSignupEnabled } from "@/lib/env-validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { hashOrganizationInviteToken } from "@/lib/invite-token";
 import { BILLING_TERMS_VERSION } from "@/lib/billing/billing-config";
+import { provisionDefaultPublicIntakeFormForOrganization } from "@/lib/intake/ensure-default-public-intake-form";
 import { z } from "zod";
 
 const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -181,6 +182,8 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
         role: StaffRole.OWNER,
       },
     });
+
+    await provisionDefaultPublicIntakeFormForOrganization(organization.id, tx);
 
     if (betaInviteValidation?.ok) {
       const inviteRecord = await tx.betaSignupInvite.findUniqueOrThrow({

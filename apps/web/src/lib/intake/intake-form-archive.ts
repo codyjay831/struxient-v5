@@ -12,3 +12,12 @@ export function canArchiveSpecializedIntakeForm(form: {
   }
   return form.channel === "WEB_FORM" && form.isPublic === true;
 }
+
+/** Archived additional public WEB_FORM links may be restored. */
+export function canRestoreSpecializedIntakeForm(form: {
+  isDefault: boolean;
+  channel: string;
+  isPublic: boolean;
+}): boolean {
+  return canArchiveSpecializedIntakeForm(form);
+}

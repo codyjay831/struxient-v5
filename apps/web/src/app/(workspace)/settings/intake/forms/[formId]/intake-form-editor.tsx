@@ -98,7 +98,6 @@ export function IntakeFormEditor({
   const [schema, setSchema] = useState<IntakeFormSchema>(formDefinition.schema);
   const [name, setName] = useState(formDefinition.name);
   const [isPublic, setIsPublic] = useState(formDefinition.isPublic);
-  const [isDefault, setIsDefault] = useState(formDefinition.isDefault);
   const [requestTypes, setRequestTypes] = useState<PublicRequestTypeOption[]>(
     initialRequestTypeOptions,
   );
@@ -291,10 +290,7 @@ export function IntakeFormEditor({
         <input type="hidden" name="schema" value={JSON.stringify(schema)} readOnly />
         <input type="hidden" name="requestTypesJson" value={requestTypesJson} readOnly />
         {showPublicFormToggles ? (
-          <>
-            {isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}
-            {isDefault ? <input type="hidden" name="isDefault" value="on" readOnly /> : null}
-          </>
+          <>{isPublic ? <input type="hidden" name="isPublic" value="on" readOnly /> : null}</>
         ) : (
           <>
             <input
@@ -510,20 +506,6 @@ export function IntakeFormEditor({
                     <p className="text-sm font-bold text-foreground">Public customer form</p>
                     <p className="text-[0.65rem] text-foreground-subtle">
                       Accessible via a public customer link
-                    </p>
-                  </div>
-                </label>
-                <label className="flex cursor-pointer items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={isDefault}
-                    onChange={(e) => setIsDefault(e.target.checked)}
-                    className="size-4 rounded border-border text-accent focus:ring-accent"
-                  />
-                  <div>
-                    <p className="text-sm font-bold text-foreground">Default customer form</p>
-                    <p className="text-[0.65rem] text-foreground-subtle">
-                      Primary form for your main customer request link
                     </p>
                   </div>
                 </label>

@@ -56,7 +56,7 @@ export function PublicRequestLinkPanel({
             <StatusBadge label={statusLabel} tone={statusTone} />
             {specializedFormCount > 0 ? (
               <StatusBadge
-                label={`${specializedFormCount} specialized link${specializedFormCount === 1 ? "" : "s"}`}
+                label={`${specializedFormCount} additional link${specializedFormCount === 1 ? "" : "s"}`}
                 tone="neutral"
               />
             ) : null}

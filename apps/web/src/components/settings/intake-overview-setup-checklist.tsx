@@ -3,7 +3,6 @@ import { AlertCircle, ArrowRight, CheckCircle2, Circle } from "lucide-react";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
-  INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_PUBLIC_COPY_PATH,
   INTAKE_SPECIALIZED_PATH,
   INTAKE_STAFF_PATH,
@@ -90,14 +89,6 @@ export function IntakeOverviewSetupChecklist({
       actionLabel: hasIntro ? "Edit page copy" : "Customize page",
     },
     {
-      id: "customer-questions",
-      title: `${customerFieldCount} customer question${customerFieldCount === 1 ? "" : "s"}`,
-      description: "Fields customers answer on your public request page.",
-      status: "complete",
-      href: INTAKE_CUSTOMER_FIELDS_PATH,
-      actionLabel: "Edit questions",
-    },
-    {
       id: "staff-intake",
       title: officeFormProvisioned ? "Staff intake ready" : "Staff intake not provisioned",
       description: officeFormProvisioned
@@ -108,18 +99,15 @@ export function IntakeOverviewSetupChecklist({
       actionLabel: officeFormProvisioned ? "Edit staff intake" : "Open New lead",
     },
     {
-      id: "specialized-links",
-      title:
-        specializedFormCount > 0
-          ? `${specializedFormCount} specialized link${specializedFormCount === 1 ? "" : "s"} active`
-          : "No specialized links yet",
+      id: "customer-request-links",
+      title: "Customer request links",
       description:
         specializedFormCount > 0
-          ? "Campaign or trade-specific entry points that still create leads."
-          : "Optional — create links for campaigns, trades, or service lines.",
+          ? `${customerFieldCount} question${customerFieldCount === 1 ? "" : "s"} on your primary link, plus ${specializedFormCount} additional link${specializedFormCount === 1 ? "" : "s"}.`
+          : `${customerFieldCount} question${customerFieldCount === 1 ? "" : "s"} on your primary link. Add additional links only when you need separate public entry points.`,
       status: "complete",
       href: INTAKE_SPECIALIZED_PATH,
-      actionLabel: specializedFormCount > 0 ? "Manage links" : "Add link",
+      actionLabel: "Manage links",
     },
   ];
 

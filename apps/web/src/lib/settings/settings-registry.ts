@@ -118,15 +118,6 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     targetRoute: "/settings/intake/public",
   },
   {
-    id: "manage-customer-questions",
-    type: "management",
-    title: "Customer questions",
-    description: "Manage default customer intake questions and service types.",
-    keywords: ["customer questions", "customer fields", "intake form", "service types"],
-    managementGroup: "Management",
-    targetRoute: "/settings/intake/customer-fields",
-  },
-  {
     id: "manage-office-intake",
     type: "management",
     title: "Staff intake",
@@ -138,9 +129,10 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "manage-custom-intake-forms",
     type: "management",
-    title: "Specialized request links",
-    description: "Manage optional additional public request links for campaigns or service lines.",
-    keywords: ["specialized links", "specialized forms", "public forms", "campaign forms"],
+    title: "Customer request links",
+    description:
+      "Manage your main customer request link and optional additional links for campaigns or service lines.",
+    keywords: ["customer request links", "specialized links", "public forms", "campaign forms"],
     managementGroup: "Management",
     targetRoute: "/settings/intake/specialized",
   },
