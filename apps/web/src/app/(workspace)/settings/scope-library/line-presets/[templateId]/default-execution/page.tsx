@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { LineItemTemplateTaskSource } from "@prisma/client";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
 import { LineItemTemplateDefaultExecutionPanel } from "@/components/scope-library/line-item-template-default-execution-panel";
@@ -123,14 +122,6 @@ export default async function LineItemTemplateDefaultExecutionPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Scope Library", href: "/settings/scope-library" },
-          { label: "Saved line item" },
-          { label: "Default execution" },
-        ]}
-      />
       <PageHeader
         eyebrow="Settings · Scope Library"
         title="Default execution"

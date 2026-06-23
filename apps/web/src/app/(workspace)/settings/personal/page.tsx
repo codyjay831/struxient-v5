@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -14,12 +13,6 @@ const listLinkClass =
 export default function PersonalSettingsPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Personal" },
-        ]}
-      />
       <PageHeader
         title="Personal"
         description="Manage your personal display, notification, and landing preferences."

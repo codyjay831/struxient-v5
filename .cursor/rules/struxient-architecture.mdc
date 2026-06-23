@@ -49,6 +49,10 @@ Attention cockpit only — see [`docs/workstation-guardrails.md`](../../docs/wor
 
 Proposals are **review-then-apply**. No silent persistence from AI output.
 
+## Navigation — no breadcrumbs
+
+**Never add breadcrumbs.** If a screen needs a trail to be understandable, the IA is too deep. Use sidebar, module subnav, `PageHeader` title, and `PageBackLink` for deep pages only. Canon: [workspace-ux-canon.md](../../docs/canon/workspace-ux-canon.md) §No breadcrumbs. Guardrail: `detect-breadcrumbs.mjs`.
+
 ## After every task
 
 Complete [`post-task-checklist.mdc`](./post-task-checklist.mdc).

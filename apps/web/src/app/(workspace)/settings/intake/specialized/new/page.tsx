@@ -6,12 +6,9 @@ import { createIntakeFormAction } from "../../intake-form-actions";
 import { Loader2, Sparkles } from "lucide-react";
 import { TradeTemplatePicker } from "@/components/intake/trade-template-picker";
 import { TRADE_STARTERS } from "@/lib/intake/trade-starters";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
-import {
-  INTAKE_SETTINGS_HUB_PATH,
-  INTAKE_SPECIALIZED_PATH,
-} from "@/lib/intake-settings-hierarchy";
+import { PageBackLink } from "@/components/ui/page-back-link";
+import { INTAKE_SPECIALIZED_PATH } from "@/lib/intake-settings-hierarchy";
 import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 type TradeStarter = (typeof TRADE_STARTERS)[number];
@@ -38,17 +35,12 @@ export default function NewSpecializedIntakeFormPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-          { label: "Specialized request links", href: INTAKE_SPECIALIZED_PATH },
-          { label: "New" },
-        ]}
-      />
       <PageHeader
         title="Create request link"
         description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines."
+        actions={
+          <PageBackLink href={INTAKE_SPECIALIZED_PATH}>← Specialized request links</PageBackLink>
+        }
       />
       <CustomerIntakeModuleNav className="mb-6" />
 

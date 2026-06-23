@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SignalCard } from "@/components/ui/signal-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
@@ -42,12 +41,6 @@ export default async function QuoteLiveProposalPreviewPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Quote preview" },
-          ]}
-        />
         <PageHeader title="Quote preview" description="Customer-facing proposal preview." />
         <AccessDeniedPanel description="This role cannot preview quote records." />
       </div>
@@ -65,12 +58,6 @@ export default async function QuoteLiveProposalPreviewPage({
   if (!row) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           eyebrow="Sales · internal only"
           title="Live proposal preview"
@@ -124,14 +111,6 @@ export default async function QuoteLiveProposalPreviewPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: row.title, href: quoteHref },
-          { label: "Live proposal preview" },
-        ]}
-      />
-
       <PageHeader
         eyebrow="Sales · internal only"
         title="Live proposal preview"

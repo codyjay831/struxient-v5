@@ -7,7 +7,6 @@ import {
   type QuoteActivationStatus,
 } from "@/components/quotes/quote-execution-review-preview-view";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
@@ -47,12 +46,6 @@ export default async function QuoteExecutionReviewPreviewPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Build execution plan" },
-          ]}
-        />
         <PageHeader title="Build execution plan" description="Prepare the work plan before job activation." />
         <AccessDeniedPanel description="This role cannot review quote execution plans." />
       </div>
@@ -269,13 +262,6 @@ export default async function QuoteExecutionReviewPreviewPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: row.title, href: quoteHref },
-          { label: "Build execution plan" },
-        ]}
-      />
       <PageHeader
         eyebrow="Sales to production handoff"
         title="Build execution plan"

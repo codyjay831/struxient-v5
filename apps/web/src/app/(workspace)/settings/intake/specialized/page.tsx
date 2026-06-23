@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 import {
@@ -38,13 +37,6 @@ export default async function SpecializedIntakeFormsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-          { label: "Specialized request links" },
-        ]}
-      />
       <PageHeader
         title="Specialized request links"
         description="Optional public entry points that still create leads in the same Lead Review and quote flow."

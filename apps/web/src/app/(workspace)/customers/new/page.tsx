@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -13,13 +12,6 @@ const listLinkClass =
 export default function NewCustomerPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Relationships" },
-          { label: "Customers", href: "/customers" },
-          { label: "New" },
-        ]}
-      />
       <PageHeader
         title="New customer"
         description="Add who they are, how to reach them, and where the work happens. Only the customer name is required; everything else is optional."

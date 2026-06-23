@@ -9,9 +9,6 @@ export default async function CustomerFieldsIntakePage() {
   const form = await ensureDefaultPublicIntakeFormDefinition(ctx.organizationId);
 
   return (
-    <IntakeFormEditorPage
-      formId={form.id}
-      breadcrumbLeafOverride="Customer questions"
-    />
+    <IntakeFormEditorPage formId={form.id} />
   );
 }

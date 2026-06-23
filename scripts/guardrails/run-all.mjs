@@ -18,6 +18,7 @@ const CHECKS = [
   { name: "raw-palette", file: "detect-raw-palette.mjs", strict: false },
   { name: "corrections-constant", file: "detect-corrections-constant-drift.mjs", strict: false },
   { name: "client-db-import", file: "detect-client-db-import.mjs", strict: false },
+  { name: "breadcrumbs", file: "detect-breadcrumbs.mjs", strict: true },
 ];
 
 const strictAll = process.env.GUARDRAILS_STRICT === "1";

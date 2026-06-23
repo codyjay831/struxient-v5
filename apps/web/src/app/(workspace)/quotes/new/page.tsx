@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
@@ -39,12 +38,6 @@ export default async function NewQuotePage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "New quote" },
-          ]}
-        />
         <PageHeader
           title="New quote"
           description="Create and send customer proposals."
@@ -113,12 +106,6 @@ export default async function NewQuotePage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: "New quote" },
-        ]}
-      />
       <PageHeader
         title="New quote"
         description="Create a draft quote to begin building your proposal."

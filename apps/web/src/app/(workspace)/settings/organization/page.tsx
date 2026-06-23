@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getSettingsRequestContextOrThrow } from "@/lib/auth-context";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -22,12 +21,6 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Organization" },
-        ]}
-      />
       <PageHeader
         title="Organization"
         description="Manage company profile and organization-wide defaults."

@@ -120,6 +120,34 @@ Workstation is the contractor execution cockpit. It is not a dashboard-card surf
 - Presentation grouping is derived from canonical helpers and query truth; do not add UI-only workflow fields.
 - Workstation item rows must keep one clear visible next action and route-backed contextual detail behavior.
 
+## No breadcrumbs — navigation must be obvious without a trail
+
+**Locked:** Struxient does **not** use breadcrumb navigation in the staff workspace app.
+
+**Principle:** If users need breadcrumbs to understand where they are, the information architecture is too deep or we failed to give them clear primary nav + one page title + an optional back link. Breadcrumbs are enterprise admin noise — tiny uppercase trails that duplicate the sidebar, module tabs, and page header.
+
+**Contract:**
+1. **Do not add** `WorkspaceBreadcrumb`, `<Breadcrumb>`, or equivalent wayfinding trails on new surfaces.
+2. **Remove** breadcrumbs when touching a route — do not preserve them for consistency.
+3. **Every page** must be understandable from: sidebar (or module nav) + **one** page title + optional **one** back link (`PageBackLink`).
+4. **Never repeat** the same label in breadcrumb + title + tab — triple labeling is a defect.
+
+**Required replacements:**
+
+| Instead of… | Use… |
+|-------------|------|
+| `Settings › Customer intake › …` | Intake subnav + `PageHeader` title |
+| Deep editor (`/settings/intake/forms/[id]`) | `PageBackLink` to parent list |
+| Create flows (`/leads/new`) | `PageHeader` + back to list in actions |
+| Record detail | Sidebar section + record title (customer name, job name) |
+
+**Exception (staff workspace v1):** None. Customer/public token pages without a sidebar may use a single back/home link — still not a breadcrumb trail.
+
+**Anti-pattern:** Adding breadcrumbs because settings pages usually have them. That is exactly the complexity we reject.
+
+**Enforcement:** `npm run guardrails` (`detect-breadcrumbs.mjs`) fails on any `WorkspaceBreadcrumb` import.
+
 ---
 *Canon update (2026-06-18): Initial workspace UX canon established for Milestone 1.  
-Canon update (2026-06-18): Added Workstation Milestone 2 execution-cockpit interaction contract.*
+Canon update (2026-06-18): Added Workstation Milestone 2 execution-cockpit interaction contract.  
+Canon update (2026-06-23): **No breadcrumbs** — locked; use sidebar, module nav, page title, and back links only.*

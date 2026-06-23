@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
@@ -50,9 +49,6 @@ export default async function ScopeLibraryTasksPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library", href: "/settings/scope-library" }, { label: "Reusable tasks" }]}
-      />
       <PageHeader
         title="Reusable tasks"
         description="Internal task templates with Signal-based readiness. library only; quotes and jobs will copy from here."

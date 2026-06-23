@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
@@ -48,13 +47,6 @@ export default async function PublicIntakeSettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-          { label: "Customer request page" },
-        ]}
-      />
       <PageHeader
         title="Customer request page"
         description="Control whether your public request link is live and how the customer-facing page reads."

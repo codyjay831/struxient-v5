@@ -2,7 +2,6 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -47,12 +46,6 @@ export default async function EditLeadPage({
   if (!lead) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           title="Opportunity not found"
           description="No record exists for this id in your organization. Links only resolve within your tenant scope."
@@ -94,13 +87,6 @@ export default async function EditLeadPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: lead.title, href: `/leads/${lead.id}` },
-            { label: "Edit" },
-          ]}
-      />
       <PageHeader
         title={`Edit ${lead.title}`}
         description="Status and customer link are not editable here."

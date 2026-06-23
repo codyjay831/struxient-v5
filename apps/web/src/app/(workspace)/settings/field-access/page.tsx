@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getSettingsRequestContextOrNull } from "@/lib/auth-context";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
@@ -15,12 +14,6 @@ export default async function FieldAccessSettingsPage() {
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Settings", href: "/settings" },
-            { label: "Field access" },
-          ]}
-        />
         <PageHeader
           title="Field access"
           description="Manage crews and subcontractor job visibility."
@@ -59,12 +52,6 @@ export default async function FieldAccessSettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Field access" },
-        ]}
-      />
       <PageHeader
         title="Field access"
         description="Configure how field staff and subcontractors see assigned work."

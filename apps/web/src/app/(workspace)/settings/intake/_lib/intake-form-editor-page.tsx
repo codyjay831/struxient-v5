@@ -19,16 +19,10 @@ import {
   DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
 } from "@/lib/public-request-settings-defaults";
 import { IntakeFormEditor } from "../forms/[formId]/intake-form-editor";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
+import { PageBackLink } from "@/components/ui/page-back-link";
 
-export async function IntakeFormEditorPage({
-  formId,
-  breadcrumbLeafOverride,
-}: {
-  formId: string;
-  breadcrumbLeafOverride?: string;
-}) {
+export async function IntakeFormEditorPage({ formId }: { formId: string }) {
   const ctx = await getRequestContextOrThrow();
 
   const [form, organization, publicSettings] = await Promise.all([
@@ -67,54 +61,43 @@ export async function IntakeFormEditorPage({
   const editorContext = resolveIntakeEditorContext(form);
   const labels = intakeEditorContextLabels(editorContext);
 
-  const breadcrumbItems = [
-    { label: "Settings", href: "/settings" },
-    { label: "Customer intake", href: "/settings/intake" },
-    ...(editorContext === "specializedCustomerForm"
-      ? [{ label: labels.breadcrumbParent.label, href: labels.breadcrumbParent.href }]
-      : editorContext === "defaultCustomerIntake"
-        ? [{ label: "Customer questions", href: "/settings/intake/customer-fields" }]
-        : editorContext === "defaultInternalIntake"
-          ? [{ label: "Staff intake", href: "/settings/intake/staff" }]
-          : []),
-    { label: breadcrumbLeafOverride ?? form.name },
-  ];
-
   return (
     <div className="mx-auto max-w-7xl">
-      <WorkspaceBreadcrumb items={breadcrumbItems} />
-      <CustomerIntakeModuleNav />
-      <div className="mt-8">
-        <IntakeFormEditor
-          formDefinition={{
-            id: form.id,
-            name: form.name,
-            organizationId: form.organizationId,
-            slug: form.slug,
-            channel: form.channel,
-            isPublic: form.isPublic,
-            isDefault: form.isDefault,
-            schema: editorSchema,
-          }}
-          editorContext={editorContext}
-          isPublicIntakeForm={isPublicIntakeForm}
-          initialRequestTypeOptions={initialRequestTypeOptions}
-          organizationSlug={organization?.slug ?? null}
-          organizationDisplayName={organization?.name ?? "Your company"}
-          baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
-          publicPageCopy={
-            isPublicIntakeForm
-              ? {
-                  formTitle: publicSettings?.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
-                  introMessage: publicSettings?.introMessage ?? null,
-                  emergencyWarningText: publicSettings?.emergencyWarningText ?? null,
-                  submitButtonText:
-                    publicSettings?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
-                }
-              : undefined
-          }
-        />
-      </div>
+      <CustomerIntakeModuleNav className="mb-6" />
+      {labels.showBackLink ? (
+        <div className="mb-6">
+          <PageBackLink href={labels.backHref}>{labels.backLabel}</PageBackLink>
+        </div>
+      ) : null}
+      <IntakeFormEditor
+        formDefinition={{
+          id: form.id,
+          name: form.name,
+          organizationId: form.organizationId,
+          slug: form.slug,
+          channel: form.channel,
+          isPublic: form.isPublic,
+          isDefault: form.isDefault,
+          schema: editorSchema,
+        }}
+        editorContext={editorContext}
+        isPublicIntakeForm={isPublicIntakeForm}
+        initialRequestTypeOptions={initialRequestTypeOptions}
+        organizationSlug={organization?.slug ?? null}
+        organizationDisplayName={organization?.name ?? "Your company"}
+        baseUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        publicPageCopy={
+          isPublicIntakeForm
+            ? {
+                formTitle: publicSettings?.formTitle ?? DEFAULT_PUBLIC_REQUEST_FORM_TITLE,
+                introMessage: publicSettings?.introMessage ?? null,
+                emergencyWarningText: publicSettings?.emergencyWarningText ?? null,
+                submitButtonText:
+                  publicSettings?.submitButtonText ?? DEFAULT_PUBLIC_REQUEST_SUBMIT_BUTTON_TEXT,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

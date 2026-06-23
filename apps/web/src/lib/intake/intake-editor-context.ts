@@ -30,7 +30,6 @@ export type IntakeEditorContextLabels = {
   backLabel: string;
   showBackLink: boolean;
   structureLabel: string;
-  breadcrumbParent: { label: string; href: string };
   surfaceMode: "public" | "staff";
   layoutMode: "progressive" | "compact";
 };
@@ -45,10 +44,9 @@ export function intakeEditorContextLabels(
         description:
           "Questions customers answer on your main customer request page. Page title, intro, and availability are edited under Customer request page.",
         backHref: INTAKE_SETTINGS_HUB_PATH,
-        backLabel: "Back to overview",
+        backLabel: "← Customer intake",
         showBackLink: false,
         structureLabel: "Customer questions",
-        breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "public",
         layoutMode: "progressive",
       };
@@ -58,13 +56,9 @@ export function intakeEditorContextLabels(
         description:
           "Optional public entry point for campaigns, trade-specific pages, referral partners, or distinct service lines. Submissions follow the same Lead Review flow.",
         backHref: INTAKE_SPECIALIZED_PATH,
-        backLabel: "Back to specialized request links",
-        showBackLink: false,
+        backLabel: "← Specialized request links",
+        showBackLink: true,
         structureLabel: "Questions for this link",
-        breadcrumbParent: {
-          label: "Specialized request links",
-          href: INTAKE_SPECIALIZED_PATH,
-        },
         surfaceMode: "public",
         layoutMode: "progressive",
       };
@@ -74,10 +68,9 @@ export function intakeEditorContextLabels(
         description:
           "Staff-only form at /leads/new for phone, email, walk-in, and referral leads. Customers never see this surface.",
         backHref: INTAKE_SETTINGS_HUB_PATH,
-        backLabel: "Back to overview",
+        backLabel: "← Customer intake",
         showBackLink: false,
         structureLabel: "Staff intake fields",
-        breadcrumbParent: { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
         surfaceMode: "staff",
         layoutMode: "compact",
       };

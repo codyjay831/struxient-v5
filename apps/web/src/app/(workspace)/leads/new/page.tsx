@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -27,12 +26,6 @@ export default async function NewLeadPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: "Add lead" },
-        ]}
-      />
       <PageHeader
         title="Add lead"
         description="After saving, open the lead to link a customer and start a quote."

@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -23,12 +22,6 @@ export default async function EditCustomerPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Customers", href: "/customers" },
-            { label: "Edit" },
-          ]}
-        />
         <PageHeader title="Edit customer" />
         <AccessDeniedPanel description="This role cannot edit customer records." />
       </div>
@@ -44,12 +37,6 @@ export default async function EditCustomerPage({
   if (!customer) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Customers", href: "/customers" },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           title="Customer not found"
           actions={
@@ -73,13 +60,6 @@ export default async function EditCustomerPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Customers", href: "/customers" },
-          { label: customer.displayName, href: `/customers/${customer.id}` },
-          { label: "Edit" },
-        ]}
-      />
       <PageHeader
         title={`Edit ${customer.displayName}`}
         actions={

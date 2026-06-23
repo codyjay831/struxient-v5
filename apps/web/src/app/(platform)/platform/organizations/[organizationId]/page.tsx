@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { PageBackLink } from "@/components/ui/page-back-link";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -33,16 +33,10 @@ export default async function PlatformOrganizationDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Platform", href: "/platform" },
-          { label: "Organizations", href: "/platform/organizations" },
-          { label: summary.name },
-        ]}
-      />
       <PageHeader
         title={summary.name}
         description={`Tenant inspector · ${shortId(summary.id)} · ${summary.timezone}`}
+        actions={<PageBackLink href="/platform/organizations">← Organizations</PageBackLink>}
       />
 
       <section className="mb-10 grid gap-4 lg:grid-cols-2">

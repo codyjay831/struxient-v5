@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
-
 export function SettingsPageShell({
   searchSlot,
   mobileCategorySlot,
@@ -14,8 +12,6 @@ export function SettingsPageShell({
 }) {
   return (
     <div className="mx-auto max-w-6xl">
-      <WorkspaceBreadcrumb items={[{ label: "Settings" }]} />
-
       <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-start">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>

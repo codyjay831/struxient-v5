@@ -73,6 +73,7 @@ npm run guardrails
 | `detect-raw-palette.mjs` | **Warn** | Raw `zinc-*` / `gray-*` / `slate-*` Tailwind utilities in `src` |
 | `detect-corrections-constant-drift.mjs` | **Warn** | Literal `"Corrections"` instead of `CORRECTIONS_STAGE_NAME` |
 | `detect-client-db-import.mjs` | **Warn** | `"use client"` files importing `@/lib/db` |
+| `detect-breadcrumbs.mjs` | **Fail** | Any `WorkspaceBreadcrumb` import — breadcrumbs are banned ([workspace-ux-canon.md](./canon/workspace-ux-canon.md) §No breadcrumbs) |
 
 Orchestrator: `scripts/guardrails/run-all.mjs`.
 

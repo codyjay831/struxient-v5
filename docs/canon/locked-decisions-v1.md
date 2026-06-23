@@ -279,4 +279,11 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 *Canon update (2026-05-25): §16 — product phasing (execution before commodity parity), no trigger builder, opinionated automation toggles; link [product-philosophy.md](./product-philosophy.md).*  
 *Canon update (2026-06-11): §5 scheduling rows explicitly marked historical and deferred to [scheduling-canon.md](./scheduling-canon.md) + [`../plans/scheduling-implementation-plan.md`](../plans/scheduling-implementation-plan.md).*
 *Canon update (2026-06-14): §1 added access-control baseline lock: stale-session fail-closed behavior, selected-org validation, assignment-first Field visibility, collaborator-required subcontractor visibility, customer token channel separation, and Owner/Admin destructive boundary.*
-*Canon update (2026-06-19): §2 corrected task status to minimal `TODO` / `DONE` / `CANCELED` with audited cancellation; §10 tightened `BLOCKS_WORK` remediation to `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows and limited follow-up tasks to non-blocking coordination.*
+## 17. Workspace navigation — no breadcrumbs
+
+- **No breadcrumbs** in the staff workspace (see [workspace-ux-canon.md](./workspace-ux-canon.md) §No breadcrumbs). Use sidebar, module nav, `PageHeader` title, and `PageBackLink` only.
+- If a screen needs a breadcrumb trail to be understandable, the IA is too deep — simplify or add one explicit back link instead.
+
+---
+
+*Canon update (2026-06-23): §17 — no breadcrumbs in staff workspace; enforced by `detect-breadcrumbs.mjs` guardrail.*

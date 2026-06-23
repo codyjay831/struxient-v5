@@ -3,7 +3,6 @@ import { QuoteCheckpointKind } from "@prisma/client";
 import { QuoteCheckpointRecordedBody } from "@/components/quotes/quote-checkpoint-recorded-body";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { db } from "@/lib/db";
 import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
@@ -21,7 +20,6 @@ const listLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
 function checkpointLabels(kind: QuoteCheckpointKind): {
-  breadcrumbTail: string;
   title: string;
   description: string;
   calloutTitle: string;
@@ -29,7 +27,6 @@ function checkpointLabels(kind: QuoteCheckpointKind): {
 } {
   if (kind === QuoteCheckpointKind.APPROVAL) {
     return {
-      breadcrumbTail: `Acceptance #`,
       title: "Recorded acceptance",
       description:
         "Staff-only record of the commercial proposal the customer agreed to at this moment. Not a signed PDF vault and not job activation.",
@@ -39,7 +36,6 @@ function checkpointLabels(kind: QuoteCheckpointKind): {
     };
   }
   return {
-    breadcrumbTail: `Send #`,
     title: "Recorded send",
     description:
       "Staff-only record of the commercial proposal as sent at this moment. Not email delivery, not a public link, and not customer approval by itself.",
@@ -59,12 +55,6 @@ export default async function QuoteCheckpointViewPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Checkpoint" },
-          ]}
-        />
         <PageHeader title="Checkpoint" description="Immutable quote proof records." />
         <AccessDeniedPanel description="This role cannot access quote checkpoint records." />
       </div>
@@ -99,13 +89,6 @@ export default async function QuoteCheckpointViewPage({
   if (!checkpoint) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Sales", href: "/leads" },
-            { label: "Quote", href: quoteHref },
-            { label: "Not found" },
-          ]}
-        />
         <PageHeader
           eyebrow="Sales · internal only"
           title="Checkpoint"
@@ -136,14 +119,6 @@ export default async function QuoteCheckpointViewPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Sales", href: "/leads" },
-          { label: "Quote", href: quoteHref },
-          { label: `${labels.breadcrumbTail}${checkpoint.sequence}` },
-        ]}
-      />
-
       <PageHeader
         eyebrow="Sales · internal only"
         title={labels.title}

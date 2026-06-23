@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
@@ -34,13 +33,6 @@ export default async function ScopeLibraryClarificationPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Scope Library", href: "/settings/scope-library" },
-          { label: "Clarification" },
-        ]}
-      />
       <PageHeader
         title="Clarification Library"
         description="Build reusable scope clarification question sets with tags, aliases, version-safe edits, and AI-assisted drafting."

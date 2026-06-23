@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { ChangeOrderWorkspace } from "@/components/jobs/change-order-workspace";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { jobDetailPath } from "@/lib/change-order-flow";
@@ -40,15 +39,6 @@ export default async function JobChangeOrdersPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Execution" },
-          { label: "Jobs", href: "/jobs" },
-          { label: workspace.jobTitle, href: jobDetailPath(workspace.jobId) },
-          { label: "Change Orders" },
-        ]}
-      />
-
       <PageHeader
         title="Change Orders"
         description="Create a customer-facing Change Order for signed scope changes. This does not mutate the original quote."

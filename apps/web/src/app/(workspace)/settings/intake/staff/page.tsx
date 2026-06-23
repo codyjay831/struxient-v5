@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
@@ -20,13 +19,6 @@ export default async function StaffIntakeFieldsPage() {
   if (!isProvisioned) {
     return (
       <div className="mx-auto max-w-3xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Settings", href: "/settings" },
-            { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-            { label: "Staff intake" },
-          ]}
-        />
         <PageHeader
           title="Staff intake"
           description="Internal form for phone, walk-in, email, and referral leads."
@@ -46,6 +38,6 @@ export default async function StaffIntakeFieldsPage() {
   }
 
   return (
-    <IntakeFormEditorPage formId={form.id} breadcrumbLeafOverride="Staff intake" />
+    <IntakeFormEditorPage formId={form.id} />
   );
 }

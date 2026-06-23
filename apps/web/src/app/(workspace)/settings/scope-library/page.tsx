@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { ScopeLibrarySectionNav } from "@/components/scope-library/scope-library-section-nav";
@@ -81,7 +80,6 @@ export default async function ScopeLibraryPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb items={[{ label: "Settings", href: "/settings" }, { label: "Scope Library" }]} />
       <PageHeader
         title="Scope Library"
         description="Saved line items (commercial presets) and reusable internal tasks. Applying a preset on a quote copies values; default execution on a saved line item is copied later the same way—never live-linked."

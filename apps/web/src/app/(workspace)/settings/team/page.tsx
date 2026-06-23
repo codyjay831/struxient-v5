@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getSettingsRequestContextOrNull } from "@/lib/auth-context";
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -37,12 +36,6 @@ export default async function TeamSettingsPage() {
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <WorkspaceBreadcrumb
-          items={[
-            { label: "Settings", href: "/settings" },
-            { label: "Team" },
-          ]}
-        />
         <PageHeader title="Team" description="Invite teammates and manage roles." />
         <AccessDeniedPanel
           description="Only Owners and Admins can manage team members and invitations."
@@ -74,12 +67,6 @@ export default async function TeamSettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Team" },
-        ]}
-      />
       <PageHeader
         title="Team"
         description="Invite teammates and manage roles."

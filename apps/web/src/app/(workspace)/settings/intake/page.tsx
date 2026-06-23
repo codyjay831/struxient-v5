@@ -1,4 +1,3 @@
-import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
 import { PublicRequestSharingGuidance } from "@/components/settings/public-request-sharing-guidance";
@@ -75,12 +74,6 @@ export default async function IntakeSettingsHubPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <WorkspaceBreadcrumb
-        items={[
-          { label: "Settings", href: "/settings" },
-          { label: "Customer intake" },
-        ]}
-      />
       <PageHeader
         title="Customer intake"
         description="Share your customer link, then tune the page and questions when you're ready."
