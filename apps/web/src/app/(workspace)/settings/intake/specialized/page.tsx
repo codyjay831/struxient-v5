@@ -1,10 +1,9 @@
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { buildPublicIntakeUrlForForm } from "@/lib/public-intake-url";
 import { CopyPublicRequestUrlButton } from "@/components/leads/copy-public-request-url-button";
-import { PageHeader } from "@/components/ui/page-header";
 import { PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
 import { INTAKE_SPECIALIZED_NEW_PATH, intakeFormEditorPath } from "@/lib/intake-settings-hierarchy";
 import { ArchiveIntakeFormButton } from "@/components/settings/archive-intake-form-button";
@@ -49,21 +48,25 @@ export default async function SpecializedIntakeFormsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Customer request links"
-        description="Manage your primary customer request link and any optional additional links for campaigns, trade pages, or service lines."
-        actions={
-          <Link
-            href={INTAKE_SPECIALIZED_NEW_PATH}
-            className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
-          >
-            <Plus className="mr-2 size-4" />
-            Create request link
-          </Link>
-        }
-      />
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+            Customer request links
+          </h1>
+          <p className="mt-0.5 text-sm text-foreground-muted">
+            Primary link plus optional campaign or service-line URLs.
+          </p>
+        </div>
+        <Link
+          href={INTAKE_SPECIALIZED_NEW_PATH}
+          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-opacity hover:opacity-90"
+        >
+          <Plus className="mr-2 size-4" />
+          Create request link
+        </Link>
+      </header>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-foreground">Active links</h2>
@@ -155,12 +158,18 @@ export default async function SpecializedIntakeFormsPage() {
         </div>
 
         {archivedLinks.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-foreground">Archived</h2>
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2">
+                <ChevronRight
+                  className="size-3.5 text-foreground-subtle transition-transform group-open:rotate-90"
+                  aria-hidden
+                />
+                <span className="text-sm font-semibold text-foreground">Archived</span>
+              </span>
               <span className="text-xs text-foreground-subtle">{archivedLinks.length}</span>
-            </div>
-            <div className="space-y-3">
+            </summary>
+            <div className="mt-3 space-y-3">
               {archivedLinks.map((form) => (
                 <div
                   key={form.id}
@@ -192,7 +201,7 @@ export default async function SpecializedIntakeFormsPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         ) : null}
       </div>
     </>
