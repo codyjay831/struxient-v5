@@ -20,6 +20,7 @@ import {
 } from "@/lib/public-request-settings-defaults";
 import { IntakeFormEditor } from "../forms/[formId]/intake-form-editor";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 export async function IntakeFormEditorPage({
   formId,
@@ -71,13 +72,18 @@ export async function IntakeFormEditorPage({
     { label: "Customer intake", href: "/settings/intake" },
     ...(editorContext === "specializedCustomerForm"
       ? [{ label: labels.breadcrumbParent.label, href: labels.breadcrumbParent.href }]
-      : []),
+      : editorContext === "defaultCustomerIntake"
+        ? [{ label: "Customer fields", href: "/settings/intake/customer-fields" }]
+        : editorContext === "defaultInternalIntake"
+          ? [{ label: "Staff intake", href: "/settings/intake/staff" }]
+          : []),
     { label: breadcrumbLeafOverride ?? form.name },
   ];
 
   return (
     <div className="mx-auto max-w-7xl">
       <WorkspaceBreadcrumb items={breadcrumbItems} />
+      <CustomerIntakeModuleNav />
       <div className="mt-8">
         <IntakeFormEditor
           formDefinition={{

@@ -1,20 +1,19 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ExternalLink, Globe, Users } from "lucide-react";
 import { WorkspaceBreadcrumb } from "@/components/ui/workspace-breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PublicRequestLinkPanel } from "@/components/leads/public-request-link-panel";
-import { IntakeFlowMap } from "@/components/settings/intake-flow-map";
+import { PublicRequestSharingGuidance } from "@/components/settings/public-request-sharing-guidance";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 import { db } from "@/lib/db";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import {
   INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_PUBLIC_COPY_PATH,
   INTAKE_SPECIALIZED_PATH,
-  INTAKE_SPECIALIZED_NEW_PATH,
   INTAKE_STAFF_PATH,
 } from "@/lib/intake-settings-hierarchy";
 import { OFFICE_INTAKE_FORM_WHERE, PUBLIC_INTAKE_FORM_WHERE } from "@/lib/intake/intake-form-surface";
@@ -32,21 +31,28 @@ const secondaryButtonClass =
 const mutedLinkClass =
   "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
 
-function SetupNotice({
-  tone,
-  children,
+function ConfigCard({
+  title,
+  description,
+  status,
+  primaryAction,
+  secondaryAction,
 }: {
-  tone: "warning" | "info";
-  children: ReactNode;
+  title: string;
+  description: string;
+  status?: ReactNode;
+  primaryAction: ReactNode;
+  secondaryAction?: ReactNode;
 }) {
-  const toneClass =
-    tone === "warning"
-      ? "border-warning/35 bg-warning/[0.07] text-foreground"
-      : "border-border bg-foreground/[0.02] text-foreground-muted";
   return (
-    <p className={`mt-3 rounded-lg border px-3 py-2 text-xs leading-relaxed ${toneClass}`}>
-      {children}
-    </p>
+    <WorkspacePanel padding="compact">
+      <SectionHeading title={title} description={description} />
+      {status ? <div className="mt-3 flex flex-wrap items-center gap-2">{status}</div> : null}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {primaryAction}
+        {secondaryAction}
+      </div>
+    </WorkspacePanel>
   );
 }
 
@@ -61,7 +67,7 @@ export default async function IntakeSettingsHubPage() {
   ] = await Promise.all([
     db.publicRequestSettings.findUnique({
       where: { organizationId: ctx.organizationId },
-      select: { enabled: true, formTitle: true, submitButtonText: true },
+      select: { enabled: true },
     }),
     db.organization.findUnique({
       where: { id: ctx.organizationId },
@@ -91,7 +97,7 @@ export default async function IntakeSettingsHubPage() {
         ...PUBLIC_INTAKE_FORM_WHERE,
         isDefault: true,
       },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true },
       orderBy: { updatedAt: "desc" },
     }),
   ]);
@@ -104,6 +110,7 @@ export default async function IntakeSettingsHubPage() {
     slug && publicLive ? buildPublicIntakeUrl({ baseUrl, companySlug: slug }) : null;
   const officeFormProvisioned =
     officeDefaultForm && !isSyntheticDefaultOfficeIntakeFormDefinitionId(officeDefaultForm.id);
+  const defaultFormName = defaultPublicForm?.name ?? "Default customer form";
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -113,18 +120,30 @@ export default async function IntakeSettingsHubPage() {
           { label: "Customer intake" },
         ]}
       />
+      <CustomerIntakeModuleNav />
       <PageHeader
+        variant="compact"
         title="Customer intake"
-        description="Configure how customers and staff submit work requests."
         actions={
           <Link href="/settings" className={mutedLinkClass}>
             ← Settings
           </Link>
         }
       />
+      <p className="-mt-2 mb-4 text-sm text-foreground-muted">
+        Set up your public request page, customer questions, and staff intake form.
+      </p>
 
-      <div className="mb-6">
-        <IntakeFlowMap />
+      <div className="mb-6 flex flex-wrap gap-2">
+        <StatusBadge
+          label={`Public intake: ${publicLive ? "Accepting" : "Paused"}`}
+          tone={publicLive ? "approved" : "warning"}
+        />
+        <StatusBadge label={`Default form: ${defaultFormName}`} tone="neutral" />
+        <StatusBadge
+          label={`Staff intake: ${officeFormProvisioned ? "On" : "Needs setup"}`}
+          tone={officeFormProvisioned ? "approved" : "warning"}
+        />
       </div>
 
       <PublicRequestLinkPanel
@@ -132,151 +151,81 @@ export default async function IntakeSettingsHubPage() {
         slug={slug}
         baseUrl={baseUrl}
         publicRequestLive={publicLive}
-        className="mb-6"
+        previewHref={publicPreviewHref}
+        editCopyHref={INTAKE_PUBLIC_COPY_PATH}
+        className="mb-5"
       />
 
-      <div className="space-y-6">
-        <WorkspacePanel>
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-success/10 p-2 text-success">
-              <Globe className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <SectionHeading
-                title="Default customer intake"
-                description="Your main public request page. Customers use this link to submit work requests."
+      <div className="grid gap-4 md:grid-cols-3">
+        <ConfigCard
+          title="Customer fields"
+          description="Main public request questions and request types."
+          status={
+            <>
+              <StatusBadge
+                label={publicLive ? "Accepting" : "Paused"}
+                tone={publicLive ? "approved" : "warning"}
               />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <StatusBadge
-              label={publicLive ? "Accepting requests" : "Paused"}
-              tone={publicLive ? "approved" : "warning"}
-            />
-            {defaultPublicForm?.name ? (
-              <span className="max-w-md truncate text-xs text-foreground-muted">
-                Form: {defaultPublicForm.name}
-              </span>
-            ) : null}
-            {publicSettings?.formTitle ? (
-              <span className="max-w-md truncate text-xs text-foreground-muted">
-                Page title: {publicSettings.formTitle}
-              </span>
-            ) : null}
-          </div>
-
-          {!slug ? (
-            <SetupNotice tone="warning">
-              No company slug configured. Set one in{" "}
-              <Link href="/settings/organization" className="text-accent hover:underline">
-                Business profile
-              </Link>{" "}
-              before sharing a public customer link.
-            </SetupNotice>
-          ) : null}
-          {!publicLive ? (
-            <SetupNotice tone="warning">
-              Public intake is paused. Turn intake back on under{" "}
-              <Link href={INTAKE_PUBLIC_COPY_PATH} className="text-accent hover:underline">
-                page copy & availability
-              </Link>
-              .
-            </SetupNotice>
-          ) : null}
-
-          <div className="mt-4 flex flex-wrap gap-2">
+              {defaultPublicForm?.name ? (
+                <span className="max-w-full truncate text-xs text-foreground-muted">
+                  {defaultPublicForm.name}
+                </span>
+              ) : null}
+            </>
+          }
+          primaryAction={
             <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className={primaryButtonClass}>
               Edit customer fields
             </Link>
-            <Link href={INTAKE_PUBLIC_COPY_PATH} className={secondaryButtonClass}>
-              Edit page copy & availability
-            </Link>
-            {publicPreviewHref ? (
-              <a
-                href={publicPreviewHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={secondaryButtonClass}
-              >
-                <ExternalLink className="mr-1.5 size-3.5" />
-                Preview customer page
-              </a>
-            ) : (
-              <span className={`${secondaryButtonClass} cursor-not-allowed opacity-60`}>
-                Preview unavailable
-              </span>
-            )}
-          </div>
-        </WorkspacePanel>
+          }
+        />
 
-        <WorkspacePanel>
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-accent/10 p-2 text-accent">
-              <Users className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <SectionHeading
-                title="Default internal intake"
-                description="Staff-only form at /leads/new for phone, email, walk-in, and referral leads."
+        <ConfigCard
+          title="Staff intake"
+          description="Internal form used by office staff at /leads/new."
+          status={
+            <>
+              <StatusBadge
+                label={officeFormProvisioned ? "On" : "Needs setup"}
+                tone={officeFormProvisioned ? "approved" : "warning"}
               />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <StatusBadge label="Always on" tone="approved" />
-            {officeDefaultForm?.name ? (
-              <span className="max-w-md truncate text-xs text-foreground-muted">
-                Form: {officeDefaultForm.name}
-              </span>
-            ) : (
-              <span className="text-xs text-foreground-muted">
-                Form is created on first use of New intake
-              </span>
-            )}
-          </div>
-
-          {!officeFormProvisioned ? (
-            <SetupNotice tone="info">
-              Open{" "}
-              <Link href="/leads/new" className="text-accent hover:underline">
-                New intake
-              </Link>{" "}
-              once to provision the stored internal form, then return here to edit fields.
-            </SetupNotice>
-          ) : null}
-
-          <div className="mt-4 flex flex-wrap gap-2">
+              {officeDefaultForm?.name ? (
+                <span className="max-w-full truncate text-xs text-foreground-muted">
+                  {officeDefaultForm.name}
+                </span>
+              ) : null}
+            </>
+          }
+          primaryAction={
             <Link href={INTAKE_STAFF_PATH} className={primaryButtonClass}>
               Edit staff fields
             </Link>
+          }
+          secondaryAction={
             <Link href="/leads/new" className={secondaryButtonClass}>
-              Preview on New intake
+              Preview staff intake
             </Link>
-          </div>
-        </WorkspacePanel>
+          }
+        />
 
-        <WorkspacePanel>
-          <SectionHeading
-            title="Specialized customer forms"
-            description="Optional extra public links for campaigns, trade-specific landing pages, referral partners, or distinct service lines."
-          />
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+        <ConfigCard
+          title="Specialized forms"
+          description="Extra public request links for campaigns, trades, or service lines."
+          status={
             <StatusBadge
-              label={`${specializedFormCount} specialized form${specializedFormCount === 1 ? "" : "s"}`}
+              label={`${specializedFormCount} active specialized form${specializedFormCount === 1 ? "" : "s"}`}
               tone={specializedFormCount > 0 ? "approved" : "neutral"}
             />
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          }
+          primaryAction={
             <Link href={INTAKE_SPECIALIZED_PATH} className={primaryButtonClass}>
               Manage specialized forms
             </Link>
-            <Link href={INTAKE_SPECIALIZED_NEW_PATH} className={secondaryButtonClass}>
-              Create specialized form
-            </Link>
-          </div>
-        </WorkspacePanel>
+          }
+        />
       </div>
+
+      <PublicRequestSharingGuidance className="mt-6" />
     </div>
   );
 }

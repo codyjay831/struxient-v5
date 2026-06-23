@@ -6,6 +6,7 @@ import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { getOfficeIntakeFormBundle } from "@/lib/intake/load-office-intake-form";
 import { isSyntheticDefaultOfficeIntakeFormDefinitionId } from "@/lib/intake/default-office-intake-form";
 import { INTAKE_SETTINGS_HUB_PATH } from "@/lib/intake-settings-hierarchy";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 import { IntakeFormEditorPage } from "../_lib/intake-form-editor-page";
 
 export const dynamic = "force-dynamic";
@@ -26,15 +27,16 @@ export default async function StaffIntakeFieldsPage() {
           items={[
             { label: "Settings", href: "/settings" },
             { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-            { label: "Staff intake fields" },
+            { label: "Staff intake" },
           ]}
         />
+        <CustomerIntakeModuleNav />
         <PageHeader
-          title="Staff intake fields"
+          title="Staff intake"
           description="Staff-only form at /leads/new for phone, email, walk-in, and referral leads."
           actions={
             <Link href={INTAKE_SETTINGS_HUB_PATH} className={listLinkClass}>
-              ← Customer intake
+              ← Overview
             </Link>
           }
         />
@@ -52,6 +54,6 @@ export default async function StaffIntakeFieldsPage() {
   }
 
   return (
-    <IntakeFormEditorPage formId={form.id} breadcrumbLeafOverride="Staff intake fields" />
+    <IntakeFormEditorPage formId={form.id} breadcrumbLeafOverride="Staff intake" />
   );
 }

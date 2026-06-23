@@ -13,6 +13,7 @@ import {
   PublicRequestSettingsForm,
   type PublicRequestSettingsFormInitial,
 } from "./public-request-settings-form";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 import {
   INTAKE_CUSTOMER_FIELDS_PATH,
   INTAKE_SETTINGS_HUB_PATH,
@@ -61,15 +62,16 @@ export default async function PublicIntakeSettingsPage() {
         items={[
           { label: "Settings", href: "/settings" },
           { label: "Customer intake", href: INTAKE_SETTINGS_HUB_PATH },
-          { label: "Public page copy & availability" },
+          { label: "Public page" },
         ]}
       />
+      <CustomerIntakeModuleNav />
       <PageHeader
-        title="Public page copy & availability"
+        title="Public page"
         description="Control whether customer intake is live and how the public request page looks around your intake fields."
         actions={
           <Link href={INTAKE_SETTINGS_HUB_PATH} className={listLinkClass}>
-            ← Customer intake
+            ← Overview
           </Link>
         }
       />
@@ -80,7 +82,7 @@ export default async function PublicIntakeSettingsPage() {
           and whether intake is accepting requests. Intake questions and service lines are edited
           under{" "}
           <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className="text-accent hover:underline">
-            customer intake fields
+            customer fields
           </Link>
           .
         </p>

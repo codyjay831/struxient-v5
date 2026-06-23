@@ -8,12 +8,14 @@ import { SettingsMobileCategorySelect } from "@/components/settings/settings-mob
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { SettingsSaveStatus, type SettingsSaveState } from "@/components/settings/settings-save-status";
 import { SettingsSearch } from "@/components/settings/settings-search";
+import Link from "next/link";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
   SettingsManageRow,
   SettingsNumberRow,
   SettingsToggleRow,
 } from "@/components/settings/settings-row";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
@@ -205,7 +207,7 @@ export function SettingsPageClient({
         <div className="space-y-8">
           <SettingsSection
             title="Customer intake"
-            description="Configure how customers and staff submit work requests."
+            description="Public request link, customer fields, and staff intake."
           >
             {!canManageIntakeSettings ? (
               <div className="rounded-lg border border-border bg-surface px-4 py-3">
@@ -217,23 +219,33 @@ export function SettingsPageClient({
               </div>
             ) : null}
 
-            <div
-              id="row-customer-intake-status"
-              className="rounded-lg border border-border bg-surface px-4 py-3"
-            >
-              <p className="text-sm font-medium text-foreground">Public intake status</p>
-              <p className="mt-1 text-xs text-foreground-muted">
-                {initialPublicRequestEnabled ? "Accepting requests" : "Paused"} — change availability
-                in Customer intake settings.
-              </p>
-            </div>
-
-            <SettingsManageRow
-              rowId="row-manage-customer-intake-hub"
-              title="Open Customer Intake"
-              description="Live status, public link, and intake field setup."
+            <Link
+              id="row-manage-customer-intake-hub"
               href="/settings/intake"
-            />
+              className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-foreground/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">Customer intake</p>
+                  <p className="mt-1 text-xs text-foreground-muted">
+                    Set up your public request page, customer questions, and staff intake form.
+                  </p>
+                  <div className="mt-2">
+                    <StatusBadge
+                      label={
+                        initialPublicRequestEnabled
+                          ? "Public intake: Accepting"
+                          : "Public intake: Paused"
+                      }
+                      tone={initialPublicRequestEnabled ? "approved" : "warning"}
+                    />
+                  </div>
+                </div>
+                <span className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast">
+                  Open Customer Intake
+                </span>
+              </div>
+            </Link>
           </SettingsSection>
         </div>
       );

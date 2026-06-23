@@ -103,7 +103,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     id: "manage-customer-intake",
     type: "management",
     title: "Customer intake",
-    description: "Open the customer intake control center for public and internal intake setup.",
+    description: "Open Customer intake settings for public and staff intake setup.",
     keywords: ["intake", "customer intake", "public request", "lead intake", "forms"],
     managementGroup: "Management",
     targetRoute: "/settings/intake",

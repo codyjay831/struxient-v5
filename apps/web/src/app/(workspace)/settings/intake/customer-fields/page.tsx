@@ -11,7 +11,7 @@ export default async function CustomerFieldsIntakePage() {
   return (
     <IntakeFormEditorPage
       formId={form.id}
-      breadcrumbLeafOverride="Customer intake fields"
+      breadcrumbLeafOverride="Customer fields"
     />
   );
 }

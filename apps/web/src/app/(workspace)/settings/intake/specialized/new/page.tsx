@@ -13,6 +13,7 @@ import {
   INTAKE_SETTINGS_HUB_PATH,
   INTAKE_SPECIALIZED_PATH,
 } from "@/lib/intake-settings-hierarchy";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 type TradeStarter = (typeof TRADE_STARTERS)[number];
 
@@ -46,9 +47,10 @@ export default function NewSpecializedIntakeFormPage() {
           { label: "New" },
         ]}
       />
+      <CustomerIntakeModuleNav />
       <PageHeader
-        title="Create specialized customer form"
-        description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines. Your default customer intake remains the main path."
+        title="Create specialized form"
+        description="Optional public link for campaigns, trade-specific pages, referral partners, or distinct service lines."
         actions={
           <Link
             href={INTAKE_SPECIALIZED_PATH}

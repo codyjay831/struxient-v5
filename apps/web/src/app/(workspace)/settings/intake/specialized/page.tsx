@@ -15,6 +15,7 @@ import {
   intakeFormEditorPath,
 } from "@/lib/intake-settings-hierarchy";
 import { ArchiveIntakeFormButton } from "@/components/settings/archive-intake-form-button";
+import { CustomerIntakeModuleNav } from "@/components/settings/customer-intake-module-nav";
 
 export default async function SpecializedIntakeFormsPage() {
   const ctx = await getRequestContextOrThrow();
@@ -46,17 +47,18 @@ export default async function SpecializedIntakeFormsPage() {
           { label: "Specialized forms" },
         ]}
       />
+      <CustomerIntakeModuleNav />
       <WorkspacePanel padding="compact" className="mb-6">
         <p className="text-sm text-foreground-muted">
           Optional public links beyond your{" "}
           <Link href={INTAKE_CUSTOMER_FIELDS_PATH} className="text-accent hover:underline">
-            default customer intake fields
+            customer fields
           </Link>
           .
         </p>
       </WorkspacePanel>
       <PageHeader
-        title="Specialized customer forms"
+        title="Specialized forms"
         description="Optional public entry points that still create leads in the same Lead Review and quote flow."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -64,7 +66,7 @@ export default async function SpecializedIntakeFormsPage() {
               href={INTAKE_SETTINGS_HUB_PATH}
               className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground"
             >
-              ← Customer intake
+              ← Overview
             </Link>
             <Link
               href={INTAKE_SPECIALIZED_NEW_PATH}
@@ -79,7 +81,7 @@ export default async function SpecializedIntakeFormsPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-foreground">Specialized customer forms</h2>
+          <h2 className="text-sm font-semibold text-foreground">Active specialized forms</h2>
           <span className="text-xs text-foreground-subtle">{specializedForms.length}</span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
