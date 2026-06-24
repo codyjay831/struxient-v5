@@ -673,7 +673,8 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                   </Button>
                 ) : null}
 
-                {selectedRevision.status === ChangeOrderStatus.DRAFT ? (
+                {(selectedRevision.status === ChangeOrderStatus.DRAFT ||
+                  selectedRevision.status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES) ? (
                   <Button
                     type="button"
                     variant="primary"

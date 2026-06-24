@@ -14,13 +14,10 @@ import {
   updateChangeOrderDraftWithActor,
   validateStoredExecutionDeltaForChangeOrder,
   voidChangeOrderWithActor,
-  type ChangeOrderLineInput,
   type CreateChangeOrderDraftInput,
   type UpdateChangeOrderDraftInput,
 } from "@/lib/change-order/change-order-lifecycle";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
-
-export type { ChangeOrderLineInput, CreateChangeOrderDraftInput, UpdateChangeOrderDraftInput };
 
 type ChangeOrderActionResult = { ok: true; changeOrderId: string } | { ok: false; error: string };
 

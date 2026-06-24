@@ -29,6 +29,11 @@ export interface ChangeOrderSendResult {
   error?: string;
 }
 
+const SENDABLE_CHANGE_ORDER_STATUSES: ChangeOrderStatus[] = [
+  ChangeOrderStatus.DRAFT,
+  ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES,
+];
+
 export async function captureChangeOrderSendCheckpoint(
   tx: ExtendedTransactionClient,
   changeOrderId: string,
@@ -40,7 +45,7 @@ export async function captureChangeOrderSendCheckpoint(
     where: {
       id: changeOrderId,
       organizationId,
-      status: ChangeOrderStatus.DRAFT,
+      status: { in: SENDABLE_CHANGE_ORDER_STATUSES },
     },
     select: changeOrderSelectForCustomerCheckpoint,
   });
@@ -118,7 +123,7 @@ export async function transitionChangeOrderToSent(
     where: {
       id: changeOrderId,
       organizationId,
-      status: ChangeOrderStatus.DRAFT,
+      status: { in: SENDABLE_CHANGE_ORDER_STATUSES },
     },
     data: {
       status: ChangeOrderStatus.SENT,

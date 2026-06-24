@@ -1,9 +1,6 @@
 "use server";
 
-import type {
-  ChangeOrderLineInput,
-  CreateChangeOrderDraftInput,
-} from "@/app/(workspace)/change-orders/change-order-actions";
+import type { CreateChangeOrderDraftInput } from "@/lib/change-order/change-order-lifecycle";
 import {
   applyChangeOrderAction as applyChangeOrderActionCore,
   createChangeOrderDraftAction as createChangeOrderDraftActionCore,
@@ -12,9 +9,6 @@ import {
   sendChangeOrderAction,
   voidChangeOrderAction,
 } from "@/app/(workspace)/change-orders/change-order-actions";
-
-export type CreateQuoteScopeRevisionInput = CreateChangeOrderDraftInput;
-export type QuoteScopeRevisionLineInput = ChangeOrderLineInput;
 
 type QuoteScopeRevisionActionResult =
   | { ok: true; revisionId: string }
@@ -49,7 +43,7 @@ function toLegacyApplyResult(
 }
 
 export async function createQuoteScopeRevisionDraftAction(
-  input: CreateQuoteScopeRevisionInput,
+  input: CreateChangeOrderDraftInput,
 ): Promise<QuoteScopeRevisionActionResult> {
   return toLegacyActionResult(await createChangeOrderDraftActionCore(input));
 }

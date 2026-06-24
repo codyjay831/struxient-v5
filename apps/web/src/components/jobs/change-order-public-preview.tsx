@@ -6,9 +6,11 @@ import { ChangeOrderStatus } from "@prisma/client";
 import {
   acceptChangeOrderFromTokenAction,
   requestChangeOrderChangesAction,
-  type ChangeOrderAcceptState,
-  type ChangeOrderRequestChangesState,
 } from "@/app/co/[token]/change-order-share-actions";
+import type {
+  ChangeOrderAcceptState,
+  ChangeOrderRequestChangesState,
+} from "@/app/co/[token]/change-order-share-types";
 import type { ChangeOrderCustomerPreviewDocument } from "@/lib/change-order-customer-projection";
 import { formatMoneyCents } from "@/lib/quote-display";
 

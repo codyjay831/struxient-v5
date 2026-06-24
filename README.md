@@ -48,8 +48,9 @@ For host-side Prisma (`apps/web/`) against the compose **db** service only:
 1. From the repo root: `docker compose up -d db` (starts **`struxient-v5-db`** on host **5432** per `docker-compose.yml`).
 2. In `apps/web/`: copy `.env.example` to `.env` (same `DATABASE_URL` shape as compose for local dev).
 3. From `apps/web/`: `npx prisma migrate dev` (apply pending migrations; initial migration is `20260505175844_init_org_customer`).
-4. From `apps/web/`: `npx prisma db seed` (development seed data only; safe to re-run).
-5. Validate: `npx prisma generate`, `npm run lint`, `npm run build` (from `apps/web/`, or use root `npm run lint` / `npm run build`).
+4. After migrations that add Prisma enums or fields: `npx prisma generate`, then restart the dev server (`npm run dev`). A stale client can leave new enum values undefined at runtime until you regenerate and restart.
+5. From `apps/web/`: `npx prisma db seed` (development seed data only; safe to re-run).
+6. Validate: `npx prisma generate`, `npm run lint`, `npm run build` (from `apps/web/`, or use root `npm run lint` / `npm run build`).
 
 Do not point `DATABASE_URL` at other projects’ Postgres instances. Rebuild the **`web`** image if you need the Dockerized app on port **3001** to match the latest source.
 

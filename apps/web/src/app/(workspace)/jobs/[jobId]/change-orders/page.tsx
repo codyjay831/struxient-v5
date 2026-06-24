@@ -78,7 +78,10 @@ export default async function JobChangeOrdersPage({
           </ButtonLink>
         </EmptyState>
       ) : (
-        <ChangeOrderWorkspace data={workspace} />
+        <ChangeOrderWorkspace
+          key={workspace.focusChangeOrderId ?? "change-order-list"}
+          data={workspace}
+        />
       )}
     </div>
   );

@@ -30,19 +30,13 @@ import { requestChangeOrderChangesForShareToken } from "@/lib/change-order/chang
 import { validateChangeOrderExecutionDelta } from "@/lib/change-order/execution-delta-validation";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { canCustomerAcceptChangeOrder } from "@/lib/change-order/change-order-commercial-rules";
+import type {
+  ChangeOrderAcceptState,
+  ChangeOrderRequestChangesState,
+} from "./change-order-share-types";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 10;
-
-export type ChangeOrderAcceptState = {
-  error?: string;
-  success?: boolean;
-};
-
-export type ChangeOrderRequestChangesState = {
-  error?: string;
-  success?: boolean;
-};
 
 export async function requestChangeOrderChangesAction(
   token: string,

@@ -235,7 +235,7 @@ test("smoke: send button disabled unless revision is draft", () => {
     isPending: false,
   });
   assert.equal(acceptedState.disabled, true);
-  assert.match(acceptedState.reason ?? "", /Only draft Change Orders/i);
+  assert.match(acceptedState.reason ?? "", /Only editable Change Orders/i);
 });
 
 test("price-impact draft cannot be staff-accepted", () => {

@@ -602,8 +602,11 @@ export function getSendChangeOrderButtonState(input: {
   if (!input.selectedRevision) {
     return { disabled: true, reason: "Select a draft Change Order to send." };
   }
-  if (input.selectedRevision.status !== ChangeOrderStatus.DRAFT) {
-    return { disabled: true, reason: "Only draft Change Orders can be sent." };
+  if (
+    input.selectedRevision.status !== ChangeOrderStatus.DRAFT &&
+    input.selectedRevision.status !== ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES
+  ) {
+    return { disabled: true, reason: "Only editable Change Orders can be sent." };
   }
   if (!input.permissions.canApprove) {
     return {
@@ -836,12 +839,16 @@ export function getApplyButtonState(input: {
       reason: "Execution impact must pass validation before apply.",
     };
   }
-  const impact = deriveChangeOrderImpactPreview({
-    lines: input.selectedRevision.lines,
+  const hasExecutionPaymentOp = Boolean(input.selectedRevision.executionImpact?.paymentImpact);
+  const paymentCheck = validateScopeRevisionPaymentImpact({
     priceDeltaCents: input.selectedRevision.priceDeltaCents,
+    hasApprovedPaymentImpactOperationInTx: hasExecutionPaymentOp,
   });
-  if (impact.paymentBlocked && impact.paymentBlockReason) {
-    return { disabled: true, reason: impact.paymentBlockReason };
+  if (!paymentCheck.ok) {
+    return {
+      disabled: true,
+      reason: paymentCheck.error ?? "Payment impact required before apply.",
+    };
   }
   return { disabled: false, reason: null };
 }

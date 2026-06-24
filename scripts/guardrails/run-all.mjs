@@ -19,6 +19,7 @@ const CHECKS = [
   { name: "corrections-constant", file: "detect-corrections-constant-drift.mjs", strict: false },
   { name: "client-db-import", file: "detect-client-db-import.mjs", strict: false },
   { name: "breadcrumbs", file: "detect-breadcrumbs.mjs", strict: true },
+  { name: "change-order-server-action-exports", file: "detect-change-order-server-action-exports.mjs", strict: true },
 ];
 
 const strictAll = process.env.GUARDRAILS_STRICT === "1";
