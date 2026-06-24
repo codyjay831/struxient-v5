@@ -300,10 +300,17 @@ Enum values (canonical string slugs):
 | `ADD_TO_NEXT_UNPAID_PAYMENT` | Add delta to **next unsettled** job payment requirement | Job underway; next draw is soon |
 | `ADD_TO_FINAL_PAYMENT` | Add delta to **final unsettled** payment requirement | Small change; trusted customer; near completion |
 | `CREDIT_REMAINING_BALANCE` | Negative delta reduces **unsettled** balance (**final-first** default) | Scope reduction, allowance, price decrease |
+| `DEPOSIT_NOW_REST_TO_FINAL` | Deposit (new CO-sourced `DUE` row) + remainder on **final unsettled** payment | Partial upfront, rest at final |
+| `SPLIT_ACROSS_REMAINING_PAYMENTS` | Full delta distributed across eligible unsettled rows with **stored exact allocations** | Larger COs; payment plan review |
+| `DEPOSIT_NOW_REST_SPLIT_ACROSS_REMAINING` | Deposit (new CO-sourced `DUE` row) + remainder split across eligible unsettled rows | Partial upfront + spread |
 
-**Deferred (post-MVP â€” do not implement without canon update):**
+**Payment plan review (v2):** Office uses a visual payment plan table — current job payments, CO amount, per-payment adjustments, generated customer terms, and apply preview. Simple presets are shortcuts; **stored `allocations[]` in `paymentImpactJson` are commercial truth**. Apply uses stored values, not silent recalculation.
 
-- Split delta across remaining unpaid requirements
+**Allocation basis** (split strategies): `ORIGINAL_PAYMENT_PERCENTAGES`, `CURRENT_REMAINING_AMOUNTS`, `EQUAL_SPLIT`. Manual per-row entry deferred to v2.1.
+
+**Deferred (post-MVP):**
+
+- Manual custom allocation per payment row (v2.1)
 - `NO_IMMEDIATE_PAYMENT_REQUIREMENT` (contract value change without collection row)
 - Stripe / invoice amount sync
 - Partial-payment-aware allocations
@@ -357,6 +364,22 @@ All materialization runs in the **same transaction** as scope/task delta apply. 
 - If credit **exceeds** total unsettled balance â†’ **fail apply** or `NEEDS_EXECUTION_REVIEW` (manual review / waiver path).
 - Record credit allocation in apply audit metadata.
 
+#### `DEPOSIT_NOW_REST_TO_FINAL` (v2)
+
+- **Positive** `priceDeltaCents` only.
+- Office sets deposit amount; **create one** CO-sourced `DUE` row for deposit; **increase** final unsettled payment by remainder.
+- If deposit equals full delta, collapse to `DUE_BEFORE_ADDED_WORK`.
+- `depositAmountCents + allocation.adjustmentCents === priceDeltaCents`.
+
+#### `SPLIT_ACROSS_REMAINING_PAYMENTS` (v2)
+
+- **Positive** delta only. Eligible = unsettled (`status âˆ‰ { PAID, WAIVED, CANCELED }`).
+- Exact `allocations[]` stored at save; apply verifies drift and sets `newAmountCents` exactly.
+
+#### `DEPOSIT_NOW_REST_SPLIT_ACROSS_REMAINING` (v2)
+
+- Deposit CO-sourced `DUE` row + stored split allocations on remainder. Same sum and drift rules as above.
+
 #### Zero-dollar CO
 
 - No payment materialization.
@@ -364,12 +387,13 @@ All materialization runs in the **same transaction** as scope/task delta apply. 
 
 #### Double-count prevention (all strategies)
 
-For a given Change Order apply, exactly **one** materialization outcome:
+Each cent of `priceDeltaCents` is materialized **exactly once**:
 
-- either **one new** CO-sourced requirement (`DUE_BEFORE_ADDED_WORK`), **or**
-- **one or more amount adjustments** on existing unsettled rows (`ADD_TO_*`, `CREDIT_*`),
+- `DUE_BEFORE_ADDED_WORK` (or collapsed deposit-only): one new CO-sourced `DUE` row only.
+- `ADD_TO_*`, `SPLIT_*`, `CREDIT_*`: adjustments on existing unsettled rows only (no deposit row).
+- `DEPOSIT_NOW_*`: one deposit CO row **plus** adjustments for remainder; deposit + adjustments must sum to delta.
 
-never both a new standalone row and a milestone bump for the same `priceDeltaCents`.
+**Must not** apply the same CO amount twice.
 
 ### 11.5 Customer-facing rules (`/co/[token]`)
 
@@ -379,7 +403,10 @@ never both a new standalone row and a milestone bump for the same `priceDeltaCen
 - Payment strategy in **plain English** (from `customerTermsText`, not internal enum slug)
 - Due timing or affected payment milestone title
 - Credit wording for negative deltas
-- Whether payment is due before added work starts (when `DUE_BEFORE_ADDED_WORK`)
+- Whether payment is due before added work starts (when `DUE_BEFORE_ADDED_WORK` or deposit strategies)
+- **Exact payment allocation** for split/deposit strategies (title + before/after from `resolvedPreview.allocationLines` — no internal ids)
+
+**Customer terms:** `customerTermsText` **must be generated** from stored allocation at save time. Office **must not** edit terms to contradict the allocation table.
 
 **Must not show:**
 

@@ -53,9 +53,53 @@ test("parseChangeOrderPaymentImpact accepts valid MVP strategies", () => {
 test("parseChangeOrderPaymentImpact rejects invalid strategy", () => {
   const parsed = parseChangeOrderPaymentImpact({
     ...validImpact(),
-    strategy: "SPLIT_ACROSS_PAYMENTS",
+    strategy: "INVALID_STRATEGY",
   });
   assert.equal(parsed.ok, false);
+});
+
+test("parseChangeOrderPaymentImpact accepts v2 split strategy", () => {
+  const parsed = parseChangeOrderPaymentImpact({
+    schemaVersion: 2,
+    strategy: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+    customerTermsText: "Spread across payments.",
+    allocationBasis: "EQUAL_SPLIT",
+    allocations: [
+      {
+        paymentRequirementId: "pay-1",
+        title: "Progress",
+        statusAtApproval: "PENDING",
+        currentAmountCents: 50_000,
+        adjustmentCents: 2500,
+        newAmountCents: 52_500,
+      },
+      {
+        paymentRequirementId: "pay-2",
+        title: "Final",
+        statusAtApproval: "PENDING",
+        currentAmountCents: 50_000,
+        adjustmentCents: 2500,
+        newAmountCents: 52_500,
+      },
+    ],
+    resolvedPreview: {
+      strategyLabel: "Spread across remaining payments",
+      customerSummary: "The additional $50.00 will be spread across your remaining unpaid payments.",
+      adjustmentTotalCents: 5000,
+      allocationLines: [
+        {
+          title: "Progress",
+          currentAmountCents: 50_000,
+          adjustmentCents: 2500,
+          newAmountCents: 52_500,
+        },
+      ],
+    },
+  });
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) {
+    assert.equal(parsed.impact.schemaVersion, 2);
+  }
 });
 
 test("parseChangeOrderPaymentImpact requires target for schedule strategies", () => {

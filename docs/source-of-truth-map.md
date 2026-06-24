@@ -165,7 +165,8 @@
 | CO impact preview | **Derived** | `change-order-flow.ts` + delta validator | Quote-plan preview reused for job deltas |
 | Apply guards (coverage/payment) | **Derived at write** | `validateScopeRevisionApplyGuards`, `validateScopeRevisionPaymentImpact` (transitional); **`payment-impact-schema.ts` + materializer** (Pass 1 target) | Apply without payment or coverage invariants |
 | CO payment strategy & customer terms | **Stored** | `ChangeOrder.paymentImpactJson` + ACCEPTANCE checkpoint snapshot | Payment terms only in execution delta; orphan PENDING CO payment rows |
-| CO payment materialization | **Stored writes at apply** | `payment-impact-materialize.ts` (Pass 1) → `JobPaymentRequirement` | Duplicate standalone row + milestone bump |
+| CO payment materialization | **Stored writes at apply** | `payment-impact-materializer.ts` → `JobPaymentRequirement` | Duplicate row + milestone bump; silent recalc vs stored allocations |
+| CO payment plan review / allocation | **Derived at draft, stored at save** | `payment-impact-allocation.ts`, Payment Plan Review drawer | Ad-hoc split math in UI; freeform customer terms |
 | CO payment due-ness (due-before-work) | **Stored fact + derived** | `JobPaymentRequirement.status = DUE` + optional stage gate; `isPaymentEffectivelyDue()` | Manual orphan PENDING rows never surfacing |
 
 ## Jobs, issues, recovery

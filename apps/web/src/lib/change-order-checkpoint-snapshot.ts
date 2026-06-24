@@ -4,14 +4,14 @@ import {
   buildCustomerChangeOrderDocument,
   type ChangeOrderCustomerPreviewDocument,
 } from "@/lib/change-order-customer-projection";
-import type { ChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import type { ChangeOrderPaymentImpactAny } from "@/lib/change-order/payment-impact-schema";
 import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 
 export const CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 1;
 
 export type ChangeOrderCheckpointSnapshotWire = {
   document: ChangeOrderCustomerPreviewDocument;
-  paymentImpact?: ChangeOrderPaymentImpact;
+  paymentImpact?: ChangeOrderPaymentImpactAny;
 };
 
 export type ChangeOrderCheckpointStaffOnlyWire = {
@@ -120,7 +120,7 @@ export function changeOrderRowToCustomerPreviewDocument(
 
 export function buildChangeOrderCheckpointSnapshotWire(params: {
   document: ChangeOrderCustomerPreviewDocument;
-  paymentImpact?: ChangeOrderPaymentImpact | null;
+  paymentImpact?: ChangeOrderPaymentImpactAny | null;
 }): ChangeOrderCheckpointSnapshotWire {
   return {
     document: params.document,
@@ -130,7 +130,7 @@ export function buildChangeOrderCheckpointSnapshotWire(params: {
 
 export function serializeChangeOrderPreviewDocumentForCheckpoint(
   document: ChangeOrderCustomerPreviewDocument,
-  paymentImpact?: ChangeOrderPaymentImpact | null,
+  paymentImpact?: ChangeOrderPaymentImpactAny | null,
 ): ChangeOrderCheckpointSnapshotWire {
   return buildChangeOrderCheckpointSnapshotWire({ document, paymentImpact });
 }

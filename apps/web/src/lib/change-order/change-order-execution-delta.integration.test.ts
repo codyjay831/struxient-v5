@@ -10,6 +10,7 @@ import {
   ChangeOrderStatus,
   JobPaymentRequirementStatus,
   JobTaskStatus,
+  Prisma,
   StaffRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -30,7 +31,9 @@ import {
   buildAddToFinalPaymentImpactJson,
   buildAddToNextPaymentImpactJson,
   buildCreditPaymentImpactJson,
+  buildDepositRestToFinalImpactJson,
   buildDueBeforeAddedWorkPaymentImpactJson,
+  buildSplitPaymentImpactJson,
   cleanupChangeOrderJobFixture,
   countActiveScopeItems,
   countActiveTasks,
@@ -143,7 +146,7 @@ test("integration: price-impact CO rejects accept without payment impact", async
       where: { id: created.changeOrderId },
       data: {
         priceDeltaCents: 25000,
-        paymentImpactJson: null,
+        paymentImpactJson: Prisma.DbNull,
       },
     });
 
@@ -236,7 +239,6 @@ test("integration: price-impact SENT staff accept works and enables apply", asyn
         {
           id: coPayments[0]!.id,
           title: coPayments[0]!.title,
-          amountCents: coPayments[0]!.amountCents,
           status: coPayments[0]!.status,
           sourcePaymentScheduleItemId: null,
           requiredBeforeStageId: null,
@@ -383,6 +385,98 @@ test("integration: apply increases final payment only for ADD_TO_FINAL strategy"
       where: { sourceChangeOrderId: created.changeOrderId },
     });
     assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: split strategy updates multiple payments on apply", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("split-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Split add",
+      priceDeltaCents: 10_000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 10_000 }],
+      paymentImpactJson: buildSplitPaymentImpactJson({
+        priceDeltaCents: 10_000,
+        depositRequirementId: payments.depositRequirement.id,
+        finalRequirementId: payments.finalRequirement.id,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, 55_000);
+    assert.equal(final?.amountCents, 55_000);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: deposit rest to final creates CO row and updates final", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("deposit-final-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Deposit and final",
+      priceDeltaCents: 10_000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 10_000 }],
+      paymentImpactJson: buildDepositRestToFinalImpactJson({
+        priceDeltaCents: 10_000,
+        depositCents: 3000,
+        finalRequirementId: payments.finalRequirement.id,
+        changeOrderNumber: 1,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+
+    assert.equal(deposit?.amountCents, 50_000);
+    assert.equal(final?.amountCents, 57_000);
+    assert.equal(coSourced, 1);
   } finally {
     await cleanupChangeOrderJobFixture(fixture);
   }
@@ -594,7 +688,7 @@ test("integration: legacy-only price CO cannot apply without paymentImpactJson",
       where: { id: created.changeOrderId },
       data: {
         priceDeltaCents: 12_000,
-        paymentImpactJson: null,
+        paymentImpactJson: Prisma.DbNull,
         status: ChangeOrderStatus.ACCEPTED,
         applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
         executionDeltaJson: changeOrderExecutionDeltaToJson(legacyDelta),
@@ -886,7 +980,7 @@ test("integration: customer request-changes writes checkpoint without execution 
     assert.equal(created.ok, true);
     if (!created.ok) return;
     await markChangeOrderSent(created.changeOrderId);
-    const token = await createChangeOrderShareToken(created.changeOrderId);
+    await createChangeOrderShareToken(created.changeOrderId);
     const shareToken = await db.changeOrderShareToken.findFirst({
       where: { changeOrderId: created.changeOrderId },
       select: { id: true },

@@ -12,7 +12,7 @@ Use on a dev job with active scope, tasks, office permissions, and at least depo
 ## Create and commercial flow
 
 - [ ] Create a **price-impact** Change Order (non-zero price delta)
-- [ ] Commercial column **Payment terms** card shows Change Order amount, selected approach, due timing, customer copy, and after-apply summary
+- [ ] Commercial column **Payment terms** card shows summary, **Review payment plan** button, generated customer terms, and after-apply summary
 - [ ] **Collect before added work starts** shows staff note that task blocking is **not automatic yet** (no false “work blocked” promise)
 - [ ] Commercial section shows scope/price summary and “What the customer will see” on read-only views
 - [ ] Generated **ADD_TASK** appears in Work impact with amber “review before send” styling
@@ -27,7 +27,13 @@ Use on a dev job with active scope, tasks, office permissions, and at least depo
 - [ ] **Add to next unpaid payment** — preview shows target title and amount before → after; apply increases that requirement only
 - [ ] **Add to final payment** — preview shows final payment before → after; apply increases final only
 - [ ] **Credit remaining balance** — preview explains credit against remaining balance; apply reduces balances final-first
-- [ ] Paid/waived target after customer accept — apply fails with clear payment message; approved terms still visible in readiness panel
+- [ ] **Spread across remaining payments** — plan review shows per-payment adjustments; apply updates each row exactly
+- [ ] **Deposit now, rest to final** — deposit DUE row + final payment increase; customer page shows deposit + allocation table
+- [ ] **Deposit now, spread remainder** — deposit DUE row + multiple payment increases
+- [ ] **Percentage-based split** — uses original contract % when available; falls back to current balances with warning
+- [ ] **Target paid after acceptance** — apply fails with payment allocation drift message
+- [ ] **Customer allocation preview** — customer page shows allocation table without internal IDs
+- [ ] Payment terms are **generated from allocation** (no freeform contradicting table)
 
 ## Work impact composer (draft)
 

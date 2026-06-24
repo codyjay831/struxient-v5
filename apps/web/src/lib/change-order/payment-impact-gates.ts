@@ -1,10 +1,13 @@
 import {
+  isAllocationStrategy,
+  isDepositStrategy,
   parseChangeOrderPaymentImpact,
-  type ChangeOrderPaymentImpact,
+  validatePaymentImpactAllocationSum,
+  type ChangeOrderPaymentImpactAny,
 } from "@/lib/change-order/payment-impact-schema";
 
 export type ChangeOrderPaymentImpactGateResult =
-  | { ok: true; impact: ChangeOrderPaymentImpact | null }
+  | { ok: true; impact: ChangeOrderPaymentImpactAny | null }
   | { ok: false; error: string; errors?: string[] };
 
 /**
@@ -61,12 +64,27 @@ export function validateChangeOrderPaymentImpactGate(params: {
   if (
     (impact.strategy === "ADD_TO_NEXT_UNPAID_PAYMENT" ||
       impact.strategy === "ADD_TO_FINAL_PAYMENT") &&
-    !impact.targetPaymentRequirementId
+    !impact.targetPaymentRequirementId &&
+    !("allocations" in impact && impact.allocations?.length)
   ) {
     return {
       ok: false,
       error: "Payment strategy requires a target payment requirement.",
     };
+  }
+
+  if (isAllocationStrategy(impact.strategy) || isDepositStrategy(impact.strategy)) {
+    const sumErrors = validatePaymentImpactAllocationSum({
+      priceDeltaCents: params.priceDeltaCents,
+      impact,
+    });
+    if (sumErrors.length > 0) {
+      return {
+        ok: false,
+        error: sumErrors[0] ?? "Payment allocation is invalid.",
+        errors: sumErrors,
+      };
+    }
   }
 
   return { ok: true, impact };

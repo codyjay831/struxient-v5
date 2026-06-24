@@ -23,6 +23,7 @@ import {
   changeOrderPaymentImpactToJson,
   type ChangeOrderPaymentImpact,
 } from "@/lib/change-order/payment-impact-schema";
+import { buildImpactForPreset } from "@/lib/change-order/payment-impact-allocation";
 import {
   buildPaymentImpactForStrategy,
 } from "@/lib/change-order/payment-impact-resolver";
@@ -394,6 +395,74 @@ export function buildCreditPaymentImpactJson(params: {
         amountCents: 50_000,
         status: JobPaymentRequirementStatus.PENDING,
         sourcePaymentScheduleItemId: null,
+        scheduleSortOrder: 1,
+        anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+        createdAt: new Date(),
+      },
+    ],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson(built.impact);
+}
+
+export function buildSplitPaymentImpactJson(params: {
+  priceDeltaCents: number;
+  depositRequirementId: string;
+  finalRequirementId: string;
+}): Record<string, unknown> {
+  const built = buildImpactForPreset({
+    preset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+    priceDeltaCents: params.priceDeltaCents,
+    allocationBasis: "EQUAL_SPLIT",
+    requirements: [
+      {
+        id: params.depositRequirementId,
+        title: "Deposit",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: "schedule-deposit",
+        scheduleSortOrder: 0,
+        anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+        createdAt: new Date(),
+      },
+      {
+        id: params.finalRequirementId,
+        title: "Final Balance",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: "schedule-final",
+        scheduleSortOrder: 1,
+        anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+        createdAt: new Date(),
+      },
+    ],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson(built.impact);
+}
+
+export function buildDepositRestToFinalImpactJson(params: {
+  priceDeltaCents: number;
+  depositCents: number;
+  finalRequirementId: string;
+  changeOrderNumber?: number;
+}): Record<string, unknown> {
+  const built = buildImpactForPreset({
+    preset: "DEPOSIT_NOW_REST_TO_FINAL",
+    priceDeltaCents: params.priceDeltaCents,
+    depositCents: params.depositCents,
+    changeOrderNumber: params.changeOrderNumber,
+    requirements: [
+      {
+        id: params.finalRequirementId,
+        title: "Final Balance",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: "schedule-final",
         scheduleSortOrder: 1,
         anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
         createdAt: new Date(),

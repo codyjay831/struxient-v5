@@ -125,6 +125,7 @@ export async function loadChangeOrderWorkspace(input: {
           amountCents: true,
           status: true,
           sourcePaymentScheduleItemId: true,
+          requiredBeforeStageId: true,
           createdAt: true,
         },
       },
@@ -172,15 +173,23 @@ export async function loadChangeOrderWorkspace(input: {
       id: true,
       sortOrder: true,
       anchorType: true,
+      percentage: true,
     },
   });
   const scheduleById = new Map(quotePaymentSchedule.map((item) => [item.id, item]));
+
+  const jobStageTitles = await db.jobStage.findMany({
+    where: { jobId: job.id },
+    select: { id: true, title: true },
+  });
+  const stageTitleById = new Map(jobStageTitles.map((stage) => [stage.id, stage.title]));
 
   const jobPaymentRequirements: JobPaymentRequirementForResolver[] = job.paymentRequirements.map(
     (requirement) => {
       const scheduleItem = requirement.sourcePaymentScheduleItemId
         ? scheduleById.get(requirement.sourcePaymentScheduleItemId)
         : null;
+      const percentage = scheduleItem?.percentage;
       return {
         id: requirement.id,
         title: requirement.title,
@@ -189,6 +198,12 @@ export async function loadChangeOrderWorkspace(input: {
         sourcePaymentScheduleItemId: requirement.sourcePaymentScheduleItemId,
         scheduleSortOrder: scheduleItem?.sortOrder ?? null,
         anchorType: scheduleItem?.anchorType ?? null,
+        schedulePercentage:
+          percentage != null ? Number.parseFloat(percentage.toString()) : null,
+        requiredBeforeStageId: requirement.requiredBeforeStageId,
+        requiredBeforeStageTitle: requirement.requiredBeforeStageId
+          ? (stageTitleById.get(requirement.requiredBeforeStageId) ?? null)
+          : null,
         createdAt: requirement.createdAt,
       };
     },

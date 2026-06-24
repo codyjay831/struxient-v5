@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChangeOrderStatus } from "@prisma/client";
+import { ChangeOrderApplicationStatus, ChangeOrderStatus } from "@prisma/client";
 import { CheckCircle2, FilePlus2, RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   applyChangeOrderAction,
@@ -54,7 +54,7 @@ import {
 } from "@/lib/change-order/payment-impact-resolver";
 import {
   changeOrderPaymentImpactToJson,
-  type ChangeOrderPaymentImpact,
+  type ChangeOrderPaymentImpactAny,
 } from "@/lib/change-order/payment-impact-schema";
 
 type WorkspacePhase = "idle" | "creating" | "updating" | "approving" | "applying";
@@ -229,7 +229,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     }
     return projectChangeOrderExecutionImpact({
       executionDeltaJson: executionDeltaProposal,
-      baseJobPlanVersion: selectedChangeOrder.baseJobPlanVersion,
+      baseJobPlanVersion: selectedChangeOrder.baseJobPlanVersion ?? data.jobPlanVersion,
       currentJobPlanVersion: data.jobPlanVersion,
       priceDeltaCents: selectedChangeOrder.priceDeltaCents,
       scopeItems: scopeItemsForProjection,
@@ -277,7 +277,8 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     selectedChangeOrder &&
     isExecutionTaskComposerEditable({
       status: selectedChangeOrder.status,
-      applicationStatus: selectedChangeOrder.applicationStatus,
+      applicationStatus:
+        selectedChangeOrder.applicationStatus ?? ChangeOrderApplicationStatus.NOT_APPLIED,
     });
 
   const draftReadiness = deriveChangeOrderReadiness({
@@ -399,6 +400,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
 
     setError(null);
     setPhase("updating");
+    const commercialPriceDeltaCents = editValidation.ok ? editValidation.priceDeltaCents : 0;
     startTransition(async () => {
       const result = await updateChangeOrderDraftAction({
         changeOrderId: selectedChangeOrder.id,
@@ -410,10 +412,10 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
             }
           : {
               reasoning: editReasoning.trim(),
-              priceDeltaCents: editValidation.priceDeltaCents,
+              priceDeltaCents: commercialPriceDeltaCents,
               lines: editLines,
               paymentImpactJson:
-                editValidation.priceDeltaCents === 0
+                commercialPriceDeltaCents === 0
                   ? null
                   : activeEditState?.paymentImpactJson
                     ? (activeEditState.paymentImpactJson as Record<string, unknown>)
@@ -748,7 +750,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                   paymentImpactChanged={selectedReadiness.paymentImpactChanged}
                   paymentImpactReady={selectedReadiness.paymentImpactReady}
                   sendBlockedReason={selectedReadiness.paymentImpactBlockReason}
-                  onChange={(impact: ChangeOrderPaymentImpact | null) => {
+                  onChange={(impact: ChangeOrderPaymentImpactAny | null) => {
                     updateEditState({
                       paymentImpactJson: impact ? changeOrderPaymentImpactToJson(impact) : null,
                     });
@@ -870,7 +872,9 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                     description: item.description,
                   }))}
                   proposal={executionDeltaProposal}
-                  baseJobPlanVersion={selectedChangeOrder.baseJobPlanVersion}
+                  baseJobPlanVersion={
+                    selectedChangeOrder.baseJobPlanVersion ?? data.jobPlanVersion
+                  }
                   onProposalChange={(nextProposal) => {
                     updateEditState({ executionDeltaProposal: nextProposal });
                     setComposerError(null);

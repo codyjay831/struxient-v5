@@ -2,7 +2,7 @@ import {
   ChangeOrderLineOperation,
   PaymentScheduleAnchorType,
 } from "@prisma/client";
-import type { ChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import type { ChangeOrderPaymentImpactAny } from "@/lib/change-order/payment-impact-schema";
 import { paymentImpactToCustomerTerms } from "@/lib/change-order/payment-impact-resolver";
 
 export type ChangeOrderPreviewLine = {
@@ -49,6 +49,14 @@ export type ChangeOrderCustomerPaymentTerms = {
   targetAmountAfterCents: number | null;
   isCredit: boolean;
   dueBeforeAddedWork: boolean;
+  allocationLines: Array<{
+    title: string;
+    currentAmountCents: number;
+    adjustmentCents: number;
+    newAmountCents: number;
+  }>;
+  depositAmountCents: number | null;
+  depositDueLabel: string | null;
 };
 
 export type BuildChangeOrderCustomerPreviewInput = {
@@ -79,7 +87,7 @@ export type BuildChangeOrderCustomerPreviewInput = {
     anchorType: PaymentScheduleAnchorType;
     anchorStageName: string | null;
   }>;
-  paymentImpact?: ChangeOrderPaymentImpact | null;
+  paymentImpact?: ChangeOrderPaymentImpactAny | null;
 };
 
 function formatNumberLabel(number: number): string {

@@ -4,9 +4,12 @@ import {
 } from "@prisma/client";
 import type {
   ChangeOrderPaymentImpact,
+  ChangeOrderPaymentImpactAny,
   ChangeOrderPaymentImpactResolvedPreview,
   ChangeOrderPaymentStrategy,
+  ChangeOrderPaymentStrategyV1,
 } from "@/lib/change-order/payment-impact-schema";
+import { isDepositStrategy, isPaymentImpactV2 } from "@/lib/change-order/payment-impact-schema";
 import { CHANGE_ORDER_PAYMENT_STRATEGY_LABELS } from "@/lib/change-order/payment-impact-schema";
 import { formatCents } from "@/lib/job-payment-display";
 
@@ -18,6 +21,9 @@ export type JobPaymentRequirementForResolver = {
   sourcePaymentScheduleItemId: string | null;
   scheduleSortOrder: number | null;
   anchorType: PaymentScheduleAnchorType | null;
+  schedulePercentage?: number | null;
+  requiredBeforeStageId?: string | null;
+  requiredBeforeStageTitle?: string | null;
   createdAt: Date;
 };
 
@@ -80,7 +86,7 @@ export function sumUnsettledPaymentBalanceCents(
 export function suggestDefaultPaymentStrategy(params: {
   priceDeltaCents: number;
   requirements: JobPaymentRequirementForResolver[];
-}): ChangeOrderPaymentStrategy {
+}): ChangeOrderPaymentStrategyV1 {
   if (params.priceDeltaCents < 0) {
     return "CREDIT_REMAINING_BALANCE";
   }
@@ -105,7 +111,7 @@ export function suggestDefaultPaymentStrategy(params: {
 }
 
 function buildCustomerSummary(params: {
-  strategy: ChangeOrderPaymentStrategy;
+  strategy: ChangeOrderPaymentStrategyV1;
   priceDeltaCents: number;
   targetTitle: string | null;
 }): { customerSummary: string; dueTimingLabel: string | null; blocksAddedWork: boolean } {
@@ -144,7 +150,7 @@ function buildCustomerSummary(params: {
 }
 
 export function buildPaymentImpactForStrategy(params: {
-  strategy: ChangeOrderPaymentStrategy;
+  strategy: ChangeOrderPaymentStrategyV1;
   priceDeltaCents: number;
   requirements: JobPaymentRequirementForResolver[];
   jobPlanVersion?: number;
@@ -299,7 +305,7 @@ export function derivePaymentImpactWarnings(params: {
   return warnings;
 }
 
-export function paymentImpactToCustomerTerms(impact: ChangeOrderPaymentImpact): {
+export function paymentImpactToCustomerTerms(impact: ChangeOrderPaymentImpactAny): {
   customerSummary: string;
   customerTermsText: string;
   strategyLabel: string;
@@ -309,17 +315,31 @@ export function paymentImpactToCustomerTerms(impact: ChangeOrderPaymentImpact): 
   targetAmountAfterCents: number | null;
   isCredit: boolean;
   dueBeforeAddedWork: boolean;
+  allocationLines: Array<{
+    title: string;
+    currentAmountCents: number;
+    adjustmentCents: number;
+    newAmountCents: number;
+  }>;
+  depositAmountCents: number | null;
+  depositDueLabel: string | null;
 } {
+  const preview = impact.resolvedPreview;
   return {
-    customerSummary: impact.resolvedPreview.customerSummary,
+    customerSummary: preview.customerSummary,
     customerTermsText: impact.customerTermsText,
-    strategyLabel: impact.resolvedPreview.strategyLabel,
-    dueTimingLabel: impact.resolvedPreview.dueTimingLabel ?? null,
-    affectedPaymentTitle: impact.resolvedPreview.targetPaymentTitle ?? null,
-    targetAmountBeforeCents: impact.resolvedPreview.targetAmountBeforeCents ?? null,
-    targetAmountAfterCents: impact.resolvedPreview.targetAmountAfterCents ?? null,
+    strategyLabel: preview.strategyLabel,
+    dueTimingLabel: preview.dueTimingLabel ?? null,
+    affectedPaymentTitle: preview.targetPaymentTitle ?? null,
+    targetAmountBeforeCents: preview.targetAmountBeforeCents ?? null,
+    targetAmountAfterCents: preview.targetAmountAfterCents ?? null,
     isCredit: impact.strategy === "CREDIT_REMAINING_BALANCE",
-    dueBeforeAddedWork: impact.strategy === "DUE_BEFORE_ADDED_WORK",
+    dueBeforeAddedWork:
+      impact.strategy === "DUE_BEFORE_ADDED_WORK" ||
+      (isPaymentImpactV2(impact) && isDepositStrategy(impact.strategy)),
+    allocationLines: preview.allocationLines ?? [],
+    depositAmountCents: preview.depositAmountCents ?? null,
+    depositDueLabel: preview.depositDueLabel ?? null,
   };
 }
 
@@ -330,6 +350,7 @@ export function getStaffPaymentAfterApplySummary(params: {
   strategy: ChangeOrderPaymentStrategy;
   priceDeltaCents: number;
   targetTitle: string | null;
+  allocationCount?: number;
 }): string {
   const amountLabel = formatCents(Math.abs(params.priceDeltaCents));
   switch (params.strategy) {
@@ -345,6 +366,12 @@ export function getStaffPaymentAfterApplySummary(params: {
         : `After apply, ${amountLabel} is added to the final unpaid payment on this job.`;
     case "CREDIT_REMAINING_BALANCE":
       return `After apply, a ${amountLabel} credit reduces remaining unpaid balances, starting with final payment.`;
+    case "SPLIT_ACROSS_REMAINING_PAYMENTS":
+      return `After apply, ${amountLabel} is distributed across ${params.allocationCount ?? "remaining"} unpaid payments exactly as shown in the payment plan.`;
+    case "DEPOSIT_NOW_REST_TO_FINAL":
+      return `After apply, a deposit due payment is created and the remainder is added to the final unpaid payment.`;
+    case "DEPOSIT_NOW_REST_SPLIT_ACROSS_REMAINING":
+      return `After apply, a deposit due payment is created and the remainder is spread across unpaid payments exactly as shown.`;
   }
 }
 
@@ -363,6 +390,12 @@ export function humanizePaymentApplyError(message: string): string {
   }
   if (/Legacy execution payment ops are no longer accepted/i.test(message)) {
     return "Legacy payment instructions are no longer used. Choose and save approved payment terms in the commercial column.";
+  }
+  if (/no longer matches the customer-approved payment allocation/i.test(message)) {
+    return message;
+  }
+  if (/no longer matches the approved amount/i.test(message)) {
+    return "A payment no longer matches the customer-approved payment allocation. Review payment terms before applying.";
   }
   if (/payment strategy|paymentImpactJson|payment impact/i.test(message)) {
     return "Payment terms are missing or invalid. Choose how the customer will pay, save commercial changes, then send or apply.";

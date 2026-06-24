@@ -145,7 +145,41 @@ export function ChangeOrderPublicPreview({
                 <span className="font-medium">Due timing:</span> {document.paymentTerms.dueTimingLabel}
               </p>
             ) : null}
-            {document.paymentTerms.affectedPaymentTitle ? (
+            {document.paymentTerms.depositAmountCents ? (
+              <p className="mt-3 text-sm text-foreground">
+                <span className="font-medium">Deposit due now:</span>{" "}
+                {formatMoneyCents(document.paymentTerms.depositAmountCents)}
+                {document.paymentTerms.depositDueLabel
+                  ? ` — ${document.paymentTerms.depositDueLabel}`
+                  : ""}
+              </p>
+            ) : null}
+            {document.paymentTerms.allocationLines.length > 0 ? (
+              <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-foreground/[0.02] text-left text-xs uppercase tracking-wide text-foreground-subtle">
+                      <th className="px-3 py-2 font-medium">Payment</th>
+                      <th className="px-3 py-2 font-medium text-right">Current</th>
+                      <th className="px-3 py-2 font-medium text-right">Revised</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {document.paymentTerms.allocationLines.map((line) => (
+                      <tr key={line.title} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 font-medium text-foreground">{line.title}</td>
+                        <td className="px-3 py-2 text-right text-foreground-muted">
+                          {formatMoneyCents(line.currentAmountCents)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium text-foreground">
+                          {formatMoneyCents(line.newAmountCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : document.paymentTerms.affectedPaymentTitle ? (
               <p className="mt-2 text-sm text-foreground-muted">
                 Affected payment: {document.paymentTerms.affectedPaymentTitle}
                 {document.paymentTerms.targetAmountBeforeCents != null &&
@@ -176,7 +210,7 @@ export function ChangeOrderPublicPreview({
             <h2 className="text-lg font-bold text-foreground">Respond to this Change Order</h2>
             <p className="mt-1 text-sm text-foreground-muted">
               You are approving the scope changes, revised total
-              {document.paymentTerms ? ", and payment terms" : ""} shown above. You can also request
+              {document.paymentTerms ? ", and payment allocation" : ""} shown above. You can also
               changes for the office to review.
             </p>
 
