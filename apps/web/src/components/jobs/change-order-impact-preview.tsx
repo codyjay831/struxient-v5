@@ -7,15 +7,21 @@ import { ChangeOrderLineDiffPreview } from "@/components/jobs/change-order-line-
 
 export function ChangeOrderImpactPreviewPanel({
   preview,
+  customerFacingLabel,
 }: {
   preview: ChangeOrderImpactPreview;
+  customerFacingLabel?: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-foreground/[0.02] p-4 space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Impact preview</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {customerFacingLabel ?? "Impact preview"}
+        </h3>
         <p className="mt-1 text-xs text-foreground-muted">
-          Commercial summary and proposed line-level changes.
+          {customerFacingLabel
+            ? "Scope and price summary shown on the customer Change Order."
+            : "Commercial summary and proposed line-level changes."}
         </p>
       </div>
 

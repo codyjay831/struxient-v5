@@ -138,6 +138,16 @@ Customer access still favors **magic-link** and **SMS-link** flows where they re
 
 **Customer-visible or monetary** changes to **approved** sold scope **must** go through a **change order** (append model) or an explicit **new quote / supersede path** per [locked-decisions-v1.md](./locked-decisions-v1.md) §7—**must not** silently mutate **approved baseline truth** (checkpoint / execution rules). **Customer re-approval** follows the rules in that section (default: re-approve when CO has **price impact**).
 
+## I26 — Change Order execution delta (post-activation plan revision)
+
+A Change Order **must** store a **proposed execution delta** (`executionDeltaJson`) and **`baseJobPlanVersion`** at draft creation. **Draft, sent, and accepted** Change Orders **must not** mutate active `JobScopeItem` or `JobTask` rows.
+
+**Must:** apply accepted Change Orders only after validation against the current active job plan, through an audited **`ExecutionPlanRevision`** (`JOB_EXECUTION_DELTA`), in a single transaction.
+
+**Must:** if the active plan changed and conflicts are **unsafe**, set **`NEEDS_EXECUTION_REVIEW`** (or equivalent application sub-state)—**must not** silently mutate the job or trap the CO as `ACCEPTED` with no resolution path.
+
+**Must not:** build Change Order execution planning by cloning the quote whole-plan execution builder; quote activation creates the initial plan; Change Orders propose **deltas** only. Full rules: [change-order-canon.md](./change-order-canon.md).
+
 ## I21 — v1 multi-tenant default
 
 **Default** SaaS posture: **one Organization per contractor**, **active organization in session** (v4-style), **org switcher** for users in multiple orgs. **Tenant-at-login** (v3-style) is **only** for an **explicitly configured** deployment mode—not the default customer-facing product story. Details: [locked-decisions-v1.md](./locked-decisions-v1.md) §6.
@@ -217,3 +227,4 @@ When product decisions contradict prior canon:
 *Canon update (2026-05-06): I2 + I20 — **working quote** vs **checkpoint** / approved baseline wording; link to [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md).*  
 *Canon update (2026-05-06): Added I24 — Stages are presets and containers; tasks are the execution power layer. Default MVP preset **Standard Project**; reserved future preset **Service Work**. Architecture must stay preset-flexible. Detailed framing in [templates-and-execution-planning.md](./templates-and-execution-planning.md) §6.*
 *Canon update (2026-06-19): I24 clarified Standard Project as a planning affordance, not permanent job architecture; added I25 requiring MVP constraints to preserve source-of-truth integrity instead of collapsing concepts or encoding temporary UI assumptions as schema.*
+*Canon update (2026-06-24): Added I26 — Change Order execution delta (proposed delta storage, baseJobPlanVersion, apply via ExecutionPlanRevision, NEEDS_EXECUTION_REVIEW); link [change-order-canon.md](./change-order-canon.md).*

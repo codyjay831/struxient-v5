@@ -1,6 +1,7 @@
 import {
   ChangeOrderLineOperation,
   ChangeOrderStatus,
+  ChangeOrderApplicationStatus,
   JobScopeItemStatus,
   JobStatus,
   StaffRole,
@@ -9,6 +10,26 @@ import {
   assertExecutionPlanPermission,
 } from "@/lib/execution-plan-permissions";
 import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-payment-policy";
+import {
+  canEditChangeOrderDraft,
+  canStaffAcceptChangeOrder,
+  changeOrderRequiresCustomerPriceApproval,
+} from "@/lib/change-order/change-order-commercial-rules";
+import {
+  changeOrderLifecycleReadinessLabel,
+  deriveChangeOrderLifecycleReadiness,
+  executionImpactHasGeneratedTaskSuggestions,
+  parseApplyErrorSummary,
+  type ChangeOrderExecutionImpactView,
+  type ChangeOrderLifecycleReadiness,
+} from "@/lib/change-order/change-order-execution-projection";
+import {
+  commercialDraftChanged,
+  deriveChangeOrderOfficeNextStep,
+  executionDraftChanged,
+  getUnsavedDraftChangesReason,
+  resolveDraftUpdateSaveIntent,
+} from "@/lib/change-order/change-order-draft-save-semantics";
 
 export type ChangeOrderIntent = "add" | "modify" | "remove";
 
@@ -58,6 +79,11 @@ export type ChangeOrderRevisionSnapshot = {
   reasoning: string;
   priceDeltaCents: number;
   lines: ChangeOrderLineDraft[];
+  applicationStatus?: ChangeOrderApplicationStatus;
+  baseJobPlanVersion?: number;
+  lastApplyErrorJson?: unknown;
+  customerDocumentTitle?: string | null;
+  executionImpact?: ChangeOrderExecutionImpactView;
 };
 
 export type ChangeOrderPermissions = {
@@ -103,12 +129,27 @@ export type ChangeOrderLineDiff = {
 export type ChangeOrderReadiness = {
   impact: ChangeOrderImpactPreview;
   createDraft: ChangeOrderButtonState;
-  approve: ChangeOrderButtonState;
+  updateDraft: ChangeOrderButtonState;
+  saveCommercial: ChangeOrderButtonState;
+  saveExecutionImpact: ChangeOrderButtonState;
+  send: ChangeOrderButtonState;
+  staffAccept: ChangeOrderButtonState;
   apply: ChangeOrderButtonState;
   executionCoverageWarning: string | null;
   jobPlanVersion: number;
   expectedJobPlanVersion: number;
   selectedRevisionStatus: ChangeOrderStatus | null;
+  lifecycleReadiness: ChangeOrderLifecycleReadiness | null;
+  lifecycleReadinessLabel: string | null;
+  applyErrorSummary: { classification: string | null; messages: string[] } | null;
+  requiresCustomerApproval: boolean;
+  isEditable: boolean;
+  officeNextStep: string | null;
+  mixedEditBlocked: boolean;
+  mixedEditMessage: string | null;
+  commercialChanged: boolean;
+  executionChanged: boolean;
+  unsavedDraftChangesReason: string | null;
 };
 
 export function jobChangeOrdersPath(jobId: string): string {
@@ -542,7 +583,56 @@ export function getCreateDraftButtonState(input: {
   return { disabled: false, reason: null };
 }
 
-export function getApproveButtonState(input: {
+export function getSendChangeOrderButtonState(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  executionValidationOk: boolean;
+  hasGeneratedTaskSuggestions: boolean;
+  hasUnsavedDraftChanges: boolean;
+  unsavedDraftChangesReason: string | null;
+  isPending: boolean;
+}): ChangeOrderButtonState {
+  if (input.pageBlocked) {
+    return { disabled: true, reason: "Change Orders are blocked for this job." };
+  }
+  if (input.isPending) {
+    return { disabled: true, reason: "Sending change order…" };
+  }
+  if (!input.selectedRevision) {
+    return { disabled: true, reason: "Select a draft Change Order to send." };
+  }
+  if (input.selectedRevision.status !== ChangeOrderStatus.DRAFT) {
+    return { disabled: true, reason: "Only draft Change Orders can be sent." };
+  }
+  if (!input.permissions.canApprove) {
+    return {
+      disabled: true,
+      reason: input.permissions.approveError ?? "You cannot send Change Orders.",
+    };
+  }
+  if (input.hasUnsavedDraftChanges) {
+    return {
+      disabled: true,
+      reason: input.unsavedDraftChangesReason ?? "Save draft changes before sending.",
+    };
+  }
+  if (!input.executionValidationOk) {
+    return {
+      disabled: true,
+      reason: "Execution impact must pass validation before sending.",
+    };
+  }
+  if (input.hasGeneratedTaskSuggestions) {
+    return {
+      disabled: true,
+      reason: "Review generated task suggestions before sending.",
+    };
+  }
+  return { disabled: false, reason: null };
+}
+
+export function getStaffAcceptButtonState(input: {
   permissions: ChangeOrderPermissions;
   pageBlocked: boolean;
   selectedRevision: ChangeOrderRevisionSnapshot | null;
@@ -552,19 +642,143 @@ export function getApproveButtonState(input: {
     return { disabled: true, reason: "Change Orders are blocked for this job." };
   }
   if (input.isPending) {
-    return { disabled: true, reason: "Approving change order…" };
+    return { disabled: true, reason: "Recording acceptance…" };
   }
   if (!input.selectedRevision) {
-    return { disabled: true, reason: "Select a draft Change Order to approve." };
-  }
-  if (input.selectedRevision.status !== ChangeOrderStatus.DRAFT) {
-    return { disabled: true, reason: "Only draft Change Orders can be approved." };
+    return { disabled: true, reason: "Select a Change Order to accept." };
   }
   if (!input.permissions.canApprove) {
     return {
       disabled: true,
-      reason: input.permissions.approveError ?? "You cannot approve Change Orders.",
+      reason: input.permissions.approveError ?? "You cannot accept Change Orders.",
     };
+  }
+  const acceptAllowed = canStaffAcceptChangeOrder({
+    status: input.selectedRevision.status,
+    priceDeltaCents: input.selectedRevision.priceDeltaCents,
+  });
+  if (!acceptAllowed.ok) {
+    return { disabled: true, reason: acceptAllowed.error };
+  }
+  return { disabled: false, reason: null };
+}
+
+/** @deprecated Use getSendChangeOrderButtonState */
+export function getApproveButtonState(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  isPending: boolean;
+}): ChangeOrderButtonState {
+  return getSendChangeOrderButtonState({
+    ...input,
+    executionValidationOk: true,
+    hasGeneratedTaskSuggestions: false,
+    hasUnsavedDraftChanges: false,
+    unsavedDraftChangesReason: null,
+  });
+}
+
+export function getUpdateDraftButtonState(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  draftCommercialValid: boolean;
+  mixedEditBlocked: boolean;
+  mixedEditMessage: string | null;
+  hasPendingChanges: boolean;
+  isPending: boolean;
+}): ChangeOrderButtonState {
+  return getSaveCommercialDraftButtonState({
+    ...input,
+    commercialChanged: input.hasPendingChanges,
+  });
+}
+
+export function getSaveCommercialDraftButtonState(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  draftCommercialValid: boolean;
+  mixedEditBlocked: boolean;
+  mixedEditMessage: string | null;
+  commercialChanged: boolean;
+  isPending: boolean;
+}): ChangeOrderButtonState {
+  if (input.pageBlocked) {
+    return { disabled: true, reason: "Change Orders are blocked for this job." };
+  }
+  if (input.isPending) {
+    return { disabled: true, reason: "Updating draft…" };
+  }
+  if (!input.selectedRevision) {
+    return { disabled: true, reason: "Select a Change Order to update." };
+  }
+  const editable = canEditChangeOrderDraft(input.selectedRevision.status);
+  if (!editable.ok) {
+    return { disabled: true, reason: editable.error };
+  }
+  if (!input.permissions.canCreateDraft) {
+    return {
+      disabled: true,
+      reason: input.permissions.createDraftError ?? "You cannot update Change Order drafts.",
+    };
+  }
+  if (input.mixedEditBlocked) {
+    return {
+      disabled: true,
+      reason: input.mixedEditMessage ?? "Save commercial and execution changes separately.",
+    };
+  }
+  if (!input.commercialChanged) {
+    return { disabled: true, reason: "No commercial changes to save." };
+  }
+  if (!input.draftCommercialValid) {
+    return { disabled: true, reason: "Complete commercial changes before saving." };
+  }
+  return { disabled: false, reason: null };
+}
+
+export function getSaveExecutionImpactButtonState(input: {
+  permissions: ChangeOrderPermissions;
+  pageBlocked: boolean;
+  selectedRevision: ChangeOrderRevisionSnapshot | null;
+  mixedEditBlocked: boolean;
+  mixedEditMessage: string | null;
+  executionChanged: boolean;
+  executionComposerEditable: boolean;
+  isPending: boolean;
+}): ChangeOrderButtonState {
+  if (input.pageBlocked) {
+    return { disabled: true, reason: "Change Orders are blocked for this job." };
+  }
+  if (input.isPending) {
+    return { disabled: true, reason: "Saving execution impact…" };
+  }
+  if (!input.selectedRevision) {
+    return { disabled: true, reason: "Select a Change Order to save work impact." };
+  }
+  const editable = canEditChangeOrderDraft(input.selectedRevision.status);
+  if (!editable.ok) {
+    return { disabled: true, reason: editable.error };
+  }
+  if (!input.executionComposerEditable) {
+    return { disabled: true, reason: "Work impact is read-only for this Change Order." };
+  }
+  if (!input.permissions.canCreateDraft) {
+    return {
+      disabled: true,
+      reason: input.permissions.createDraftError ?? "You cannot update Change Order drafts.",
+    };
+  }
+  if (input.mixedEditBlocked) {
+    return {
+      disabled: true,
+      reason: input.mixedEditMessage ?? "Save commercial and execution changes separately.",
+    };
+  }
+  if (!input.executionChanged) {
+    return { disabled: true, reason: "No work impact changes to save." };
   }
   return { disabled: false, reason: null };
 }
@@ -575,6 +789,8 @@ export function getApplyButtonState(input: {
   selectedRevision: ChangeOrderRevisionSnapshot | null;
   jobPlanVersion: number;
   expectedJobPlanVersion: number;
+  executionValidationOk: boolean;
+  applicationStatus?: ChangeOrderApplicationStatus;
   isPending: boolean;
 }): ChangeOrderButtonState {
   if (input.pageBlocked) {
@@ -584,10 +800,22 @@ export function getApplyButtonState(input: {
     return { disabled: true, reason: "Applying change order…" };
   }
   if (!input.selectedRevision) {
-    return { disabled: true, reason: "Select an approved Change Order to apply." };
+    return { disabled: true, reason: "Select an accepted Change Order to apply." };
   }
   if (input.selectedRevision.status !== ChangeOrderStatus.ACCEPTED) {
     return { disabled: true, reason: "Only accepted Change Orders can be applied." };
+  }
+  if (input.applicationStatus === ChangeOrderApplicationStatus.APPLY_FAILED) {
+    return {
+      disabled: true,
+      reason: "Apply failed. Review execution impact before retrying.",
+    };
+  }
+  if (input.applicationStatus === ChangeOrderApplicationStatus.NEEDS_EXECUTION_REVIEW) {
+    return {
+      disabled: true,
+      reason: "Execution review required before apply.",
+    };
   }
   if (!input.permissions.canApply) {
     return {
@@ -601,6 +829,12 @@ export function getApplyButtonState(input: {
   });
   if (!versionCheck.ok) {
     return { disabled: true, reason: versionCheck.error };
+  }
+  if (!input.executionValidationOk) {
+    return {
+      disabled: true,
+      reason: "Execution impact must pass validation before apply.",
+    };
   }
   const impact = deriveChangeOrderImpactPreview({
     lines: input.selectedRevision.lines,
@@ -633,6 +867,11 @@ export function deriveChangeOrderReadiness(input: {
   jobPlanVersion: number;
   expectedJobPlanVersion: number;
   isPending: boolean;
+  baselineReasoning?: string;
+  baselineLines?: ChangeOrderLineDraft[];
+  baselineExecutionProposal?: import("@/lib/change-order/execution-delta-schema").ChangeOrderExecutionDeltaProposal | null;
+  currentExecutionProposal?: import("@/lib/change-order/execution-delta-schema").ChangeOrderExecutionDeltaProposal | null;
+  executionComposerEditable?: boolean;
 }): ChangeOrderReadiness {
   const activeScopeItemIds = new Set(input.activeScopeItems.map((item) => item.id));
   const draftValidation = validateChangeOrderDraftInput({
@@ -665,6 +904,87 @@ export function deriveChangeOrderReadiness(input: {
       })
     : draftImpact;
 
+  const executionImpact = input.selectedRevision?.executionImpact ?? null;
+  const executionValidationOk = executionImpact?.validationOk ?? false;
+  const hasGeneratedTaskSuggestions = executionImpact
+    ? executionImpactHasGeneratedTaskSuggestions(executionImpact)
+    : false;
+  const selectedCommercialValid = input.selectedRevision
+    ? validateChangeOrderDraftInput({
+        reasoning: input.selectedRevision.reasoning,
+        lines: input.selectedRevision.lines,
+        activeScopeItemIds,
+        activeScopeItems: input.activeScopeItems,
+      }).ok
+    : false;
+
+  const lifecycleReadiness = input.selectedRevision
+    ? deriveChangeOrderLifecycleReadiness({
+        status: input.selectedRevision.status,
+        applicationStatus:
+          input.selectedRevision.applicationStatus ?? ChangeOrderApplicationStatus.NOT_APPLIED,
+        draftCommercialValid: selectedCommercialValid,
+        executionValidationOk,
+        hasGeneratedTaskSuggestions,
+        stalePlan: executionImpact?.stalePlan ?? false,
+      })
+    : draftValidation.ok
+      ? deriveChangeOrderLifecycleReadiness({
+          status: ChangeOrderStatus.DRAFT,
+          applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
+          draftCommercialValid: true,
+          executionValidationOk: false,
+          hasGeneratedTaskSuggestions: false,
+          stalePlan: false,
+        })
+      : deriveChangeOrderLifecycleReadiness({
+          status: ChangeOrderStatus.DRAFT,
+          applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
+          draftCommercialValid: false,
+          executionValidationOk: false,
+          hasGeneratedTaskSuggestions: false,
+          stalePlan: false,
+        });
+
+  const applyErrorSummary = input.selectedRevision?.lastApplyErrorJson
+    ? parseApplyErrorSummary(input.selectedRevision.lastApplyErrorJson)
+    : null;
+
+  const isEditable = input.selectedRevision
+    ? canEditChangeOrderDraft(input.selectedRevision.status).ok
+    : false;
+
+  const commercialChanged =
+    input.selectedRevision &&
+    input.baselineReasoning != null &&
+    input.baselineLines != null
+      ? commercialDraftChanged({
+          baselineReasoning: input.baselineReasoning,
+          baselineLines: input.baselineLines,
+          reasoning: input.reasoning,
+          lines: input.draftLines,
+        })
+      : false;
+
+  const executionChanged =
+    input.baselineExecutionProposal !== undefined
+      ? executionDraftChanged({
+          baselineProposal: input.baselineExecutionProposal ?? null,
+          proposal: input.currentExecutionProposal ?? null,
+        })
+      : false;
+
+  const saveIntent = resolveDraftUpdateSaveIntent({
+    commercialChanged,
+    executionChanged,
+  });
+  const mixedEditBlocked = saveIntent.kind === "blocked_mixed";
+  const mixedEditMessage = saveIntent.kind === "blocked_mixed" ? saveIntent.message : null;
+  const unsavedDraftChangesReason = getUnsavedDraftChangesReason({
+    commercialChanged,
+    executionChanged,
+  });
+
   return {
     impact: input.selectedRevision ? selectedImpact : draftImpact,
     createDraft: getCreateDraftButtonState({
@@ -676,7 +996,47 @@ export function deriveChangeOrderReadiness(input: {
       activeScopeItems: input.activeScopeItems,
       isPending: input.isPending,
     }),
-    approve: getApproveButtonState({
+    updateDraft: getSaveCommercialDraftButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      draftCommercialValid: draftValidation.ok,
+      mixedEditBlocked,
+      mixedEditMessage,
+      commercialChanged,
+      isPending: input.isPending,
+    }),
+    saveCommercial: getSaveCommercialDraftButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      draftCommercialValid: draftValidation.ok,
+      mixedEditBlocked,
+      mixedEditMessage,
+      commercialChanged,
+      isPending: input.isPending,
+    }),
+    saveExecutionImpact: getSaveExecutionImpactButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      mixedEditBlocked,
+      mixedEditMessage,
+      executionChanged,
+      executionComposerEditable: input.executionComposerEditable ?? false,
+      isPending: input.isPending,
+    }),
+    send: getSendChangeOrderButtonState({
+      permissions: input.permissions,
+      pageBlocked: input.pageBlocked,
+      selectedRevision: input.selectedRevision,
+      executionValidationOk,
+      hasGeneratedTaskSuggestions,
+      hasUnsavedDraftChanges: commercialChanged || executionChanged,
+      unsavedDraftChangesReason,
+      isPending: input.isPending,
+    }),
+    staffAccept: getStaffAcceptButtonState({
       permissions: input.permissions,
       pageBlocked: input.pageBlocked,
       selectedRevision: input.selectedRevision,
@@ -688,6 +1048,8 @@ export function deriveChangeOrderReadiness(input: {
       selectedRevision: input.selectedRevision,
       jobPlanVersion: input.jobPlanVersion,
       expectedJobPlanVersion: input.expectedJobPlanVersion,
+      executionValidationOk,
+      applicationStatus: input.selectedRevision?.applicationStatus,
       isPending: input.isPending,
     }),
     executionCoverageWarning: deriveExecutionCoverageWarning({
@@ -697,6 +1059,26 @@ export function deriveChangeOrderReadiness(input: {
     jobPlanVersion: input.jobPlanVersion,
     expectedJobPlanVersion: input.expectedJobPlanVersion,
     selectedRevisionStatus: input.selectedRevision?.status ?? null,
+    lifecycleReadiness,
+    lifecycleReadinessLabel: changeOrderLifecycleReadinessLabel(lifecycleReadiness),
+    applyErrorSummary,
+    requiresCustomerApproval: input.selectedRevision
+      ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents)
+      : draftValidation.ok
+        ? changeOrderRequiresCustomerPriceApproval(draftValidation.priceDeltaCents)
+        : false,
+    isEditable,
+    officeNextStep: deriveChangeOrderOfficeNextStep({
+      lifecycleReadiness,
+      requiresCustomerApproval: input.selectedRevision
+        ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents)
+        : false,
+    }),
+    mixedEditBlocked,
+    mixedEditMessage,
+    commercialChanged,
+    executionChanged,
+    unsavedDraftChangesReason,
   };
 }
 

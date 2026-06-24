@@ -54,6 +54,26 @@ function ActionReadiness({
   );
 }
 
+function lifecycleTone(
+  readiness: ChangeOrderReadiness,
+): "neutral" | "success" | "warning" | "danger" {
+  switch (readiness.lifecycleReadiness) {
+    case "APPLIED":
+    case "READY_TO_SEND":
+    case "ACCEPTED_READY_TO_APPLY":
+      return "success";
+    case "APPLY_FAILED":
+    case "ACCEPTED_NEEDS_EXECUTION_REVIEW":
+    case "EXECUTION_NEEDS_REVIEW":
+      return "danger";
+    case "SENT_WAITING":
+    case "CUSTOMER_REQUESTED_CHANGES":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
 export function ChangeOrderReadinessPanel({
   readiness,
   mode,
@@ -66,11 +86,39 @@ export function ChangeOrderReadinessPanel({
   return (
     <div className="rounded-lg border border-border bg-foreground/[0.02] p-4 space-y-4 lg:sticky lg:top-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Impact and readiness</h3>
+        <h3 className="text-sm font-semibold text-foreground">Readiness</h3>
         <p className="mt-1 text-xs text-foreground-muted">
-          Review commercial, payment, and execution impact before taking action.
+          Commercial, execution, and lifecycle state before you send or apply.
         </p>
       </div>
+
+      {readiness.lifecycleReadinessLabel ? (
+        <ReadinessRow
+          label="Status"
+          value={readiness.lifecycleReadinessLabel}
+          tone={lifecycleTone(readiness)}
+        />
+      ) : null}
+
+      {readiness.officeNextStep ? (
+        <div className="rounded-lg border border-border bg-background px-3 py-2">
+          <p className="text-xs font-medium text-foreground-muted">Next step for office</p>
+          <p className="mt-1 text-sm text-foreground">{readiness.officeNextStep}</p>
+        </div>
+      ) : null}
+
+      {readiness.mixedEditBlocked && readiness.mixedEditMessage ? (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>{readiness.mixedEditMessage}</p>
+        </div>
+      ) : null}
+
+      <ReadinessRow
+        label="Customer approval required"
+        value={readiness.requiresCustomerApproval ? "Yes" : "No"}
+        tone={readiness.requiresCustomerApproval ? "warning" : "neutral"}
+      />
 
       <dl className="grid gap-3 sm:grid-cols-2">
         <ReadinessRow label="Adds" value={String(impact.addCount)} />
@@ -97,16 +145,46 @@ export function ChangeOrderReadinessPanel({
         </div>
       ) : null}
 
+      {readiness.applyErrorSummary && readiness.applyErrorSummary.messages.length > 0 ? (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">
+              Apply failed
+              {readiness.applyErrorSummary.classification
+                ? ` (${readiness.applyErrorSummary.classification})`
+                : ""}
+            </p>
+            <ul className="mt-2 list-disc pl-5">
+              {readiness.applyErrorSummary.messages.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         {mode === "draft" ? (
           <ActionReadiness label="Create draft" state={readiness.createDraft} />
         ) : null}
+        {mode === "selected" && readiness.isEditable ? (
+          <>
+            <ActionReadiness label="Save commercial changes" state={readiness.saveCommercial} />
+            <ActionReadiness label="Save execution impact" state={readiness.saveExecutionImpact} />
+          </>
+        ) : null}
         {readiness.selectedRevisionStatus === ChangeOrderStatus.DRAFT ? (
-          <ActionReadiness label="Send Change Order" state={readiness.approve} />
+          <ActionReadiness label="Send change order" state={readiness.send} />
+        ) : null}
+        {readiness.selectedRevisionStatus === ChangeOrderStatus.SENT ||
+        (readiness.selectedRevisionStatus === ChangeOrderStatus.DRAFT &&
+          !readiness.requiresCustomerApproval) ? (
+          <ActionReadiness label="Mark internally accepted" state={readiness.staffAccept} />
         ) : null}
         {readiness.selectedRevisionStatus === ChangeOrderStatus.ACCEPTED ? (
           <>
-            <ActionReadiness label="Apply Change Order" state={readiness.apply} />
+            <ActionReadiness label="Apply to job plan" state={readiness.apply} />
             <ReadinessRow
               label="Job plan version"
               value={`${readiness.expectedJobPlanVersion} (current ${readiness.jobPlanVersion})`}

@@ -137,6 +137,8 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 7. Change orders — sold scope, re-sign, tasks
 
+> **Execution architecture (2026-06-24):** [change-order-canon.md](./change-order-canon.md) — CO = commercial delta + proposed execution delta; apply via `ExecutionPlanRevision`; schema proposal in [change-order-execution-delta-schema-proposal.md](../plans/change-order-execution-delta-schema-proposal.md).
+
 **v5 posture (UX + truth):** Staff work from the **current quote** as the **working record**; **immutable proof** of what was committed at send/approve/activate lives in **hidden checkpoints** (receipts), not in a user-managed “version browser.” See [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). Denormalized captures (e.g. JSON) may live **inside checkpoint records** as an implementation detail.
 
 | Topic | v1 decision |
@@ -145,7 +147,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | **Scope or price change after approval** | Done through a **Change order** artifact: **new line group / lines** (or explicit CO document) **appended** to the job’s **commercial record**—**not** silent edits to the **approved baseline** encoded in the checkpoint / execution rules. |
 | **Minor corrections** | **Typo / internal-only** fixes may use **administrative correction** with audit; anything **customer-visible or monetary** goes through **CO** or an explicit **new quote / supersede path** per org policy—without pretending the prior commitment never happened. |
 | **Customer re-sign** | **Required** when CO changes **customer total**, **legal scope**, or **payment schedule** in a material way; configurable **threshold** (e.g. any price change) default = **always re-approve** for any CO with price impact. |
-| **Task graph** | CO may **add tasks**; optionally **flag** existing tasks as **review required** when CO affects their line item. |
+| **Task graph** | CO stores **proposed execution delta** (add/cancel/modify tasks) applied only after acceptance + validation—not implicit scope reconciliation at apply time. Optionally **flag** existing tasks for review when CO affects their scope. |
 
 ---
 

@@ -3,7 +3,8 @@ type PublicTokenAuditEvent =
   | "quote.accept"
   | "quote.request_changes"
   | "change_order.view"
-  | "change_order.accept";
+  | "change_order.accept"
+  | "change_order.request_changes";
 
 export function auditPublicTokenEvent(event: PublicTokenAuditEvent, detail: Record<string, unknown>) {
   // Placeholder audit sink until dedicated security audit stream is finalized.

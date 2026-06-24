@@ -49,7 +49,7 @@
 |----|--------|----------------|-----------------|---------------------|
 | P1 | **Activation path** | I3: direct materialization after approval—exact steps (transaction boundaries, partial failure). | Duplicate entry or half-created jobs. | Spec activation saga: quote state → job + initial tasks + events. |
 | P2 | **Template instance rules** | I4: instance vs library mutation. | Cross-quote corruption. | Explicit copy-on-apply; library update from instance as single user action. |
-| P3 | **Change orders** | Append model + re-sign thresholds (locked §7). | Customer/legal mismatch. | CO entity model + diff UI + portal projection rules. |
+| P3 | **Change orders** | Commercial spine shipped; **execution delta + apply refactor** pending schema approval ([change-order-canon.md](./canon/change-order-canon.md), [change-order-execution-delta-schema-proposal.md](./plans/change-order-execution-delta-schema-proposal.md)). | ACCEPTED COs trapped; implicit apply mutates job without stored delta. | Approve schema → Pass 2 backend (delta validation/apply) → Pass 3 UI. |
 | P4 | **Construction issues** | Typed enums, signal muting, Workstation surfacing (locked §10, I16). | “Wall of notes,” blocked work invisible. | Issue create flow + signal muting hooks + workstation query integration. |
 | P5 | **Signal Engine** | Signal Bus, Provides/Requires, AI Secretary (locked §14). | Manual overhead, deadlocks, circular dependencies. | **RESOLVED 2026-05-13**: Signal Bus, task readiness, AI Secretary, and cycle detection implemented. |
 | P6 | **Payment signals** | Stripe + signals on payment cleared (locked §8, §14). | Work starts unpaid or money state lies. | **RESOLVED 2026-05-13**: `payment:cleared` signals wired to payment requirements. |

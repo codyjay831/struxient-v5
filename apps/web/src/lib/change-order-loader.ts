@@ -1,4 +1,4 @@
-import { ChangeOrderStatus, JobScopeItemStatus, JobStatus } from "@prisma/client";
+import { JobScopeItemStatus, JobStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   changeOrderPageBlockMessage,
@@ -7,22 +7,23 @@ import {
   resolveFocusedRevisionId,
   type ChangeOrderLineDraft,
   type ChangeOrderPermissions,
+  type ChangeOrderRevisionSnapshot,
   type ChangeOrderScopeItemSnapshot,
 } from "@/lib/change-order-flow";
+import {
+  projectChangeOrderExecutionImpact,
+  type ChangeOrderJobTaskSnapshot,
+} from "@/lib/change-order/change-order-execution-projection";
 import type { StaffRole } from "@prisma/client";
 
-export type LoadedChangeOrder = {
-  id: string;
+export type LoadedChangeOrder = ChangeOrderRevisionSnapshot & {
   number: number;
   title: string;
   customerDocumentTitle: string | null;
-  status: ChangeOrderStatus;
-  reasoning: string;
-  priceDeltaCents: number;
   createdAt: string;
   approvedAt: string | null;
   appliedAt: string | null;
-  lines: ChangeOrderLineDraft[];
+  executionDeltaJson: unknown;
 };
 
 export type LoadedChangeOrderWorkspace = {
@@ -37,6 +38,7 @@ export type LoadedChangeOrderWorkspace = {
   pageBlocked: boolean;
   pageBlockedMessage: string | null;
   activeScopeItems: ChangeOrderScopeItemSnapshot[];
+  jobTasks: ChangeOrderJobTaskSnapshot[];
   changeOrders: LoadedChangeOrder[];
   focusChangeOrderId: string | null;
   // compatibility with existing components while migrating names
@@ -103,6 +105,16 @@ export async function loadChangeOrderWorkspace(input: {
           },
         },
       },
+      tasks: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          instructions: true,
+          status: true,
+          scopes: { select: { jobScopeItemId: true } },
+        },
+      },
       changeOrders: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
@@ -116,6 +128,10 @@ export async function loadChangeOrderWorkspace(input: {
           createdAt: true,
           approvedAt: true,
           appliedAt: true,
+          baseJobPlanVersion: true,
+          applicationStatus: true,
+          lastApplyErrorJson: true,
+          executionDeltaJson: true,
           lines: {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
@@ -142,18 +158,23 @@ export async function loadChangeOrderWorkspace(input: {
     permissions,
   });
 
-  const changeOrders: LoadedChangeOrder[] = job.changeOrders.map((changeOrder) => ({
-    id: changeOrder.id,
-    number: changeOrder.number,
-    title: changeOrder.title,
-    customerDocumentTitle: changeOrder.customerDocumentTitle,
-    status: changeOrder.status,
-    reasoning: changeOrder.reasoning,
-    priceDeltaCents: changeOrder.priceDeltaCents,
-    createdAt: changeOrder.createdAt.toISOString(),
-    approvedAt: changeOrder.approvedAt?.toISOString() ?? null,
-    appliedAt: changeOrder.appliedAt?.toISOString() ?? null,
-    lines: changeOrder.lines.map(
+  const jobTasks: ChangeOrderJobTaskSnapshot[] = job.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    instructions: task.instructions,
+    status: task.status,
+    scopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
+  }));
+
+  const scopeItemsForProjection = job.scopeItems.map((item) => ({
+    id: item.id,
+    description: item.description,
+    executionRelevant: item.executionRelevant,
+    status: item.status,
+  }));
+
+  const changeOrders: LoadedChangeOrder[] = job.changeOrders.map((changeOrder) => {
+    const lines = changeOrder.lines.map(
       (line): ChangeOrderLineDraft => ({
         operation: line.operation,
         sourceJobScopeItemId: line.sourceJobScopeItemId,
@@ -163,8 +184,36 @@ export async function loadChangeOrderWorkspace(input: {
         priceDeltaCents: line.priceDeltaCents,
         executionRelevant: line.executionRelevant,
       }),
-    ),
-  }));
+    );
+
+    const executionImpact = projectChangeOrderExecutionImpact({
+      executionDeltaJson: changeOrder.executionDeltaJson,
+      baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+      currentJobPlanVersion: job.jobPlanVersion,
+      priceDeltaCents: changeOrder.priceDeltaCents,
+      scopeItems: scopeItemsForProjection,
+      tasks: jobTasks,
+    });
+
+    return {
+      id: changeOrder.id,
+      number: changeOrder.number,
+      title: changeOrder.title,
+      customerDocumentTitle: changeOrder.customerDocumentTitle,
+      status: changeOrder.status,
+      reasoning: changeOrder.reasoning,
+      priceDeltaCents: changeOrder.priceDeltaCents,
+      createdAt: changeOrder.createdAt.toISOString(),
+      approvedAt: changeOrder.approvedAt?.toISOString() ?? null,
+      appliedAt: changeOrder.appliedAt?.toISOString() ?? null,
+      baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+      applicationStatus: changeOrder.applicationStatus,
+      lastApplyErrorJson: changeOrder.lastApplyErrorJson,
+      executionDeltaJson: changeOrder.executionDeltaJson,
+      executionImpact,
+      lines,
+    };
+  });
 
   const focusChangeOrderId = resolveFocusedRevisionId({
     revisions: changeOrders,
@@ -211,6 +260,7 @@ export async function loadChangeOrderWorkspace(input: {
           }
         : null,
     })),
+    jobTasks,
     changeOrders,
     focusChangeOrderId,
     revisions: changeOrders,

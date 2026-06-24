@@ -1,10 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import { Check, Loader2, Printer } from "lucide-react";
+import { Check, Loader2, MessageSquare, Printer } from "lucide-react";
+import { ChangeOrderStatus } from "@prisma/client";
 import {
   acceptChangeOrderFromTokenAction,
+  requestChangeOrderChangesAction,
   type ChangeOrderAcceptState,
+  type ChangeOrderRequestChangesState,
 } from "@/app/co/[token]/change-order-share-actions";
 import type { ChangeOrderCustomerPreviewDocument } from "@/lib/change-order-customer-projection";
 import { formatMoneyCents } from "@/lib/quote-display";
@@ -12,17 +15,26 @@ import { formatMoneyCents } from "@/lib/quote-display";
 export function ChangeOrderPublicPreview({
   token,
   document,
-  isAccepted,
+  status,
 }: {
   token: string;
   document: ChangeOrderCustomerPreviewDocument;
-  isAccepted: boolean;
+  status: ChangeOrderStatus;
 }) {
   const boundAccept = acceptChangeOrderFromTokenAction.bind(null, token);
-  const [state, formAction, isPending] = useActionState<ChangeOrderAcceptState, FormData>(
+  const boundRequestChanges = requestChangeOrderChangesAction.bind(null, token);
+  const [acceptState, acceptAction, acceptPending] = useActionState<ChangeOrderAcceptState, FormData>(
     boundAccept,
     {},
   );
+  const [requestState, requestAction, requestPending] = useActionState<
+    ChangeOrderRequestChangesState,
+    FormData
+  >(boundRequestChanges, {});
+
+  const isAccepted = status === ChangeOrderStatus.ACCEPTED || status === ChangeOrderStatus.APPLIED;
+  const canRespond = status === ChangeOrderStatus.SENT;
+  const requestChangesRecorded = status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
@@ -45,6 +57,16 @@ export function ChangeOrderPublicPreview({
           Print / PDF
         </button>
       </div>
+
+      {requestChangesRecorded ? (
+        <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-foreground">
+          <p className="font-semibold">Change request received</p>
+          <p className="mt-1 text-foreground-muted">
+            Your requested changes were sent to the company. They will revise this Change Order and
+            send an updated version if needed.
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-8">
         <section className="rounded-xl border border-border bg-surface p-6">
@@ -72,8 +94,12 @@ export function ChangeOrderPublicPreview({
                     ) : null}
                   </div>
                   <div className="text-right text-xs text-foreground-muted">
-                    <p>{line.quantityDisplay} @ {formatMoneyCents(line.unitPriceCents)}</p>
-                    <p className="font-semibold text-foreground">{formatMoneyCents(line.lineTotalCents)}</p>
+                    <p>
+                      {line.quantityDisplay} @ {formatMoneyCents(line.unitPriceCents)}
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      {formatMoneyCents(line.lineTotalCents)}
+                    </p>
                   </div>
                 </div>
               </li>
@@ -85,26 +111,34 @@ export function ChangeOrderPublicPreview({
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-foreground-muted">Current total</span>
-              <span className="font-semibold text-foreground">{formatMoneyCents(document.baseTotalCents)}</span>
+              <span className="font-semibold text-foreground">
+                {formatMoneyCents(document.baseTotalCents)}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-foreground-muted">Change Order delta</span>
-              <span className="font-semibold text-foreground">{formatMoneyCents(document.deltaCents)}</span>
+              <span className="font-semibold text-foreground">
+                {formatMoneyCents(document.deltaCents)}
+              </span>
             </div>
             <div className="flex items-center justify-between border-t border-border pt-2">
               <span className="font-semibold text-foreground">Revised total</span>
-              <span className="text-lg font-bold text-foreground">{formatMoneyCents(document.revisedTotalCents)}</span>
+              <span className="text-lg font-bold text-foreground">
+                {formatMoneyCents(document.revisedTotalCents)}
+              </span>
             </div>
           </div>
         </section>
 
-        {!isAccepted ? (
+        {canRespond ? (
           <section className="rounded-xl border-2 border-accent bg-surface p-6">
-            <h2 className="text-lg font-bold text-foreground">Accept this Change Order</h2>
+            <h2 className="text-lg font-bold text-foreground">Respond to this Change Order</h2>
             <p className="mt-1 text-sm text-foreground-muted">
-              By accepting, you approve the scope and revised amount shown above.
+              Accept the scope and revised amount shown above, or request changes for the office to
+              review.
             </p>
-            <form action={formAction} className="mt-5 space-y-4">
+
+            <form action={acceptAction} className="mt-5 space-y-4">
               <input
                 name="acceptedByName"
                 type="text"
@@ -112,24 +146,64 @@ export function ChangeOrderPublicPreview({
                 placeholder="Your full name"
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
               />
-              {state.error ? (
-                <p className="text-xs font-medium text-destructive">{state.error}</p>
+              {acceptState.error ? (
+                <p className="text-xs font-medium text-destructive">{acceptState.error}</p>
+              ) : null}
+              {acceptState.success ? (
+                <p className="text-xs font-medium text-success">Change Order accepted.</p>
               ) : null}
               <button
                 type="submit"
-                disabled={isPending}
+                disabled={acceptPending}
                 className="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2 text-sm font-bold text-accent-contrast"
               >
-                {isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                {acceptPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
                 Accept Change Order
               </button>
             </form>
+
+            <form action={requestAction} className="mt-8 space-y-4 border-t border-border pt-6">
+              <h3 className="text-sm font-semibold text-foreground">Request changes</h3>
+              <textarea
+                name="message"
+                required
+                minLength={5}
+                placeholder="Describe what you would like changed."
+                className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              {requestState.error ? (
+                <p className="text-xs font-medium text-destructive">{requestState.error}</p>
+              ) : null}
+              {requestState.success ? (
+                <p className="text-xs font-medium text-success">
+                  Your change request was sent to the company.
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={requestPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground"
+              >
+                {requestPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="size-4" />
+                )}
+                Request changes
+              </button>
+            </form>
           </section>
-        ) : (
+        ) : null}
+
+        {isAccepted ? (
           <section className="rounded-xl border border-success/30 bg-success/10 p-6">
             <p className="font-semibold text-foreground">Change Order accepted.</p>
           </section>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -147,6 +147,24 @@
 | Frozen sent quote snapshot + PDF hash | **Stored** | `QuoteSignatureRequest.frozenSnapshotJson`, `frozenSnapshotSha256`, sent artifact rows | Rendering signer page from live mutable quote rows |
 | Customer revision/change request intent | **Stored** | `QuoteChangeRequest` | Notes-only customer-change handling and missing revision loop context |
 
+## Change orders (post-activation)
+
+> **Canon:** [change-order-canon.md](./canon/change-order-canon.md) · **Schema proposal:** [change-order-execution-delta-schema-proposal.md](./plans/change-order-execution-delta-schema-proposal.md)
+
+| Concept | Stored or derived? | Canonical location | Risk if duplicated |
+|---------|-------------------|-------------------|---------------------|
+| CO commercial lines | **Stored** | `ChangeOrderLine` | Silent sold-scope mutation outside CO |
+| CO commercial status | **Stored** | `ChangeOrder.status` | Client-only send/accept gates |
+| CO plan version anchor | **Stored** | `ChangeOrder.baseJobPlanVersion` (proposed) | Client-only `expectedJobPlanVersion` without persisted anchor |
+| Proposed execution delta | **Stored** | `ChangeOrder.executionDeltaJson` (proposed) | Implicit apply-time scope reconciliation |
+| CO apply sub-state | **Stored** | `ChangeOrder.applicationStatus` (proposed) | ACCEPTED COs trapped without NEEDS_EXECUTION_REVIEW |
+| Active job plan version | **Stored** | `Job.jobPlanVersion` | Second version counter or missing bump on apply |
+| CO commercial proof | **Stored** | `ChangeOrderCheckpoint` | Rewriting live CO rows as proof |
+| Execution plan revision (CO apply) | **Stored** | `ExecutionPlanRevision` linked to `changeOrderId` | Post-apply-only audit without proposed delta |
+| CO apply validation | **Derived at write** | `execution-delta-validation.ts` (Pass 2 target) | Duplicate coverage/orphan logic in UI |
+| CO impact preview | **Derived** | `change-order-flow.ts` + delta validator | Quote-plan preview reused for job deltas |
+| Apply guards (coverage/payment) | **Derived at write** | `validateScopeRevisionApplyGuards`, `validateScopeRevisionPaymentImpact` | Apply without payment or coverage invariants |
+
 ## Jobs, issues, recovery
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
@@ -190,7 +208,8 @@
 - [scheduling-canon.md](./canon/scheduling-canon.md) — Deadlines, job schedule events, derivation
 - [signals.md](./canon/signals.md) — Signal bus and readiness engine
 - [workstation-canon.md](./canon/workstation-canon.md) — Cockpit role
-- [invariants-and-decision-rules.md](./canon/invariants-and-decision-rules.md) — I2, I6, I8, I9, I10, I16
+- [invariants-and-decision-rules.md](./canon/invariants-and-decision-rules.md) — I2, I6, I8, I9, I10, I16, I20, I26
+- [change-order-canon.md](./canon/change-order-canon.md) — CO commercial + execution delta
 
 ---
 
@@ -200,4 +219,4 @@
 *Updated 2026-06-14 — Added platform operator context, `PlatformAccess`, and append-only `PlatformAuditEvent` SoT rows.*
 *Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*  
 *Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*  
-*Updated 2026-06-20 — Added whole-quote proposal dependency guard row clarifying tasks-first apply policy and hard-vs-soft orphan handling.*
+*Updated 2026-06-24 — Change Order execution delta SoT rows (canon Pass 1; schema proposal pending approval).*

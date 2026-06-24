@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ChangeOrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ChangeOrderPublicPreview } from "@/components/jobs/change-order-public-preview";
 import { changeOrderRowToCustomerPreviewDocument } from "@/lib/change-order-checkpoint-snapshot";
@@ -97,7 +96,7 @@ export default async function PublicChangeOrderPage({
       <ChangeOrderPublicPreview
         token={token}
         document={document}
-        isAccepted={shareToken.changeOrder.status === ChangeOrderStatus.ACCEPTED}
+        status={shareToken.changeOrder.status}
       />
     </main>
   );

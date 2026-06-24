@@ -8,84 +8,84 @@ datasource db {
 }
 
 model Organization {
-  id                        String                      @id @default(cuid())
-  name                      String
-  createdAt                 DateTime                    @default(now())
-  updatedAt                 DateTime                    @updatedAt
+  id                              String                           @id @default(cuid())
+  name                            String
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
   /// Lowercase public handle for `/request/[slug]` — optional until configured.
-  slug                      String?                     @unique
+  slug                            String?                          @unique
   /// IANA timezone for deadline date-only EOD resolution and schedule display.
-  timezone                  String                      @default("America/Los_Angeles")
-  attachments               Attachment[]
-  customers                 Customer[]
-  customerServiceLocations  CustomerServiceLocation[]
-  dailyJobLogs              DailyJobLog[]
-  intakeFormDefinitions     IntakeFormDefinition[]
-  jobs                      Job[]
-  jobActivities             JobActivity[]
-  jobIssues                 JobIssue[]
-  jobRecoveryFlows          JobRecoveryFlow[]
-  jobPaymentRequirements    JobPaymentRequirement[]
-  jobVisits                 JobVisit[]
-  jobScheduleEvents         JobScheduleEvent[]
-  jobWorkPackages           JobWorkPackage[]
-  leads                     Lead[]
-  leadCustomFieldDefs       LeadCustomFieldDef[]
-  leadVisitRequests         LeadVisitRequest[]
-  scheduleBlocks            ScheduleBlock[]
-  lineItemTemplates         LineItemTemplate[]
-  memberships               Membership[]
-  publicRequestSettings     PublicRequestSettings?
-  quotes                    Quote[]
-  quoteExecutionPlans       QuoteExecutionPlan[]
-  executionPlanRevisions    ExecutionPlanRevision[]
-  changeOrders              ChangeOrder[]
-  changeOrderLines          ChangeOrderLine[]
-  changeOrderShareTokens    ChangeOrderShareToken[]
-  changeOrderCheckpoints    ChangeOrderCheckpoint[]
-  changeOrderViews          ChangeOrderView[]
-  jobScopeItems             JobScopeItem[]
-  jobTaskScopes             JobTaskScope[]
-  quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
-  quoteExecutionTasks       QuoteExecutionTask[]
-  quoteChangeRequests       QuoteChangeRequest[]
-  quoteCheckpoints          QuoteCheckpoint[]
-  quoteShareTokens          QuoteShareToken[]
-  quoteSignatureRequests    QuoteSignatureRequest[]
-  quoteSignatureRecipients  QuoteSignatureRecipient[]
-  quoteSignatureEvents      QuoteSignatureEvent[]
-  quoteSignatureDeliveries  QuoteSignatureDelivery[]
-  quoteSignatureArtifacts   QuoteSignatureArtifact[]
+  timezone                        String                           @default("America/Los_Angeles")
+  attachments                     Attachment[]
+  customers                       Customer[]
+  customerServiceLocations        CustomerServiceLocation[]
+  dailyJobLogs                    DailyJobLog[]
+  intakeFormDefinitions           IntakeFormDefinition[]
+  jobs                            Job[]
+  jobActivities                   JobActivity[]
+  jobIssues                       JobIssue[]
+  jobRecoveryFlows                JobRecoveryFlow[]
+  jobPaymentRequirements          JobPaymentRequirement[]
+  jobVisits                       JobVisit[]
+  jobScheduleEvents               JobScheduleEvent[]
+  jobWorkPackages                 JobWorkPackage[]
+  leads                           Lead[]
+  leadCustomFieldDefs             LeadCustomFieldDef[]
+  leadVisitRequests               LeadVisitRequest[]
+  scheduleBlocks                  ScheduleBlock[]
+  lineItemTemplates               LineItemTemplate[]
+  memberships                     Membership[]
+  publicRequestSettings           PublicRequestSettings?
+  quotes                          Quote[]
+  quoteExecutionPlans             QuoteExecutionPlan[]
+  executionPlanRevisions          ExecutionPlanRevision[]
+  changeOrders                    ChangeOrder[]
+  changeOrderLines                ChangeOrderLine[]
+  changeOrderShareTokens          ChangeOrderShareToken[]
+  changeOrderCheckpoints          ChangeOrderCheckpoint[]
+  changeOrderViews                ChangeOrderView[]
+  jobScopeItems                   JobScopeItem[]
+  jobTaskScopes                   JobTaskScope[]
+  quoteExecutionTaskScopes        QuoteExecutionTaskScope[]
+  quoteExecutionTasks             QuoteExecutionTask[]
+  quoteChangeRequests             QuoteChangeRequest[]
+  quoteCheckpoints                QuoteCheckpoint[]
+  quoteShareTokens                QuoteShareToken[]
+  quoteSignatureRequests          QuoteSignatureRequest[]
+  quoteSignatureRecipients        QuoteSignatureRecipient[]
+  quoteSignatureEvents            QuoteSignatureEvent[]
+  quoteSignatureDeliveries        QuoteSignatureDelivery[]
+  quoteSignatureArtifacts         QuoteSignatureArtifact[]
   quoteSignatureProviderEnvelopes QuoteSignatureProviderEnvelope[]
-  notificationEvents        NotificationEvent[]
-  stages                    Stage[]
-  taskTemplates             TaskTemplate[]
-  tags                      Tag[]
-  clarificationQuestionSets ClarificationQuestionSet[]
-  workstationSettings       WorkstationSettings?
-  utilities                 Utility[]
-  utilityCoverage           UtilityCoverage[]
-  jurisdictions             Jurisdiction[]
-  countyAssessorResources   CountyAssessorResource[]
-  serviceLocationAudits     ServiceLocationAuditEvent[]
-  siteDetailsReviews        SiteDetailsReview[]
-  aiUsageLogs               AiUsageLog[]
-  businessProfile           OrganizationBusinessProfile?
-  organizationInvites       OrganizationInvite[]
-  crews                     Crew[]
-  crewMembers               CrewMember[]
-  jobCollaborators          JobCollaborator[]
-  platformAuditEvents     PlatformAuditEvent[]
-  billingAccount          OrganizationBillingAccount?
-  subscription            OrganizationSubscription?
-  aiBillingPeriods        AiBillingPeriod[]
-  betaGrant               OrganizationBetaGrant?
-  betaSignupInvite        BetaSignupInvite?
-  customerContacts        CustomerContact[]
-  customerPortalAccesses  CustomerPortalAccess[]
-  customerPortalEvents    CustomerPortalEvent[]
-  customerVisibleResources CustomerVisibleResource[]
-  customerRequests        CustomerRequest[]
+  notificationEvents              NotificationEvent[]
+  stages                          Stage[]
+  taskTemplates                   TaskTemplate[]
+  tags                            Tag[]
+  clarificationQuestionSets       ClarificationQuestionSet[]
+  workstationSettings             WorkstationSettings?
+  utilities                       Utility[]
+  utilityCoverage                 UtilityCoverage[]
+  jurisdictions                   Jurisdiction[]
+  countyAssessorResources         CountyAssessorResource[]
+  serviceLocationAudits           ServiceLocationAuditEvent[]
+  siteDetailsReviews              SiteDetailsReview[]
+  aiUsageLogs                     AiUsageLog[]
+  businessProfile                 OrganizationBusinessProfile?
+  organizationInvites             OrganizationInvite[]
+  crews                           Crew[]
+  crewMembers                     CrewMember[]
+  jobCollaborators                JobCollaborator[]
+  platformAuditEvents             PlatformAuditEvent[]
+  billingAccount                  OrganizationBillingAccount?
+  subscription                    OrganizationSubscription?
+  aiBillingPeriods                AiBillingPeriod[]
+  betaGrant                       OrganizationBetaGrant?
+  betaSignupInvite                BetaSignupInvite?
+  customerContacts                CustomerContact[]
+  customerPortalAccesses          CustomerPortalAccess[]
+  customerPortalEvents            CustomerPortalEvent[]
+  customerVisibleResources        CustomerVisibleResource[]
+  customerRequests                CustomerRequest[]
 }
 
 model Stage {
@@ -167,21 +167,21 @@ model Customer {
 
 /// Person attached to a customer/property — contact context, not portal auth identity.
 model CustomerContact {
-  id                     String       @id @default(cuid())
+  id                     String                 @id @default(cuid())
   organizationId         String
   customerId             String
   name                   String
   email                  String?
   phone                  String?
   relationshipToProperty String?
-  isPrimary              Boolean      @default(false)
-  isBillingContact       Boolean      @default(false)
-  isDecisionMaker        Boolean      @default(false)
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
+  isPrimary              Boolean                @default(false)
+  isBillingContact       Boolean                @default(false)
+  isDecisionMaker        Boolean                @default(false)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
   archivedAt             DateTime?
-  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer               Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer               Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
   portalAccesses         CustomerPortalAccess[]
 
   @@index([organizationId])
@@ -192,47 +192,47 @@ model CustomerContact {
 
 /// Verified external customer portal identity — separate from staff User and CustomerContact.
 model CustomerPortalIdentity {
-  id               String    @id @default(cuid())
-  emailNormalized  String?   @unique
-  phoneNormalized  String?   @unique
-  emailVerifiedAt  DateTime?
-  phoneVerifiedAt  DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  lastSeenAt       DateTime?
-  disabledAt       DateTime?
-  portalAccesses   CustomerPortalAccess[]
-  sessions         CustomerPortalSession[]
-  magicLinkTokens  CustomerPortalMagicLinkToken[]
-  portalEvents     CustomerPortalEvent[]
+  id              String                         @id @default(cuid())
+  emailNormalized String?                        @unique
+  phoneNormalized String?                        @unique
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  lastSeenAt      DateTime?
+  disabledAt      DateTime?
+  portalAccesses  CustomerPortalAccess[]
+  sessions        CustomerPortalSession[]
+  magicLinkTokens CustomerPortalMagicLinkToken[]
+  portalEvents    CustomerPortalEvent[]
 
   @@index([disabledAt])
 }
 
 /// Scoped customer permission for organization + customer + job.
 model CustomerPortalAccess {
-  id                    String                     @id @default(cuid())
+  id                    String                         @id @default(cuid())
   organizationId        String
   customerId            String
   jobId                 String
   customerContactId     String?
   portalIdentityId      String?
-  accessLevel           CustomerPortalAccessLevel  @default(PROJECT_PARTICIPANT)
-  status                CustomerPortalAccessStatus @default(PENDING_VERIFICATION)
+  accessLevel           CustomerPortalAccessLevel      @default(PROJECT_PARTICIPANT)
+  status                CustomerPortalAccessStatus     @default(PENDING_VERIFICATION)
   invitedByMembershipId String?
   revokedByMembershipId String?
   expiresAt             DateTime?
-  createdAt             DateTime                   @default(now())
-  updatedAt             DateTime                   @updatedAt
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
   revokedAt             DateTime?
   lastUsedAt            DateTime?
-  organization          Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer              Customer                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  job                   Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  customerContact       CustomerContact?           @relation(fields: [customerContactId], references: [id], onDelete: SetNull)
-  portalIdentity        CustomerPortalIdentity?    @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
-  invitedByMembership   Membership?                @relation("PortalAccessInvitedBy", fields: [invitedByMembershipId], references: [id], onDelete: SetNull)
-  revokedByMembership   Membership?                @relation("PortalAccessRevokedBy", fields: [revokedByMembershipId], references: [id], onDelete: SetNull)
+  organization          Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer              Customer                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job                   Job                            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customerContact       CustomerContact?               @relation(fields: [customerContactId], references: [id], onDelete: SetNull)
+  portalIdentity        CustomerPortalIdentity?        @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
+  invitedByMembership   Membership?                    @relation("PortalAccessInvitedBy", fields: [invitedByMembershipId], references: [id], onDelete: SetNull)
+  revokedByMembership   Membership?                    @relation("PortalAccessRevokedBy", fields: [revokedByMembershipId], references: [id], onDelete: SetNull)
   sessions              CustomerPortalSession[]
   magicLinkTokens       CustomerPortalMagicLinkToken[]
   portalEvents          CustomerPortalEvent[]
@@ -364,7 +364,7 @@ model CustomerRequest {
   customer               Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
   job                    Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
   customerPortalAccess   CustomerPortalAccess? @relation(fields: [customerPortalAccessId], references: [id], onDelete: SetNull)
-  resolvedByMembership   Membership?         @relation("CustomerRequestResolvedBy", fields: [resolvedByMembershipId], references: [id], onDelete: SetNull)
+  resolvedByMembership   Membership?           @relation("CustomerRequestResolvedBy", fields: [resolvedByMembershipId], references: [id], onDelete: SetNull)
   linkedTask             JobTask?              @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
   linkedScheduleEvent    JobScheduleEvent?     @relation(fields: [linkedScheduleEventId], references: [id], onDelete: SetNull)
   linkedDocument         Attachment?           @relation(fields: [linkedDocumentId], references: [id], onDelete: SetNull)
@@ -441,70 +441,70 @@ model CustomerServiceLocation {
 }
 
 model User {
-  id                         String                      @id @default(cuid())
-  email                      String?                     @unique
-  name                       String?
-  passwordHash               String?
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
-  emailVerified              DateTime?
-  termsAcceptedAt            DateTime?
-  termsVersion               String?
-  image                      String?
-  accounts                   Account[]
-  uploadedAttachments        Attachment[]                @relation("UploadedAttachments")
-  reviewedDailyJobLogs       DailyJobLog[]               @relation("ReviewedBy")
-  jobActivities              JobActivity[]
-  jobIssues                  JobIssue[]
-  completedTasks             JobTask[]                   @relation("CompletedTasks")
-  assignedTasks              JobTask[]                   @relation("AssignedTasks")
-  assignedVisits             JobVisit[]                  @relation("AssignedVisits")
-  leadScheduleEvents         JobScheduleEvent[]          @relation("LeadScheduleEvents")
-  scheduleBlocks             ScheduleBlock[]
-  notificationEvents         NotificationEvent[]
-  leadEvents                 LeadEvent[]
-  memberships                Membership[]
-  resolvedChangeRequests     QuoteChangeRequest[]
-  completedLeadVisits        LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
-  assignedLeadVisits         LeadVisitRequest[]            @relation("LeadVisitAssignedTo")
-  sessions                   Session[]
-  siteDetailsReviews         SiteDetailsReview[]         @relation("SiteDetailsReviewedBy")
-  serviceLocationAuditEvents ServiceLocationAuditEvent[] @relation("ServiceLocationAuditActor")
-  updatedBusinessProfiles    OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
-  acceptedQuoteExecutionPlans QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
-  approvedExecutionPlanRevisions ExecutionPlanRevision[]    @relation("ExecutionPlanRevisionApprovedBy")
-  approvedChangeOrders       ChangeOrder[]                  @relation("ChangeOrderApprovedBy")
-  canceledTasks               JobTask[]                     @relation("CanceledTasks")
-  invitedOrganizationInvites  OrganizationInvite[]          @relation("OrganizationInviteInvitedBy")
-  acceptedOrganizationInvites OrganizationInvite[]          @relation("OrganizationInviteAcceptedBy")
-  revokedOrganizationInvites  OrganizationInvite[]          @relation("OrganizationInviteRevokedBy")
-  crewMemberships             CrewMember[]
-  jobCollaborations           JobCollaborator[]
-  lastActiveOrganizationId    String?
-  platformAccess              PlatformAccess?
-  platformAccessCreated       PlatformAccess[]            @relation("PlatformAccessCreatedBy")
-  platformAccessRevoked       PlatformAccess[]            @relation("PlatformAccessRevokedBy")
-  platformAuditEvents         PlatformAuditEvent[]        @relation("PlatformAuditActor")
-  createdBetaSignupInvites    BetaSignupInvite[]          @relation("BetaSignupInviteCreatedBy")
-  acceptedBetaSignupInvites   BetaSignupInvite[]          @relation("BetaSignupInviteAcceptedBy")
-  revokedBetaSignupInvites    BetaSignupInvite[]          @relation("BetaSignupInviteRevokedBy")
-  grantedBetaGrants           OrganizationBetaGrant[]     @relation("OrganizationBetaGrantGrantedBy")
-  revokedBetaGrants           OrganizationBetaGrant[]     @relation("OrganizationBetaGrantRevokedBy")
+  id                             String                        @id @default(cuid())
+  email                          String?                       @unique
+  name                           String?
+  passwordHash                   String?
+  createdAt                      DateTime                      @default(now())
+  updatedAt                      DateTime                      @updatedAt
+  emailVerified                  DateTime?
+  termsAcceptedAt                DateTime?
+  termsVersion                   String?
+  image                          String?
+  accounts                       Account[]
+  uploadedAttachments            Attachment[]                  @relation("UploadedAttachments")
+  reviewedDailyJobLogs           DailyJobLog[]                 @relation("ReviewedBy")
+  jobActivities                  JobActivity[]
+  jobIssues                      JobIssue[]
+  completedTasks                 JobTask[]                     @relation("CompletedTasks")
+  assignedTasks                  JobTask[]                     @relation("AssignedTasks")
+  assignedVisits                 JobVisit[]                    @relation("AssignedVisits")
+  leadScheduleEvents             JobScheduleEvent[]            @relation("LeadScheduleEvents")
+  scheduleBlocks                 ScheduleBlock[]
+  notificationEvents             NotificationEvent[]
+  leadEvents                     LeadEvent[]
+  memberships                    Membership[]
+  resolvedChangeRequests         QuoteChangeRequest[]
+  completedLeadVisits            LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
+  assignedLeadVisits             LeadVisitRequest[]            @relation("LeadVisitAssignedTo")
+  sessions                       Session[]
+  siteDetailsReviews             SiteDetailsReview[]           @relation("SiteDetailsReviewedBy")
+  serviceLocationAuditEvents     ServiceLocationAuditEvent[]   @relation("ServiceLocationAuditActor")
+  updatedBusinessProfiles        OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
+  acceptedQuoteExecutionPlans    QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
+  approvedExecutionPlanRevisions ExecutionPlanRevision[]       @relation("ExecutionPlanRevisionApprovedBy")
+  approvedChangeOrders           ChangeOrder[]                 @relation("ChangeOrderApprovedBy")
+  canceledTasks                  JobTask[]                     @relation("CanceledTasks")
+  invitedOrganizationInvites     OrganizationInvite[]          @relation("OrganizationInviteInvitedBy")
+  acceptedOrganizationInvites    OrganizationInvite[]          @relation("OrganizationInviteAcceptedBy")
+  revokedOrganizationInvites     OrganizationInvite[]          @relation("OrganizationInviteRevokedBy")
+  crewMemberships                CrewMember[]
+  jobCollaborations              JobCollaborator[]
+  lastActiveOrganizationId       String?
+  platformAccess                 PlatformAccess?
+  platformAccessCreated          PlatformAccess[]              @relation("PlatformAccessCreatedBy")
+  platformAccessRevoked          PlatformAccess[]              @relation("PlatformAccessRevokedBy")
+  platformAuditEvents            PlatformAuditEvent[]          @relation("PlatformAuditActor")
+  createdBetaSignupInvites       BetaSignupInvite[]            @relation("BetaSignupInviteCreatedBy")
+  acceptedBetaSignupInvites      BetaSignupInvite[]            @relation("BetaSignupInviteAcceptedBy")
+  revokedBetaSignupInvites       BetaSignupInvite[]            @relation("BetaSignupInviteRevokedBy")
+  grantedBetaGrants              OrganizationBetaGrant[]       @relation("OrganizationBetaGrantGrantedBy")
+  revokedBetaGrants              OrganizationBetaGrant[]       @relation("OrganizationBetaGrantRevokedBy")
 }
 
 model OrganizationBusinessProfile {
-  id               String                        @id @default(cuid())
-  organizationId   String                        @unique
-  trades           BusinessProfileTrade[]        @default([])
-  workTypes        BusinessProfileWorkType[]     @default([])
-  customerMarkets  BusinessProfileCustomerMarket[] @default([])
-  operatingModel   BusinessProfileOperatingModel?
-  teamSize         BusinessProfileTeamSize?
-  updatedByUserId  String?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-  organization     Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  updatedByUser    User?                         @relation("BusinessProfileUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  id              String                          @id @default(cuid())
+  organizationId  String                          @unique
+  trades          BusinessProfileTrade[]          @default([])
+  workTypes       BusinessProfileWorkType[]       @default([])
+  customerMarkets BusinessProfileCustomerMarket[] @default([])
+  operatingModel  BusinessProfileOperatingModel?
+  teamSize        BusinessProfileTeamSize?
+  updatedByUserId String?
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
+  organization    Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedByUser   User?                           @relation("BusinessProfileUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([updatedByUserId])
 }
@@ -544,18 +544,18 @@ model VerificationToken {
 }
 
 model Membership {
-  id             String       @id @default(cuid())
-  userId         String
-  organizationId String
-  role           StaffRole    @default(FIELD)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invitedPortalAccesses CustomerPortalAccess[] @relation("PortalAccessInvitedBy")
-  revokedPortalAccesses CustomerPortalAccess[] @relation("PortalAccessRevokedBy")
-  createdVisibleResources CustomerVisibleResource[] @relation("VisibleResourceCreatedBy")
-  resolvedCustomerRequests CustomerRequest[] @relation("CustomerRequestResolvedBy")
+  id                       String                    @id @default(cuid())
+  userId                   String
+  organizationId           String
+  role                     StaffRole                 @default(FIELD)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedPortalAccesses    CustomerPortalAccess[]    @relation("PortalAccessInvitedBy")
+  revokedPortalAccesses    CustomerPortalAccess[]    @relation("PortalAccessRevokedBy")
+  createdVisibleResources  CustomerVisibleResource[] @relation("VisibleResourceCreatedBy")
+  resolvedCustomerRequests CustomerRequest[]         @relation("CustomerRequestResolvedBy")
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -597,23 +597,23 @@ model BetaSignupInvite {
 }
 
 model OrganizationBetaGrant {
-  id                 String           @id @default(cuid())
-  organizationId     String           @unique
-  betaSignupInviteId String?          @unique
-  startsAt           DateTime         @default(now())
+  id                 String            @id @default(cuid())
+  organizationId     String            @unique
+  betaSignupInviteId String?           @unique
+  startsAt           DateTime          @default(now())
   expiresAt          DateTime
-  aiEnabled          Boolean          @default(false)
-  aiIncludedUnits    Int              @default(50)
-  usedAiUnits        Int              @default(0)
+  aiEnabled          Boolean           @default(false)
+  aiIncludedUnits    Int               @default(50)
+  usedAiUnits        Int               @default(0)
   revokedAt          DateTime?
   revokedByUserId    String?
   grantedByUserId    String?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   betaSignupInvite   BetaSignupInvite? @relation(fields: [betaSignupInviteId], references: [id], onDelete: SetNull)
-  revokedBy          User?            @relation("OrganizationBetaGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
-  grantedBy          User?            @relation("OrganizationBetaGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  revokedBy          User?             @relation("OrganizationBetaGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  grantedBy          User?             @relation("OrganizationBetaGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
 
   @@index([expiresAt])
   @@index([revokedAt])
@@ -672,26 +672,26 @@ model CrewMember {
   crew           Crew         @relation(fields: [crewId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([crewId, userId, startsAt])
   @@index([organizationId, userId])
   @@index([organizationId, crewId])
-  @@unique([crewId, userId, startsAt])
 }
 
 model JobCollaborator {
-  id               String               @id @default(cuid())
-  organizationId   String
-  jobId            String
-  userId           String
-  permissionsJson  Json
-  status           JobCollaboratorStatus @default(ACTIVE)
-  grantedAt        DateTime             @default(now())
-  revokedAt        DateTime?
-  expiresAt        DateTime?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job              Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String                @id @default(cuid())
+  organizationId  String
+  jobId           String
+  userId          String
+  permissionsJson Json
+  status          JobCollaboratorStatus @default(ACTIVE)
+  grantedAt       DateTime              @default(now())
+  revokedAt       DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job             Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, userId])
   @@index([organizationId, userId, status])
@@ -738,42 +738,42 @@ model Lead {
 }
 
 model Quote {
-  id                    String                   @id @default(cuid())
-  organizationId        String
-  customerId            String?
-  serviceLocationId     String?
-  status                QuoteStatus              @default(DRAFT)
-  title                 String
-  internalNotes         String?
-  subtotalCents         Int                      @default(0)
-  totalCents            Int                      @default(0)
-  createdAt             DateTime                 @default(now())
-  updatedAt             DateTime                 @updatedAt
-  customerDocumentTitle String?
-  lastSentEmailAt       DateTime?
-  leadId                String?
-  revisionOfQuoteId     String?
-  revisionNumber        Int                      @default(1)
-  presentation          Json?
-  attachments           Attachment[]
-  job                   Job?
-  customer              Customer?                @relation(fields: [customerId], references: [id])
-  lead                  Lead?                    @relation(fields: [leadId], references: [id])
-  serviceLocation       CustomerServiceLocation? @relation("QuoteServiceLocation", fields: [serviceLocationId], references: [id], onDelete: SetNull)
-  organization          Organization             @relation(fields: [organizationId], references: [id])
-  changeRequests        QuoteChangeRequest[]       @relation("QuoteChangeRequestIssuedQuote")
-  resultingForChangeRequests QuoteChangeRequest[]  @relation("QuoteChangeRequestResultingRevision")
-  checkpoints           QuoteCheckpoint[]
-  lineItems             QuoteLineItem[]
-  paymentSchedule       PaymentScheduleItem[]
-  shareToken            QuoteShareToken?
-  revisionOfQuote       Quote?                   @relation("QuoteRevisionLineage", fields: [revisionOfQuoteId], references: [id], onDelete: SetNull)
-  revisedQuotes         Quote[]                  @relation("QuoteRevisionLineage")
-  executionPlan         QuoteExecutionPlan?
-  executionPlanRevisions ExecutionPlanRevision[]
-  changeOrders         ChangeOrder[]
-  scopeDecisions       QuoteScopeDecision[]
-  signatureRequests    QuoteSignatureRequest[]
+  id                         String                   @id @default(cuid())
+  organizationId             String
+  customerId                 String?
+  serviceLocationId          String?
+  status                     QuoteStatus              @default(DRAFT)
+  title                      String
+  internalNotes              String?
+  subtotalCents              Int                      @default(0)
+  totalCents                 Int                      @default(0)
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  customerDocumentTitle      String?
+  lastSentEmailAt            DateTime?
+  leadId                     String?
+  revisionOfQuoteId          String?
+  revisionNumber             Int                      @default(1)
+  presentation               Json?
+  attachments                Attachment[]
+  job                        Job?
+  customer                   Customer?                @relation(fields: [customerId], references: [id])
+  lead                       Lead?                    @relation(fields: [leadId], references: [id])
+  serviceLocation            CustomerServiceLocation? @relation("QuoteServiceLocation", fields: [serviceLocationId], references: [id], onDelete: SetNull)
+  organization               Organization             @relation(fields: [organizationId], references: [id])
+  changeRequests             QuoteChangeRequest[]     @relation("QuoteChangeRequestIssuedQuote")
+  resultingForChangeRequests QuoteChangeRequest[]     @relation("QuoteChangeRequestResultingRevision")
+  checkpoints                QuoteCheckpoint[]
+  lineItems                  QuoteLineItem[]
+  paymentSchedule            PaymentScheduleItem[]
+  shareToken                 QuoteShareToken?
+  revisionOfQuote            Quote?                   @relation("QuoteRevisionLineage", fields: [revisionOfQuoteId], references: [id], onDelete: SetNull)
+  revisedQuotes              Quote[]                  @relation("QuoteRevisionLineage")
+  executionPlan              QuoteExecutionPlan?
+  executionPlanRevisions     ExecutionPlanRevision[]
+  changeOrders               ChangeOrder[]
+  scopeDecisions             QuoteScopeDecision[]
+  signatureRequests          QuoteSignatureRequest[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -838,11 +838,11 @@ model ChangeOrderShareToken {
 }
 
 model ChangeOrderView {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   changeOrderId  String
   token          String
-  viewedAt       DateTime @default(now())
+  viewedAt       DateTime     @default(now())
   ip             String?
   userAgent      String?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -901,12 +901,12 @@ model QuoteCheckpoint {
 
 /// Standard Acceptance / Verified E-Sign signature request for a quote version.
 model QuoteSignatureRequest {
-  id                    String                      @id @default(cuid())
+  id                    String                          @id @default(cuid())
   organizationId        String
   quoteId               String
   mode                  QuoteSignatureMode
-  provider              SignatureProvider           @default(STRUXIENT)
-  status                QuoteSignatureRequestStatus @default(DRAFT)
+  provider              SignatureProvider               @default(STRUXIENT)
+  status                QuoteSignatureRequestStatus     @default(DRAFT)
   requestedByUserId     String?
   customMessage         String?
   expiresAt             DateTime?
@@ -925,10 +925,10 @@ model QuoteSignatureRequest {
   auditPacketSha256     String?
   sendCheckpointId      String?
   approvalCheckpointId  String?
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
-  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote                 Quote                       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  organization          Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                 Quote                           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   recipients            QuoteSignatureRecipient[]
   events                QuoteSignatureEvent[]
   deliveries            QuoteSignatureDelivery[]
@@ -983,7 +983,7 @@ model QuoteSignatureRecipient {
 
 /// Append-only audit events for quote signature flows.
 model QuoteSignatureEvent {
-  id                 String                  @id @default(cuid())
+  id                 String                   @id @default(cuid())
   organizationId     String
   quoteId            String
   signatureRequestId String?
@@ -991,15 +991,15 @@ model QuoteSignatureEvent {
   actorType          SignatureActorType
   actorUserId        String?
   eventType          QuoteSignatureEventType
-  occurredAt         DateTime                @default(now())
+  occurredAt         DateTime                 @default(now())
   ipAddress          String?
   userAgent          String?
   provider           SignatureProvider?
   providerEventId    String?
   metadataJson       Json?
-  createdAt          DateTime                @default(now())
-  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  signatureRequest   QuoteSignatureRequest?  @relation(fields: [signatureRequestId], references: [id], onDelete: SetNull)
+  createdAt          DateTime                 @default(now())
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signatureRequest   QuoteSignatureRequest?   @relation(fields: [signatureRequestId], references: [id], onDelete: SetNull)
   recipient          QuoteSignatureRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
 
   @@unique([provider, providerEventId])
@@ -1200,29 +1200,29 @@ model LineItemTemplateTask {
 /// Line items are always loaded through [Quote] scoped by [Quote.organizationId].
 /// No denormalized organizationId here—avoids redundant writes and drift.
 model QuoteLineItem {
-  id                        String                   @id @default(cuid())
+  id                        String                    @id @default(cuid())
   quoteId                   String
-  sortOrder                 Int                      @default(0)
+  sortOrder                 Int                       @default(0)
   description               String
-  quantity                  Decimal                  @db.Decimal(18, 6)
+  quantity                  Decimal                   @db.Decimal(18, 6)
   unitAmountCents           Int
   lineTotalCents            Int
   internalNotes             String?
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
   sourceLineItemTemplateId  String?
   customerExcludedNotes     String?
   customerIncludedNotes     String?
   customerPresentationGroup String?
   customerScopeDescription  String?
   customerScopeTitle        String?
-  executionRelevant         Boolean                  @default(true)
+  executionRelevant         Boolean                   @default(true)
   jobStageCopies            JobStage[]
   jobTaskCopies             JobTask[]
   draftExecutionTasks       QuoteLineExecutionTask[]
   clarifications            QuoteLineClarification[]
-  quote                     Quote                    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  sourceLineItemTemplate    LineItemTemplate?        @relation(fields: [sourceLineItemTemplateId], references: [id])
+  quote                     Quote                     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplate    LineItemTemplate?         @relation(fields: [sourceLineItemTemplateId], references: [id])
   quoteExecutionTaskScopes  QuoteExecutionTaskScope[]
   jobScopeItems             JobScopeItem[]
   scopeDecisions            QuoteScopeDecision[]
@@ -1379,62 +1379,62 @@ model QuoteLineExecutionTask {
 }
 
 model QuoteExecutionPlan {
-  id                        String                  @id @default(cuid())
-  organizationId            String
-  quoteId                   String                  @unique
-  status                    QuoteExecutionPlanStatus @default(DRAFT)
-  planVersion               Int                     @default(1)
-  planningInputHash         String?
-  planningInputSchemaVersion Int                    @default(1)
-  acceptedByUserId          String?
-  acceptedAt                DateTime?
-  createdAt                 DateTime                @default(now())
-  updatedAt                 DateTime                @updatedAt
-  organization              Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote                     Quote                   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  acceptedByUser            User?                   @relation("QuoteExecutionPlanAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
-  tasks                     QuoteExecutionTask[]
+  id                         String                   @id @default(cuid())
+  organizationId             String
+  quoteId                    String                   @unique
+  status                     QuoteExecutionPlanStatus @default(DRAFT)
+  planVersion                Int                      @default(1)
+  planningInputHash          String?
+  planningInputSchemaVersion Int                      @default(1)
+  acceptedByUserId           String?
+  acceptedAt                 DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  organization               Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                      Quote                    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  acceptedByUser             User?                    @relation("QuoteExecutionPlanAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  tasks                      QuoteExecutionTask[]
 
   @@index([organizationId])
   @@index([status])
 }
 
 model QuoteExecutionTask {
-  id                           String                    @id @default(cuid())
-  organizationId               String
-  quoteExecutionPlanId         String
-  sourceLineItemTemplateTaskId String?
+  id                             String                     @id @default(cuid())
+  organizationId                 String
+  quoteExecutionPlanId           String
+  sourceLineItemTemplateTaskId   String?
   sourceQuoteLineExecutionTaskId String?
-  sourceTaskTemplateId         String?
-  sourceType                   LineItemTemplateTaskSource
-  origin                       ExecutionTaskOrigin       @default(MANUAL)
-  title                        String
-  category                     TaskTemplateCategory
-  instructions                 String?
-  sortOrder                    Int                       @default(0)
-  createdAt                    DateTime                  @default(now())
-  updatedAt                    DateTime                  @updatedAt
-  humanEditedAt                DateTime?
-  protectedAt                  DateTime?
-  createdByPlanRevisionId      String?
-  requirementsJson             Json                      @default("{}")
-  assigneeRole                 StaffRole?
-  costBudgetCents              Int?
-  estimatedMinutes             Int?
-  hardSignal                   Boolean                   @default(false)
-  partsRequiredJson            Json?
-  providesSignals              String[]                  @default([])
-  requiresSignals              String[]                  @default([])
-  planningTags                 String[]                  @default([])
-  stageId                      String?
-  organization                 Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteExecutionPlan           QuoteExecutionPlan        @relation(fields: [quoteExecutionPlanId], references: [id], onDelete: Cascade)
-  sourceLineItemTemplateTask   LineItemTemplateTask?     @relation(fields: [sourceLineItemTemplateTaskId], references: [id], onDelete: SetNull)
-  sourceQuoteLineExecutionTask QuoteLineExecutionTask?   @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id], onDelete: SetNull)
-  sourceTaskTemplate           TaskTemplate?             @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
-  stage                        Stage?                    @relation(fields: [stageId], references: [id], onDelete: SetNull)
-  scopes                       QuoteExecutionTaskScope[]
-  jobTaskCopies                JobTask[]                 @relation("JobTaskSourceQuoteExecutionTask")
+  sourceTaskTemplateId           String?
+  sourceType                     LineItemTemplateTaskSource
+  origin                         ExecutionTaskOrigin        @default(MANUAL)
+  title                          String
+  category                       TaskTemplateCategory
+  instructions                   String?
+  sortOrder                      Int                        @default(0)
+  createdAt                      DateTime                   @default(now())
+  updatedAt                      DateTime                   @updatedAt
+  humanEditedAt                  DateTime?
+  protectedAt                    DateTime?
+  createdByPlanRevisionId        String?
+  requirementsJson               Json                       @default("{}")
+  assigneeRole                   StaffRole?
+  costBudgetCents                Int?
+  estimatedMinutes               Int?
+  hardSignal                     Boolean                    @default(false)
+  partsRequiredJson              Json?
+  providesSignals                String[]                   @default([])
+  requiresSignals                String[]                   @default([])
+  planningTags                   String[]                   @default([])
+  stageId                        String?
+  organization                   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteExecutionPlan             QuoteExecutionPlan         @relation(fields: [quoteExecutionPlanId], references: [id], onDelete: Cascade)
+  sourceLineItemTemplateTask     LineItemTemplateTask?      @relation(fields: [sourceLineItemTemplateTaskId], references: [id], onDelete: SetNull)
+  sourceQuoteLineExecutionTask   QuoteLineExecutionTask?    @relation(fields: [sourceQuoteLineExecutionTaskId], references: [id], onDelete: SetNull)
+  sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id], onDelete: SetNull)
+  stage                          Stage?                     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  scopes                         QuoteExecutionTaskScope[]
+  jobTaskCopies                  JobTask[]                  @relation("JobTaskSourceQuoteExecutionTask")
 
   @@index([organizationId])
   @@index([quoteExecutionPlanId, sortOrder])
@@ -1443,14 +1443,14 @@ model QuoteExecutionTask {
 }
 
 model QuoteExecutionTaskScope {
-  id                   String              @id @default(cuid())
+  id                   String             @id @default(cuid())
   organizationId       String
   quoteExecutionTaskId String
   quoteLineItemId      String
-  createdAt            DateTime            @default(now())
-  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteExecutionTask   QuoteExecutionTask  @relation(fields: [quoteExecutionTaskId], references: [id], onDelete: Cascade)
-  quoteLineItem        QuoteLineItem       @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
+  createdAt            DateTime           @default(now())
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteExecutionTask   QuoteExecutionTask @relation(fields: [quoteExecutionTaskId], references: [id], onDelete: Cascade)
+  quoteLineItem        QuoteLineItem      @relation(fields: [quoteLineItemId], references: [id], onDelete: Cascade)
 
   @@unique([quoteExecutionTaskId, quoteLineItemId])
   @@index([organizationId])
@@ -1458,30 +1458,30 @@ model QuoteExecutionTaskScope {
 }
 
 model ExecutionPlanRevision {
-  id                     String                @id @default(cuid())
-  organizationId         String
-  quoteId                String
-  jobId                  String?
-  changeOrderId          String?
-  kind                   ExecutionPlanRevisionKind
-  status                 ExecutionPlanRevisionStatus @default(DRAFT)
-  basePlanVersion        Int
-  resultingPlanVersion   Int?
-  proposalJson           Json
-  proposalSchemaVersion  Int
-  plannerVersion         String
-  modelProviderMeta      Json?
-  planningInputHash      String?
-  reasoningSummary       String?
-  approvedByUserId       String?
-  appliedAt              DateTime?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
-  organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote                  Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  job                    Job?                  @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  changeOrder            ChangeOrder?          @relation(fields: [changeOrderId], references: [id], onDelete: SetNull)
-  approvedByUser         User?                 @relation("ExecutionPlanRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  id                    String                      @id @default(cuid())
+  organizationId        String
+  quoteId               String
+  jobId                 String?
+  changeOrderId         String?
+  kind                  ExecutionPlanRevisionKind
+  status                ExecutionPlanRevisionStatus @default(DRAFT)
+  basePlanVersion       Int
+  resultingPlanVersion  Int?
+  proposalJson          Json
+  proposalSchemaVersion Int
+  plannerVersion        String
+  modelProviderMeta     Json?
+  planningInputHash     String?
+  reasoningSummary      String?
+  approvedByUserId      String?
+  appliedAt             DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                 Quote                       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job                   Job?                        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  changeOrder           ChangeOrder?                @relation(fields: [changeOrderId], references: [id], onDelete: SetNull)
+  approvedByUser        User?                       @relation("ExecutionPlanRevisionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([quoteId])
@@ -1490,58 +1490,70 @@ model ExecutionPlanRevision {
 }
 
 model ChangeOrder {
-  id                  String                @id @default(cuid())
-  organizationId      String
-  quoteId             String
-  jobId               String
-  number              Int
-  title               String
-  customerDocumentTitle String?
-  status              ChangeOrderStatus     @default(DRAFT)
-  reasoning           String
-  priceDeltaCents     Int                   @default(0)
-  approvedByUserId    String?
-  approvedAt          DateTime?
-  lastSentEmailAt     DateTime?
-  acceptedAt          DateTime?
-  appliedAt           DateTime?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote               Quote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  job                 Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  approvedByUser      User?                 @relation("ChangeOrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  lines               ChangeOrderLine[]
-  executionPlanRevisions ExecutionPlanRevision[]
-  paymentRequirements JobPaymentRequirement[]
-  shareToken          ChangeOrderShareToken?
-  checkpoints         ChangeOrderCheckpoint[]
-  views               ChangeOrderView[]
+  id                          String                       @id @default(cuid())
+  organizationId              String
+  quoteId                     String
+  jobId                       String
+  number                      Int
+  title                       String
+  customerDocumentTitle       String?
+  status                      ChangeOrderStatus            @default(DRAFT)
+  reasoning                   String
+  priceDeltaCents             Int                          @default(0)
+  approvedByUserId            String?
+  approvedAt                  DateTime?
+  lastSentEmailAt             DateTime?
+  acceptedAt                  DateTime?
+  appliedAt                   DateTime?
+  baseJobPlanVersion          Int                          @default(1)
+  executionDeltaJson          Json?
+  executionDeltaSchemaVersion Int                          @default(1)
+  applicationStatus           ChangeOrderApplicationStatus @default(NOT_APPLIED)
+  lastApplyErrorJson          Json?
+  lastApplyAttemptAt          DateTime?
+  supersededByChangeOrderId   String?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  organization                Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                       Quote                        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job                         Job                          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  approvedByUser              User?                        @relation("ChangeOrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  supersededByChangeOrder     ChangeOrder?                 @relation("ChangeOrderSupersession", fields: [supersededByChangeOrderId], references: [id], onDelete: SetNull)
+  supersedesChangeOrders      ChangeOrder[]                @relation("ChangeOrderSupersession")
+  lines                       ChangeOrderLine[]
+  executionPlanRevisions      ExecutionPlanRevision[]
+  paymentRequirements         JobPaymentRequirement[]
+  shareToken                  ChangeOrderShareToken?
+  checkpoints                 ChangeOrderCheckpoint[]
+  views                       ChangeOrderView[]
+  createdTasks                JobTask[]
 
   @@unique([jobId, number])
   @@index([organizationId])
   @@index([quoteId])
   @@index([jobId])
+  @@index([jobId, applicationStatus])
+  @@index([supersededByChangeOrderId])
 }
 
 model ChangeOrderLine {
-  id                   String                 @id @default(cuid())
-  organizationId       String
-  changeOrderId        String
-  operation            ChangeOrderLineOperation
-  sourceJobScopeItemId String?
-  description          String
-  quantity             Decimal                @db.Decimal(18, 6)
-  unitPriceCents       Int?
-  priceDeltaCents      Int?
-  executionRelevant    Boolean                @default(true)
-  scopeDataJson        Json?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  changeOrder          ChangeOrder            @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
-  sourceJobScopeItem   JobScopeItem?          @relation("ChangeOrderLineSourceScope", fields: [sourceJobScopeItemId], references: [id], onDelete: SetNull)
-  resultingJobScopeItems JobScopeItem[]       @relation("JobScopeItemFromChangeOrderLine")
+  id                     String                   @id @default(cuid())
+  organizationId         String
+  changeOrderId          String
+  operation              ChangeOrderLineOperation
+  sourceJobScopeItemId   String?
+  description            String
+  quantity               Decimal                  @db.Decimal(18, 6)
+  unitPriceCents         Int?
+  priceDeltaCents        Int?
+  executionRelevant      Boolean                  @default(true)
+  scopeDataJson          Json?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  organization           Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeOrder            ChangeOrder              @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  sourceJobScopeItem     JobScopeItem?            @relation("ChangeOrderLineSourceScope", fields: [sourceJobScopeItemId], references: [id], onDelete: SetNull)
+  resultingJobScopeItems JobScopeItem[]           @relation("JobScopeItemFromChangeOrderLine")
 
   @@index([organizationId])
   @@index([changeOrderId])
@@ -1571,43 +1583,43 @@ model PaymentScheduleItem {
 /// Job rows are independent copies — later quote/template edits do not mutate stages or tasks here.
 /// One job per quote in V1 (enforced by [@@unique] on [quoteId]).
 model Job {
-  id                  String                   @id @default(cuid())
-  organizationId      String
-  quoteId             String                   @unique
-  customerId          String?
-  serviceLocationId   String?
-  title               String
-  status              JobStatus                @default(ACTIVE)
-  activatedAt         DateTime                 @default(now())
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  leadId              String?
-  jobPlanVersion      Int                      @default(1)
-  attachments         Attachment[]
-  dailyJobLogs        DailyJobLog[]
-  customer            Customer?                @relation(fields: [customerId], references: [id])
-  lead                Lead?                    @relation(fields: [leadId], references: [id])
-  serviceLocation     CustomerServiceLocation? @relation("JobServiceLocation", fields: [serviceLocationId], references: [id], onDelete: SetNull)
-  organization        Organization             @relation(fields: [organizationId], references: [id])
-  quote               Quote                    @relation(fields: [quoteId], references: [id])
-  activities          JobActivity[]
-  issues              JobIssue[]
-  recoveryFlows       JobRecoveryFlow[]
-  paymentRequirements JobPaymentRequirement[]
-  signals             JobSignal[]
-  stages              JobStage[]
-  tasks               JobTask[]
-  visits              JobVisit[]
-  scheduleEvents      JobScheduleEvent[]
-  workPackages        JobWorkPackage[]
-  scopeItems          JobScopeItem[]
-  changeOrders        ChangeOrder[]
+  id                     String                    @id @default(cuid())
+  organizationId         String
+  quoteId                String                    @unique
+  customerId             String?
+  serviceLocationId      String?
+  title                  String
+  status                 JobStatus                 @default(ACTIVE)
+  activatedAt            DateTime                  @default(now())
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  leadId                 String?
+  jobPlanVersion         Int                       @default(1)
+  attachments            Attachment[]
+  dailyJobLogs           DailyJobLog[]
+  customer               Customer?                 @relation(fields: [customerId], references: [id])
+  lead                   Lead?                     @relation(fields: [leadId], references: [id])
+  serviceLocation        CustomerServiceLocation?  @relation("JobServiceLocation", fields: [serviceLocationId], references: [id], onDelete: SetNull)
+  organization           Organization              @relation(fields: [organizationId], references: [id])
+  quote                  Quote                     @relation(fields: [quoteId], references: [id])
+  activities             JobActivity[]
+  issues                 JobIssue[]
+  recoveryFlows          JobRecoveryFlow[]
+  paymentRequirements    JobPaymentRequirement[]
+  signals                JobSignal[]
+  stages                 JobStage[]
+  tasks                  JobTask[]
+  visits                 JobVisit[]
+  scheduleEvents         JobScheduleEvent[]
+  workPackages           JobWorkPackage[]
+  scopeItems             JobScopeItem[]
+  changeOrders           ChangeOrder[]
   executionPlanRevisions ExecutionPlanRevision[]
-  collaborators       JobCollaborator[]
-  portalAccesses      CustomerPortalAccess[]
-  portalEvents        CustomerPortalEvent[]
-  visibleResources    CustomerVisibleResource[]
-  portalRequests      CustomerRequest[]
+  collaborators          JobCollaborator[]
+  portalAccesses         CustomerPortalAccess[]
+  portalEvents           CustomerPortalEvent[]
+  visibleResources       CustomerVisibleResource[]
+  portalRequests         CustomerRequest[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1703,9 +1715,11 @@ model JobTask {
   dueFirstReadyAt                DateTime?
   schedulingRequirement          TaskSchedulingRequirement  @default(NONE)
   workPackageId                  String?
-  origin                         ExecutionTaskOrigin       @default(MANUAL)
+  origin                         ExecutionTaskOrigin        @default(MANUAL)
   sourcePlanRevisionId           String?
-  planningTags                   String[]                  @default([])
+  sourceChangeOrderId            String?
+  sourceExecutionDeltaOpId       String?
+  planningTags                   String[]                   @default([])
   /// Reserved for future assignment logic.
   assigneeRole                   StaffRole?
   /// Reserved for future job costing.
@@ -1731,6 +1745,7 @@ model JobTask {
   sourceQuoteExecutionTask       QuoteExecutionTask?        @relation("JobTaskSourceQuoteExecutionTask", fields: [sourceQuoteExecutionTaskId], references: [id], onDelete: SetNull)
   sourceQuoteLineItem            QuoteLineItem?             @relation(fields: [sourceQuoteLineItemId], references: [id])
   sourceTaskTemplate             TaskTemplate?              @relation(fields: [sourceTaskTemplateId], references: [id])
+  sourceChangeOrder              ChangeOrder?               @relation(fields: [sourceChangeOrderId], references: [id], onDelete: SetNull)
   stage                          Stage?                     @relation(fields: [stageId], references: [id])
   scheduleEventLinks             JobScheduleEventTask[]
   workPackage                    JobWorkPackage?            @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
@@ -1746,30 +1761,31 @@ model JobTask {
   @@index([schedulingRequirement])
   @@index([workPackageId])
   @@index([sourceQuoteExecutionTaskId])
+  @@index([sourceChangeOrderId])
 }
 
 model JobScopeItem {
-  id                           String              @id @default(cuid())
-  organizationId               String
-  jobId                        String
-  sourceQuoteLineItemId        String?
-  sourceChangeOrderLineId      String?
-  description                  String
-  quantity                     Decimal             @db.Decimal(18, 6)
-  unitPriceCents               Int?
-  executionRelevant            Boolean             @default(true)
-  status                       JobScopeItemStatus  @default(ACTIVE)
-  supersededByJobScopeItemId   String?             @unique
-  createdAt                    DateTime            @default(now())
-  updatedAt                    DateTime            @updatedAt
-  organization                 Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job                          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  sourceQuoteLineItem          QuoteLineItem?      @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
-  sourceChangeOrderLine        ChangeOrderLine?    @relation("JobScopeItemFromChangeOrderLine", fields: [sourceChangeOrderLineId], references: [id], onDelete: SetNull)
-  supersededByJobScopeItem     JobScopeItem?       @relation("JobScopeItemSupersession", fields: [supersededByJobScopeItemId], references: [id], onDelete: SetNull)
-  supersedesJobScopeItem       JobScopeItem?       @relation("JobScopeItemSupersession")
-  sourceForChangeOrderLines    ChangeOrderLine[]   @relation("ChangeOrderLineSourceScope")
-  taskScopes                   JobTaskScope[]
+  id                         String             @id @default(cuid())
+  organizationId             String
+  jobId                      String
+  sourceQuoteLineItemId      String?
+  sourceChangeOrderLineId    String?
+  description                String
+  quantity                   Decimal            @db.Decimal(18, 6)
+  unitPriceCents             Int?
+  executionRelevant          Boolean            @default(true)
+  status                     JobScopeItemStatus @default(ACTIVE)
+  supersededByJobScopeItemId String?            @unique
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+  organization               Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job                        Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceQuoteLineItem        QuoteLineItem?     @relation(fields: [sourceQuoteLineItemId], references: [id], onDelete: SetNull)
+  sourceChangeOrderLine      ChangeOrderLine?   @relation("JobScopeItemFromChangeOrderLine", fields: [sourceChangeOrderLineId], references: [id], onDelete: SetNull)
+  supersededByJobScopeItem   JobScopeItem?      @relation("JobScopeItemSupersession", fields: [supersededByJobScopeItemId], references: [id], onDelete: SetNull)
+  supersedesJobScopeItem     JobScopeItem?      @relation("JobScopeItemSupersession")
+  sourceForChangeOrderLines  ChangeOrderLine[]  @relation("ChangeOrderLineSourceScope")
+  taskScopes                 JobTaskScope[]
 
   @@index([organizationId])
   @@index([jobId])
@@ -1793,7 +1809,7 @@ model JobTaskScope {
 }
 
 model JobWorkPackage {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
   organizationId   String
   jobId            String
   title            String
@@ -1801,11 +1817,11 @@ model JobWorkPackage {
   plannedStartDate DateTime?
   plannedEndDate   DateTime?
   source           String?
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  displayOrder     Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job              Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job              Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
   tasks            JobTask[]
 
   @@index([organizationId])
@@ -1815,32 +1831,32 @@ model JobWorkPackage {
 
 /// Canonical job-related calendar commitment (appointment, crew block, inspection window, etc.).
 model JobScheduleEvent {
-  id             String                 @id @default(cuid())
-  organizationId String
-  jobId          String
-  kind           JobScheduleEventKind
-  status         JobScheduleEventStatus @default(TENTATIVE)
-  completionOutcome JobScheduleEventCompletionOutcome?
-  completedAt    DateTime?
-  title          String?
-  startAt        DateTime
-  endAt          DateTime
-  externalWindowStartAt DateTime?
-  externalWindowEndAt DateTime?
-  externalWindowLabel String?
-  externalWindowNotes String?
-  externalWindowSource String?
-  customerVisible Boolean @default(false)
-  leadUserId     String?
-  notes          String?
+  id                     String                             @id @default(cuid())
+  organizationId         String
+  jobId                  String
+  kind                   JobScheduleEventKind
+  status                 JobScheduleEventStatus             @default(TENTATIVE)
+  completionOutcome      JobScheduleEventCompletionOutcome?
+  completedAt            DateTime?
+  title                  String?
+  startAt                DateTime
+  endAt                  DateTime
+  externalWindowStartAt  DateTime?
+  externalWindowEndAt    DateTime?
+  externalWindowLabel    String?
+  externalWindowNotes    String?
+  externalWindowSource   String?
+  customerVisible        Boolean                            @default(false)
+  leadUserId             String?
+  notes                  String?
   /// Bridge to legacy JobVisit row during migration; null for new-only events.
-  legacyVisitId  String?                @unique
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job            Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  leadUser       User?                  @relation("LeadScheduleEvents", fields: [leadUserId], references: [id], onDelete: SetNull)
-  taskLinks      JobScheduleEventTask[]
+  legacyVisitId          String?                            @unique
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @updatedAt
+  organization           Organization                       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job                    Job                                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  leadUser               User?                              @relation("LeadScheduleEvents", fields: [leadUserId], references: [id], onDelete: SetNull)
+  taskLinks              JobScheduleEventTask[]
   linkedCustomerRequests CustomerRequest[]
 
   @@index([organizationId])
@@ -1944,29 +1960,29 @@ model JobVisit {
 }
 
 model Attachment {
-  id               String           @id @default(cuid())
-  organizationId   String
-  fileName         String
-  fileKey          String
-  contentType      String
-  fileSize         Int
-  quoteId          String?
-  jobId            String?
-  jobTaskId        String?
-  uploadedByUserId String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  status           AttachmentStatus @default(READY)
-  customerId       String?
-  description      String?
-  leadId           String?
-  customer         Customer?        @relation(fields: [customerId], references: [id])
-  job              Job?             @relation(fields: [jobId], references: [id])
-  jobTask          JobTask?         @relation(fields: [jobTaskId], references: [id])
-  lead             Lead?            @relation(fields: [leadId], references: [id])
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote            Quote?           @relation(fields: [quoteId], references: [id])
-  uploadedByUser   User?            @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
+  id                     String            @id @default(cuid())
+  organizationId         String
+  fileName               String
+  fileKey                String
+  contentType            String
+  fileSize               Int
+  quoteId                String?
+  jobId                  String?
+  jobTaskId              String?
+  uploadedByUserId       String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  status                 AttachmentStatus  @default(READY)
+  customerId             String?
+  description            String?
+  leadId                 String?
+  customer               Customer?         @relation(fields: [customerId], references: [id])
+  job                    Job?              @relation(fields: [jobId], references: [id])
+  jobTask                JobTask?          @relation(fields: [jobTaskId], references: [id])
+  lead                   Lead?             @relation(fields: [leadId], references: [id])
+  organization           Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                  Quote?            @relation(fields: [quoteId], references: [id])
+  uploadedByUser         User?             @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
   linkedCustomerRequests CustomerRequest[]
 
   @@index([organizationId])
@@ -2410,31 +2426,31 @@ model StripeWebhookEvent {
 }
 
 model AiUsageLog {
-  id                String                   @id @default(cuid())
-  organizationId    String
-  serviceLocationId String?
-  feature           String
-  provider          String
-  model             String
-  requestKind       String
-  status            String
-  promptChars       Int                      @default(0)
-  responseChars     Int                      @default(0)
-  inputTokens       Int?
-  outputTokens      Int?
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  serviceLocationId  String?
+  feature            String
+  provider           String
+  model              String
+  requestKind        String
+  status             String
+  promptChars        Int                      @default(0)
+  responseChars      Int                      @default(0)
+  inputTokens        Int?
+  outputTokens       Int?
   estimatedCostCents Int?
-  billableUnits     Int?
-  billableStatus    AiUsageBillableStatus?
-  aiBillingPeriodId String?
-  requestPayload    Json?
-  responsePayload   Json?
-  errorMessage      String?
-  startedAt         DateTime                 @default(now())
-  finishedAt        DateTime?
-  createdAt         DateTime                 @default(now())
-  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  serviceLocation   CustomerServiceLocation? @relation(fields: [serviceLocationId], references: [id], onDelete: SetNull)
-  aiBillingPeriod   AiBillingPeriod?         @relation(fields: [aiBillingPeriodId], references: [id], onDelete: SetNull)
+  billableUnits      Int?
+  billableStatus     AiUsageBillableStatus?
+  aiBillingPeriodId  String?
+  requestPayload     Json?
+  responsePayload    Json?
+  errorMessage       String?
+  startedAt          DateTime                 @default(now())
+  finishedAt         DateTime?
+  createdAt          DateTime                 @default(now())
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceLocation    CustomerServiceLocation? @relation(fields: [serviceLocationId], references: [id], onDelete: SetNull)
+  aiBillingPeriod    AiBillingPeriod?         @relation(fields: [aiBillingPeriodId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([serviceLocationId, createdAt])
@@ -2716,21 +2732,35 @@ enum ExecutionTaskOrigin {
 enum ExecutionPlanRevisionKind {
   INITIAL_PLAN
   SCOPE_RECONCILIATION
+  JOB_EXECUTION_DELTA
 }
 
 enum ExecutionPlanRevisionStatus {
   DRAFT
+  ACCEPTED
   APPLIED
+  APPLY_FAILED
+  NEEDS_REVIEW
   DISCARDED
 }
 
 enum ChangeOrderStatus {
   DRAFT
+  READY_TO_SEND
   SENT
+  CUSTOMER_REQUESTED_CHANGES
   ACCEPTED
   APPLIED
   REJECTED
   VOID
+  SUPERSEDED
+}
+
+enum ChangeOrderApplicationStatus {
+  NOT_APPLIED
+  APPLIED
+  APPLY_FAILED
+  NEEDS_EXECUTION_REVIEW
 }
 
 enum ChangeOrderLineOperation {
@@ -2742,6 +2772,7 @@ enum ChangeOrderLineOperation {
 enum ChangeOrderCheckpointKind {
   SEND
   ACCEPTANCE
+  REQUEST_CHANGES
 }
 
 enum ChangeOrderCheckpointSource {
@@ -3098,6 +3129,16 @@ enum JobActivityType {
   JOB_ARCHIVED
   JOB_SCHEDULE_CLEANUP_COMPLETED
   SCOPE_REVISION_APPLIED
+  CHANGE_ORDER_CREATED
+  CHANGE_ORDER_SENT
+  CHANGE_ORDER_ACCEPTED
+  CHANGE_ORDER_REQUESTED_CHANGES
+  CHANGE_ORDER_REJECTED
+  CHANGE_ORDER_VOIDED
+  CHANGE_ORDER_APPLY_ATTEMPTED
+  CHANGE_ORDER_APPLIED
+  CHANGE_ORDER_APPLY_FAILED
+  CHANGE_ORDER_NEEDS_EXECUTION_REVIEW
 }
 
 model Tag {

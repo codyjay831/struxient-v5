@@ -169,7 +169,7 @@ Explicitly **not missed work** — parked until decided:
 | **Stripe / QBO / invoicing** | [locked-decisions-v1.md](./canon/locked-decisions-v1.md) phase 2; `/payments` page “future systems” stub |
 | **Customer portal depth** | Link-first v1; password optional later |
 | **E-sign vendor** | Legal/jurisdiction ([build-concerns-risks-and-gaps.md](./build-concerns-risks-and-gaps.md) A4) |
-| **Change orders** | Canon locked; entity/UI not full ([build-concerns-risks-and-gaps.md](./build-concerns-risks-and-gaps.md) P3) |
+| **Change orders** | Commercial spine + portal shipped; **execution delta architecture** canon locked — schema approval + Pass 2 apply refactor ([change-order-canon.md](./canon/change-order-canon.md)) |
 | **Tasks route stub** | `/tasks` page says runtime task graph deferred — misleading vs real `JobTask` (cleanup when routing IA settles) |
 
 ---

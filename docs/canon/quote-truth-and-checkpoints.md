@@ -30,7 +30,7 @@ Do **not** design the primary experience around:
 
 ## Relationship to change orders (locked §7)
 
-Change orders, re-sign thresholds, and **no silent mutation of sold customer-visible or monetary truth** remain as in [locked-decisions-v1.md](./locked-decisions-v1.md) §7 and [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) **I20**. This document refines **where that immutability lives** (checkpoint + execution + activity) and **what not to expose** in the shell.
+Change orders, re-sign thresholds, and **no silent mutation of sold customer-visible or monetary truth** remain as in [locked-decisions-v1.md](./locked-decisions-v1.md) §7 and [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) **I20**, **I26**. Post-activation execution impact is defined in [change-order-canon.md](./change-order-canon.md) (commercial delta + proposed execution delta—not a new quote or full plan replacement).
 
 ## Revision cloning (pre-activation commercial changes)
 

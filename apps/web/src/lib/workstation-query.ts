@@ -18,6 +18,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
+import { deriveChangeOrderWorkstationAttention } from "@/lib/change-order/change-order-workstation-attention";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import {
   buildQuoteActivationReadinessInput,
@@ -851,11 +852,32 @@ export async function queryWorkstationWorkItems(
   const changeOrders = commercialReadable ? await db.changeOrder.findMany({
     where: {
       organizationId,
-      status: {
-        in: [ChangeOrderStatus.DRAFT, ChangeOrderStatus.SENT, ChangeOrderStatus.ACCEPTED],
-      },
+      OR: [
+        {
+          status: {
+            in: [
+              ChangeOrderStatus.DRAFT,
+              ChangeOrderStatus.SENT,
+              ChangeOrderStatus.ACCEPTED,
+              ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES,
+            ],
+          },
+        },
+        {
+          applicationStatus: {
+            in: ["NEEDS_EXECUTION_REVIEW", "APPLY_FAILED"],
+          },
+          status: ChangeOrderStatus.ACCEPTED,
+        },
+      ],
     },
-    include: {
+    select: {
+      id: true,
+      number: true,
+      title: true,
+      status: true,
+      applicationStatus: true,
+      updatedAt: true,
       quote: {
         select: {
           id: true,
@@ -877,16 +899,19 @@ export async function queryWorkstationWorkItems(
   }) : [];
 
   for (const changeOrder of changeOrders) {
-    const priority: WorkstationWorkItemPriority =
-      changeOrder.status === ChangeOrderStatus.ACCEPTED ? "critical" : "high";
+    const attention = deriveChangeOrderWorkstationAttention({
+      status: changeOrder.status,
+      applicationStatus: changeOrder.applicationStatus,
+    });
+    const priority: WorkstationWorkItemPriority = attention.priority;
     const group: WorkstationWorkItemGroup =
-      changeOrder.status === ChangeOrderStatus.ACCEPTED ? "ready" : "waiting";
-    const nextStep =
-      changeOrder.status === ChangeOrderStatus.DRAFT
-        ? "Send Change Order to customer."
-        : changeOrder.status === ChangeOrderStatus.SENT
-          ? "Await customer acceptance."
-          : "Apply accepted Change Order.";
+      changeOrder.status === ChangeOrderStatus.ACCEPTED &&
+      changeOrder.applicationStatus === "NOT_APPLIED"
+        ? "ready"
+        : changeOrder.applicationStatus === "APPLY_FAILED" ||
+            changeOrder.applicationStatus === "NEEDS_EXECUTION_REVIEW"
+          ? "investigate"
+          : "waiting";
 
     const { lane, withinLaneRank, reason: rankReason } = rank(
       {
@@ -906,15 +931,15 @@ export async function queryWorkstationWorkItems(
       kind: "quote",
       title: `CO-${String(changeOrder.number).padStart(3, "0")} · ${changeOrder.title}`,
       subtitle: customerLabel ?? changeOrder.job.title,
-      status: `Change Order ${changeOrder.status}`,
+      status: attention.statusLabel,
       priority,
       group,
-      lens: changeOrder.status === ChangeOrderStatus.ACCEPTED ? "attention" : "waiting",
+      lens: attention.lens,
       lane,
       withinLaneRank,
       filterCategory: "quotes",
       reason: rankReason || "Customer-facing scope and price amendment in progress.",
-      nextStep,
+      nextStep: attention.nextStep,
       recordId: changeOrder.id,
       parentRecordId: changeOrder.job.id,
       parentLabel: customerLabel ?? undefined,

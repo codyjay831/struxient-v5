@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ChangeOrderCheckpointKind,
   ChangeOrderLineOperation,
   ChangeOrderStatus,
   ExecutionPlanRevisionKind,
@@ -12,6 +13,8 @@ import {
 import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
 import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-payment-policy";
 import { validateChangeOrderDraftInput } from "@/lib/change-order-flow";
+import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
+import { parseChangeOrderExecutionDelta } from "@/lib/change-order/execution-delta-schema";
 
 /**
  * Integration-style tests for Change Order action contracts.
@@ -157,14 +160,14 @@ test("integration: successful zero-dollar apply guard path", () => {
 
 test("integration: apply metadata contract includes revision audit fields", () => {
   const executionPlanRevision = {
-    kind: ExecutionPlanRevisionKind.SCOPE_RECONCILIATION,
+    kind: ExecutionPlanRevisionKind.JOB_EXECUTION_DELTA,
     status: ExecutionPlanRevisionStatus.APPLIED,
     basePlanVersion: 4,
     resultingPlanVersion: 5,
     changeOrderId: "co-1",
   };
   const activity = {
-    type: JobActivityType.SCOPE_REVISION_APPLIED,
+    type: JobActivityType.CHANGE_ORDER_APPLIED,
     entityType: "ChangeOrder",
     entityId: "rev-1",
     metadataJson: {
@@ -176,7 +179,38 @@ test("integration: apply metadata contract includes revision audit fields", () =
 
   assert.equal(executionPlanRevision.resultingPlanVersion, activity.metadataJson.resultingJobPlanVersion);
   assert.equal(executionPlanRevision.basePlanVersion + 1, executionPlanRevision.resultingPlanVersion);
-  assert.equal(activity.type, JobActivityType.SCOPE_REVISION_APPLIED);
+  assert.equal(activity.type, JobActivityType.CHANGE_ORDER_APPLIED);
+});
+
+test("integration: generated execution delta parses and uses unique operation ids", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 2,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 0,
+    reasoning: "Customer requested battery backup",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "Battery backup",
+        quantity: "1",
+        unitPriceCents: 100000,
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const parsed = parseChangeOrderExecutionDelta(delta);
+  assert.equal(parsed.ok, true);
+  assert.equal(delta.baseJobPlanVersion, 2);
+  assert.equal(delta.operations.some((operation) => operation.type === "ADD_TASK"), true);
+});
+
+test("integration: staff accept and request-changes checkpoint kinds exist", () => {
+  assert.equal(ChangeOrderCheckpointKind.ACCEPTANCE, "ACCEPTANCE");
+  assert.equal(ChangeOrderCheckpointKind.REQUEST_CHANGES, "REQUEST_CHANGES");
 });
 
 test("integration: simulated create→approve→apply state machine", () => {

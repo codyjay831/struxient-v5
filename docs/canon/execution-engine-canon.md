@@ -280,7 +280,23 @@ Full implementation table: [`docs/source-of-truth-map.md`](../source-of-truth-ma
 
 ---
 
-## 13. Explicit non-canon / deferred
+## 14. Change orders (post-activation plan revision)
+
+**Canon:** [change-order-canon.md](./change-order-canon.md). Schema proposal: [change-order-execution-delta-schema-proposal.md](../plans/change-order-execution-delta-schema-proposal.md).
+
+- **Quote activation** materializes the **initial** job execution graph (copy-on-activate).
+- **Change Orders** append **commercial** sold scope and propose an **execution delta** against `Job.jobPlanVersion` — **not** a second whole-quote execution plan.
+- Draft/sent/accepted COs **must not** mutate `JobScopeItem` or `JobTask`.
+- Apply runs only after acceptance + validation, writes **`ExecutionPlanRevision`** (`JOB_EXECUTION_DELTA`), increments `jobPlanVersion`.
+- Accepted COs that cannot safely apply enter **`NEEDS_EXECUTION_REVIEW`** — not a permanent `ACCEPTED` trap.
+
+**Must not:** clone quote Execution Review / whole-quote AI planner UI for Change Orders.
+
+**Implementation note:** Legacy code performs scope-only reconciliation at apply without stored delta — tracked for Pass 2 refactor; do not extend that pattern.
+
+---
+
+## 15. Explicit non-canon / deferred
 
 Do **not** treat the following as v5 MVP execution canon unless explicitly re-approved:
 
@@ -324,6 +340,7 @@ When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface 
 | [templates-and-execution-planning.md](./templates-and-execution-planning.md) | Template shapes and quote-time planning |
 | [workstation-canon.md](./workstation-canon.md) | Cockpit role and attention rules |
 | [product-philosophy.md](./product-philosophy.md) | Flow keeper thesis and phasing |
+| [change-order-canon.md](./change-order-canon.md) | CO commercial + execution delta, lifecycle, apply |
 | [../source-of-truth-map.md](../source-of-truth-map.md) | Stored vs derived implementation map |
 
 ---
@@ -333,3 +350,4 @@ When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface 
 *Canon update (2026-06-13): Locked whole-quote plan ownership, task-to-scope linking, derived staleness/hash acceptance contract, stage `OPEN/COMPLETED/SKIPPED` semantics, audited cancellation, post-activation scope-revision coverage/payment invariants, and in-transaction activation/apply revalidation.*  
 *Canon update (2026-06-20): Clarified authoring vs activation truth — `QuoteLineExecutionTask` may remain pre-plan seed/authoring input; `QuoteExecutionPlan` + `QuoteExecutionTask` are pre-activation activation truth; post-activation job runtime records are updated through scope-revision/change-order paths, not by mutating the accepted quote plan.*  
 *Canon update (2026-06-20): Restored tasks-first dependency policy for whole-quote apply validation: soft missing providers are review gaps; hard missing providers block activation readiness.*
+*Canon update (2026-06-24): §14 — Change Order execution delta architecture (commercial + proposed delta, apply via ExecutionPlanRevision, NEEDS_EXECUTION_REVIEW); renumbered former §13 to §15.*
