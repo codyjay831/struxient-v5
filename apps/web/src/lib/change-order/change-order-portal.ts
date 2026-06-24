@@ -11,8 +11,9 @@ import {
   changeOrderSelectForCustomerCheckpoint,
   serializeChangeOrderPreviewDocumentForCheckpoint,
 } from "@/lib/change-order-checkpoint-snapshot";
-import { recordJobActivity } from "@/lib/job-activity-helper";
+import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 import { JobActivityType } from "@prisma/client";
+import { recordJobActivity } from "@/lib/job-activity-helper";
 
 export async function requestChangeOrderChangesForShareToken(input: {
   shareTokenId: string;
@@ -48,6 +49,8 @@ export async function requestChangeOrderChangesForShareToken(input: {
       changeOrder,
       changeOrder.organization.name,
     );
+    const parsedPaymentImpact = parseChangeOrderPaymentImpact(changeOrder.paymentImpactJson);
+    const paymentImpact = parsedPaymentImpact.ok ? parsedPaymentImpact.impact : null;
     const aggregate = await tx.changeOrderCheckpoint.aggregate({
       where: {
         organizationId: changeOrder.organizationId,
@@ -67,6 +70,7 @@ export async function requestChangeOrderChangesForShareToken(input: {
         schemaVersion: CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
         snapshotJson: serializeChangeOrderPreviewDocumentForCheckpoint(
           document,
+          paymentImpact,
         ) as unknown as Prisma.InputJsonValue,
         staffOnlyJson: {
           message: input.message.trim(),

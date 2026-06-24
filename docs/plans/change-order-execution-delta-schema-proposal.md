@@ -1,7 +1,8 @@
-# Change Order Execution Delta — Schema Proposal (Pass 1)
+﻿# Change Order Execution Delta â€” Schema Proposal (Pass 1)
 
-> **Status:** Proposal only — **do not migrate** until explicitly approved (`ALLOW_SCHEMA=1`).  
-> **Canon authority:** [change-order-canon.md](../canon/change-order-canon.md)  
+> **Status:** Proposal only â€” **do not migrate** until explicitly approved (`ALLOW_SCHEMA=1`).
+> **Canon authority:** [change-order-canon.md](../canon/change-order-canon.md)
+> **Related:** [change-order-payment-impact-schema-proposal.md](./change-order-payment-impact-schema-proposal.md) (Pass 0 payment strategy)
 > **Date:** 2026-06-24
 
 ---
@@ -10,13 +11,13 @@
 
 Extend `ChangeOrder` with plan-version anchoring and proposed execution delta storage; split commercial workflow from execution apply sub-state; extend `ExecutionPlanRevision` for job delta apply; optional lineage on `JobTask`; audit enum additions.
 
-**Schema risk rating: MEDIUM** — additive columns/enums, backfill required, apply-path refactor touches transactional hot path. No destructive drops. Rollback feasible.
+**Schema risk rating: MEDIUM** â€” additive columns/enums, backfill required, apply-path refactor touches transactional hot path. No destructive drops. Rollback feasible.
 
 ---
 
 ## A. Proposed Prisma changes (exact)
 
-### 1. `ChangeOrder` model — add fields
+### 1. `ChangeOrder` model â€” add fields
 
 ```prisma
 model ChangeOrder {
@@ -38,14 +39,14 @@ model ChangeOrder {
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
 | `baseJobPlanVersion` | `Int` | `1` | `Job.jobPlanVersion` at CO draft creation |
-| `executionDeltaJson` | `Json?` | `null` | Proposed delta ops (see canon §6) |
+| `executionDeltaJson` | `Json?` | `null` | Proposed delta ops (see canon Â§6) |
 | `executionDeltaSchemaVersion` | `Int` | `1` | JSON schema evolution |
-| `applicationStatus` | enum | `NOT_APPLIED` | Apply sub-state (canon §5) |
+| `applicationStatus` | enum | `NOT_APPLIED` | Apply sub-state (canon Â§5) |
 | `lastApplyErrorJson` | `Json?` | `null` | Last validation/apply failure payload |
 | `lastApplyAttemptAt` | `DateTime?` | `null` | Audit / workstation staleness |
 | `supersededByChangeOrderId` | `String?` | `null` | Optional supersession chain |
 
-### 2. New enum — `ChangeOrderApplicationStatus`
+### 2. New enum â€” `ChangeOrderApplicationStatus`
 
 ```prisma
 enum ChangeOrderApplicationStatus {
@@ -72,7 +73,7 @@ enum ChangeOrderStatus {
 }
 ```
 
-**Migration note:** Existing `VOID` value unchanged. Map UI label “Voided” to `VOID`.
+**Migration note:** Existing `VOID` value unchanged. Map UI label â€œVoidedâ€ to `VOID`.
 
 ### 4. Extend `ChangeOrderCheckpointKind`
 
@@ -89,8 +90,8 @@ enum ChangeOrderCheckpointKind {
 ```prisma
 enum ExecutionPlanRevisionKind {
   INITIAL_PLAN
-  SCOPE_RECONCILIATION   // legacy CO apply — retain for backfill
-  JOB_EXECUTION_DELTA    // NEW — canonical CO apply kind
+  SCOPE_RECONCILIATION   // legacy CO apply â€” retain for backfill
+  JOB_EXECUTION_DELTA    // NEW â€” canonical CO apply kind
 }
 ```
 
@@ -99,7 +100,7 @@ enum ExecutionPlanRevisionKind {
 ```prisma
 enum ExecutionPlanRevisionStatus {
   DRAFT
-  ACCEPTED               // NEW — delta accepted, not yet applied
+  ACCEPTED               // NEW â€” delta accepted, not yet applied
   APPLIED
   APPLY_FAILED           // NEW
   NEEDS_REVIEW           // NEW
@@ -107,7 +108,7 @@ enum ExecutionPlanRevisionStatus {
 }
 ```
 
-### 7. Optional lineage — `JobTask`
+### 7. Optional lineage â€” `JobTask`
 
 ```prisma
 model JobTask {
@@ -124,7 +125,7 @@ Add reverse relation on `ChangeOrder`: `createdTasks JobTask[]`.
 
 **Pass 2 recommendation:** ship lineage fields with apply refactor; low risk, high debug value.
 
-### 8. Optional — `JobActivityType` additions
+### 8. Optional â€” `JobActivityType` additions
 
 ```prisma
 enum JobActivityType {
@@ -143,7 +144,7 @@ enum JobActivityType {
 }
 ```
 
-**Alternative (smaller diff):** keep `SCOPE_REVISION_APPLIED` and add only `CHANGE_ORDER_NEEDS_EXECUTION_REVIEW` + `CHANGE_ORDER_APPLY_FAILED`. Canon prefers full audit set — product decision in Pass 2.
+**Alternative (smaller diff):** keep `SCOPE_REVISION_APPLIED` and add only `CHANGE_ORDER_NEEDS_EXECUTION_REVIEW` + `CHANGE_ORDER_APPLY_FAILED`. Canon prefers full audit set â€” product decision in Pass 2.
 
 ---
 
@@ -196,7 +197,7 @@ CREATE TYPE "ChangeOrderApplicationStatus" AS ENUM (
   'NOT_APPLIED', 'APPLIED', 'APPLY_FAILED', 'NEEDS_EXECUTION_REVIEW'
 );
 
--- 2. Alter ChangeOrderStatus — add values (Postgres)
+-- 2. Alter ChangeOrderStatus â€” add values (Postgres)
 ALTER TYPE "ChangeOrderStatus" ADD VALUE IF NOT EXISTS 'READY_TO_SEND';
 ALTER TYPE "ChangeOrderStatus" ADD VALUE IF NOT EXISTS 'CUSTOMER_REQUESTED_CHANGES';
 ALTER TYPE "ChangeOrderStatus" ADD VALUE IF NOT EXISTS 'SUPERSEDED';
@@ -226,20 +227,20 @@ Prisma migration file generated via `npx prisma migrate dev` after schema edit w
 | Step | Action | Risk |
 |------|--------|------|
 | 1 | Set `baseJobPlanVersion = 1` for all existing COs (default handles new column) | Low |
-| 2 | For each existing CO, derive minimal `executionDeltaJson` from `ChangeOrderLine[]`: map ADD→`ADD_SCOPE_ITEM`, MODIFY→`MODIFY_SCOPE_ITEM`, REMOVE→`REMOVE_SCOPE_ITEM` only | Medium — no task ops; marks `legacyScopeReconciliation: true` in JSON meta |
-| 3 | `applicationStatus`: `APPLIED` COs → `APPLIED`; `ACCEPTED` → `NOT_APPLIED`; others → `NOT_APPLIED` | Low |
-| 4 | Existing `ExecutionPlanRevision` with `kind = SCOPE_RECONCILIATION` — leave unchanged; new applies use `JOB_EXECUTION_DELTA` | Low |
-| 5 | Detect trapped COs: status `ACCEPTED`, execution-relevant ADD lines, no task coverage → set `NEEDS_EXECUTION_REVIEW` + `lastApplyErrorJson` explaining legacy gap | Medium — ops visibility |
-| 6 | Re-link `JobTask` lineage optional script: tasks canceled by legacy apply → no backfill unless audit needed | Low |
+| 2 | For each existing CO, derive minimal `executionDeltaJson` from `ChangeOrderLine[]`: map ADDâ†’`ADD_SCOPE_ITEM`, MODIFYâ†’`MODIFY_SCOPE_ITEM`, REMOVEâ†’`REMOVE_SCOPE_ITEM` only | Medium â€” no task ops; marks `legacyScopeReconciliation: true` in JSON meta |
+| 3 | `applicationStatus`: `APPLIED` COs â†’ `APPLIED`; `ACCEPTED` â†’ `NOT_APPLIED`; others â†’ `NOT_APPLIED` | Low |
+| 4 | Existing `ExecutionPlanRevision` with `kind = SCOPE_RECONCILIATION` â€” leave unchanged; new applies use `JOB_EXECUTION_DELTA` | Low |
+| 5 | Detect trapped COs: status `ACCEPTED`, execution-relevant ADD lines, no task coverage â†’ set `NEEDS_EXECUTION_REVIEW` + `lastApplyErrorJson` explaining legacy gap | Medium â€” ops visibility |
+| 6 | Re-link `JobTask` lineage optional script: tasks canceled by legacy apply â†’ no backfill unless audit needed | Low |
 
-**Backfill script location (Pass 2):** `apps/web/prisma/backfill/change-order-execution-delta-v1.ts` — run once with dry-run flag.
+**Backfill script location (Pass 2):** `apps/web/prisma/backfill/change-order-execution-delta-v1.ts` â€” run once with dry-run flag.
 
 ---
 
 ## E. Rollback plan
 
-- New columns nullable or have defaults — can ignore in code rollback.
-- Enum values cannot be removed easily in Postgres — forward-only; rollback = stop writing new enum values.
+- New columns nullable or have defaults â€” can ignore in code rollback.
+- Enum values cannot be removed easily in Postgres â€” forward-only; rollback = stop writing new enum values.
 - Worst case: redeploy previous app version; new statuses unused.
 
 ---
@@ -254,14 +255,14 @@ Document in PR: rationale, backfill, no derived-state columns (application statu
 
 ---
 
-## G. Files to touch in Pass 2 (backend — not this pass)
+## G. Files to touch in Pass 2 (backend â€” not this pass)
 
 | File | Change |
 |------|--------|
 | `apps/web/prisma/schema.prisma` | Apply this proposal |
-| `apps/web/src/lib/change-order/execution-delta-schema.ts` | NEW — Zod + types |
-| `apps/web/src/lib/change-order/execution-delta-validation.ts` | NEW — simulate + conflict |
-| `apps/web/src/lib/change-order/execution-delta-apply.ts` | NEW — apply ops in tx |
+| `apps/web/src/lib/change-order/execution-delta-schema.ts` | NEW â€” Zod + types |
+| `apps/web/src/lib/change-order/execution-delta-validation.ts` | NEW â€” simulate + conflict |
+| `apps/web/src/lib/change-order/execution-delta-apply.ts` | NEW â€” apply ops in tx |
 | `apps/web/src/app/(workspace)/change-orders/change-order-actions.ts` | Store base version + delta on create; refactor apply |
 | `apps/web/src/lib/change-order-flow.ts` | Readiness uses stored `baseJobPlanVersion` |
 | `apps/web/src/lib/change-order-loader.ts` | Load delta + application status |
@@ -319,4 +320,4 @@ Document in PR: rationale, backfill, no derived-state columns (application statu
 3. Pass 2 ships backfill script + apply refactor in same release window.
 4. Do **not** ship schema without Pass 2 apply refactor (otherwise new columns are inert and misleading).
 
-No smaller design pass required — architecture is locked in canon. Optional trim: defer `JobTask` lineage and full `JobActivityType` expansion to Pass 2b if needed to reduce migration scope.
+No smaller design pass required â€” architecture is locked in canon. Optional trim: defer `JobTask` lineage and full `JobActivityType` expansion to Pass 2b if needed to reduce migration scope.

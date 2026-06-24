@@ -9,7 +9,7 @@ import {
 import {
   assertExecutionPlanPermission,
 } from "@/lib/execution-plan-permissions";
-import { validateScopeRevisionPaymentImpact } from "@/lib/quote-scope-revision-payment-policy";
+import { validateChangeOrderPaymentImpactGate } from "@/lib/change-order/payment-impact-gates";
 import {
   canEditChangeOrderDraft,
   canStaffAcceptChangeOrder,
@@ -19,7 +19,7 @@ import {
   changeOrderLifecycleReadinessLabel,
   deriveChangeOrderLifecycleReadiness,
   executionImpactHasGeneratedTaskSuggestions,
-  parseApplyErrorSummary,
+  parseApplyErrorSummaryForDisplay,
   type ChangeOrderExecutionImpactView,
   type ChangeOrderLifecycleReadiness,
 } from "@/lib/change-order/change-order-execution-projection";
@@ -83,6 +83,7 @@ export type ChangeOrderRevisionSnapshot = {
   baseJobPlanVersion?: number;
   lastApplyErrorJson?: unknown;
   customerDocumentTitle?: string | null;
+  paymentImpactJson?: unknown;
   executionImpact?: ChangeOrderExecutionImpactView;
 };
 
@@ -149,6 +150,10 @@ export type ChangeOrderReadiness = {
   mixedEditMessage: string | null;
   commercialChanged: boolean;
   executionChanged: boolean;
+  paymentImpactChanged: boolean;
+  paymentImpactReady: boolean;
+  paymentImpactBlockReason: string | null;
+  storedPaymentTermsText: string | null;
   unsavedDraftChangesReason: string | null;
 };
 
@@ -498,6 +503,7 @@ export function deriveChangeOrderImpactPreview(input: {
   lines: ChangeOrderLineDraft[];
   priceDeltaCents: number;
   scopeItems?: ChangeOrderScopeItemSnapshot[];
+  paymentImpactJson?: unknown;
 }): ChangeOrderImpactPreview {
   const addCount = input.lines.filter(
     (line) => line.operation === ChangeOrderLineOperation.ADD,
@@ -512,9 +518,9 @@ export function deriveChangeOrderImpactPreview(input: {
     (line) => line.executionRelevant !== false,
   ).length;
 
-  const paymentCheck = validateScopeRevisionPaymentImpact({
+  const paymentCheck = validateChangeOrderPaymentImpactGate({
     priceDeltaCents: input.priceDeltaCents,
-    hasApprovedPaymentImpactOperationInTx: false,
+    paymentImpactJson: input.paymentImpactJson ?? null,
   });
 
   const scopeSummaryLines = input.lines.map((line) => {
@@ -539,7 +545,7 @@ export function deriveChangeOrderImpactPreview(input: {
     executionRelevantLineCount,
     priceDeltaCents: input.priceDeltaCents,
     paymentBlocked: !paymentCheck.ok,
-    paymentBlockReason: paymentCheck.error ?? null,
+    paymentBlockReason: paymentCheck.ok ? null : paymentCheck.error,
     scopeSummaryLines,
     lineDiffs,
   };
@@ -591,6 +597,8 @@ export function getSendChangeOrderButtonState(input: {
   hasGeneratedTaskSuggestions: boolean;
   hasUnsavedDraftChanges: boolean;
   unsavedDraftChangesReason: string | null;
+  paymentImpactReady: boolean;
+  paymentImpactBlockReason: string | null;
   isPending: boolean;
 }): ChangeOrderButtonState {
   if (input.pageBlocked) {
@@ -630,6 +638,14 @@ export function getSendChangeOrderButtonState(input: {
     return {
       disabled: true,
       reason: "Review generated task suggestions before sending.",
+    };
+  }
+  if (!input.paymentImpactReady) {
+    return {
+      disabled: true,
+      reason:
+        input.paymentImpactBlockReason ??
+        "Save payment terms in the commercial column before sending this Change Order.",
     };
   }
   return { disabled: false, reason: null };
@@ -706,6 +722,7 @@ export function getSaveCommercialDraftButtonState(input: {
   mixedEditBlocked: boolean;
   mixedEditMessage: string | null;
   commercialChanged: boolean;
+  paymentImpactChanged?: boolean;
   isPending: boolean;
 }): ChangeOrderButtonState {
   if (input.pageBlocked) {
@@ -733,7 +750,7 @@ export function getSaveCommercialDraftButtonState(input: {
       reason: input.mixedEditMessage ?? "Save commercial and execution changes separately.",
     };
   }
-  if (!input.commercialChanged) {
+  if (!input.commercialChanged && !input.paymentImpactChanged) {
     return { disabled: true, reason: "No commercial changes to save." };
   }
   if (!input.draftCommercialValid) {
@@ -811,7 +828,7 @@ export function getApplyButtonState(input: {
   if (input.applicationStatus === ChangeOrderApplicationStatus.APPLY_FAILED) {
     return {
       disabled: true,
-      reason: "Apply failed. Review execution impact before retrying.",
+      reason: "Apply failed. Review payment terms and work impact before retrying.",
     };
   }
   if (input.applicationStatus === ChangeOrderApplicationStatus.NEEDS_EXECUTION_REVIEW) {
@@ -839,15 +856,14 @@ export function getApplyButtonState(input: {
       reason: "Execution impact must pass validation before apply.",
     };
   }
-  const hasExecutionPaymentOp = Boolean(input.selectedRevision.executionImpact?.paymentImpact);
-  const paymentCheck = validateScopeRevisionPaymentImpact({
+  const paymentImpactGate = validateChangeOrderPaymentImpactGate({
     priceDeltaCents: input.selectedRevision.priceDeltaCents,
-    hasApprovedPaymentImpactOperationInTx: hasExecutionPaymentOp,
+    paymentImpactJson: input.selectedRevision.paymentImpactJson ?? null,
   });
-  if (!paymentCheck.ok) {
+  if (!paymentImpactGate.ok) {
     return {
       disabled: true,
-      reason: paymentCheck.error ?? "Payment impact required before apply.",
+      reason: paymentImpactGate.error ?? "Approved payment terms are required before apply.",
     };
   }
   return { disabled: false, reason: null };
@@ -879,6 +895,8 @@ export function deriveChangeOrderReadiness(input: {
   baselineExecutionProposal?: import("@/lib/change-order/execution-delta-schema").ChangeOrderExecutionDeltaProposal | null;
   currentExecutionProposal?: import("@/lib/change-order/execution-delta-schema").ChangeOrderExecutionDeltaProposal | null;
   executionComposerEditable?: boolean;
+  baselinePaymentImpactJson?: unknown;
+  paymentImpactJson?: unknown;
 }): ChangeOrderReadiness {
   const activeScopeItemIds = new Set(input.activeScopeItems.map((item) => item.id));
   const draftValidation = validateChangeOrderDraftInput({
@@ -908,8 +926,19 @@ export function deriveChangeOrderReadiness(input: {
         lines: input.selectedRevision.lines,
         priceDeltaCents: input.selectedRevision.priceDeltaCents,
         scopeItems: input.activeScopeItems,
+        paymentImpactJson: input.selectedRevision.paymentImpactJson,
       })
     : draftImpact;
+
+  const paymentImpactGate = input.selectedRevision
+    ? validateChangeOrderPaymentImpactGate({
+        priceDeltaCents: input.selectedRevision.priceDeltaCents,
+        paymentImpactJson:
+          input.paymentImpactJson !== undefined
+            ? input.paymentImpactJson
+            : input.selectedRevision.paymentImpactJson ?? null,
+      })
+    : { ok: false as const, error: "Select a draft Change Order to send." };
 
   const executionImpact = input.selectedRevision?.executionImpact ?? null;
   const executionValidationOk = executionImpact?.validationOk ?? false;
@@ -954,8 +983,13 @@ export function deriveChangeOrderReadiness(input: {
         });
 
   const applyErrorSummary = input.selectedRevision?.lastApplyErrorJson
-    ? parseApplyErrorSummary(input.selectedRevision.lastApplyErrorJson)
+    ? parseApplyErrorSummaryForDisplay(input.selectedRevision.lastApplyErrorJson)
     : null;
+
+  const storedPaymentTermsText =
+    paymentImpactGate.ok && paymentImpactGate.impact
+      ? paymentImpactGate.impact.customerTermsText
+      : null;
 
   const isEditable = input.selectedRevision
     ? canEditChangeOrderDraft(input.selectedRevision.status).ok
@@ -981,6 +1015,12 @@ export function deriveChangeOrderReadiness(input: {
         })
       : false;
 
+  const paymentImpactChanged =
+    input.baselinePaymentImpactJson !== undefined
+      ? JSON.stringify(input.baselinePaymentImpactJson ?? null) !==
+        JSON.stringify(input.paymentImpactJson ?? null)
+      : false;
+
   const saveIntent = resolveDraftUpdateSaveIntent({
     commercialChanged,
     executionChanged,
@@ -990,6 +1030,7 @@ export function deriveChangeOrderReadiness(input: {
   const unsavedDraftChangesReason = getUnsavedDraftChangesReason({
     commercialChanged,
     executionChanged,
+    paymentImpactChanged,
   });
 
   return {
@@ -1011,6 +1052,7 @@ export function deriveChangeOrderReadiness(input: {
       mixedEditBlocked,
       mixedEditMessage,
       commercialChanged,
+      paymentImpactChanged,
       isPending: input.isPending,
     }),
     saveCommercial: getSaveCommercialDraftButtonState({
@@ -1021,6 +1063,7 @@ export function deriveChangeOrderReadiness(input: {
       mixedEditBlocked,
       mixedEditMessage,
       commercialChanged,
+      paymentImpactChanged,
       isPending: input.isPending,
     }),
     saveExecutionImpact: getSaveExecutionImpactButtonState({
@@ -1039,8 +1082,10 @@ export function deriveChangeOrderReadiness(input: {
       selectedRevision: input.selectedRevision,
       executionValidationOk,
       hasGeneratedTaskSuggestions,
-      hasUnsavedDraftChanges: commercialChanged || executionChanged,
+      hasUnsavedDraftChanges: commercialChanged || executionChanged || paymentImpactChanged,
       unsavedDraftChangesReason,
+      paymentImpactReady: paymentImpactGate.ok,
+      paymentImpactBlockReason: paymentImpactGate.ok ? null : paymentImpactGate.error,
       isPending: input.isPending,
     }),
     staffAccept: getStaffAcceptButtonState({
@@ -1085,6 +1130,10 @@ export function deriveChangeOrderReadiness(input: {
     mixedEditMessage,
     commercialChanged,
     executionChanged,
+    paymentImpactChanged,
+    paymentImpactReady: paymentImpactGate.ok,
+    paymentImpactBlockReason: paymentImpactGate.ok ? null : paymentImpactGate.error,
+    storedPaymentTermsText,
     unsavedDraftChangesReason,
   };
 }

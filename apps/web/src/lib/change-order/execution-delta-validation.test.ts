@@ -3,6 +3,20 @@ import test from "node:test";
 import { JobScopeItemStatus, JobTaskStatus } from "@prisma/client";
 import { validateChangeOrderExecutionDelta } from "./execution-delta-validation";
 import type { ChangeOrderExecutionDeltaProposal } from "./execution-delta-schema";
+import { buildPaymentImpactForStrategy } from "./payment-impact-resolver";
+import { changeOrderPaymentImpactToJson } from "./payment-impact-schema";
+
+function dueBeforeAddedWorkImpact(priceDeltaCents: number) {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "DUE_BEFORE_ADDED_WORK",
+    priceDeltaCents,
+    requirements: [],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson(built.impact);
+}
 
 const baseScope = {
   id: "scope-1",
@@ -93,7 +107,7 @@ test("stale base version triggers execution review classification", () => {
   }
 });
 
-test("payment delta requires explicit payment operation", () => {
+test("payment delta requires approved paymentImpactJson", () => {
   const result = validateChangeOrderExecutionDelta({
     rawDelta: addScopeWithTask,
     baseJobPlanVersion: 4,
@@ -105,11 +119,24 @@ test("payment delta requires explicit payment operation", () => {
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(result.classification, "INVARIANT_FAILED");
-    assert.ok(result.errors.some((error) => error.includes("payment requirement")));
+    assert.ok(result.errors.some((error) => error.includes("Choose and save")));
   }
 });
 
-test("payment delta passes with UPDATE_PAYMENT_REQUIREMENT operation", () => {
+test("payment delta passes with approved paymentImpactJson", () => {
+  const result = validateChangeOrderExecutionDelta({
+    rawDelta: addScopeWithTask,
+    baseJobPlanVersion: 4,
+    currentJobPlanVersion: 4,
+    priceDeltaCents: 50000,
+    paymentImpactJson: dueBeforeAddedWorkImpact(50000),
+    scopeItems: [baseScope],
+    tasks: [baseTask],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("payment delta rejects legacy payment op coexistence with paymentImpactJson", () => {
   const result = validateChangeOrderExecutionDelta({
     rawDelta: {
       ...addScopeWithTask,
@@ -120,48 +147,25 @@ test("payment delta passes with UPDATE_PAYMENT_REQUIREMENT operation", () => {
           type: "UPDATE_PAYMENT_REQUIREMENT",
           targetEntityType: "JobPaymentRequirement",
           payload: { amountCents: 50000, title: "Change Order CO-001" },
-          reason: "Reconcile customer-approved price delta.",
+          reason: "Legacy duplicate path.",
         },
       ],
     },
     baseJobPlanVersion: 4,
     currentJobPlanVersion: 4,
     priceDeltaCents: 50000,
-    scopeItems: [baseScope],
-    tasks: [baseTask],
-  });
-  assert.equal(result.ok, true);
-});
-
-test("payment delta rejects mismatched payment amount", () => {
-  const result = validateChangeOrderExecutionDelta({
-    rawDelta: {
-      ...addScopeWithTask,
-      operations: [
-        ...addScopeWithTask.operations,
-        {
-          opId: "payment:add",
-          type: "UPDATE_PAYMENT_REQUIREMENT",
-          targetEntityType: "JobPaymentRequirement",
-          payload: { amountCents: 10000, title: "Change Order CO-001" },
-          reason: "Wrong amount.",
-        },
-      ],
-    },
-    baseJobPlanVersion: 4,
-    currentJobPlanVersion: 4,
-    priceDeltaCents: 50000,
+    paymentImpactJson: dueBeforeAddedWorkImpact(50000),
     scopeItems: [baseScope],
     tasks: [baseTask],
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(result.classification, "INVARIANT_FAILED");
-    assert.ok(result.errors.some((error) => error.includes("does not match")));
+    assert.ok(result.errors.some((error) => error.includes("must not coexist")));
   }
 });
 
-test("payment delta rejects duplicate payment operations", () => {
+test("payment delta rejects legacy-only payment operations", () => {
   const paymentOp = {
     opId: "payment:add",
     type: "UPDATE_PAYMENT_REQUIREMENT" as const,
@@ -182,7 +186,7 @@ test("payment delta rejects duplicate payment operations", () => {
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.ok(result.errors.some((error) => error.includes("exactly one payment requirement")));
+    assert.ok(result.errors.some((error) => error.includes("Legacy execution payment ops")));
   }
 });
 
@@ -278,4 +282,34 @@ test("MODIFY_TASK scope relink is simulated in validation", () => {
     tasks: [baseTask],
   });
   assert.equal(result.ok, true);
+});
+
+test("price-impact draft allows missing paymentImpactJson when allowMissingPaymentImpactForDraft", () => {
+  const result = validateChangeOrderExecutionDelta({
+    rawDelta: addScopeWithTask,
+    baseJobPlanVersion: 4,
+    currentJobPlanVersion: 4,
+    priceDeltaCents: 25000,
+    paymentImpactJson: null,
+    allowMissingPaymentImpactForDraft: true,
+    scopeItems: [baseScope],
+    tasks: [baseTask],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("price-impact apply still requires paymentImpactJson without draft flag", () => {
+  const result = validateChangeOrderExecutionDelta({
+    rawDelta: addScopeWithTask,
+    baseJobPlanVersion: 4,
+    currentJobPlanVersion: 4,
+    priceDeltaCents: 25000,
+    paymentImpactJson: null,
+    scopeItems: [baseScope],
+    tasks: [baseTask],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.errors.join(" "), /Choose and save|approved payment terms/i);
+  }
 });

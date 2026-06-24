@@ -47,6 +47,15 @@ import { ChangeOrderHistoryList } from "@/components/jobs/change-order-history-l
 import { ChangeOrderIntentPicker } from "@/components/jobs/change-order-intent-picker";
 import { ChangeOrderReadinessPanel } from "@/components/jobs/change-order-readiness-panel";
 import { ChangeOrderExecutionImpactPanel } from "@/components/jobs/change-order-execution-impact-panel";
+import { ChangeOrderPaymentImpactCard } from "@/components/jobs/change-order-payment-impact-card";
+import {
+  buildPaymentImpactForStrategy,
+  suggestDefaultPaymentStrategy,
+} from "@/lib/change-order/payment-impact-resolver";
+import {
+  changeOrderPaymentImpactToJson,
+  type ChangeOrderPaymentImpact,
+} from "@/lib/change-order/payment-impact-schema";
 
 type WorkspacePhase = "idle" | "creating" | "updating" | "approving" | "applying";
 type DraftComposerPhase = "closed" | "intent" | "editing";
@@ -54,6 +63,7 @@ type DraftComposerPhase = "closed" | "intent" | "editing";
 function toRevisionSnapshot(
   changeOrder: LoadedChangeOrderWorkspace["changeOrders"][number],
   executionImpactOverride?: ReturnType<typeof projectChangeOrderExecutionImpact>,
+  paymentImpactJsonOverride?: unknown,
 ): ChangeOrderRevisionSnapshot {
   return {
     id: changeOrder.id,
@@ -65,6 +75,7 @@ function toRevisionSnapshot(
     baseJobPlanVersion: changeOrder.baseJobPlanVersion,
     lastApplyErrorJson: changeOrder.lastApplyErrorJson,
     customerDocumentTitle: changeOrder.customerDocumentTitle,
+    paymentImpactJson: paymentImpactJsonOverride ?? changeOrder.paymentImpactJson,
     executionImpact: executionImpactOverride ?? changeOrder.executionImpact,
   };
 }
@@ -77,13 +88,46 @@ type EditState = {
   baselineReasoning: string;
   baselineLines: ChangeOrderLineDraft[];
   baselineExecutionDeltaProposal: ChangeOrderExecutionDeltaProposal | null;
+  paymentImpactJson: unknown;
+  baselinePaymentImpactJson: unknown;
 };
+
+function resolveInitialPaymentImpactJson(
+  changeOrder: LoadedChangeOrderWorkspace["changeOrders"][number],
+  paymentRequirements: LoadedChangeOrderWorkspace["jobPaymentRequirements"],
+  jobPlanVersion: number,
+): unknown {
+  if (changeOrder.paymentImpactJson != null) {
+    return changeOrder.paymentImpactJson;
+  }
+  if (changeOrder.priceDeltaCents === 0) {
+    return null;
+  }
+  const strategy = suggestDefaultPaymentStrategy({
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    requirements: paymentRequirements,
+  });
+  const built = buildPaymentImpactForStrategy({
+    strategy,
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    requirements: paymentRequirements,
+    jobPlanVersion,
+  });
+  return built.ok ? changeOrderPaymentImpactToJson(built.impact) : null;
+}
 
 function buildEditState(
   changeOrder: LoadedChangeOrderWorkspace["changeOrders"][number],
+  paymentRequirements: LoadedChangeOrderWorkspace["jobPaymentRequirements"],
+  jobPlanVersion: number,
 ): EditState {
   const parsed = parseChangeOrderExecutionDelta(changeOrder.executionDeltaJson);
   const executionDeltaProposal = parsed.ok ? parsed.proposal : null;
+  const paymentImpactJson = resolveInitialPaymentImpactJson(
+    changeOrder,
+    paymentRequirements,
+    jobPlanVersion,
+  );
   return {
     changeOrderId: changeOrder.id,
     reasoning: changeOrder.reasoning,
@@ -92,6 +136,8 @@ function buildEditState(
     baselineReasoning: changeOrder.reasoning,
     baselineLines: changeOrder.lines,
     baselineExecutionDeltaProposal: executionDeltaProposal,
+    paymentImpactJson,
+    baselinePaymentImpactJson: changeOrder.paymentImpactJson,
   };
 }
 
@@ -110,7 +156,9 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     const focused = data.changeOrders.find(
       (changeOrder) => changeOrder.id === data.focusChangeOrderId,
     );
-    return focused ? buildEditState(focused) : null;
+    return focused
+      ? buildEditState(focused, data.jobPaymentRequirements, data.jobPlanVersion)
+      : null;
   });
   const [expectedJobPlanVersion, setExpectedJobPlanVersion] = useState(() => {
     const focused = data.changeOrders.find(
@@ -134,7 +182,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     setSelectedRevisionId(revisionId);
     const changeOrder = data.changeOrders.find((item) => item.id === revisionId);
     if (changeOrder) {
-      setEditState(buildEditState(changeOrder));
+      setEditState(buildEditState(changeOrder, data.jobPaymentRequirements, data.jobPlanVersion));
       setExpectedJobPlanVersion(changeOrder.baseJobPlanVersion ?? data.jobPlanVersion);
     } else {
       setEditState(null);
@@ -148,7 +196,11 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
         current?.changeOrderId === selectedRevisionId
           ? current
           : selectedChangeOrder
-            ? buildEditState(selectedChangeOrder)
+            ? buildEditState(
+                selectedChangeOrder,
+                data.jobPaymentRequirements,
+                data.jobPlanVersion,
+              )
             : null;
       if (!base) return current;
       return { ...base, ...patch };
@@ -192,7 +244,11 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
   ]);
 
   const selectedRevision = selectedChangeOrder
-    ? toRevisionSnapshot(selectedChangeOrder, localExecutionImpact ?? undefined)
+    ? toRevisionSnapshot(
+        selectedChangeOrder,
+        localExecutionImpact ?? undefined,
+        activeEditState?.paymentImpactJson,
+      )
     : null;
 
   const editValidation = validateChangeOrderDraftInput({
@@ -251,6 +307,8 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     baselineExecutionProposal: activeEditState?.baselineExecutionDeltaProposal,
     currentExecutionProposal: executionDeltaProposal,
     executionComposerEditable: Boolean(isExecutionEditable),
+    baselinePaymentImpactJson: activeEditState?.baselinePaymentImpactJson,
+    paymentImpactJson: activeEditState?.paymentImpactJson,
   });
 
   function resetComposer() {
@@ -354,6 +412,12 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
               reasoning: editReasoning.trim(),
               priceDeltaCents: editValidation.priceDeltaCents,
               lines: editLines,
+              paymentImpactJson:
+                editValidation.priceDeltaCents === 0
+                  ? null
+                  : activeEditState?.paymentImpactJson
+                    ? (activeEditState.paymentImpactJson as Record<string, unknown>)
+                    : undefined,
             }),
       });
       if (!result.ok) {
@@ -612,9 +676,10 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
 
               {isSelectedEditable ? (
                 <>
-                  {selectedReadiness.commercialChanged ? (
+                  {selectedReadiness.commercialChanged || selectedReadiness.paymentImpactChanged ? (
                     <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
-                      You have unsaved commercial changes. Save commercial changes before sending.
+                      {selectedReadiness.unsavedDraftChangesReason ??
+                        "You have unsaved commercial changes. Save commercial changes before sending."}
                     </div>
                   ) : null}
                   {selectedReadiness.mixedEditBlocked && selectedReadiness.mixedEditMessage ? (
@@ -648,11 +713,47 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                     preview={selectedReadiness.impact}
                     customerFacingLabel="What the customer will see"
                   />
+                  {selectedRevision.priceDeltaCents !== 0 ? (
+                    <ChangeOrderPaymentImpactCard
+                      key={selectedRevision.id}
+                      priceDeltaCents={selectedRevision.priceDeltaCents}
+                      paymentImpactJson={selectedRevision.paymentImpactJson ?? null}
+                      paymentRequirements={data.jobPaymentRequirements}
+                      jobPlanVersion={data.jobPlanVersion}
+                      editable={false}
+                      paymentImpactSaved={selectedReadiness.paymentImpactReady}
+                      paymentImpactReady={selectedReadiness.paymentImpactReady}
+                      sendBlockedReason={selectedReadiness.paymentImpactBlockReason}
+                      onChange={() => {}}
+                    />
+                  ) : null}
                 </>
               )}
 
               {editValidation.ok && isSelectedEditable ? (
                 <ChangeOrderImpactPreviewPanel preview={selectedReadiness.impact} />
+              ) : null}
+
+              {editValidation.ok ? (
+                <ChangeOrderPaymentImpactCard
+                  key={selectedRevision.id}
+                  priceDeltaCents={editValidation.priceDeltaCents}
+                  paymentImpactJson={activeEditState?.paymentImpactJson ?? null}
+                  paymentRequirements={data.jobPaymentRequirements}
+                  jobPlanVersion={data.jobPlanVersion}
+                  editable={isSelectedEditable}
+                  paymentImpactSaved={
+                    !selectedReadiness.paymentImpactChanged && selectedReadiness.paymentImpactReady
+                  }
+                  paymentImpactChanged={selectedReadiness.paymentImpactChanged}
+                  paymentImpactReady={selectedReadiness.paymentImpactReady}
+                  sendBlockedReason={selectedReadiness.paymentImpactBlockReason}
+                  onChange={(impact: ChangeOrderPaymentImpact | null) => {
+                    updateEditState({
+                      paymentImpactJson: impact ? changeOrderPaymentImpactToJson(impact) : null,
+                    });
+                  }}
+                />
               ) : null}
 
               <div className="flex flex-wrap gap-2">

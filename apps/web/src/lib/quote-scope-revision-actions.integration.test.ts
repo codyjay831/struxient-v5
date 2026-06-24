@@ -136,7 +136,7 @@ test("integration: payment-impact guard failures for non-zero delta", () => {
     hasApprovedPaymentImpactOperationInTx: false,
   });
   assert.equal(payment.ok, false);
-  assert.ok(payment.error?.includes("payment requirement"));
+  assert.ok(payment.error?.includes("Approved payment terms"));
 });
 
 test("integration: successful zero-dollar apply guard path", () => {

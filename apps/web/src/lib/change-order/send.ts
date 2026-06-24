@@ -14,6 +14,8 @@ import {
   type ChangeOrderCheckpointSnapshotWire,
   type ChangeOrderCheckpointStaffOnlyWire,
 } from "@/lib/change-order-checkpoint-snapshot";
+import { assertPaymentImpactReadyForSend } from "@/lib/change-order/payment-impact-gates";
+import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 import { notifyChangeOrderSent } from "@/lib/notifications";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
@@ -54,8 +56,20 @@ export async function captureChangeOrderSendCheckpoint(
     throw new Error("CHANGE_ORDER_SEND_CHECKPOINT_RACE");
   }
 
+  const paymentGate = assertPaymentImpactReadyForSend({
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+  });
+  if (!paymentGate.ok) {
+    throw new Error("CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED");
+  }
+
   const document = changeOrderRowToCustomerPreviewDocument(changeOrder, organizationName);
-  const snapshotWire = serializeChangeOrderPreviewDocumentForCheckpoint(document);
+  const parsedPaymentImpact = parseChangeOrderPaymentImpact(changeOrder.paymentImpactJson);
+  const snapshotWire = serializeChangeOrderPreviewDocumentForCheckpoint(
+    document,
+    parsedPaymentImpact.ok ? parsedPaymentImpact.impact : null,
+  );
 
   const aggregate = await tx.changeOrderCheckpoint.aggregate({
     where: {
@@ -215,6 +229,13 @@ export async function sendChangeOrder(
       }
       if (e.message === "CHANGE_ORDER_SEND_STATUS_RACE") {
         return { ok: false, error: "This Change Order could not be marked sent. Refresh and try again." };
+      }
+      if (e.message === "CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED") {
+        return {
+          ok: false,
+          error:
+            "Choose and save payment terms in the commercial column before sending this Change Order.",
+        };
       }
     }
     return { ok: false, error: "An unexpected error occurred while sending the Change Order." };

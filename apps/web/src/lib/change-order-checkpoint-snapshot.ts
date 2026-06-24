@@ -4,11 +4,14 @@ import {
   buildCustomerChangeOrderDocument,
   type ChangeOrderCustomerPreviewDocument,
 } from "@/lib/change-order-customer-projection";
+import type { ChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 
 export const CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION = 1;
 
 export type ChangeOrderCheckpointSnapshotWire = {
   document: ChangeOrderCustomerPreviewDocument;
+  paymentImpact?: ChangeOrderPaymentImpact;
 };
 
 export type ChangeOrderCheckpointStaffOnlyWire = {
@@ -28,6 +31,7 @@ export const changeOrderSelectForCustomerCheckpoint = {
   customerDocumentTitle: true,
   reasoning: true,
   updatedAt: true,
+  paymentImpactJson: true,
   quote: {
     select: {
       id: true,
@@ -73,6 +77,9 @@ export function changeOrderRowToCustomerPreviewDocument(
   row: ChangeOrderCheckpointSelectRow,
   organizationDisplayName: string,
 ): ChangeOrderCustomerPreviewDocument {
+  const parsedPaymentImpact = parseChangeOrderPaymentImpact(row.paymentImpactJson);
+  const paymentImpact = parsedPaymentImpact.ok ? parsedPaymentImpact.impact : null;
+
   const { document } = buildCustomerChangeOrderDocument(
     {
       quoteTitle: row.quote.title,
@@ -104,16 +111,28 @@ export function changeOrderRowToCustomerPreviewDocument(
         anchorType: item.anchorType,
         anchorStageName: item.anchorStage?.name ?? null,
       })),
+      paymentImpact,
     },
     { organizationDisplayName },
   );
   return document;
 }
 
+export function buildChangeOrderCheckpointSnapshotWire(params: {
+  document: ChangeOrderCustomerPreviewDocument;
+  paymentImpact?: ChangeOrderPaymentImpact | null;
+}): ChangeOrderCheckpointSnapshotWire {
+  return {
+    document: params.document,
+    ...(params.paymentImpact ? { paymentImpact: params.paymentImpact } : {}),
+  };
+}
+
 export function serializeChangeOrderPreviewDocumentForCheckpoint(
   document: ChangeOrderCustomerPreviewDocument,
+  paymentImpact?: ChangeOrderPaymentImpact | null,
 ): ChangeOrderCheckpointSnapshotWire {
-  return { document };
+  return buildChangeOrderCheckpointSnapshotWire({ document, paymentImpact });
 }
 
 export function parseChangeOrderCheckpointSnapshot(snapshotJson: unknown): ChangeOrderCheckpointSnapshotWire | null {

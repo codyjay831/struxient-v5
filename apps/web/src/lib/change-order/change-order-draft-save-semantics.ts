@@ -12,12 +12,16 @@ export const UNSAVED_EXECUTION_IMPACT_BANNER =
 export function getUnsavedDraftChangesReason(input: {
   commercialChanged: boolean;
   executionChanged: boolean;
+  paymentImpactChanged?: boolean;
 }): string | null {
   if (input.commercialChanged && input.executionChanged) {
     return MIXED_DRAFT_SAVE_BLOCKED_MESSAGE;
   }
   if (input.commercialChanged) {
     return "Save commercial changes before sending.";
+  }
+  if (input.paymentImpactChanged) {
+    return "Save payment impact before sending.";
   }
   if (input.executionChanged) {
     return "Save execution impact before sending.";
@@ -122,7 +126,7 @@ export function deriveChangeOrderOfficeNextStep(input: {
     case "ACCEPTED_NEEDS_EXECUTION_REVIEW":
       return "The job plan changed — review work impact before applying.";
     case "APPLY_FAILED":
-      return "Review the failure summary and work impact before retrying apply.";
+      return "Review the apply failure summary. If job payments changed after acceptance, update payment terms in the commercial column, save, then retry.";
     case "APPLIED":
       return "No action required — this Change Order is applied.";
   }

@@ -19,7 +19,9 @@ export type ScopeRevisionApplyTask = {
 
 export type ScopeRevisionApplyGuardInput = {
   priceDeltaCents: number;
-  hasApprovedPaymentImpactOperationInTx: boolean;
+  hasApprovedPaymentImpactOperationInTx?: boolean;
+  hasValidPaymentImpactForApply?: boolean;
+  skipPaymentImpactRequirement?: boolean;
   scopeItems: ScopeRevisionApplyScopeItem[];
   tasks: ScopeRevisionApplyTask[];
 };
@@ -39,7 +41,9 @@ export function validateScopeRevisionApplyGuards(
 
   const paymentCheck = validateScopeRevisionPaymentImpact({
     priceDeltaCents: input.priceDeltaCents,
-    hasApprovedPaymentImpactOperationInTx: input.hasApprovedPaymentImpactOperationInTx,
+    hasApprovedPaymentImpactOperationInTx: input.hasApprovedPaymentImpactOperationInTx ?? false,
+    hasValidPaymentImpactForApply: input.hasValidPaymentImpactForApply ?? false,
+    skipPaymentImpactRequirement: input.skipPaymentImpactRequirement ?? false,
   });
   if (!paymentCheck.ok && paymentCheck.error) {
     errors.push(paymentCheck.error);

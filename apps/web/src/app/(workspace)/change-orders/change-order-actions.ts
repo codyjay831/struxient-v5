@@ -91,6 +91,9 @@ export async function sendChangeOrderAction(
   const deltaReady = await validateStoredExecutionDeltaForChangeOrder(id, session.organizationId);
   if (!deltaReady.ok) return { ok: false, error: deltaReady.error };
 
+  const paymentReady = await validateStoredPaymentImpactForChangeOrder(id, session.organizationId);
+  if (!paymentReady.ok) return { ok: false, error: paymentReady.error };
+
   const sent = await sendChangeOrder(id, options);
   if (!sent.ok) {
     return { ok: false, error: sent.error ?? "Failed to send Change Order." };

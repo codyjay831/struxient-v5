@@ -15,6 +15,17 @@ import {
 import { db } from "@/lib/db";
 import { DEV_ORGANIZATION_ID } from "@/lib/dev-organization";
 import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
+import {
+  JobPaymentRequirementStatus,
+  PaymentScheduleAnchorType,
+} from "@prisma/client";
+import {
+  changeOrderPaymentImpactToJson,
+  type ChangeOrderPaymentImpact,
+} from "@/lib/change-order/payment-impact-schema";
+import {
+  buildPaymentImpactForStrategy,
+} from "@/lib/change-order/payment-impact-resolver";
 
 export const OFFICE_ACTOR = {
   userId: "dev-user-id",
@@ -208,6 +219,9 @@ export async function cleanupChangeOrderJobFixture(fixture: ChangeOrderJobFixtur
   await db.jobPaymentRequirement.deleteMany({
     where: { organizationId: DEV_ORGANIZATION_ID, jobId: fixture.jobId },
   });
+  await db.paymentScheduleItem.deleteMany({
+    where: { quoteId: fixture.quoteId },
+  });
   await db.jobTaskScope.deleteMany({
     where: { organizationId: DEV_ORGANIZATION_ID, jobTask: { jobId: fixture.jobId } },
   });
@@ -227,6 +241,169 @@ export function buildAddLine(description = "Battery backup") {
     priceDeltaCents: 0,
     executionRelevant: true,
   };
+}
+
+export function buildDueBeforeAddedWorkPaymentImpactJson(
+  priceDeltaCents: number,
+): Record<string, unknown> {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "DUE_BEFORE_ADDED_WORK",
+    priceDeltaCents,
+    requirements: [],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson(built.impact);
+}
+
+export function buildDueBeforeAddedWorkPaymentImpact(
+  priceDeltaCents: number,
+): ChangeOrderPaymentImpact {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "DUE_BEFORE_ADDED_WORK",
+    priceDeltaCents,
+    requirements: [],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return built.impact;
+}
+
+export async function seedJobPaymentRequirements(fixture: ChangeOrderJobFixture) {
+  const depositSchedule = await db.paymentScheduleItem.create({
+    data: {
+      quoteId: fixture.quoteId,
+      title: "Deposit",
+      amountCents: 50_000,
+      sortOrder: 0,
+      anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+    },
+  });
+  const finalSchedule = await db.paymentScheduleItem.create({
+    data: {
+      quoteId: fixture.quoteId,
+      title: "Final Balance",
+      amountCents: 50_000,
+      sortOrder: 1,
+      anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+    },
+  });
+  const depositRequirement = await db.jobPaymentRequirement.create({
+    data: {
+      organizationId: DEV_ORGANIZATION_ID,
+      jobId: fixture.jobId,
+      title: "Deposit",
+      amountCents: 50_000,
+      status: JobPaymentRequirementStatus.PENDING,
+      sourcePaymentScheduleItemId: depositSchedule.id,
+    },
+    select: { id: true, title: true, amountCents: true },
+  });
+  const finalRequirement = await db.jobPaymentRequirement.create({
+    data: {
+      organizationId: DEV_ORGANIZATION_ID,
+      jobId: fixture.jobId,
+      title: "Final Balance",
+      amountCents: 50_000,
+      status: JobPaymentRequirementStatus.PENDING,
+      sourcePaymentScheduleItemId: finalSchedule.id,
+    },
+    select: { id: true, title: true, amountCents: true },
+  });
+  return { depositRequirement, finalRequirement };
+}
+
+export function buildAddToFinalPaymentImpactJson(params: {
+  priceDeltaCents: number;
+  targetPaymentRequirementId: string;
+}): Record<string, unknown> {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "ADD_TO_FINAL_PAYMENT",
+    priceDeltaCents: params.priceDeltaCents,
+    requirements: [
+      {
+        id: params.targetPaymentRequirementId,
+        title: "Final Balance",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: "schedule-final",
+        scheduleSortOrder: 1,
+        anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+        createdAt: new Date(),
+      },
+    ],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson({
+    ...built.impact,
+    targetPaymentRequirementId: params.targetPaymentRequirementId,
+    resolvedPreview: {
+      ...built.impact.resolvedPreview,
+      targetPaymentRequirementId: params.targetPaymentRequirementId,
+    },
+  });
+}
+
+export function buildAddToNextPaymentImpactJson(params: {
+  priceDeltaCents: number;
+  targetPaymentRequirementId: string;
+}): Record<string, unknown> {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "ADD_TO_NEXT_UNPAID_PAYMENT",
+    priceDeltaCents: params.priceDeltaCents,
+    requirements: [
+      {
+        id: params.targetPaymentRequirementId,
+        title: "Deposit",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: "schedule-deposit",
+        scheduleSortOrder: 0,
+        anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+        createdAt: new Date(),
+      },
+    ],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson({
+    ...built.impact,
+    targetPaymentRequirementId: params.targetPaymentRequirementId,
+    resolvedPreview: {
+      ...built.impact.resolvedPreview,
+      targetPaymentRequirementId: params.targetPaymentRequirementId,
+    },
+  });
+}
+
+export function buildCreditPaymentImpactJson(params: {
+  priceDeltaCents: number;
+}): Record<string, unknown> {
+  const built = buildPaymentImpactForStrategy({
+    strategy: "CREDIT_REMAINING_BALANCE",
+    priceDeltaCents: params.priceDeltaCents,
+    requirements: [
+      {
+        id: "final-req",
+        title: "Final Balance",
+        amountCents: 50_000,
+        status: JobPaymentRequirementStatus.PENDING,
+        sourcePaymentScheduleItemId: null,
+        scheduleSortOrder: 1,
+        anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+        createdAt: new Date(),
+      },
+    ],
+  });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+  return changeOrderPaymentImpactToJson(built.impact);
 }
 
 export async function markChangeOrderSent(changeOrderId: string) {

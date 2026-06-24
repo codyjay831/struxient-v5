@@ -39,6 +39,7 @@ export default async function PublicChangeOrderPage({
           customerDocumentTitle: true,
           reasoning: true,
           updatedAt: true,
+          paymentImpactJson: true,
           quote: {
             select: {
               id: true,

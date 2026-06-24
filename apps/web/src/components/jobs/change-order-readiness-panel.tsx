@@ -152,7 +152,7 @@ export function ChangeOrderReadinessPanel({
             <p className="font-medium">
               Apply failed
               {readiness.applyErrorSummary.classification
-                ? ` (${readiness.applyErrorSummary.classification})`
+                ? ` (${readiness.applyErrorSummary.classification.replaceAll("_", " ").toLowerCase()})`
                 : ""}
             </p>
             <ul className="mt-2 list-disc pl-5">
@@ -160,6 +160,14 @@ export function ChangeOrderReadinessPanel({
                 <li key={message}>{message}</li>
               ))}
             </ul>
+            {readiness.storedPaymentTermsText ? (
+              <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-foreground">
+                <p className="text-xs font-medium text-foreground-muted">
+                  Customer-approved payment terms (still on file)
+                </p>
+                <p className="mt-1 text-sm">{readiness.storedPaymentTermsText}</p>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

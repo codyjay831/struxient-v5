@@ -35,6 +35,7 @@ export function buildDefaultExecutionDeltaFromChangeOrderLines(params: {
   priceDeltaCents: number;
   reasoning: string;
   lines: ChangeOrderLineForExecutionDelta[];
+  skipLegacyPaymentOperation?: boolean;
 }): ChangeOrderExecutionDeltaProposal {
   const operations: ChangeOrderExecutionDeltaOperation[] = [];
 
@@ -123,7 +124,8 @@ export function buildDefaultExecutionDeltaFromChangeOrderLines(params: {
     });
   }
 
-  if (params.priceDeltaCents !== 0) {
+  if (params.priceDeltaCents !== 0 && !params.skipLegacyPaymentOperation) {
+    // Legacy apply-only payment op — customer-approved strategy lives in paymentImpactJson (Pass 2 materializer).
     operations.push({
       opId: `payment:${params.changeOrderId ?? "draft"}`,
       type: "UPDATE_PAYMENT_REQUIREMENT",

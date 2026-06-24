@@ -793,13 +793,20 @@ export function ChangeOrderExecutionImpactPanel({
       {impact.paymentImpact ? (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-            Payment requirement impact
+            Legacy payment instruction (deprecated)
           </h4>
-          <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm">
-            <p className="font-medium text-foreground">{impact.paymentImpact.title}</p>
+          <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-3 text-sm">
+            <p className="font-medium text-foreground">
+              This Change Order still has an old internal payment instruction. It is not the
+              customer-approved payment plan.
+            </p>
             <p className="mt-1 text-foreground-muted">{impact.paymentImpact.reason}</p>
             <p className="mt-2 font-semibold text-foreground">
               {formatCents(impact.paymentImpact.amountCents)}
+            </p>
+            <p className="mt-2 text-xs text-foreground-muted">
+              Set payment terms in the commercial column. Approved payment terms are used on apply;
+              this legacy instruction is not the normal payment path.
             </p>
           </div>
         </div>

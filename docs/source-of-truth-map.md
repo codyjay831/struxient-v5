@@ -149,7 +149,7 @@
 
 ## Change orders (post-activation)
 
-> **Canon:** [change-order-canon.md](./canon/change-order-canon.md) · **Schema proposal:** [change-order-execution-delta-schema-proposal.md](./plans/change-order-execution-delta-schema-proposal.md)
+> **Canon:** [change-order-canon.md](./canon/change-order-canon.md) · **Schema proposals:** [change-order-execution-delta-schema-proposal.md](./plans/change-order-execution-delta-schema-proposal.md) · [change-order-payment-impact-schema-proposal.md](./plans/change-order-payment-impact-schema-proposal.md)
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|---------------------|
@@ -163,7 +163,10 @@
 | Execution plan revision (CO apply) | **Stored** | `ExecutionPlanRevision` linked to `changeOrderId` | Post-apply-only audit without proposed delta |
 | CO apply validation | **Derived at write** | `execution-delta-validation.ts` (Pass 2 target) | Duplicate coverage/orphan logic in UI |
 | CO impact preview | **Derived** | `change-order-flow.ts` + delta validator | Quote-plan preview reused for job deltas |
-| Apply guards (coverage/payment) | **Derived at write** | `validateScopeRevisionApplyGuards`, `validateScopeRevisionPaymentImpact` | Apply without payment or coverage invariants |
+| Apply guards (coverage/payment) | **Derived at write** | `validateScopeRevisionApplyGuards`, `validateScopeRevisionPaymentImpact` (transitional); **`payment-impact-schema.ts` + materializer** (Pass 1 target) | Apply without payment or coverage invariants |
+| CO payment strategy & customer terms | **Stored** | `ChangeOrder.paymentImpactJson` + ACCEPTANCE checkpoint snapshot | Payment terms only in execution delta; orphan PENDING CO payment rows |
+| CO payment materialization | **Stored writes at apply** | `payment-impact-materialize.ts` (Pass 1) → `JobPaymentRequirement` | Duplicate standalone row + milestone bump |
+| CO payment due-ness (due-before-work) | **Stored fact + derived** | `JobPaymentRequirement.status = DUE` + optional stage gate; `isPaymentEffectivelyDue()` | Manual orphan PENDING rows never surfacing |
 
 ## Jobs, issues, recovery
 
@@ -220,3 +223,4 @@
 *Updated 2026-06-19 — Added issue coordination boundary: `BLOCKS_WORK` remediation remains `JobIssue` + `JobRecoveryFlow` + recovery `JobTask` rows; ordinary tasks may coordinate but cannot clear blockers or replace recovery/resume semantics.*  
 *Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*  
 *Updated 2026-06-24 — Change Order execution delta SoT rows (canon Pass 1; schema proposal pending approval).*
+*Updated 2026-06-24 — Change Order payment strategy SoT rows (canon Pass 0 payment; `paymentImpactJson` schema proposal).*

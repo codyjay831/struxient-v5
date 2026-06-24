@@ -18,6 +18,8 @@ import {
   changeOrderSelectForCustomerCheckpoint,
   serializeChangeOrderPreviewDocumentForCheckpoint,
 } from "@/lib/change-order-checkpoint-snapshot";
+import { assertPaymentImpactReadyForAccept } from "@/lib/change-order/payment-impact-gates";
+import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -138,6 +140,7 @@ export async function acceptChangeOrderFromTokenAction(
               jobId: true,
               baseJobPlanVersion: true,
               executionDeltaJson: true,
+              paymentImpactJson: true,
               priceDeltaCents: true,
               job: {
                 select: {
@@ -205,11 +208,23 @@ export async function acceptChangeOrderFromTokenAction(
         throw new Error("CHANGE_ORDER_DELTA_INVALID");
       }
 
+      const paymentGate = assertPaymentImpactReadyForAccept({
+        priceDeltaCents: changeOrder.priceDeltaCents,
+        paymentImpactJson: changeOrder.paymentImpactJson,
+      });
+      if (!paymentGate.ok) {
+        throw new Error("CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED");
+      }
+
       const document = changeOrderRowToCustomerPreviewDocument(
         changeOrder,
         changeOrder.organization.name,
       );
-      const snapshotWire = serializeChangeOrderPreviewDocumentForCheckpoint(document);
+      const parsedPaymentImpact = parseChangeOrderPaymentImpact(changeOrder.paymentImpactJson);
+      const snapshotWire = serializeChangeOrderPreviewDocumentForCheckpoint(
+        document,
+        parsedPaymentImpact.ok ? parsedPaymentImpact.impact : null,
+      );
 
       const aggregate = await tx.changeOrderCheckpoint.aggregate({
         where: {
@@ -324,6 +339,12 @@ export async function acceptChangeOrderFromTokenAction(
       }
       if (e.message === "CHANGE_ORDER_DELTA_INVALID") {
         return { error: "This Change Order needs office review before it can be accepted." };
+      }
+      if (e.message === "CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED") {
+        return {
+          error:
+            "This Change Order is missing payment terms. Please contact the company to resend an updated Change Order.",
+        };
       }
     }
     return { error: "An unexpected error occurred. Please try again later." };

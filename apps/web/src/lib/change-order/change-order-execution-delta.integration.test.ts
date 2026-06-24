@@ -8,6 +8,7 @@ import {
   ChangeOrderApplicationStatus,
   ChangeOrderCheckpointKind,
   ChangeOrderStatus,
+  JobPaymentRequirementStatus,
   JobTaskStatus,
   StaffRole,
 } from "@prisma/client";
@@ -17,12 +18,19 @@ import {
   createChangeOrderDraftWithActor,
   markChangeOrderAcceptedWithActor,
   updateChangeOrderDraftWithActor,
+  validateStoredExecutionDeltaForChangeOrder,
+  validateStoredPaymentImpactForChangeOrder,
 } from "@/lib/change-order/change-order-lifecycle";
 import { changeOrderExecutionDeltaToJson } from "@/lib/change-order/execution-delta-schema";
+import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
 import { applyChangeOrderExecutionDeltaInTx } from "@/lib/change-order/execution-delta-apply";
 import type { ChangeOrderExecutionDeltaProposal } from "@/lib/change-order/execution-delta-schema";
 import {
   buildAddLine,
+  buildAddToFinalPaymentImpactJson,
+  buildAddToNextPaymentImpactJson,
+  buildCreditPaymentImpactJson,
+  buildDueBeforeAddedWorkPaymentImpactJson,
   cleanupChangeOrderJobFixture,
   countActiveScopeItems,
   countActiveTasks,
@@ -31,17 +39,23 @@ import {
   markChangeOrderSent,
   OFFICE_ACTOR,
   requireDevOrgForIntegrationTest,
+  seedJobPaymentRequirements,
 } from "@/lib/change-order/change-order-test-fixture";
 import { requestChangeOrderChangesForShareToken } from "@/lib/change-order/change-order-portal";
+import {
+  buildPaymentDueContextFromJob,
+  getUnsettledEffectivelyDueRequirements,
+  isPaymentEffectivelyDue,
+} from "@/lib/job-payment-readiness";
 
 const FIELD_ACTOR = { ...OFFICE_ACTOR, role: StaffRole.FIELD };
 const VIEWER_ACTOR = { ...OFFICE_ACTOR, role: StaffRole.VIEWER };
 
-test("integration: price-impact DRAFT staff accept is rejected", async (t) => {
+test("integration: price-impact draft without payment strategy can persist; send/accept gated", async (t) => {
   if (!(await requireDevOrgForIntegrationTest(t))) {
     return;
   }
-  const fixture = await createChangeOrderJobFixture("price-draft-reject");
+  const fixture = await createChangeOrderJobFixture("price-draft-no-payment");
   try {
     const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
       quoteId: fixture.quoteId,
@@ -53,11 +67,21 @@ test("integration: price-impact DRAFT staff accept is rejected", async (t) => {
     assert.equal(created.ok, true);
     if (!created.ok) return;
 
-    const accepted = await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
-    assert.equal(accepted.ok, false);
-    if (!accepted.ok) {
-      assert.match(accepted.error, /sent to the customer/i);
-    }
+    const deltaReady = await validateStoredExecutionDeltaForChangeOrder(
+      created.changeOrderId,
+      OFFICE_ACTOR.organizationId,
+    );
+    assert.equal(deltaReady.ok, true);
+
+    const paymentReady = await validateStoredPaymentImpactForChangeOrder(
+      created.changeOrderId,
+      OFFICE_ACTOR.organizationId,
+    );
+    assert.equal(paymentReady.ok, false);
+    assert.match(
+      paymentReady.ok ? "" : paymentReady.error,
+      /choose and save|payment strategy|payment terms/i,
+    );
   } finally {
     await cleanupChangeOrderJobFixture(fixture);
   }
@@ -99,6 +123,44 @@ test("integration: zero-dollar internal accept from DRAFT works", async (t) => {
   }
 });
 
+test("integration: price-impact CO rejects accept without payment impact", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("price-no-payment");
+  try {
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Paid add",
+      priceDeltaCents: 0,
+      lines: [buildAddLine("Paid add")],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await db.changeOrder.update({
+      where: { id: created.changeOrderId },
+      data: {
+        priceDeltaCents: 25000,
+        paymentImpactJson: null,
+      },
+    });
+
+    await markChangeOrderSent(created.changeOrderId);
+    const paymentReady = await validateStoredPaymentImpactForChangeOrder(
+      created.changeOrderId,
+      OFFICE_ACTOR.organizationId,
+    );
+    assert.equal(paymentReady.ok, false);
+
+    const accepted = await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(accepted.ok, false);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
 test("integration: price-impact SENT staff accept works and enables apply", async (t) => {
   if (!(await requireDevOrgForIntegrationTest(t))) {
     return;
@@ -111,6 +173,7 @@ test("integration: price-impact SENT staff accept works and enables apply", asyn
       reasoning: "Paid add",
       priceDeltaCents: 15000,
       lines: [{ ...buildAddLine("Paid panel"), priceDeltaCents: 15000 }],
+      paymentImpactJson: buildDueBeforeAddedWorkPaymentImpactJson(15000),
     });
     assert.equal(created.ok, true);
     if (!created.ok) return;
@@ -124,6 +187,440 @@ test("integration: price-impact SENT staff accept works and enables apply", asyn
     if (applied.ok) {
       assert.equal(applied.resultingJobPlanVersion, fixture.jobPlanVersion + 1);
     }
+
+    const coPayments = await db.jobPaymentRequirement.findMany({
+      where: {
+        organizationId: OFFICE_ACTOR.organizationId,
+        sourceChangeOrderId: created.changeOrderId,
+      },
+    });
+    assert.equal(coPayments.length, 1);
+    assert.equal(coPayments[0]?.status, JobPaymentRequirementStatus.DUE);
+    assert.equal(coPayments[0]?.amountCents, 15000);
+    assert.match(coPayments[0]?.title ?? "", /CO-/);
+    assert.equal(coPayments[0]?.sourcePaymentScheduleItemId, null);
+
+    const job = await db.job.findUniqueOrThrow({
+      where: { id: fixture.jobId },
+      select: {
+        status: true,
+        stages: {
+          select: {
+            id: true,
+            sortOrder: true,
+            stageId: true,
+            tasks: { select: { status: true, recoveryFlowId: true } },
+          },
+        },
+        paymentRequirements: {
+          select: {
+            id: true,
+            title: true,
+            amountCents: true,
+            status: true,
+            sourcePaymentScheduleItemId: true,
+            requiredBeforeStageId: true,
+          },
+        },
+      },
+    });
+    const paymentCtx = buildPaymentDueContextFromJob({
+      ...job,
+      paymentRequirements: job.paymentRequirements.map((req) => ({
+        ...req,
+        sourcePaymentScheduleItem: null,
+      })),
+    });
+    assert.equal(
+      isPaymentEffectivelyDue(
+        {
+          id: coPayments[0]!.id,
+          title: coPayments[0]!.title,
+          amountCents: coPayments[0]!.amountCents,
+          status: coPayments[0]!.status,
+          sourcePaymentScheduleItemId: null,
+          requiredBeforeStageId: null,
+          sourcePaymentScheduleItem: null,
+        },
+        paymentCtx,
+      ),
+      true,
+    );
+    const dueRequirements = getUnsettledEffectivelyDueRequirements(
+      job.paymentRequirements.map((req) => ({
+        ...req,
+        sourcePaymentScheduleItem: null,
+      })),
+      paymentCtx,
+    );
+    assert.ok(dueRequirements.some((req) => req.id === coPayments[0]?.id));
+
+    const storedDelta = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { executionDeltaJson: true },
+    });
+    assert.doesNotMatch(JSON.stringify(storedDelta?.executionDeltaJson), /UPDATE_PAYMENT_REQUIREMENT/);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: apply increases next unpaid payment without duplicate CO row", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("add-to-next-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Add to deposit",
+      priceDeltaCents: 10_000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 10_000 }],
+      paymentImpactJson: buildAddToNextPaymentImpactJson({
+        priceDeltaCents: 10_000,
+        targetPaymentRequirementId: payments.depositRequirement.id,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, 60_000);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: credit strategy reduces final payment first", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("credit-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Credit scope reduction",
+      priceDeltaCents: -20_000,
+      lines: [{ ...buildAddLine("Credit line"), priceDeltaCents: -20_000 }],
+      paymentImpactJson: buildCreditPaymentImpactJson({ priceDeltaCents: -20_000 }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(final?.amountCents, 30_000);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: apply increases final payment only for ADD_TO_FINAL strategy", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("add-to-final-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Add to final",
+      priceDeltaCents: 8000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 8000 }],
+      paymentImpactJson: buildAddToFinalPaymentImpactJson({
+        priceDeltaCents: 8000,
+        targetPaymentRequirementId: payments.finalRequirement.id,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, 50_000);
+    assert.equal(final?.amountCents, 58_000);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: settled payment requirements are not mutated on apply", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("settled-target-guard");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    await db.jobPaymentRequirement.update({
+      where: { id: payments.depositRequirement.id },
+      data: { status: JobPaymentRequirementStatus.PAID },
+    });
+
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Add to paid deposit",
+      priceDeltaCents: 5000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 5000 }],
+      paymentImpactJson: buildAddToNextPaymentImpactJson({
+        priceDeltaCents: 5000,
+        targetPaymentRequirementId: payments.depositRequirement.id,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const scopeBefore = await countActiveScopeItems(fixture.jobId);
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true, status: true },
+    });
+    assert.equal(deposit?.amountCents, 50_000);
+    assert.equal(deposit?.status, JobPaymentRequirementStatus.PAID);
+    assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: payment materialization failure rolls back scope mutations", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("payment-rollback");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Stale target",
+      priceDeltaCents: 5000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 5000 }],
+      paymentImpactJson: buildAddToNextPaymentImpactJson({
+        priceDeltaCents: 5000,
+        targetPaymentRequirementId: payments.depositRequirement.id,
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    await db.jobPaymentRequirement.update({
+      where: { id: payments.depositRequirement.id },
+      data: { status: JobPaymentRequirementStatus.WAIVED },
+    });
+
+    const scopeBefore = await countActiveScopeItems(fixture.jobId);
+    const tasksBefore = await countActiveTasks(fixture.jobId);
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+    assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+    assert.equal(await countActiveTasks(fixture.jobId), tasksBefore);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: legacy payment op with paymentImpactJson is rejected at apply", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("double-count-guard");
+  try {
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Dual payment paths",
+      priceDeltaCents: 9000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 9000 }],
+      paymentImpactJson: buildDueBeforeAddedWorkPaymentImpactJson(9000),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    const stored = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { executionDeltaJson: true },
+    });
+    const delta = stored?.executionDeltaJson as { operations?: { type?: string }[] };
+    assert.ok(delta?.operations?.every((op) => op.type !== "UPDATE_PAYMENT_REQUIREMENT"));
+
+    await db.changeOrder.update({
+      where: { id: created.changeOrderId },
+      data: {
+        executionDeltaJson: {
+          ...(stored?.executionDeltaJson as object),
+          operations: [
+            ...(((stored?.executionDeltaJson as { operations?: unknown[] })?.operations ?? []) as unknown[]),
+            {
+              opId: "legacy:payment",
+              type: "UPDATE_PAYMENT_REQUIREMENT",
+              targetEntityType: "JobPaymentRequirement",
+              payload: { amountDeltaCents: 9000 },
+              reason: "Legacy duplicate",
+            },
+          ],
+        },
+        status: ChangeOrderStatus.ACCEPTED,
+        applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
+      },
+    });
+    await db.changeOrderCheckpoint.create({
+      data: {
+        organizationId: OFFICE_ACTOR.organizationId,
+        changeOrderId: created.changeOrderId,
+        kind: ChangeOrderCheckpointKind.ACCEPTANCE,
+        source: "STAFF",
+        sequence: 1,
+        schemaVersion: 1,
+        snapshotJson: {},
+        changeOrderUpdatedAtAtCapture: new Date(),
+      },
+    });
+
+    const scopeBefore = await countActiveScopeItems(fixture.jobId);
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+    assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+
+    const coPayments = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coPayments, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: legacy-only price CO cannot apply without paymentImpactJson", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("legacy-no-payment-impact");
+  try {
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Legacy paid add",
+      priceDeltaCents: 0,
+      lines: [buildAddLine("Legacy paid")],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    const line = await db.changeOrderLine.findFirst({
+      where: { changeOrderId: created.changeOrderId },
+      select: {
+        id: true,
+        operation: true,
+        sourceJobScopeItemId: true,
+        description: true,
+        quantity: true,
+        unitPriceCents: true,
+        priceDeltaCents: true,
+        executionRelevant: true,
+      },
+    });
+    assert.ok(line);
+
+    const legacyDelta = buildDefaultExecutionDeltaFromChangeOrderLines({
+      baseJobPlanVersion: fixture.jobPlanVersion,
+      changeOrderId: created.changeOrderId,
+      number: 1,
+      priceDeltaCents: 12_000,
+      reasoning: "Legacy paid add",
+      lines: [{ ...line, priceDeltaCents: 12_000 }],
+      skipLegacyPaymentOperation: false,
+    });
+
+    await db.changeOrder.update({
+      where: { id: created.changeOrderId },
+      data: {
+        priceDeltaCents: 12_000,
+        paymentImpactJson: null,
+        status: ChangeOrderStatus.ACCEPTED,
+        applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
+        executionDeltaJson: changeOrderExecutionDeltaToJson(legacyDelta),
+      },
+    });
+    await db.changeOrderCheckpoint.create({
+      data: {
+        organizationId: OFFICE_ACTOR.organizationId,
+        changeOrderId: created.changeOrderId,
+        kind: ChangeOrderCheckpointKind.ACCEPTANCE,
+        source: "STAFF",
+        sequence: 1,
+        schemaVersion: 1,
+        snapshotJson: {},
+        changeOrderUpdatedAtAtCapture: new Date(),
+      },
+    });
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+
+    const row = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { applicationStatus: true },
+    });
+    assert.equal(row?.applicationStatus, ChangeOrderApplicationStatus.APPLY_FAILED);
   } finally {
     await cleanupChangeOrderJobFixture(fixture);
   }
@@ -319,7 +816,8 @@ test("integration: concurrent apply only succeeds once", async (t) => {
       return created.changeOrderId;
     };
 
-    const [coA, coB] = await Promise.all([createAccepted("CO A"), createAccepted("CO B")]);
+    const coA = await createAccepted("CO A");
+    const coB = await createAccepted("CO B");
     const [resultA, resultB] = await Promise.all([
       applyChangeOrderWithActor(OFFICE_ACTOR, coA),
       applyChangeOrderWithActor(OFFICE_ACTOR, coB),

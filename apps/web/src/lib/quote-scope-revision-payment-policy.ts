@@ -20,10 +20,20 @@ export type ScopeRevisionPaymentImpactValidation = {
  */
 export function validateScopeRevisionPaymentImpact(params: {
   priceDeltaCents: number;
-  hasApprovedPaymentImpactOperationInTx: boolean;
+  hasApprovedPaymentImpactOperationInTx?: boolean;
+  hasValidPaymentImpactForApply?: boolean;
+  skipPaymentImpactRequirement?: boolean;
 }): ScopeRevisionPaymentImpactValidation {
-  const { priceDeltaCents, hasApprovedPaymentImpactOperationInTx } = params;
-  if (priceDeltaCents === 0) {
+  const {
+    priceDeltaCents,
+    hasApprovedPaymentImpactOperationInTx = false,
+    hasValidPaymentImpactForApply = false,
+    skipPaymentImpactRequirement = false,
+  } = params;
+  if (priceDeltaCents === 0 || skipPaymentImpactRequirement) {
+    return { ok: true };
+  }
+  if (hasValidPaymentImpactForApply) {
     return { ok: true };
   }
   if (hasApprovedPaymentImpactOperationInTx) {
@@ -32,7 +42,7 @@ export function validateScopeRevisionPaymentImpact(params: {
   return {
     ok: false,
     error:
-      "Change Order modifies job price. A payment requirement must be created in the same transaction.",
+      "Change Order modifies job price. Approved payment terms must be materialized in the same transaction.",
   };
 }
 

@@ -15,6 +15,7 @@ import {
   type ChangeOrderJobTaskSnapshot,
 } from "@/lib/change-order/change-order-execution-projection";
 import type { StaffRole } from "@prisma/client";
+import type { JobPaymentRequirementForResolver } from "@/lib/change-order/payment-impact-resolver";
 
 export type LoadedChangeOrder = ChangeOrderRevisionSnapshot & {
   number: number;
@@ -44,6 +45,7 @@ export type LoadedChangeOrderWorkspace = {
   // compatibility with existing components while migrating names
   revisions: LoadedChangeOrder[];
   focusRevisionId: string | null;
+  jobPaymentRequirements: JobPaymentRequirementForResolver[];
 };
 
 export type LoadedChangeOrderRevision = LoadedChangeOrder;
@@ -115,6 +117,17 @@ export async function loadChangeOrderWorkspace(input: {
           scopes: { select: { jobScopeItemId: true } },
         },
       },
+      paymentRequirements: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          amountCents: true,
+          status: true,
+          sourcePaymentScheduleItemId: true,
+          createdAt: true,
+        },
+      },
       changeOrders: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
@@ -132,6 +145,7 @@ export async function loadChangeOrderWorkspace(input: {
           applicationStatus: true,
           lastApplyErrorJson: true,
           executionDeltaJson: true,
+          paymentImpactJson: true,
           lines: {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
@@ -150,6 +164,35 @@ export async function loadChangeOrderWorkspace(input: {
   });
 
   if (!job) return null;
+
+  const quotePaymentSchedule = await db.paymentScheduleItem.findMany({
+    where: { quoteId: job.quoteId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      sortOrder: true,
+      anchorType: true,
+    },
+  });
+  const scheduleById = new Map(quotePaymentSchedule.map((item) => [item.id, item]));
+
+  const jobPaymentRequirements: JobPaymentRequirementForResolver[] = job.paymentRequirements.map(
+    (requirement) => {
+      const scheduleItem = requirement.sourcePaymentScheduleItemId
+        ? scheduleById.get(requirement.sourcePaymentScheduleItemId)
+        : null;
+      return {
+        id: requirement.id,
+        title: requirement.title,
+        amountCents: requirement.amountCents,
+        status: requirement.status,
+        sourcePaymentScheduleItemId: requirement.sourcePaymentScheduleItemId,
+        scheduleSortOrder: scheduleItem?.sortOrder ?? null,
+        anchorType: scheduleItem?.anchorType ?? null,
+        createdAt: requirement.createdAt,
+      };
+    },
+  );
 
   const permissions = deriveChangeOrderPermissions(input.role);
   const blockReason = deriveChangeOrderPageBlockReason({
@@ -210,6 +253,7 @@ export async function loadChangeOrderWorkspace(input: {
       applicationStatus: changeOrder.applicationStatus,
       lastApplyErrorJson: changeOrder.lastApplyErrorJson,
       executionDeltaJson: changeOrder.executionDeltaJson,
+      paymentImpactJson: changeOrder.paymentImpactJson,
       executionImpact,
       lines,
     };
@@ -265,5 +309,6 @@ export async function loadChangeOrderWorkspace(input: {
     focusChangeOrderId,
     revisions: changeOrders,
     focusRevisionId: focusChangeOrderId,
+    jobPaymentRequirements,
   };
 }

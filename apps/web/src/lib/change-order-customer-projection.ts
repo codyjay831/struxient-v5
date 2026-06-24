@@ -2,6 +2,8 @@ import {
   ChangeOrderLineOperation,
   PaymentScheduleAnchorType,
 } from "@prisma/client";
+import type { ChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import { paymentImpactToCustomerTerms } from "@/lib/change-order/payment-impact-resolver";
 
 export type ChangeOrderPreviewLine = {
   id: string;
@@ -34,6 +36,19 @@ export type ChangeOrderCustomerPreviewDocument = {
   deltaCents: number;
   revisedTotalCents: number;
   updatedAt: string;
+  paymentTerms: ChangeOrderCustomerPaymentTerms | null;
+};
+
+export type ChangeOrderCustomerPaymentTerms = {
+  customerSummary: string;
+  customerTermsText: string;
+  strategyLabel: string;
+  dueTimingLabel: string | null;
+  affectedPaymentTitle: string | null;
+  targetAmountBeforeCents: number | null;
+  targetAmountAfterCents: number | null;
+  isCredit: boolean;
+  dueBeforeAddedWork: boolean;
 };
 
 export type BuildChangeOrderCustomerPreviewInput = {
@@ -64,6 +79,7 @@ export type BuildChangeOrderCustomerPreviewInput = {
     anchorType: PaymentScheduleAnchorType;
     anchorStageName: string | null;
   }>;
+  paymentImpact?: ChangeOrderPaymentImpact | null;
 };
 
 function formatNumberLabel(number: number): string {
@@ -127,6 +143,10 @@ export function buildCustomerChangeOrderDocument(
     anchorStageName: line.anchorStageName,
   }));
 
+  const paymentTerms = input.paymentImpact
+    ? paymentImpactToCustomerTerms(input.paymentImpact)
+    : null;
+
   return {
     document: {
       organizationDisplayName: options.organizationDisplayName,
@@ -141,6 +161,7 @@ export function buildCustomerChangeOrderDocument(
       deltaCents,
       revisedTotalCents,
       updatedAt: input.updatedAt.toISOString(),
+      paymentTerms,
     },
   };
 }

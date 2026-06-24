@@ -8,6 +8,7 @@ import {
   JobStatus,
   StaffRole,
 } from "@prisma/client";
+import { buildDueBeforeAddedWorkPaymentImpactJson } from "@/lib/change-order/change-order-test-fixture";
 import {
   buildProposedLineFromSource,
   changeOrderPageBlockMessage,
@@ -214,6 +215,8 @@ test("smoke: send button disabled unless revision is draft", () => {
     hasGeneratedTaskSuggestions: false,
     hasUnsavedDraftChanges: false,
     unsavedDraftChangesReason: null,
+    paymentImpactReady: true,
+    paymentImpactBlockReason: null,
     isPending: false,
   });
   assert.equal(draftState.disabled, false);
@@ -232,6 +235,8 @@ test("smoke: send button disabled unless revision is draft", () => {
     hasGeneratedTaskSuggestions: false,
     hasUnsavedDraftChanges: false,
     unsavedDraftChangesReason: null,
+    paymentImpactReady: true,
+    paymentImpactBlockReason: null,
     isPending: false,
   });
   assert.equal(acceptedState.disabled, true);
@@ -384,7 +389,7 @@ test("change order page blocks archived jobs and missing quotes", () => {
   assert.match(changeOrderPageBlockMessage("missing_quote"), /no linked quote/i);
 });
 
-test("change order impact preview flags non-zero payment delta", () => {
+test("change order impact preview flags non-zero payment delta without payment impact", () => {
   const preview = deriveChangeOrderImpactPreview({
     lines: [
       {
@@ -398,6 +403,22 @@ test("change order impact preview flags non-zero payment delta", () => {
   });
   assert.equal(preview.paymentBlocked, true);
   assert.ok(preview.paymentBlockReason);
+});
+
+test("change order impact preview clears payment block when payment impact is valid", () => {
+  const preview = deriveChangeOrderImpactPreview({
+    lines: [
+      {
+        operation: ChangeOrderLineOperation.ADD,
+        description: "Premium upgrade",
+        quantity: "1",
+        priceDeltaCents: 5000,
+      },
+    ],
+    priceDeltaCents: 5000,
+    paymentImpactJson: buildDueBeforeAddedWorkPaymentImpactJson(5000),
+  });
+  assert.equal(preview.paymentBlocked, false);
 });
 
 test("dollar input parser converts user-friendly price delta", () => {
@@ -544,6 +565,8 @@ test("unsaved execution impact blocks send", () => {
     hasGeneratedTaskSuggestions: false,
     hasUnsavedDraftChanges: true,
     unsavedDraftChangesReason: "Save execution impact before sending.",
+    paymentImpactReady: true,
+    paymentImpactBlockReason: null,
     isPending: false,
   });
   assert.equal(state.disabled, true);
@@ -610,6 +633,8 @@ test("invalid execution impact blocks send", () => {
     hasGeneratedTaskSuggestions: false,
     hasUnsavedDraftChanges: false,
     unsavedDraftChangesReason: null,
+    paymentImpactReady: true,
+    paymentImpactBlockReason: null,
     isPending: false,
   });
   assert.equal(state.disabled, true);

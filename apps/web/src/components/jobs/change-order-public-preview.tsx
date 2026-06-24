@@ -132,12 +132,52 @@ export function ChangeOrderPublicPreview({
           </div>
         </section>
 
+        {document.paymentTerms ? (
+          <section className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-sm font-semibold text-foreground">Payment terms</h2>
+            <p className="mt-1 text-xs text-foreground-muted">
+              {document.paymentTerms.strategyLabel}
+            </p>
+            <p className="mt-3 text-sm text-foreground">{document.paymentTerms.customerTermsText}</p>
+            <p className="mt-2 text-sm text-foreground-muted">{document.paymentTerms.customerSummary}</p>
+            {document.paymentTerms.dueTimingLabel ? (
+              <p className="mt-3 text-sm text-foreground">
+                <span className="font-medium">Due timing:</span> {document.paymentTerms.dueTimingLabel}
+              </p>
+            ) : null}
+            {document.paymentTerms.affectedPaymentTitle ? (
+              <p className="mt-2 text-sm text-foreground-muted">
+                Affected payment: {document.paymentTerms.affectedPaymentTitle}
+                {document.paymentTerms.targetAmountBeforeCents != null &&
+                document.paymentTerms.targetAmountAfterCents != null ? (
+                  <>
+                    {" "}
+                    ({formatMoneyCents(document.paymentTerms.targetAmountBeforeCents)} →{" "}
+                    {formatMoneyCents(document.paymentTerms.targetAmountAfterCents)})
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+            {document.paymentTerms.isCredit ? (
+              <p className="mt-2 text-sm text-foreground-muted">
+                This credit reduces your remaining balance.
+              </p>
+            ) : null}
+            {document.paymentTerms.dueBeforeAddedWork ? (
+              <p className="mt-2 text-sm text-foreground-muted">
+                Payment is due before added work begins.
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         {canRespond ? (
           <section className="rounded-xl border-2 border-accent bg-surface p-6">
             <h2 className="text-lg font-bold text-foreground">Respond to this Change Order</h2>
             <p className="mt-1 text-sm text-foreground-muted">
-              Accept the scope and revised amount shown above, or request changes for the office to
-              review.
+              You are approving the scope changes, revised total
+              {document.paymentTerms ? ", and payment terms" : ""} shown above. You can also request
+              changes for the office to review.
             </p>
 
             <form action={acceptAction} className="mt-5 space-y-4">

@@ -137,7 +137,7 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 
 ## 7. Change orders — sold scope, re-sign, tasks
 
-> **Execution architecture (2026-06-24):** [change-order-canon.md](./change-order-canon.md) — CO = commercial delta + proposed execution delta; apply via `ExecutionPlanRevision`; schema proposal in [change-order-execution-delta-schema-proposal.md](../plans/change-order-execution-delta-schema-proposal.md).
+> **Execution architecture (2026-06-24):** [change-order-canon.md](./change-order-canon.md) — CO = commercial delta + proposed execution delta; apply via `ExecutionPlanRevision`; schema proposals in [change-order-execution-delta-schema-proposal.md](../plans/change-order-execution-delta-schema-proposal.md) and [change-order-payment-impact-schema-proposal.md](../plans/change-order-payment-impact-schema-proposal.md).
 
 **v5 posture (UX + truth):** Staff work from the **current quote** as the **working record**; **immutable proof** of what was committed at send/approve/activate lives in **hidden checkpoints** (receipts), not in a user-managed “version browser.” See [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md). Denormalized captures (e.g. JSON) may live **inside checkpoint records** as an implementation detail.
 
@@ -146,8 +146,9 @@ Mainstream **Jobber-class** tools optimize **simplicity** and day-to-day CRM/sch
 | **Approved quote** | Customer commitment is recorded; **a checkpoint** preserves **immutable proof** of **what was approved** (line items, totals, customer-facing text at sign time). **Must not** silently rewrite that proof for **customer-visible or monetary** sold truth—use **change orders** and related paths. |
 | **Scope or price change after approval** | Done through a **Change order** artifact: **new line group / lines** (or explicit CO document) **appended** to the job’s **commercial record**—**not** silent edits to the **approved baseline** encoded in the checkpoint / execution rules. |
 | **Minor corrections** | **Typo / internal-only** fixes may use **administrative correction** with audit; anything **customer-visible or monetary** goes through **CO** or an explicit **new quote / supersede path** per org policy—without pretending the prior commitment never happened. |
-| **Customer re-sign** | **Required** when CO changes **customer total**, **legal scope**, or **payment schedule** in a material way; configurable **threshold** (e.g. any price change) default = **always re-approve** for any CO with price impact. |
+| **Customer re-sign** | **Required** when CO changes **customer total**, **legal scope**, or **payment collection terms** in a material way; configurable **threshold** (e.g. any price change) default = **always re-approve** for any CO with price impact. Price-impact COs **must** include an explicit **payment strategy** and customer-facing payment terms before send — see [change-order-canon.md](./change-order-canon.md) §11. |
 | **Task graph** | CO stores **proposed execution delta** (add/cancel/modify tasks) applied only after acceptance + validation—not implicit scope reconciliation at apply time. Optionally **flag** existing tasks for review when CO affects their scope. |
+| **CO payment collection** | Payment strategy is **commercial truth** on `ChangeOrder.paymentImpactJson`; materialized to `JobPaymentRequirement` on apply. **Must not** rely on orphan standalone PENDING rows without customer-approved terms. |
 
 ---
 
@@ -291,3 +292,4 @@ When changing any row in this file, add a one-line **Canon update (YYYY-MM-DD): 
 ---
 
 *Canon update (2026-06-23): §17 — no breadcrumbs in staff workspace; enforced by `detect-breadcrumbs.mjs` guardrail.*
+*Canon update (2026-06-24): §7 — price-impact Change Orders require payment strategy + customer payment terms before send; materialize to `JobPaymentRequirement` on apply ([change-order-canon.md](./change-order-canon.md) §11).*

@@ -156,3 +156,38 @@ test("execution projection includes existing task status for cancel ops", () => 
   assert.equal(impact.canceledTasks[0]?.existingTaskStatus, JobTaskStatus.TODO);
   assert.equal(impact.canceledTasks[0]?.taskTitle, "Install panel");
 });
+
+test("legacy UPDATE_PAYMENT_REQUIREMENT op is flagged isLegacy in execution projection", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 2,
+    priceDeltaCents: 5000,
+    reasoning: "Paid add",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "Paid add",
+        quantity: "1",
+        unitPriceCents: 5000,
+        priceDeltaCents: 5000,
+        executionRelevant: true,
+      },
+    ],
+  });
+
+  const impact = projectChangeOrderExecutionImpact({
+    executionDeltaJson: delta,
+    baseJobPlanVersion: 1,
+    currentJobPlanVersion: 1,
+    priceDeltaCents: 5000,
+    scopeItems: [],
+    tasks: [],
+  });
+
+  assert.ok(impact.paymentImpact);
+  assert.equal(impact.paymentImpact?.isLegacy, true);
+  assert.equal(impact.paymentImpact?.isGenerated, true);
+});

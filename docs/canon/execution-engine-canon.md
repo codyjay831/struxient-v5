@@ -203,7 +203,7 @@ See also: [quote-truth-and-checkpoints.md](./quote-truth-and-checkpoints.md), [t
 - `promotePendingPaymentsToDue()` runs on task completion and override completion when anchor conditions are met.
 - **Payment holds** on tasks are **display-derived** (`deriveTaskPaymentHold`)—they inform attention; server completion is not blocked by payment hold alone.
 - Workstation and job surfaces should rely on **runtime payment requirements**, not re-derive commercial schedule from the quote post-activation.
-- Scope revisions with non-zero commercial delta require explicit payment-impact reconciliation in the same scope-revision transaction (or are blocked). Never silently record price deltas that do not map to runtime payment truth.
+- Scope revisions with non-zero commercial delta require explicit **payment strategy materialization** from `ChangeOrder.paymentImpactJson` in the same apply transaction (or are blocked). Never silently record price deltas that do not map to runtime payment truth. **Legacy** `UPDATE_PAYMENT_REQUIREMENT` execution-delta ops (standalone orphan PENDING rows) are **not** production-ready — see [change-order-canon.md](./change-order-canon.md) §11.6.
 - Stage `SKIPPED` is passable for progression but must not auto-trigger `BEFORE_STAGE`/`AFTER_STAGE`/`FINAL_BALANCE` conditions tied to canceled scope.
 
 **Canonical code:** `job-payment-readiness.ts`, `payment-schedule-materialization.ts`, `quote-job-activation-actions.ts`
@@ -286,6 +286,7 @@ Full implementation table: [`docs/source-of-truth-map.md`](../source-of-truth-ma
 
 - **Quote activation** materializes the **initial** job execution graph (copy-on-activate).
 - **Change Orders** append **commercial** sold scope and propose an **execution delta** against `Job.jobPlanVersion` — **not** a second whole-quote execution plan.
+- Price-impact COs store **payment strategy** in `paymentImpactJson` (commercial truth); apply materializes into `JobPaymentRequirement` per [change-order-canon.md](./change-order-canon.md) §11.
 - Draft/sent/accepted COs **must not** mutate `JobScopeItem` or `JobTask`.
 - Apply runs only after acceptance + validation, writes **`ExecutionPlanRevision`** (`JOB_EXECUTION_DELTA`), increments `jobPlanVersion`.
 - Accepted COs that cannot safely apply enter **`NEEDS_EXECUTION_REVIEW`** — not a permanent `ACCEPTED` trap.
@@ -351,3 +352,4 @@ When in doubt: extend the canonical helper in `apps/web/src/lib/`, then surface 
 *Canon update (2026-06-20): Clarified authoring vs activation truth — `QuoteLineExecutionTask` may remain pre-plan seed/authoring input; `QuoteExecutionPlan` + `QuoteExecutionTask` are pre-activation activation truth; post-activation job runtime records are updated through scope-revision/change-order paths, not by mutating the accepted quote plan.*  
 *Canon update (2026-06-20): Restored tasks-first dependency policy for whole-quote apply validation: soft missing providers are review gaps; hard missing providers block activation readiness.*
 *Canon update (2026-06-24): §14 — Change Order execution delta architecture (commercial + proposed delta, apply via ExecutionPlanRevision, NEEDS_EXECUTION_REVIEW); renumbered former §13 to §15.*
+*Canon update (2026-06-24): §8 — Change Order payment strategy materialization from commercial `paymentImpactJson`; legacy orphan PENDING payment row pattern deprecated.*

@@ -1,4 +1,5 @@
 import { JobScopeItemStatus, JobTaskStatus } from "@prisma/client";
+import { validateChangeOrderPaymentImpactGate } from "@/lib/change-order/payment-impact-gates";
 import { validateScopeRevisionApplyGuards } from "@/lib/quote-scope-revision-apply-guards";
 import {
   parseChangeOrderExecutionDelta,
@@ -26,6 +27,9 @@ export type ExecutionDeltaValidationInput = {
   baseJobPlanVersion: number;
   currentJobPlanVersion: number;
   priceDeltaCents: number;
+  paymentImpactJson?: unknown;
+  /** Draft persist / send pre-check: allow price impact without saved payment terms. */
+  allowMissingPaymentImpactForDraft?: boolean;
   scopeItems: ExecutionDeltaScopeItem[];
   tasks: ExecutionDeltaTask[];
 };
@@ -61,14 +65,6 @@ function getBooleanPayload(
   return typeof value === "boolean" ? value : fallback;
 }
 
-function getNumberPayload(
-  operation: ChangeOrderExecutionDeltaOperation,
-  key: string,
-): number | null {
-  const value = operation.payload?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 export function validateChangeOrderExecutionDelta(
   input: ExecutionDeltaValidationInput,
 ): ExecutionDeltaValidationResult {
@@ -102,7 +98,7 @@ export function validateChangeOrderExecutionDelta(
 
   const scopeById = new Map(input.scopeItems.map((scope) => [scope.id, { ...scope }]));
   const taskById = new Map(input.tasks.map((task) => [task.id, { ...task, jobScopeItemIds: [...task.jobScopeItemIds] }]));
-  let hasPaymentOperation = false;
+  let hasLegacyPaymentOperation = false;
   const errors: string[] = [];
 
   for (const operation of proposal.operations) {
@@ -218,7 +214,7 @@ export function validateChangeOrderExecutionDelta(
         break;
       }
       case "UPDATE_PAYMENT_REQUIREMENT":
-        hasPaymentOperation = true;
+        hasLegacyPaymentOperation = true;
         break;
     }
   }
@@ -227,28 +223,43 @@ export function validateChangeOrderExecutionDelta(
     return { ok: false, classification: "CONFLICT", proposal, errors };
   }
 
+  const paymentImpactGate = validateChangeOrderPaymentImpactGate({
+    priceDeltaCents: input.priceDeltaCents,
+    paymentImpactJson: input.paymentImpactJson ?? null,
+  });
+  const hasValidPaymentImpactForApply = paymentImpactGate.ok;
+
+  const skipMissingPaymentImpactRequirement =
+    input.allowMissingPaymentImpactForDraft === true && !hasValidPaymentImpactForApply;
+
   if (input.priceDeltaCents !== 0) {
-    const paymentOps = proposal.operations.filter(
-      (operation) => operation.type === "UPDATE_PAYMENT_REQUIREMENT",
-    );
-    if (paymentOps.length === 0) {
+    if (!hasValidPaymentImpactForApply && !skipMissingPaymentImpactRequirement) {
       errors.push(
-        "Change Order modifies job price. A payment requirement must be created in the same transaction.",
+        paymentImpactGate.ok
+          ? "Change Order payment impact is invalid."
+          : paymentImpactGate.error,
       );
-    } else if (paymentOps.length > 1) {
-      errors.push("Change Order price delta must reconcile to exactly one payment requirement operation.");
-    } else {
-      const paymentAmountCents = getNumberPayload(paymentOps[0]!, "amountCents");
-      if (paymentAmountCents == null) {
-        errors.push("UPDATE_PAYMENT_REQUIREMENT requires payload.amountCents.");
-      } else if (paymentAmountCents !== input.priceDeltaCents) {
-        errors.push(
-          `Payment requirement amount ${paymentAmountCents} does not match Change Order price delta ${input.priceDeltaCents}.`,
-        );
+      if (!paymentImpactGate.ok && paymentImpactGate.errors?.length) {
+        errors.push(...paymentImpactGate.errors);
       }
     }
-  } else if (proposal.operations.some((operation) => operation.type === "UPDATE_PAYMENT_REQUIREMENT")) {
-    errors.push("Zero-dollar Change Orders must not include UPDATE_PAYMENT_REQUIREMENT operations.");
+    if (hasValidPaymentImpactForApply && hasLegacyPaymentOperation) {
+      errors.push(
+        "Legacy UPDATE_PAYMENT_REQUIREMENT must not coexist with approved paymentImpactJson.",
+      );
+    }
+    if (!hasValidPaymentImpactForApply && hasLegacyPaymentOperation) {
+      errors.push(
+        "Configure approved payment terms before apply. Legacy execution payment ops are no longer accepted.",
+      );
+    }
+  } else {
+    if (hasLegacyPaymentOperation) {
+      errors.push("Zero-dollar Change Orders must not include UPDATE_PAYMENT_REQUIREMENT operations.");
+    }
+    if (input.paymentImpactJson != null) {
+      errors.push("Zero-dollar Change Orders must not include payment impact.");
+    }
   }
 
   if (errors.length > 0) {
@@ -257,7 +268,9 @@ export function validateChangeOrderExecutionDelta(
 
   const guards = validateScopeRevisionApplyGuards({
     priceDeltaCents: input.priceDeltaCents,
-    hasApprovedPaymentImpactOperationInTx: hasPaymentOperation,
+    hasApprovedPaymentImpactOperationInTx: hasLegacyPaymentOperation,
+    hasValidPaymentImpactForApply,
+    skipPaymentImpactRequirement: skipMissingPaymentImpactRequirement,
     scopeItems: [...scopeById.values()],
     tasks: [...taskById.values()],
   });

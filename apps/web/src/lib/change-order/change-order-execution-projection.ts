@@ -11,6 +11,7 @@ import {
   taskOperationSourceLabel,
   userFacingValidationMessage,
 } from "@/lib/change-order/change-order-execution-task-composer";
+import { humanizePaymentApplyError } from "@/lib/change-order/payment-impact-resolver";
 
 export type ChangeOrderJobTaskSnapshot = {
   id: string;
@@ -42,6 +43,7 @@ export type ChangeOrderExecutionPaymentOpView = {
   title: string;
   reason: string;
   isGenerated: boolean;
+  isLegacy: boolean;
   validationErrors: string[];
 };
 
@@ -204,6 +206,16 @@ export function parseApplyErrorSummary(lastApplyErrorJson: unknown): ChangeOrder
   return { classification, messages };
 }
 
+export function parseApplyErrorSummaryForDisplay(
+  lastApplyErrorJson: unknown,
+): ChangeOrderApplyErrorSummary {
+  const summary = parseApplyErrorSummary(lastApplyErrorJson);
+  return {
+    ...summary,
+    messages: summary.messages.map(humanizePaymentApplyError),
+  };
+}
+
 export function deriveChangeOrderLifecycleReadiness(input: {
   status: import("@prisma/client").ChangeOrderStatus;
   applicationStatus: ChangeOrderApplicationStatus;
@@ -354,6 +366,7 @@ export function projectChangeOrderExecutionImpact(input: {
         title: payloadString(operation, "title", "Change Order payment"),
         reason: operation.reason,
         isGenerated: operation.opId.startsWith("payment:"),
+        isLegacy: true,
         validationErrors: [],
       };
       continue;

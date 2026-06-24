@@ -25,6 +25,16 @@ import {
   type ChangeOrderExecutionDeltaProposal,
 } from "@/lib/change-order/execution-delta-schema";
 import {
+  changeOrderPaymentImpactToJson,
+  parseChangeOrderPaymentImpact,
+} from "@/lib/change-order/payment-impact-schema";
+import { validateChangeOrderPaymentImpactGate } from "@/lib/change-order/payment-impact-gates";
+import {
+  loadJobPaymentRequirementsForMaterializer,
+  materializeChangeOrderPaymentImpactInTx,
+  validatePaymentImpactForMaterialization,
+} from "@/lib/change-order/payment-impact-materializer";
+import {
   classifyValidationFailureForApplicationStatus,
   validateChangeOrderExecutionDelta,
 } from "@/lib/change-order/execution-delta-validation";
@@ -61,6 +71,7 @@ export type CreateChangeOrderDraftInput = {
   customerDocumentTitle?: string | null;
   priceDeltaCents?: number;
   lines: ChangeOrderLineInput[];
+  paymentImpactJson?: Record<string, unknown> | null;
 };
 
 export type UpdateChangeOrderDraftInput = {
@@ -71,6 +82,7 @@ export type UpdateChangeOrderDraftInput = {
   priceDeltaCents?: number;
   lines?: ChangeOrderLineInput[];
   executionDeltaJson?: Record<string, unknown> | null;
+  paymentImpactJson?: Record<string, unknown> | null;
 };
 
 type ChangeOrderMutationResult = { ok: true; changeOrderId: string } | { ok: false; error: string };
@@ -142,6 +154,7 @@ export async function validateStoredExecutionDeltaForChangeOrder(
       baseJobPlanVersion: true,
       executionDeltaJson: true,
       priceDeltaCents: true,
+      paymentImpactJson: true,
       job: {
         select: {
           jobPlanVersion: true,
@@ -170,6 +183,8 @@ export async function validateStoredExecutionDeltaForChangeOrder(
     baseJobPlanVersion: changeOrder.baseJobPlanVersion,
     currentJobPlanVersion: changeOrder.job.jobPlanVersion,
     priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+    allowMissingPaymentImpactForDraft: true,
     scopeItems: changeOrder.job.scopeItems,
     tasks: changeOrder.job.tasks.map((task) => ({
       id: task.id,
@@ -187,6 +202,49 @@ export async function validateStoredExecutionDeltaForChangeOrder(
     };
   }
   return { ok: true as const };
+}
+
+export async function validateStoredPaymentImpactForChangeOrder(
+  changeOrderId: string,
+  organizationId: string,
+) {
+  const changeOrder = await db.changeOrder.findFirst({
+    where: { id: changeOrderId, organizationId },
+    select: {
+      priceDeltaCents: true,
+      paymentImpactJson: true,
+    },
+  });
+  if (!changeOrder) {
+    return { ok: false as const, error: "Change Order not found." };
+  }
+  const gate = validateChangeOrderPaymentImpactGate({
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+  });
+  if (!gate.ok) {
+    return { ok: false as const, error: gate.error };
+  }
+  return { ok: true as const };
+}
+
+function resolvePaymentImpactJsonForPersist(params: {
+  priceDeltaCents: number;
+  paymentImpactJson: unknown;
+}):
+  | { ok: true; value: Prisma.InputJsonValue | typeof Prisma.JsonNull }
+  | { ok: false; error: string } {
+  const gate = validateChangeOrderPaymentImpactGate(params);
+  if (!gate.ok) {
+    return { ok: false, error: gate.error };
+  }
+  if (gate.impact == null) {
+    return { ok: true, value: Prisma.JsonNull };
+  }
+  return {
+    ok: true,
+    value: changeOrderPaymentImpactToJson(gate.impact) as Prisma.InputJsonValue,
+  };
 }
 
 async function replaceChangeOrderLinesInTx(
@@ -248,9 +306,17 @@ async function persistExecutionDeltaForChangeOrderInTx(
     reasoning: string;
     lines: Awaited<ReturnType<typeof replaceChangeOrderLinesInTx>>;
     executionDeltaOverride?: ChangeOrderExecutionDeltaProposal | null;
+    paymentImpactJson?: unknown;
   },
 ) {
   let executionDelta: ChangeOrderExecutionDeltaProposal;
+  const paymentImpactGate = validateChangeOrderPaymentImpactGate({
+    priceDeltaCents: params.priceDeltaCents,
+    paymentImpactJson: params.paymentImpactJson ?? null,
+  });
+  const skipLegacyPaymentOperation =
+    params.paymentImpactJson == null ||
+    (paymentImpactGate.ok && paymentImpactGate.impact != null);
 
   if (params.executionDeltaOverride) {
     if (params.executionDeltaOverride.baseJobPlanVersion !== params.baseJobPlanVersion) {
@@ -267,6 +333,7 @@ async function persistExecutionDeltaForChangeOrderInTx(
       priceDeltaCents: params.priceDeltaCents,
       reasoning: params.reasoning,
       lines: params.lines,
+      skipLegacyPaymentOperation,
     });
   }
 
@@ -283,6 +350,8 @@ async function persistExecutionDeltaForChangeOrderInTx(
     baseJobPlanVersion: params.baseJobPlanVersion,
     currentJobPlanVersion: jobGraph.jobPlanVersion,
     priceDeltaCents: params.priceDeltaCents,
+    paymentImpactJson: params.paymentImpactJson ?? null,
+    allowMissingPaymentImpactForDraft: true,
     scopeItems: jobGraph.scopeItems,
     tasks: jobGraph.tasks.map((task) => ({
       id: task.id,
@@ -391,6 +460,21 @@ export async function createChangeOrderDraftWithActor(
     const numberLabel = formatChangeOrderNumber(nextNumber);
     const defaultTitle = `Change Order ${numberLabel}`;
 
+    const nextPriceDeltaCents = input.priceDeltaCents ?? 0;
+    let paymentImpactData: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+    if (input.paymentImpactJson !== undefined) {
+      const resolved = resolvePaymentImpactJsonForPersist({
+        priceDeltaCents: nextPriceDeltaCents,
+        paymentImpactJson: input.paymentImpactJson,
+      });
+      if (!resolved.ok) {
+        return { ok: false as const, error: resolved.error };
+      }
+      paymentImpactData = resolved.value;
+    } else if (nextPriceDeltaCents === 0) {
+      paymentImpactData = Prisma.JsonNull;
+    }
+
     const changeOrder = await tx.changeOrder.create({
       data: {
         organizationId: actor.organizationId,
@@ -401,9 +485,10 @@ export async function createChangeOrderDraftWithActor(
         customerDocumentTitle: input.customerDocumentTitle ?? null,
         status: ChangeOrderStatus.DRAFT,
         reasoning: input.reasoning.trim(),
-        priceDeltaCents: input.priceDeltaCents ?? 0,
+        priceDeltaCents: nextPriceDeltaCents,
         baseJobPlanVersion: quote.job.jobPlanVersion,
         applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
+        ...(paymentImpactData !== undefined ? { paymentImpactJson: paymentImpactData } : {}),
       },
       select: { id: true, number: true },
     });
@@ -424,6 +509,8 @@ export async function createChangeOrderDraftWithActor(
       priceDeltaCents: input.priceDeltaCents ?? 0,
       reasoning: input.reasoning.trim(),
       lines: createdLines,
+      paymentImpactJson:
+        paymentImpactData === Prisma.JsonNull ? null : (paymentImpactData ?? null),
     });
 
     await recordJobActivity(
@@ -475,6 +562,7 @@ export async function updateChangeOrderDraftWithActor(
         customerDocumentTitle: true,
         priceDeltaCents: true,
         baseJobPlanVersion: true,
+        paymentImpactJson: true,
       },
     });
     if (!row) return { ok: false as const, error: "Change Order not found." };
@@ -493,6 +581,45 @@ export async function updateChangeOrderDraftWithActor(
     }
 
     const nextPriceDeltaCents = input.priceDeltaCents ?? row.priceDeltaCents;
+    let nextPaymentImpactJson: unknown = row.paymentImpactJson;
+    if (input.paymentImpactJson !== undefined) {
+      const resolved = resolvePaymentImpactJsonForPersist({
+        priceDeltaCents: nextPriceDeltaCents,
+        paymentImpactJson: input.paymentImpactJson,
+      });
+      if (!resolved.ok) {
+        throw new Error(resolved.error);
+      }
+      nextPaymentImpactJson = resolved.value === Prisma.JsonNull ? null : resolved.value;
+    } else if (nextPriceDeltaCents === 0) {
+      nextPaymentImpactJson = null;
+    }
+
+    await tx.changeOrder.update({
+      where: { id: row.id },
+      data: {
+        reasoning: nextReasoning,
+        title: input.title?.trim() || row.title,
+        customerDocumentTitle:
+          input.customerDocumentTitle !== undefined
+            ? input.customerDocumentTitle
+            : row.customerDocumentTitle,
+        priceDeltaCents: nextPriceDeltaCents,
+        status:
+          row.status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES
+            ? ChangeOrderStatus.DRAFT
+            : row.status,
+        ...(input.paymentImpactJson !== undefined || nextPriceDeltaCents === 0
+          ? {
+              paymentImpactJson:
+                nextPaymentImpactJson == null
+                  ? Prisma.JsonNull
+                  : (nextPaymentImpactJson as Prisma.InputJsonValue),
+            }
+          : {}),
+      },
+    });
+
     const createdLines =
       nextLines &&
       (await replaceChangeOrderLinesInTx(tx, {
@@ -518,23 +645,6 @@ export async function updateChangeOrderDraftWithActor(
         },
       }));
 
-    await tx.changeOrder.update({
-      where: { id: row.id },
-      data: {
-        reasoning: nextReasoning,
-        title: input.title?.trim() || row.title,
-        customerDocumentTitle:
-          input.customerDocumentTitle !== undefined
-            ? input.customerDocumentTitle
-            : row.customerDocumentTitle,
-        priceDeltaCents: nextPriceDeltaCents,
-        status:
-          row.status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES
-            ? ChangeOrderStatus.DRAFT
-            : row.status,
-      },
-    });
-
     const executionDeltaOverride =
       input.executionDeltaJson == null
         ? null
@@ -557,6 +667,7 @@ export async function updateChangeOrderDraftWithActor(
       reasoning: nextReasoning,
       lines: linesForDelta,
       executionDeltaOverride,
+      paymentImpactJson: nextPaymentImpactJson,
     });
 
     await recordJobActivity(
@@ -604,6 +715,9 @@ export async function markChangeOrderAcceptedWithActor(
   const deltaReady = await validateStoredExecutionDeltaForChangeOrder(id, actor.organizationId);
   if (!deltaReady.ok) return { ok: false, error: deltaReady.error };
 
+  const paymentReady = await validateStoredPaymentImpactForChangeOrder(id, actor.organizationId);
+  if (!paymentReady.ok) return { ok: false, error: paymentReady.error };
+
   const updated = await db.$transaction(async (tx) => {
     const row = await tx.changeOrder.findFirst({
       where: { id, organizationId: actor.organizationId },
@@ -634,6 +748,7 @@ export async function markChangeOrderAcceptedWithActor(
       checkpointRow,
       row.organization.name,
     );
+    const parsedPaymentImpact = parseChangeOrderPaymentImpact(checkpointRow.paymentImpactJson);
     const aggregate = await tx.changeOrderCheckpoint.aggregate({
       where: {
         organizationId: actor.organizationId,
@@ -653,6 +768,7 @@ export async function markChangeOrderAcceptedWithActor(
         schemaVersion: CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
         snapshotJson: serializeChangeOrderPreviewDocumentForCheckpoint(
           document,
+          parsedPaymentImpact.ok ? parsedPaymentImpact.impact : null,
         ) as unknown as Prisma.InputJsonValue,
         staffOnlyJson: { acceptedByUserId: actor.userId } as Prisma.InputJsonValue,
         changeOrderUpdatedAtAtCapture: row.updatedAt,
@@ -698,6 +814,17 @@ export async function markChangeOrderAcceptedWithActor(
   });
 
   return updated;
+}
+
+function stripLegacyPaymentOperations(
+  proposal: ChangeOrderExecutionDeltaProposal,
+): ChangeOrderExecutionDeltaProposal {
+  return {
+    ...proposal,
+    operations: proposal.operations.filter(
+      (operation) => operation.type !== "UPDATE_PAYMENT_REQUIREMENT",
+    ),
+  };
 }
 
 async function recordApplyFailureInTx(
@@ -804,6 +931,8 @@ export async function applyChangeOrderWithActor(
           executionDeltaJson: true,
           executionDeltaSchemaVersion: true,
           priceDeltaCents: true,
+          number: true,
+          paymentImpactJson: true,
           reasoning: true,
         },
       });
@@ -881,6 +1010,7 @@ export async function applyChangeOrderWithActor(
         baseJobPlanVersion: changeOrder.baseJobPlanVersion,
         currentJobPlanVersion: observedJobPlanVersion,
         priceDeltaCents: changeOrder.priceDeltaCents,
+        paymentImpactJson: changeOrder.paymentImpactJson,
         scopeItems: job.scopeItems,
         tasks: job.tasks.map((task) => ({
           id: task.id,
@@ -926,6 +1056,44 @@ export async function applyChangeOrderWithActor(
         });
         return { ok: false as const, error: validation.errors.join(" ") };
       }
+
+      const paymentRequirements = await loadJobPaymentRequirementsForMaterializer(tx, {
+        organizationId: changeOrder.organizationId,
+        jobId: changeOrder.jobId,
+        quoteId: changeOrder.quoteId,
+      });
+      const paymentMaterializationValidation = validatePaymentImpactForMaterialization({
+        priceDeltaCents: changeOrder.priceDeltaCents,
+        paymentImpactJson: changeOrder.paymentImpactJson,
+        requirements: paymentRequirements,
+      });
+      if (!paymentMaterializationValidation.ok) {
+        const errorJson = applyErrorJson({
+          classification: "INVARIANT_FAILED",
+          errors: paymentMaterializationValidation.errors,
+          jobPlanVersion: observedJobPlanVersion,
+          baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+        });
+        await recordApplyFailureInTx(tx, {
+          actor,
+          changeOrder,
+          applicationStatus: ChangeOrderApplicationStatus.APPLY_FAILED,
+          revisionStatus: ExecutionPlanRevisionStatus.APPLY_FAILED,
+          activityType: JobActivityType.CHANGE_ORDER_APPLY_FAILED,
+          title: "Change Order apply failed",
+          details: paymentMaterializationValidation.errors.join(" "),
+          errorJson,
+        });
+        return {
+          ok: false as const,
+          error: paymentMaterializationValidation.errors.join(" "),
+        };
+      }
+
+      const executionProposal =
+        paymentMaterializationValidation.impact != null
+          ? stripLegacyPaymentOperations(validation.proposal)
+          : validation.proposal;
 
       const versionClaim = await tx.job.updateMany({
         where: {
@@ -983,8 +1151,24 @@ export async function applyChangeOrderWithActor(
         jobId: changeOrder.jobId,
         changeOrderId: changeOrder.id,
         actorUserId: actor.userId,
-        proposal: validation.proposal,
+        proposal: executionProposal,
       });
+
+      let paymentMaterialization: Awaited<
+        ReturnType<typeof materializeChangeOrderPaymentImpactInTx>
+      > | null = null;
+      if (paymentMaterializationValidation.impact != null) {
+        paymentMaterialization = await materializeChangeOrderPaymentImpactInTx({
+          tx,
+          organizationId: changeOrder.organizationId,
+          jobId: changeOrder.jobId,
+          changeOrderId: changeOrder.id,
+          changeOrderNumber: changeOrder.number,
+          priceDeltaCents: changeOrder.priceDeltaCents,
+          paymentImpact: paymentMaterializationValidation.impact,
+          requirements: paymentRequirements,
+        });
+      }
 
       const resultingJobPlanVersion = observedJobPlanVersion + 1;
       await tx.changeOrder.update({
@@ -1014,6 +1198,18 @@ export async function applyChangeOrderWithActor(
             source: "applyChangeOrderWithActor",
             paymentImpactOperationInTx: deltaApply.hasPaymentOperation,
             appliedOperationIds: deltaApply.appliedOperationIds,
+            paymentMaterialization: paymentMaterialization
+              ? {
+                  strategy: paymentMaterialization.strategy,
+                  customerTermsText: paymentMaterialization.customerTermsText,
+                  blocksAddedWork: paymentMaterialization.blocksAddedWork,
+                  entries: paymentMaterialization.entries,
+                  createdPaymentRequirementIds:
+                    paymentMaterialization.createdPaymentRequirementIds,
+                  updatedPaymentRequirementIds:
+                    paymentMaterialization.updatedPaymentRequirementIds,
+                }
+              : null,
           },
           planningInputHash: null,
           reasoningSummary: changeOrder.reasoning,
@@ -1037,6 +1233,15 @@ export async function applyChangeOrderWithActor(
             resultingJobPlanVersion,
             executionPlanRevisionId: executionPlanRevision.id,
             appliedOperationIds: deltaApply.appliedOperationIds,
+            paymentMaterialization: paymentMaterialization
+              ? {
+                  strategy: paymentMaterialization.strategy,
+                  createdPaymentRequirementIds:
+                    paymentMaterialization.createdPaymentRequirementIds,
+                  updatedPaymentRequirementIds:
+                    paymentMaterialization.updatedPaymentRequirementIds,
+                }
+              : null,
           },
         },
         tx,
