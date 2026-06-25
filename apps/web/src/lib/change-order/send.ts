@@ -16,6 +16,7 @@ import {
 } from "@/lib/change-order-checkpoint-snapshot";
 import { assertPaymentImpactReadyForSend } from "@/lib/change-order/payment-impact-gates";
 import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import { assertChangeOrderCustomerAcceptReadyOrThrow } from "@/lib/change-order/change-order-customer-accept-readiness";
 import { notifyChangeOrderSent } from "@/lib/notifications";
 import { getRequestContextOrThrow } from "@/lib/auth-context";
 import { createPublicAccessToken, hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
@@ -36,6 +37,72 @@ const SENDABLE_CHANGE_ORDER_STATUSES: ChangeOrderStatus[] = [
   ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES,
 ];
 
+const changeOrderSelectForSendValidation = {
+  id: true,
+  status: true,
+  priceDeltaCents: true,
+  paymentImpactJson: true,
+  executionDeltaJson: true,
+  baseJobPlanVersion: true,
+  job: {
+    select: {
+      jobPlanVersion: true,
+      scopeItems: {
+        select: { id: true, executionRelevant: true, status: true },
+      },
+      tasks: {
+        select: {
+          id: true,
+          status: true,
+          hardSignal: true,
+          requiresSignals: true,
+          providesSignals: true,
+          scopes: { select: { jobScopeItemId: true } },
+        },
+      },
+    },
+  },
+} as const;
+
+function assertStoredChangeOrderReadyForCustomerAccept(input: {
+  status: ChangeOrderStatus;
+  priceDeltaCents: number;
+  paymentImpactJson: unknown;
+  executionDeltaJson: unknown;
+  baseJobPlanVersion: number;
+  job: {
+    jobPlanVersion: number;
+    scopeItems: Array<{ id: string; executionRelevant: boolean; status: import("@prisma/client").JobScopeItemStatus }>;
+    tasks: Array<{
+      id: string;
+      status: import("@prisma/client").JobTaskStatus;
+      hardSignal: boolean;
+      requiresSignals: string[];
+      providesSignals: string[];
+      scopes: Array<{ jobScopeItemId: string }>;
+    }>;
+  };
+}): void {
+  assertChangeOrderCustomerAcceptReadyOrThrow({
+    status: input.status,
+    priceDeltaCents: input.priceDeltaCents,
+    paymentImpactJson: input.paymentImpactJson,
+    executionDeltaJson: input.executionDeltaJson,
+    baseJobPlanVersion: input.baseJobPlanVersion,
+    currentJobPlanVersion: input.job.jobPlanVersion,
+    scopeItems: input.job.scopeItems,
+    tasks: input.job.tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      hardSignal: task.hardSignal,
+      requiresSignals: task.requiresSignals,
+      providesSignals: task.providesSignals,
+      jobScopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
+    })),
+    requireSentStatus: false,
+  });
+}
+
 export async function captureChangeOrderSendCheckpoint(
   tx: ExtendedTransactionClient,
   changeOrderId: string,
@@ -49,7 +116,12 @@ export async function captureChangeOrderSendCheckpoint(
       organizationId,
       status: { in: SENDABLE_CHANGE_ORDER_STATUSES },
     },
-    select: changeOrderSelectForCustomerCheckpoint,
+    select: {
+      ...changeOrderSelectForCustomerCheckpoint,
+      executionDeltaJson: true,
+      baseJobPlanVersion: true,
+      job: changeOrderSelectForSendValidation.job,
+    },
   });
 
   if (!changeOrder) {
@@ -63,6 +135,8 @@ export async function captureChangeOrderSendCheckpoint(
   if (!paymentGate.ok) {
     throw new Error("CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED");
   }
+
+  assertStoredChangeOrderReadyForCustomerAccept(changeOrder);
 
   const document = changeOrderRowToCustomerPreviewDocument(changeOrder, organizationName);
   const parsedPaymentImpact = parseChangeOrderPaymentImpact(changeOrder.paymentImpactJson);
@@ -101,6 +175,25 @@ export async function captureChangeOrderSendCheckpoint(
   return { snapshotWire, staffOnly: {}, changeOrderUpdatedAt: changeOrder.updatedAt };
 }
 
+async function loadSendableChangeOrderForSendValidation(
+  tx: ExtendedTransactionClient,
+  changeOrderId: string,
+  organizationId: string,
+) {
+  const changeOrder = await tx.changeOrder.findFirst({
+    where: {
+      id: changeOrderId,
+      organizationId,
+      status: { in: SENDABLE_CHANGE_ORDER_STATUSES },
+    },
+    select: changeOrderSelectForSendValidation,
+  });
+  if (!changeOrder) {
+    throw new Error("CHANGE_ORDER_SEND_STATUS_RACE");
+  }
+  return changeOrder;
+}
+
 export async function transitionChangeOrderToSent(
   tx: ExtendedTransactionClient,
   changeOrderId: string,
@@ -109,6 +202,10 @@ export async function transitionChangeOrderToSent(
 ): Promise<{ shareToken: string; shareExpiresAt: Date | null }> {
   const now = new Date();
   const expiresAt = options.expiresInDays ? addDays(now, options.expiresInDays) : null;
+
+  assertStoredChangeOrderReadyForCustomerAccept(
+    await loadSendableChangeOrderForSendValidation(tx, changeOrderId, organizationId),
+  );
 
   const existingToken = await tx.changeOrderShareToken.findUnique({
     where: { changeOrderId },
@@ -235,6 +332,20 @@ export async function sendChangeOrder(
           ok: false,
           error:
             "Choose and save payment terms in the commercial column before sending this Change Order.",
+        };
+      }
+      if (e.message === "CHANGE_ORDER_UNREVIEWED_GENERATED_TASKS") {
+        return {
+          ok: false,
+          error:
+            "Confirm all generated task suggestions in work impact before sending this Change Order.",
+        };
+      }
+      if (e.message === "CHANGE_ORDER_CUSTOMER_ACCEPT_NOT_READY") {
+        return {
+          ok: false,
+          error:
+            "Work impact must pass acceptance validation before sending this Change Order. Review work impact and try again.",
         };
       }
     }

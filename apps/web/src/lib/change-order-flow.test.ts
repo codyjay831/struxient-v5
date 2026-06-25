@@ -37,6 +37,9 @@ import {
 import { canEditChangeOrderDraft } from "@/lib/change-order/change-order-commercial-rules";
 import { CHANGE_ORDER_EXECUTION_DELTA_SCHEMA_VERSION } from "@/lib/change-order/execution-delta-schema";
 import type { ChangeOrderExecutionTaskOpView } from "@/lib/change-order/change-order-execution-projection";
+import { confirmGeneratedTaskInProposal } from "@/lib/change-order/change-order-execution-task-composer";
+import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
+import { projectChangeOrderExecutionImpact } from "@/lib/change-order/change-order-execution-projection";
 
 const officePermissions = deriveChangeOrderPermissions(StaffRole.OFFICE);
 const viewerPermissions = deriveChangeOrderPermissions(StaffRole.VIEWER);
@@ -718,6 +721,185 @@ test("generated task suggestions keep send action disabled until reviewed", () =
 
   assert.equal(readiness.send.disabled, true);
   assert.match(readiness.send.reason ?? "", /generated task suggestions/i);
+});
+
+test("confirming generated task locally still blocks send until execution impact is saved", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 66000,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: 66000,
+        priceDeltaCents: 66000,
+        executionRelevant: true,
+      },
+    ],
+    skipLegacyPaymentOperation: true,
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+  const confirmed = confirmGeneratedTaskInProposal(delta, taskOp!.opId);
+  assert.equal(confirmed.ok, true);
+  if (!confirmed.ok) return;
+
+  const savedPaymentImpact = buildDueBeforeAddedWorkPaymentImpactJson(66000);
+  const baselineDelta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 66000,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: 66000,
+        priceDeltaCents: 66000,
+        executionRelevant: true,
+      },
+    ],
+    skipLegacyPaymentOperation: true,
+  });
+  const executionImpact = projectChangeOrderExecutionImpact({
+    executionDeltaJson: confirmed.proposal,
+    baseJobPlanVersion: 1,
+    currentJobPlanVersion: 1,
+    priceDeltaCents: 66000,
+    paymentImpactJson: savedPaymentImpact,
+    scopeItems: [],
+    tasks: [],
+  });
+
+  const ventLines = [
+    {
+      operation: ChangeOrderLineOperation.ADD,
+      description: "High flow vent",
+      quantity: "1",
+      priceDeltaCents: 66000,
+      executionRelevant: true,
+    },
+  ];
+
+  const readiness = deriveChangeOrderReadiness({
+    permissions: officePermissions,
+    pageBlocked: false,
+    draftLines: ventLines,
+    reasoning: "Add vent",
+    activeScopeItems: [sampleScopeItem],
+    selectedRevision: {
+      id: "rev-1",
+      status: ChangeOrderStatus.DRAFT,
+      reasoning: "Add vent",
+      priceDeltaCents: 66000,
+      lines: ventLines,
+      paymentImpactJson: savedPaymentImpact,
+      executionImpact,
+    },
+    jobPlanVersion: 1,
+    expectedJobPlanVersion: 1,
+    isPending: false,
+    baselineReasoning: "Add vent",
+    baselineLines: ventLines,
+    baselineExecutionProposal: baselineDelta,
+    currentExecutionProposal: confirmed.proposal,
+    baselinePaymentImpactJson: savedPaymentImpact,
+    paymentImpactJson: savedPaymentImpact,
+    executionComposerEditable: true,
+  });
+
+  assert.equal(readiness.send.disabled, true);
+  assert.match(readiness.unsavedDraftChangesReason ?? "", /Save execution impact before sending/i);
+});
+
+test("confirming generated task clears send blocker when execution impact is saved", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 66000,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: 66000,
+        priceDeltaCents: 66000,
+        executionRelevant: true,
+      },
+    ],
+    skipLegacyPaymentOperation: true,
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+  const confirmed = confirmGeneratedTaskInProposal(delta, taskOp!.opId);
+  assert.equal(confirmed.ok, true);
+  if (!confirmed.ok) return;
+
+  const savedPaymentImpact = buildDueBeforeAddedWorkPaymentImpactJson(66000);
+  const executionImpact = projectChangeOrderExecutionImpact({
+    executionDeltaJson: confirmed.proposal,
+    baseJobPlanVersion: 1,
+    currentJobPlanVersion: 1,
+    priceDeltaCents: 66000,
+    paymentImpactJson: savedPaymentImpact,
+    scopeItems: [],
+    tasks: [],
+  });
+  assert.equal(executionImpact.validationOk, true);
+
+  const ventLines = [
+    {
+      operation: ChangeOrderLineOperation.ADD,
+      description: "High flow vent",
+      quantity: "1",
+      priceDeltaCents: 66000,
+      executionRelevant: true,
+    },
+  ];
+
+  const readiness = deriveChangeOrderReadiness({
+    permissions: officePermissions,
+    pageBlocked: false,
+    draftLines: ventLines,
+    reasoning: "Add vent",
+    activeScopeItems: [sampleScopeItem],
+    selectedRevision: {
+      id: "rev-1",
+      status: ChangeOrderStatus.DRAFT,
+      reasoning: "Add vent",
+      priceDeltaCents: 66000,
+      lines: ventLines,
+      paymentImpactJson: savedPaymentImpact,
+      executionImpact,
+    },
+    jobPlanVersion: 1,
+    expectedJobPlanVersion: 1,
+    isPending: false,
+    baselineReasoning: "Add vent",
+    baselineLines: ventLines,
+    baselineExecutionProposal: confirmed.proposal,
+    currentExecutionProposal: confirmed.proposal,
+    baselinePaymentImpactJson: savedPaymentImpact,
+    paymentImpactJson: savedPaymentImpact,
+    executionComposerEditable: true,
+  });
+
+  assert.equal(readiness.workImpactStatusLabel, "Reviewed");
+  assert.equal(readiness.send.disabled, false);
 });
 
 test("invalid execution impact blocks send", () => {

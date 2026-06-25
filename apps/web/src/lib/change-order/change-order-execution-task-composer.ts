@@ -18,10 +18,17 @@ export const GENERATED_TASK_INTERNAL_NOTE = "Generated from the commercial Chang
 
 export type TaskOperationSourceKind =
   | "generated"
+  | "office_confirmed"
   | "manual_reviewed"
   | "manual_added"
   | "manual_cancel"
   | "manual_modify";
+
+export const OFFICE_REVIEW_CONFIRMED_PAYLOAD_KEY = "officeReviewConfirmed";
+export const OFFICE_REVIEW_CONFIRMED_AT_PAYLOAD_KEY = "officeReviewConfirmedAt";
+export const GENERATED_ORIGIN_PAYLOAD_KEY = "generatedOrigin";
+export const GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY = "generatedFromChangeOrderLineId";
+export const GENERATED_TASK_ORIGIN = "change_order_generated";
 
 const TASK_OPERATION_TYPES = new Set<ChangeOrderExecutionDeltaOperation["type"]>([
   "ADD_TASK",
@@ -45,18 +52,86 @@ export function isExecutionTaskComposerEditable(input: {
   );
 }
 
-export function isGeneratedAddTaskOperation(
+export function isOfficeReviewConfirmedOperation(
+  operation: ChangeOrderExecutionDeltaOperation,
+): boolean {
+  return operation.payload?.[OFFICE_REVIEW_CONFIRMED_PAYLOAD_KEY] === true;
+}
+
+export function hasGeneratedTaskOrigin(
   operation: ChangeOrderExecutionDeltaOperation,
 ): boolean {
   if (operation.type !== "ADD_TASK") return false;
+  const payload = operation.payload;
+  if (payload?.[GENERATED_ORIGIN_PAYLOAD_KEY] === true) return true;
+  if (payload?.origin === GENERATED_TASK_ORIGIN) return true;
+  if (typeof payload?.[GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY] === "string") {
+    return true;
+  }
   if (operation.internalNote === GENERATED_TASK_INTERNAL_NOTE) return true;
-  const meta = operation.payload?.meta;
+  const meta = payload?.meta;
   return Boolean(
     meta &&
       typeof meta === "object" &&
       "generated" in meta &&
       meta.generated === true,
   );
+}
+
+export function isUnreviewedGeneratedTaskOperation(
+  operation: ChangeOrderExecutionDeltaOperation,
+): boolean {
+  return hasGeneratedTaskOrigin(operation) && !isOfficeReviewConfirmedOperation(operation);
+}
+
+/** Unreviewed generated ADD_TASK — blocks send/apply until Confirm task. */
+export function isGeneratedAddTaskOperation(
+  operation: ChangeOrderExecutionDeltaOperation,
+): boolean {
+  return isUnreviewedGeneratedTaskOperation(operation);
+}
+
+export function executionDeltaHasUnreviewedGeneratedTasks(
+  proposal: ChangeOrderExecutionDeltaProposal | null | undefined,
+): boolean {
+  if (!proposal) return false;
+  return proposal.operations.some((operation) => isUnreviewedGeneratedTaskOperation(operation));
+}
+
+export function withGeneratedTaskOriginPayload(
+  payload: Record<string, unknown>,
+  changeOrderLineId: string,
+): Record<string, unknown> {
+  return {
+    ...payload,
+    [GENERATED_ORIGIN_PAYLOAD_KEY]: true,
+    origin: GENERATED_TASK_ORIGIN,
+    [GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY]: changeOrderLineId,
+  };
+}
+
+export function preserveGeneratedOriginPayload(
+  operation: ChangeOrderExecutionDeltaOperation,
+  nextPayload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!hasGeneratedTaskOrigin(operation)) {
+    return nextPayload;
+  }
+  const existing = operation.payload ?? {};
+  return {
+    ...nextPayload,
+    [GENERATED_ORIGIN_PAYLOAD_KEY]:
+      existing[GENERATED_ORIGIN_PAYLOAD_KEY] ?? true,
+    origin: existing.origin ?? GENERATED_TASK_ORIGIN,
+    ...(typeof existing[GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY] === "string" ||
+    typeof nextPayload[GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY] === "string"
+      ? {
+          [GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY]:
+            nextPayload[GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY] ??
+            existing[GENERATED_FROM_CHANGE_ORDER_LINE_ID_KEY],
+        }
+      : {}),
+  };
 }
 
 function manualComposerPayload(extra: Record<string, unknown> = {}) {
@@ -69,8 +144,18 @@ function manualComposerPayload(extra: Record<string, unknown> = {}) {
 export function getTaskOperationSourceKind(
   operation: ChangeOrderExecutionDeltaOperation,
 ): TaskOperationSourceKind {
-  if (isGeneratedAddTaskOperation(operation)) {
+  if (isUnreviewedGeneratedTaskOperation(operation)) {
     return "generated";
+  }
+  if (
+    operation.type === "ADD_TASK" &&
+    isOfficeReviewConfirmedOperation(operation) &&
+    hasGeneratedTaskOrigin(operation)
+  ) {
+    return "office_confirmed";
+  }
+  if (operation.type === "ADD_TASK" && isOfficeReviewConfirmedOperation(operation)) {
+    return "office_confirmed";
   }
   const composerSource = operation.payload?.composerSource;
   if (composerSource === MANUAL_TASK_COMPOSER_SOURCE) {
@@ -89,6 +174,8 @@ export function taskOperationSourceLabel(kind: TaskOperationSourceKind): string 
   switch (kind) {
     case "generated":
       return "Draft task suggestion — office must review before sending.";
+    case "office_confirmed":
+      return "Office confirmed";
     case "manual_added":
       return "Manually added";
     case "manual_cancel":
@@ -288,6 +375,41 @@ export function addTaskOperationToProposal(
   };
 }
 
+export function confirmGeneratedTaskInProposal(
+  proposal: ChangeOrderExecutionDeltaProposal,
+  opId: string,
+): { ok: true; proposal: ChangeOrderExecutionDeltaProposal } | { ok: false; error: string } {
+  const operation = proposal.operations.find((row) => row.opId === opId);
+  if (!operation || operation.type !== "ADD_TASK") {
+    return { ok: false, error: "Only task suggestions can be confirmed." };
+  }
+  if (!isUnreviewedGeneratedTaskOperation(operation)) {
+    return { ok: false, error: "This task is already confirmed or was not generated." };
+  }
+
+  const confirmedAt = new Date().toISOString();
+  return {
+    ok: true,
+    proposal: {
+      ...proposal,
+      operations: proposal.operations.map((row) => {
+        if (row.opId !== opId) return row;
+        const nextPayload = preserveGeneratedOriginPayload(row, { ...(row.payload ?? {}) });
+        return {
+          ...row,
+          internalNote:
+            row.internalNote === GENERATED_TASK_INTERNAL_NOTE ? undefined : row.internalNote,
+          payload: {
+            ...nextPayload,
+            [OFFICE_REVIEW_CONFIRMED_PAYLOAD_KEY]: true,
+            [OFFICE_REVIEW_CONFIRMED_AT_PAYLOAD_KEY]: confirmedAt,
+          },
+        };
+      }),
+    },
+  };
+}
+
 export function removeTaskOperationFromProposal(
   proposal: ChangeOrderExecutionDeltaProposal,
   opId: string,
@@ -340,14 +462,16 @@ export function updateTaskOperationInProposal(
             ? undefined
             : patch.internalNote;
 
+      const editedPayload = manualComposerPayload({
+        ...preserveGeneratedOriginPayload(operation, nextPayload),
+        composerEditedAt: new Date().toISOString(),
+      });
+
       return {
         ...operation,
         reason: patch.reason ?? operation.reason,
         internalNote: nextInternalNote,
-        payload: manualComposerPayload({
-          ...nextPayload,
-          composerEditedAt: new Date().toISOString(),
-        }),
+        payload: editedPayload,
       };
     }),
   };

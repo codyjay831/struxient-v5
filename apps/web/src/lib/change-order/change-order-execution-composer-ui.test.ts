@@ -35,10 +35,13 @@ test("task operation edit form resets per operation with stable key", () => {
   assert.match(impactPanelSource, /key=\{task\.opId\}/);
 });
 
-test("generated task suggestions use warning styling", () => {
+test("generated task suggestions use warning styling and confirm action", () => {
   assert.match(impactPanelSource, /task\.isGenerated/);
   assert.match(impactPanelSource, /bg-warning\/10/);
   assert.match(impactPanelSource, /Sparkles/);
+  assert.match(impactPanelSource, /Confirm task/);
+  assert.match(impactPanelSource, /confirmGeneratedTaskInProposal/);
+  assert.match(impactPanelSource, /unreviewedGeneratedCount/);
 });
 
 test("modify task composer does not expose unsupported task fields", () => {

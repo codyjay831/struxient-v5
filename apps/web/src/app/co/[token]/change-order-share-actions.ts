@@ -18,8 +18,14 @@ import {
   changeOrderSelectForCustomerCheckpoint,
   serializeChangeOrderPreviewDocumentForCheckpoint,
 } from "@/lib/change-order-checkpoint-snapshot";
-import { assertPaymentImpactReadyForAccept } from "@/lib/change-order/payment-impact-gates";
 import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
+import {
+  CHANGE_ORDER_CUSTOMER_ACCEPT_UNAVAILABLE_MESSAGE,
+  CHANGE_ORDER_CUSTOMER_ONLINE_APPROVAL_UNAVAILABLE_MESSAGE,
+  CHANGE_ORDER_CUSTOMER_PAYMENT_UNAVAILABLE_MESSAGE,
+  deriveChangeOrderCustomerAcceptReadiness,
+  getPrimaryCustomerAcceptBlocker,
+} from "@/lib/change-order/change-order-customer-accept-readiness";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -28,12 +34,14 @@ import { hashPublicAccessToken } from "@/lib/public-access/public-token-crypto";
 import { resolveChangeOrderShareToken } from "@/lib/public-access/public-token-service";
 import { auditPublicTokenEvent } from "@/lib/public-access/public-token-audit";
 import { recordCommercialPortalEventForChangeOrder } from "@/lib/customer-portal/commercial-event-bridge";
-import { requestChangeOrderChangesForShareToken } from "@/lib/change-order/change-order-portal";
-import { validateChangeOrderExecutionDelta } from "@/lib/change-order/execution-delta-validation";
+import {
+  requestChangeOrderChangesForShareToken,
+  sendChangeOrderOfficeNoteForShareToken,
+} from "@/lib/change-order/change-order-portal";
 import { recordJobActivity } from "@/lib/job-activity-helper";
-import { canCustomerAcceptChangeOrder } from "@/lib/change-order/change-order-commercial-rules";
 import type {
   ChangeOrderAcceptState,
+  ChangeOrderOfficeNoteState,
   ChangeOrderRequestChangesState,
 } from "./change-order-share-types";
 
@@ -81,6 +89,9 @@ export async function requestChangeOrderChangesAction(
       if (result.error === "CHANGE_ORDER_NOT_SENT") {
         return { error: "This Change Order is no longer awaiting review." };
       }
+      if (result.error === "CHANGE_ORDER_NOT_RESPONSE_READY") {
+        return { error: CHANGE_ORDER_CUSTOMER_ONLINE_APPROVAL_UNAVAILABLE_MESSAGE };
+      }
       return { error: "An unexpected error occurred. Please try again later." };
     }
 
@@ -100,6 +111,65 @@ export async function requestChangeOrderChangesAction(
         return { error: "This Change Order is no longer awaiting review." };
       }
     }
+    return { error: "An unexpected error occurred. Please try again later." };
+  }
+}
+
+export async function sendChangeOrderOfficeNoteAction(
+  token: string,
+  _prevState: ChangeOrderOfficeNoteState,
+  formData: FormData,
+): Promise<ChangeOrderOfficeNoteState> {
+  const message = formData.get("message") as string;
+  if (!message || message.trim().length < 5) {
+    return { error: "Please enter a brief note for the office." };
+  }
+
+  const headerList = await headers();
+  const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "unknown";
+
+  if (
+    !(await checkRateLimit(ip, {
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      max: MAX_REQUESTS_PER_WINDOW,
+      keyPrefix: "change-order-office-note",
+    }))
+  ) {
+    return { error: "Too many requests. Please try again in an hour." };
+  }
+
+  try {
+    const resolvedShareToken = await resolveChangeOrderShareToken(token);
+    if (!resolvedShareToken) {
+      return { error: "This link is no longer valid. Please request a new one from the company." };
+    }
+
+    const result = await sendChangeOrderOfficeNoteForShareToken({
+      shareTokenId: resolvedShareToken.id,
+      message: message.trim(),
+    });
+
+    if (!result.ok) {
+      if (result.error === "TOKEN_INVALID") {
+        return { error: "This link is no longer valid. Please request a new one from the company." };
+      }
+      if (result.error === "CHANGE_ORDER_NOT_SENT") {
+        return { error: "This Change Order is no longer awaiting review." };
+      }
+      if (result.error === "CHANGE_ORDER_OFFICE_NOTE_NOT_ALLOWED") {
+        return { error: CHANGE_ORDER_CUSTOMER_ACCEPT_UNAVAILABLE_MESSAGE };
+      }
+      return { error: "An unexpected error occurred. Please try again later." };
+    }
+
+    revalidatePath("/workstation");
+    auditPublicTokenEvent("change_order.office_note", {
+      changeOrderId: result.changeOrderId,
+      organizationId: result.organizationId,
+      ip,
+    });
+    return { success: true };
+  } catch {
     return { error: "An unexpected error occurred. Please try again later." };
   }
 }
@@ -174,28 +244,15 @@ export async function acceptChangeOrderFromTokenAction(
         throw new Error("TOKEN_INVALID");
       }
 
-      const acceptAllowed = canCustomerAcceptChangeOrder(shareToken.changeOrder.status);
-      if (!acceptAllowed.ok) {
-        if (acceptAllowed.error === "ALREADY_ACCEPTED") {
-          return {
-            changeOrderId: shareToken.changeOrder.id,
-            organizationId: shareToken.changeOrder.organizationId,
-            deltaCents: shareToken.changeOrder.priceDeltaCents,
-            alreadyAccepted: true as const,
-          };
-        }
-        throw new Error(acceptAllowed.error);
-      }
-
-      const changeOrder = shareToken.changeOrder;
-      const organizationId = changeOrder.organizationId;
-      const deltaValidation = validateChangeOrderExecutionDelta({
-        rawDelta: changeOrder.executionDeltaJson,
-        baseJobPlanVersion: changeOrder.baseJobPlanVersion,
-        currentJobPlanVersion: changeOrder.job.jobPlanVersion,
-        priceDeltaCents: changeOrder.priceDeltaCents,
-        scopeItems: changeOrder.job.scopeItems,
-        tasks: changeOrder.job.tasks.map((task) => ({
+      const acceptAllowed = deriveChangeOrderCustomerAcceptReadiness({
+        status: shareToken.changeOrder.status,
+        priceDeltaCents: shareToken.changeOrder.priceDeltaCents,
+        paymentImpactJson: shareToken.changeOrder.paymentImpactJson,
+        executionDeltaJson: shareToken.changeOrder.executionDeltaJson,
+        baseJobPlanVersion: shareToken.changeOrder.baseJobPlanVersion,
+        currentJobPlanVersion: shareToken.changeOrder.job.jobPlanVersion,
+        scopeItems: shareToken.changeOrder.job.scopeItems,
+        tasks: shareToken.changeOrder.job.tasks.map((task) => ({
           id: task.id,
           status: task.status,
           hardSignal: task.hardSignal,
@@ -204,17 +261,21 @@ export async function acceptChangeOrderFromTokenAction(
           jobScopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
         })),
       });
-      if (!deltaValidation.ok) {
-        throw new Error("CHANGE_ORDER_DELTA_INVALID");
+      if (!acceptAllowed.canAccept) {
+        const primary = getPrimaryCustomerAcceptBlocker(acceptAllowed);
+        if (primary?.code === "ALREADY_ACCEPTED") {
+          return {
+            changeOrderId: shareToken.changeOrder.id,
+            organizationId: shareToken.changeOrder.organizationId,
+            deltaCents: shareToken.changeOrder.priceDeltaCents,
+            alreadyAccepted: true as const,
+          };
+        }
+        throw new Error(`CHANGE_ORDER_ACCEPT_BLOCKED:${primary?.code ?? "UNKNOWN"}`);
       }
 
-      const paymentGate = assertPaymentImpactReadyForAccept({
-        priceDeltaCents: changeOrder.priceDeltaCents,
-        paymentImpactJson: changeOrder.paymentImpactJson,
-      });
-      if (!paymentGate.ok) {
-        throw new Error("CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED");
-      }
+      const changeOrder = shareToken.changeOrder;
+      const organizationId = changeOrder.organizationId;
 
       const document = changeOrderRowToCustomerPreviewDocument(
         changeOrder,
@@ -337,14 +398,12 @@ export async function acceptChangeOrderFromTokenAction(
       if (e.message === "CHANGE_ORDER_NOT_SENT") {
         return { error: "This Change Order is no longer awaiting acceptance." };
       }
-      if (e.message === "CHANGE_ORDER_DELTA_INVALID") {
-        return { error: "This Change Order needs office review before it can be accepted." };
-      }
-      if (e.message === "CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED") {
-        return {
-          error:
-            "This Change Order is missing payment terms. Please contact the company to resend an updated Change Order.",
-        };
+      if (e.message.startsWith("CHANGE_ORDER_ACCEPT_BLOCKED:")) {
+        const code = e.message.split(":")[1];
+        if (code === "PAYMENT_IMPACT") {
+          return { error: CHANGE_ORDER_CUSTOMER_PAYMENT_UNAVAILABLE_MESSAGE };
+        }
+        return { error: CHANGE_ORDER_CUSTOMER_ACCEPT_UNAVAILABLE_MESSAGE };
       }
     }
     return { error: "An unexpected error occurred. Please try again later." };

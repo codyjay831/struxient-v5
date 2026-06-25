@@ -35,6 +35,10 @@ import {
   getSendChangeOrderButtonStateFromBlockers,
 } from "@/lib/change-order/change-order-send-readiness";
 import {
+  deriveChangeOrderCustomerAcceptReadiness,
+  getPrimaryCustomerAcceptBlocker,
+} from "@/lib/change-order/change-order-customer-accept-readiness";
+import {
   projectChangeOrderExecutionImpact,
 } from "@/lib/change-order/change-order-execution-projection";
 import { deriveChangeOrderPermissions } from "@/lib/change-order-flow";
@@ -48,6 +52,12 @@ import {
   validateChangeOrderExecutionDelta,
 } from "@/lib/change-order/execution-delta-validation";
 import { applyChangeOrderExecutionDeltaInTx } from "@/lib/change-order/execution-delta-apply";
+import { executionDeltaHasUnreviewedGeneratedTasks } from "@/lib/change-order/change-order-execution-task-composer";
+import {
+  buildDefaultExecutionDeltaFromPersistLines,
+  resolveExecutionDeltaForChangeOrderPersist,
+  toExecutionLineSnapshot,
+} from "@/lib/change-order/change-order-execution-delta-persist";
 import {
   CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
   changeOrderRowToCustomerPreviewDocument,
@@ -280,6 +290,9 @@ export async function validateChangeOrderSendReadinessForStored(
               id: true,
               title: true,
               status: true,
+              hardSignal: true,
+              requiresSignals: true,
+              providesSignals: true,
               scopes: { select: { jobScopeItemId: true } },
             },
           },
@@ -344,6 +357,33 @@ export async function validateChangeOrderSendReadinessForStored(
   if (sendState.disabled) {
     return { ok: false as const, error: sendState.reason ?? "Change Order is not ready to send." };
   }
+
+  const customerAcceptReady = deriveChangeOrderCustomerAcceptReadiness({
+    status: changeOrder.status,
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+    executionDeltaJson: changeOrder.executionDeltaJson,
+    baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+    currentJobPlanVersion: changeOrder.job.jobPlanVersion,
+    scopeItems: changeOrder.job.scopeItems,
+    tasks: changeOrder.job.tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      hardSignal: task.hardSignal,
+      requiresSignals: task.requiresSignals,
+      providesSignals: task.providesSignals,
+      jobScopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
+    })),
+    requireSentStatus: false,
+  });
+  if (!customerAcceptReady.canAccept) {
+    const primary = getPrimaryCustomerAcceptBlocker(customerAcceptReady);
+    return {
+      ok: false as const,
+      error: primary?.staffMessage ?? "Change Order is not ready to send.",
+    };
+  }
+
   return { ok: true as const };
 }
 
@@ -425,6 +465,8 @@ async function persistExecutionDeltaForChangeOrderInTx(
     reasoning: string;
     lines: Awaited<ReturnType<typeof replaceChangeOrderLinesInTx>>;
     executionDeltaOverride?: ChangeOrderExecutionDeltaProposal | null;
+    storedExecutionDeltaJson?: unknown;
+    previousLines?: ReturnType<typeof toExecutionLineSnapshot>[];
     paymentImpactJson?: unknown;
   },
 ) {
@@ -437,23 +479,45 @@ async function persistExecutionDeltaForChangeOrderInTx(
     params.paymentImpactJson == null ||
     (paymentImpactGate.ok && paymentImpactGate.impact != null);
 
-  if (params.executionDeltaOverride) {
-    if (params.executionDeltaOverride.baseJobPlanVersion !== params.baseJobPlanVersion) {
-      throw new Error(
-        "Execution delta baseJobPlanVersion must match the Change Order base plan version.",
-      );
-    }
-    executionDelta = params.executionDeltaOverride;
-  } else {
-    executionDelta = buildDefaultExecutionDeltaFromChangeOrderLines({
+  const buildDefault = () =>
+    buildDefaultExecutionDeltaFromPersistLines({
       baseJobPlanVersion: params.baseJobPlanVersion,
       changeOrderId: params.changeOrderId,
-      number: params.changeOrderNumber,
+      changeOrderNumber: params.changeOrderNumber,
       priceDeltaCents: params.priceDeltaCents,
       reasoning: params.reasoning,
       lines: params.lines,
       skipLegacyPaymentOperation,
     });
+
+  if (params.executionDeltaOverride !== undefined) {
+    if (params.executionDeltaOverride === null) {
+      executionDelta = buildDefault();
+    } else {
+      if (params.executionDeltaOverride.baseJobPlanVersion !== params.baseJobPlanVersion) {
+        throw new Error(
+          "Execution delta baseJobPlanVersion must match the Change Order base plan version.",
+        );
+      }
+      executionDelta = params.executionDeltaOverride;
+    }
+  } else {
+    const resolved = resolveExecutionDeltaForChangeOrderPersist({
+      executionDeltaOverride: undefined,
+      storedExecutionDeltaJson: params.storedExecutionDeltaJson ?? null,
+      previousLines: params.previousLines ?? [],
+      nextLines: params.lines.map(toExecutionLineSnapshot),
+      buildDefault,
+    });
+    if (!resolved.ok) {
+      throw new Error(resolved.error);
+    }
+    if (resolved.proposal.baseJobPlanVersion !== params.baseJobPlanVersion) {
+      throw new Error(
+        "Execution delta baseJobPlanVersion must match the Change Order base plan version.",
+      );
+    }
+    executionDelta = resolved.proposal;
   }
 
   const jobGraph = await loadJobGraphForValidation(tx, {
@@ -682,12 +746,26 @@ export async function updateChangeOrderDraftWithActor(
         priceDeltaCents: true,
         baseJobPlanVersion: true,
         paymentImpactJson: true,
+        executionDeltaJson: true,
       },
     });
     if (!row) return { ok: false as const, error: "Change Order not found." };
 
     const editable = canEditChangeOrderDraft(row.status);
     if (!editable.ok) return { ok: false as const, error: editable.error };
+
+    const previousLines = await tx.changeOrderLine.findMany({
+      where: { changeOrderId: row.id, organizationId: actor.organizationId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        operation: true,
+        sourceJobScopeItemId: true,
+        description: true,
+        quantity: true,
+        executionRelevant: true,
+      },
+    });
 
     const nextReasoning = input.reasoning?.trim() || row.reasoning;
     if (!nextReasoning) {
@@ -765,15 +843,17 @@ export async function updateChangeOrderDraftWithActor(
       }));
 
     const executionDeltaOverride =
-      input.executionDeltaJson == null
-        ? null
-        : (() => {
-            const parsed = parseChangeOrderExecutionDelta(input.executionDeltaJson);
-            if (!parsed.ok) {
-              throw new Error(parsed.errors.join(" "));
-            }
-            return parsed.proposal;
-          })();
+      input.executionDeltaJson === undefined
+        ? undefined
+        : input.executionDeltaJson === null
+          ? null
+          : (() => {
+              const parsed = parseChangeOrderExecutionDelta(input.executionDeltaJson);
+              if (!parsed.ok) {
+                throw new Error(parsed.errors.join(" "));
+              }
+              return parsed.proposal;
+            })();
 
     const executionDelta = await persistExecutionDeltaForChangeOrderInTx(tx, {
       organizationId: actor.organizationId,
@@ -786,6 +866,8 @@ export async function updateChangeOrderDraftWithActor(
       reasoning: nextReasoning,
       lines: linesForDelta,
       executionDeltaOverride,
+      storedExecutionDeltaJson: row.executionDeltaJson,
+      previousLines: previousLines.map(toExecutionLineSnapshot),
       paymentImpactJson: nextPaymentImpactJson,
     });
 
@@ -1124,6 +1206,18 @@ export async function applyChangeOrderWithActor(
         return {
           ok: false as const,
           error: "Job plan changed. Change Order needs execution review before apply.",
+        };
+      }
+
+      const parsedExecutionDelta = parseChangeOrderExecutionDelta(changeOrder.executionDeltaJson);
+      if (
+        parsedExecutionDelta.ok &&
+        executionDeltaHasUnreviewedGeneratedTasks(parsedExecutionDelta.proposal)
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Confirm all generated task suggestions in work impact before applying this Change Order.",
         };
       }
 

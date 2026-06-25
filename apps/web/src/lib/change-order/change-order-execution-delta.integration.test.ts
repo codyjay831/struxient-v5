@@ -15,7 +15,6 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  applyChangeOrderWithActor,
   createChangeOrderDraftWithActor,
   markChangeOrderAcceptedWithActor,
   updateChangeOrderDraftWithActor,
@@ -41,12 +40,17 @@ import {
   countActiveTasks,
   createChangeOrderJobFixture,
   createChangeOrderShareToken,
+  applyConfirmedChangeOrderWithActor,
+  confirmStoredGeneratedTasksForChangeOrder,
   markChangeOrderSent,
   OFFICE_ACTOR,
   requireDevOrgForIntegrationTest,
   seedJobPaymentRequirements,
 } from "@/lib/change-order/change-order-test-fixture";
-import { requestChangeOrderChangesForShareToken } from "@/lib/change-order/change-order-portal";
+import {
+  requestChangeOrderChangesForShareToken,
+  sendChangeOrderOfficeNoteForShareToken,
+} from "@/lib/change-order/change-order-portal";
 import {
   buildPaymentDueContextFromJob,
   getUnsettledEffectivelyDueRequirements,
@@ -187,7 +191,7 @@ test("integration: price-impact SENT staff accept works and enables apply", asyn
     const accepted = await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(accepted.ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
     if (applied.ok) {
       assert.equal(applied.resultingJobPlanVersion, fixture.jobPlanVersion + 1);
@@ -293,7 +297,7 @@ test("integration: apply increases next unpaid payment without duplicate CO row"
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -332,7 +336,7 @@ test("integration: credit strategy reduces final payment first", async (t) => {
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const final = await db.jobPaymentRequirement.findUnique({
@@ -369,7 +373,7 @@ test("integration: apply increases final payment only for ADD_TO_FINAL strategy"
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -417,7 +421,7 @@ test("integration: split strategy updates multiple payments on apply", async (t)
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -461,7 +465,7 @@ test("integration: deposit rest to final creates CO row and updates final", asyn
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -514,7 +518,7 @@ test("integration: settled payment requirements are not mutated on apply", async
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
     const scopeBefore = await countActiveScopeItems(fixture.jobId);
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -560,7 +564,7 @@ test("integration: payment materialization failure rolls back scope mutations", 
 
     const scopeBefore = await countActiveScopeItems(fixture.jobId);
     const tasksBefore = await countActiveTasks(fixture.jobId);
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
     assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
     assert.equal(await countActiveTasks(fixture.jobId), tasksBefore);
@@ -604,7 +608,7 @@ test("integration: MANUAL allocation applies exact saved target amounts", async 
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -658,7 +662,7 @@ test("integration: MANUAL deposit allocation creates CO DUE row and updates targ
     await markChangeOrderSent(created.changeOrderId);
     assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, true);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -729,7 +733,7 @@ test("integration: MANUAL allocation fails safely when target paid after accepta
       select: { amountCents: true },
     });
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
 
     const deposit = await db.jobPaymentRequirement.findUnique({
@@ -791,7 +795,7 @@ test("integration: MANUAL allocation fails safely when target amount changed aft
 
     const scopeBefore = await countActiveScopeItems(fixture.jobId);
     const tasksBefore = await countActiveTasks(fixture.jobId);
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
     assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
     assert.equal(await countActiveTasks(fixture.jobId), tasksBefore);
@@ -874,7 +878,7 @@ test("integration: legacy payment op with paymentImpactJson is rejected at apply
     });
 
     const scopeBefore = await countActiveScopeItems(fixture.jobId);
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
     assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
 
@@ -951,7 +955,7 @@ test("integration: legacy-only price CO cannot apply without paymentImpactJson",
       },
     });
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
 
     const row = await db.changeOrder.findUnique({
@@ -1206,7 +1210,7 @@ test("integration: accepted invalid delta becomes APPLY_FAILED without mutating 
       await db.job.findUnique({ where: { id: fixture.jobId }, select: { jobPlanVersion: true } })
     )?.jobPlanVersion;
 
-    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const applied = await applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
     assert.equal(applied.ok, false);
 
     const row = await db.changeOrder.findUnique({
@@ -1250,8 +1254,8 @@ test("integration: concurrent apply only succeeds once", async (t) => {
     const coA = await createAccepted("CO A");
     const coB = await createAccepted("CO B");
     const [resultA, resultB] = await Promise.all([
-      applyChangeOrderWithActor(OFFICE_ACTOR, coA),
-      applyChangeOrderWithActor(OFFICE_ACTOR, coB),
+      applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, coA),
+      applyConfirmedChangeOrderWithActor(OFFICE_ACTOR, coB),
     ]);
 
     const successes = [resultA, resultB].filter((result) => result.ok);
@@ -1289,8 +1293,8 @@ test("integration: permission denied for FIELD and VIEWER apply paths", async (t
     if (!created.ok) return;
     await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
 
-    assert.equal((await applyChangeOrderWithActor(FIELD_ACTOR, created.changeOrderId)).ok, false);
-    assert.equal((await applyChangeOrderWithActor(VIEWER_ACTOR, created.changeOrderId)).ok, false);
+    assert.equal((await applyConfirmedChangeOrderWithActor(FIELD_ACTOR, created.changeOrderId)).ok, false);
+    assert.equal((await applyConfirmedChangeOrderWithActor(VIEWER_ACTOR, created.changeOrderId)).ok, false);
     assert.equal((await createChangeOrderDraftWithActor(FIELD_ACTOR, {
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
@@ -1316,6 +1320,7 @@ test("integration: customer request-changes writes checkpoint without execution 
     });
     assert.equal(created.ok, true);
     if (!created.ok) return;
+    await confirmStoredGeneratedTasksForChangeOrder(created.changeOrderId, OFFICE_ACTOR.organizationId);
     await markChangeOrderSent(created.changeOrderId);
     await createChangeOrderShareToken(created.changeOrderId);
     const shareToken = await db.changeOrderShareToken.findFirst({
@@ -1345,6 +1350,53 @@ test("integration: customer request-changes writes checkpoint without execution 
     });
     assert.equal(checkpoints, 1);
     assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: accept-blocked SENT CO allows office note without status mutation", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("office-note");
+  try {
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Customer review",
+      lines: [buildAddLine()],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    await markChangeOrderSent(created.changeOrderId);
+    await createChangeOrderShareToken(created.changeOrderId);
+    const shareToken = await db.changeOrderShareToken.findFirst({
+      where: { changeOrderId: created.changeOrderId },
+      select: { id: true },
+    });
+    assert.ok(shareToken);
+
+    const blockedRequest = await requestChangeOrderChangesForShareToken({
+      shareTokenId: shareToken.id,
+      message: "Please adjust the panel location.",
+    });
+    assert.equal(blockedRequest.ok, false);
+    if (!blockedRequest.ok) {
+      assert.equal(blockedRequest.error, "CHANGE_ORDER_NOT_RESPONSE_READY");
+    }
+
+    const noteResult = await sendChangeOrderOfficeNoteForShareToken({
+      shareTokenId: shareToken.id,
+      message: "Please call me to discuss this change order.",
+    });
+    assert.equal(noteResult.ok, true);
+
+    const row = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { status: true },
+    });
+    assert.equal(row?.status, ChangeOrderStatus.SENT);
   } finally {
     await cleanupChangeOrderJobFixture(fixture);
   }

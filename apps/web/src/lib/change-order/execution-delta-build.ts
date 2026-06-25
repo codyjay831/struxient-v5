@@ -1,4 +1,5 @@
 import { ChangeOrderLineOperation } from "@prisma/client";
+import { withGeneratedTaskOriginPayload } from "@/lib/change-order/change-order-execution-task-composer";
 import {
   CHANGE_ORDER_EXECUTION_DELTA_SCHEMA_VERSION,
   type ChangeOrderExecutionDeltaOperation,
@@ -65,12 +66,15 @@ export function buildDefaultExecutionDeltaFromChangeOrderLines(params: {
           opId: taskOpId(line.id),
           type: "ADD_TASK",
           targetEntityType: "JobTask",
-          payload: {
-            title: `Execute change: ${line.description}`,
-            instructions: `Work created by Change Order${params.number ? ` CO-${String(params.number).padStart(3, "0")}` : ""}.`,
-            scopeOpIds: [scopeOpId(line.id)],
-            category: "GENERAL",
-          },
+          payload: withGeneratedTaskOriginPayload(
+            {
+              title: `Execute change: ${line.description}`,
+              instructions: `Work created by Change Order${params.number ? ` CO-${String(params.number).padStart(3, "0")}` : ""}.`,
+              scopeOpIds: [scopeOpId(line.id)],
+              category: "GENERAL",
+            },
+            line.id,
+          ),
           linkedChangeOrderLineId: line.id,
           reason: `Create execution coverage for added scope: ${line.description}`,
           internalNote: "Generated from the commercial Change Order line.",

@@ -15,6 +15,7 @@ import {
   addManualModifyTaskToProposal,
   canSelectTaskForCancel,
   canSelectTaskForModify,
+  confirmGeneratedTaskInProposal,
   ensureProposalForComposer,
   getTargetedTaskIds,
   removeTaskOperationFromProposal,
@@ -135,6 +136,7 @@ function TaskOperationCard({
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
+  onConfirm,
   onRemove,
 }: {
   task: ChangeOrderExecutionTaskOpView;
@@ -146,6 +148,7 @@ function TaskOperationCard({
     opId: string,
     patch: { title?: string; instructions?: string; reason?: string; internalNote?: string },
   ) => void;
+  onConfirm: (opId: string) => void;
   onRemove: (opId: string) => void;
 }) {
   const isEditing = editingOpId === task.opId;
@@ -205,6 +208,11 @@ function TaskOperationCard({
 
         {editable && !isEditing ? (
           <div className="flex shrink-0 flex-col gap-2">
+            {task.isGenerated ? (
+              <Button type="button" size="sm" variant="primary" onClick={() => onConfirm(task.opId)}>
+                Confirm task
+              </Button>
+            ) : null}
             <Button type="button" size="sm" variant="ghost" onClick={() => onStartEdit(task.opId)}>
               Edit
             </Button>
@@ -358,6 +366,7 @@ export function ChangeOrderExecutionImpactPanel({
   );
 
   const allTaskOps = [...impact.addedTasks, ...impact.canceledTasks, ...impact.modifiedTasks];
+  const unreviewedGeneratedCount = impact.addedTasks.filter((task) => task.isGenerated).length;
 
   function renderTaskSection(title: string, tasks: ChangeOrderExecutionTaskOpView[]) {
     if (tasks.length === 0) {
@@ -378,6 +387,7 @@ export function ChangeOrderExecutionImpactPanel({
               onStartEdit={setEditingOpId}
               onCancelEdit={() => setEditingOpId(null)}
               onSaveEdit={handleSaveEdit}
+              onConfirm={handleConfirm}
               onRemove={handleRemove}
             />
           ))}
@@ -468,6 +478,17 @@ export function ChangeOrderExecutionImpactPanel({
     onComposerError?.(null);
   }
 
+  function handleConfirm(opId: string) {
+    const current = ensureProposalForComposer(proposal, baseJobPlanVersion);
+    const result = confirmGeneratedTaskInProposal(current, opId);
+    if (!result.ok) {
+      onComposerError?.(result.error);
+      return;
+    }
+    onComposerError?.(null);
+    onProposalChange(result.proposal);
+  }
+
   function handleSaveEdit(
     opId: string,
     patch: { title?: string; instructions?: string; reason?: string; internalNote?: string },
@@ -529,6 +550,37 @@ export function ChangeOrderExecutionImpactPanel({
           <Button type="button" size="sm" variant="secondary" onClick={onConfirmNoWorkImpact}>
             Mark as price-only / no work impact
           </Button>
+        </div>
+      ) : null}
+
+      {editable && unreviewedGeneratedCount > 0 ? (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="space-y-2">
+            <p>
+              {unreviewedGeneratedCount} generated task suggestion
+              {unreviewedGeneratedCount === 1 ? "" : "s"} need office confirmation. Click{" "}
+              <span className="font-medium">Confirm task</span> on each suggestion below, then save
+              execution impact.
+            </p>
+            {executionChanged && saveExecutionImpact && onSaveExecutionImpact ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="primary"
+                disabled={saveExecutionImpact.disabled}
+                title={saveExecutionImpact.reason ?? undefined}
+                onClick={onSaveExecutionImpact}
+              >
+                {isSaving ? (
+                  <RefreshCw className="size-4 animate-spin" />
+                ) : (
+                  <Save className="size-4" />
+                )}
+                Save execution impact
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

@@ -239,7 +239,7 @@ export function deriveChangeOrderSendBlockers(
       severity: "blocker",
       title: "Review generated task suggestions",
       explanation: `${generatedCount} generated task suggestion${generatedCount === 1 ? "" : "s"} must be reviewed or removed before sending.`,
-      actionLabel: "Review work impact",
+      actionLabel: "Confirm generated tasks",
       actionTarget: "execution",
     });
   } else if (

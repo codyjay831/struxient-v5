@@ -15,6 +15,7 @@ import type {
   ChangeOrderExecutionDeltaOperation,
   ChangeOrderExecutionDeltaProposal,
 } from "@/lib/change-order/execution-delta-schema";
+import { executionDeltaHasUnreviewedGeneratedTasks } from "@/lib/change-order/change-order-execution-task-composer";
 
 export type ApplyChangeOrderExecutionDeltaResult = {
   hasPaymentOperation: boolean;
@@ -117,6 +118,10 @@ export async function applyChangeOrderExecutionDeltaInTx(
     proposal: ChangeOrderExecutionDeltaProposal;
   },
 ): Promise<ApplyChangeOrderExecutionDeltaResult> {
+  if (executionDeltaHasUnreviewedGeneratedTasks(params.proposal)) {
+    throw new Error("CHANGE_ORDER_UNREVIEWED_GENERATED_TASKS");
+  }
+
   const scopeResultByOpId = new Map<string, string>();
   const appliedOperationIds: string[] = [];
   let hasPaymentOperation = false;

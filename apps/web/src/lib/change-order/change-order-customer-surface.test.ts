@@ -165,14 +165,15 @@ test("public change order page query loads paymentImpactJson for customer terms"
   assert.match(pageSource, /paymentImpactJson:\s*true/);
 });
 
-test("public change order page query does not load execution internals", () => {
+test("public change order page uses server-side accept readiness without passing execution internals to preview", () => {
   const pageSource = readFileSync(
     join(process.cwd(), "src/app/co/[token]/page.tsx"),
     "utf8",
   );
-  assert.doesNotMatch(pageSource, /executionDeltaJson/);
+  assert.match(pageSource, /deriveChangeOrderCustomerAcceptReadiness/);
+  assert.match(pageSource, /portalActions=\{portalActions\}/);
+  assert.doesNotMatch(pageSource, /executionDeltaJson:\s*document/);
   assert.doesNotMatch(pageSource, /lastApplyErrorJson/);
-  assert.doesNotMatch(pageSource, /baseJobPlanVersion/);
   assert.doesNotMatch(pageSource, /internalNote/);
 });
 
@@ -186,6 +187,10 @@ test("public change order preview component does not reference execution delta",
   assert.doesNotMatch(previewSource, /jobPlanVersion/i);
   assert.doesNotMatch(previewSource, /targetPaymentRequirementId/i);
   assert.doesNotMatch(previewSource, /will not start until this payment is received/i);
+  assert.match(previewSource, /Send note to office/);
+  assert.match(previewSource, /Online approval unavailable/);
+  assert.doesNotMatch(previewSource, /office review/i);
+  assert.doesNotMatch(previewSource, /stale plan/i);
 });
 
 test("customer preview includes allocation lines for split payment impact", () => {

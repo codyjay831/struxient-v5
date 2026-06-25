@@ -11,15 +11,28 @@ import {
   addManualAddTaskToProposal,
   canSelectTaskForCancel,
   canSelectTaskForModify,
+  confirmGeneratedTaskInProposal,
   createManualCancelTaskOperation,
+  executionDeltaHasUnreviewedGeneratedTasks,
+  GENERATED_ORIGIN_PAYLOAD_KEY,
+  GENERATED_TASK_INTERNAL_NOTE,
   getTaskOperationSourceKind,
+  hasGeneratedTaskOrigin,
   isExecutionTaskComposerEditable,
+  isGeneratedAddTaskOperation,
+  isUnreviewedGeneratedTaskOperation,
+  isOfficeReviewConfirmedOperation,
+  OFFICE_REVIEW_CONFIRMED_AT_PAYLOAD_KEY,
+  OFFICE_REVIEW_CONFIRMED_PAYLOAD_KEY,
   removeTaskOperationFromProposal,
   taskOperationSourceLabel,
+  updateTaskOperationInProposal,
   userFacingValidationMessage,
   mapValidationErrorsByOpId,
   type ChangeOrderComposerTaskSnapshot,
 } from "./change-order-execution-task-composer";
+import { buildDefaultExecutionDeltaFromChangeOrderLines } from "./execution-delta-build";
+import { ChangeOrderLineOperation } from "@prisma/client";
 
 const baseProposal: ChangeOrderExecutionDeltaProposal = {
   schemaVersion: CHANGE_ORDER_EXECUTION_DELTA_SCHEMA_VERSION,
@@ -171,4 +184,132 @@ test("mapValidationErrorsByOpId handles opIds that contain colons", () => {
   assert.deepEqual(byOpId.get("manual-cancel:task-done"), [
     "completed tasks cannot be canceled by Change Order delta.",
   ]);
+});
+
+test("confirmGeneratedTaskInProposal marks generated ADD_TASK as office confirmed", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 0,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: null,
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+
+  const confirmed = confirmGeneratedTaskInProposal(delta, taskOp!.opId);
+  assert.equal(confirmed.ok, true);
+  if (!confirmed.ok) return;
+
+  const nextTaskOp = confirmed.proposal.operations.find((op) => op.opId === taskOp!.opId);
+  assert.ok(nextTaskOp);
+  assert.equal(nextTaskOp?.payload?.officeReviewConfirmed, true);
+  assert.equal(typeof nextTaskOp?.payload?.officeReviewConfirmedAt, "string");
+  assert.equal(isGeneratedAddTaskOperation(nextTaskOp!), false);
+  assert.equal(hasGeneratedTaskOrigin(nextTaskOp!), true);
+  assert.equal(isOfficeReviewConfirmedOperation(nextTaskOp!), true);
+  assert.equal(getTaskOperationSourceKind(nextTaskOp!), "office_confirmed");
+  assert.equal(nextTaskOp?.payload?.[GENERATED_ORIGIN_PAYLOAD_KEY], true);
+  assert.match(taskOperationSourceLabel("office_confirmed"), /Office confirmed/i);
+  assert.equal(executionDeltaHasUnreviewedGeneratedTasks(confirmed.proposal), false);
+});
+
+test("editing internal note on generated task without confirm keeps send blocked", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 0,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: null,
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+  const edited = updateTaskOperationInProposal(delta, taskOp!.opId, {
+    internalNote: "Changed note without confirm",
+  });
+  const nextTaskOp = edited.operations.find((op) => op.opId === taskOp!.opId);
+  assert.ok(nextTaskOp);
+  assert.equal(isUnreviewedGeneratedTaskOperation(nextTaskOp!), true);
+  assert.equal(isGeneratedAddTaskOperation(nextTaskOp!), true);
+  assert.equal(executionDeltaHasUnreviewedGeneratedTasks(edited), true);
+});
+
+test("save op only on generated task without confirm keeps send blocked", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 0,
+    reasoning: "Add vent",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "High flow vent",
+        quantity: "1",
+        unitPriceCents: null,
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+  const edited = updateTaskOperationInProposal(delta, taskOp!.opId, {
+    title: "Execute change: High flow vent (edited title)",
+    reason: taskOp!.reason,
+  });
+  assert.equal(executionDeltaHasUnreviewedGeneratedTasks(edited), true);
+});
+
+test("confirmGeneratedTaskInProposal rejects non-generated tasks", () => {
+  const manual = addManualAddTaskToProposal({
+    proposal: baseProposal,
+    title: "Inspection",
+    reason: "Need inspection",
+  });
+  assert.equal(manual.ok, true);
+  if (!manual.ok) return;
+  const opId = manual.proposal.operations[0]!.opId;
+  const result = confirmGeneratedTaskInProposal(manual.proposal, opId);
+  assert.equal(result.ok, false);
+});
+
+test("isGeneratedAddTaskOperation stays true for default generated marker", () => {
+  assert.equal(
+    isGeneratedAddTaskOperation({
+      opId: "task:1",
+      type: "ADD_TASK",
+      targetEntityType: "JobTask",
+      reason: "Generated",
+      internalNote: GENERATED_TASK_INTERNAL_NOTE,
+      payload: { title: "Execute change: Vent" },
+    }),
+    true,
+  );
 });

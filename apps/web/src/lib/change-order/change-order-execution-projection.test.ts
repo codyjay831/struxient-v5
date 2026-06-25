@@ -52,6 +52,62 @@ test("generated ADD_TASK is flagged for office review", () => {
   assert.equal(executionImpactHasGeneratedTaskSuggestions(impact), true);
 });
 
+test("office-confirmed generated ADD_TASK clears generated review flag", () => {
+  const delta = buildDefaultExecutionDeltaFromChangeOrderLines({
+    baseJobPlanVersion: 1,
+    changeOrderId: "co-1",
+    number: 1,
+    priceDeltaCents: 0,
+    reasoning: "Add panel",
+    lines: [
+      {
+        id: "line-1",
+        operation: ChangeOrderLineOperation.ADD,
+        sourceJobScopeItemId: null,
+        description: "Extra panel",
+        quantity: "1",
+        unitPriceCents: null,
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const taskOp = delta.operations.find((op) => op.type === "ADD_TASK");
+  assert.ok(taskOp);
+  const confirmedDelta = {
+    ...delta,
+    operations: delta.operations.map((op) =>
+      op.opId === taskOp!.opId
+        ? {
+            ...op,
+            internalNote: undefined,
+            payload: {
+              ...op.payload,
+              generatedOrigin: true,
+              origin: "change_order_generated",
+              generatedFromChangeOrderLineId: "line-1",
+              officeReviewConfirmed: true,
+              officeReviewConfirmedAt: "2026-01-01T00:00:00.000Z",
+            },
+          }
+        : op,
+    ),
+  };
+
+  const impact = projectChangeOrderExecutionImpact({
+    executionDeltaJson: confirmedDelta,
+    baseJobPlanVersion: 1,
+    currentJobPlanVersion: 1,
+    priceDeltaCents: 0,
+    scopeItems: [],
+    tasks: [],
+  });
+
+  assert.equal(impact.addedTasks[0]?.isGenerated, false);
+  assert.equal(impact.addedTasks[0]?.sourceKind, "office_confirmed");
+  assert.equal(executionImpactHasGeneratedTaskSuggestions(impact), false);
+});
+
 test("lifecycle readiness surfaces APPLY_FAILED and NEEDS_EXECUTION_REVIEW", () => {
   assert.equal(
     deriveChangeOrderLifecycleReadiness({

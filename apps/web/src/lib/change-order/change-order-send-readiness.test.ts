@@ -157,7 +157,7 @@ test("work-impact CO blocks on generated task suggestions with actionable copy",
   const generated = blockers.find((blocker) => blocker.code === "GENERATED_TASKS");
   assert.ok(generated);
   assert.match(generated?.explanation ?? "", /generated task suggestion/i);
-  assert.equal(generated?.actionLabel, "Review work impact");
+  assert.equal(generated?.actionLabel, "Confirm generated tasks");
 });
 
 test("saved payment does not show payment blocker", () => {

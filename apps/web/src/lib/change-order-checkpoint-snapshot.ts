@@ -18,6 +18,8 @@ export type ChangeOrderCheckpointStaffOnlyWire = {
   acceptedByName?: string;
   recipients?: { email: string; name?: string }[];
   customMessage?: string;
+  message?: string;
+  portalAction?: "customer_office_note" | "formal_change_request";
 };
 
 export const changeOrderSelectForCustomerCheckpoint = {

@@ -8,6 +8,7 @@ import {
   JobScopeItemStatus,
   JobTaskStatus,
   LineItemTemplateTaskSource,
+  Prisma,
   QuoteStatus,
   StaffRole,
   TaskTemplateCategory,
@@ -34,6 +35,16 @@ import {
 import {
   buildPaymentImpactForStrategy,
 } from "@/lib/change-order/payment-impact-resolver";
+import {
+  changeOrderExecutionDeltaToJson,
+  parseChangeOrderExecutionDelta,
+} from "@/lib/change-order/execution-delta-schema";
+import {
+  confirmGeneratedTaskInProposal,
+  executionDeltaHasUnreviewedGeneratedTasks,
+  isGeneratedAddTaskOperation,
+} from "@/lib/change-order/change-order-execution-task-composer";
+import { applyChangeOrderWithActor } from "@/lib/change-order/change-order-lifecycle";
 
 export const OFFICE_ACTOR = {
   userId: "dev-user-id",
@@ -567,6 +578,49 @@ function assertManualImpact(impact: ChangeOrderPaymentImpactV2, preset: ManualPa
   if (impact.originPreset !== preset) {
     throw new Error(`Expected originPreset ${preset}, got ${String(impact.originPreset)}`);
   }
+}
+
+export async function confirmStoredGeneratedTasksForChangeOrder(
+  changeOrderId: string,
+  organizationId: string,
+): Promise<void> {
+  const changeOrder = await db.changeOrder.findFirst({
+    where: { id: changeOrderId, organizationId },
+    select: { executionDeltaJson: true },
+  });
+  if (!changeOrder) {
+    throw new Error("Change Order not found while confirming generated tasks.");
+  }
+  const parsed = parseChangeOrderExecutionDelta(changeOrder.executionDeltaJson);
+  if (!parsed.ok) {
+    throw new Error(parsed.errors.join(" "));
+  }
+  let proposal = parsed.proposal;
+  if (!executionDeltaHasUnreviewedGeneratedTasks(proposal)) {
+    return;
+  }
+  for (const operation of proposal.operations) {
+    if (!isGeneratedAddTaskOperation(operation)) continue;
+    const confirmed = confirmGeneratedTaskInProposal(proposal, operation.opId);
+    if (confirmed.ok) {
+      proposal = confirmed.proposal;
+    }
+  }
+  await db.changeOrder.update({
+    where: { id: changeOrderId },
+    data: {
+      executionDeltaJson: changeOrderExecutionDeltaToJson(proposal) as Prisma.InputJsonValue,
+    },
+  });
+}
+
+export async function applyConfirmedChangeOrderWithActor(
+  actor: typeof OFFICE_ACTOR,
+  changeOrderId: string,
+  options?: { expectedJobPlanVersion?: number | null },
+) {
+  await confirmStoredGeneratedTasksForChangeOrder(changeOrderId, actor.organizationId);
+  return applyChangeOrderWithActor(actor, changeOrderId, options);
 }
 
 export async function markChangeOrderSent(changeOrderId: string) {

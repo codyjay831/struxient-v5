@@ -108,6 +108,38 @@ async function main() {
       "3. Generated task blocks send",
       await page.getByRole("button", { name: "Send change order" }).isDisabled(),
     );
+    record(
+      "3a. Send blocker mentions generated tasks",
+      await page.getByText(/Confirm generated tasks/i).isVisible(),
+    );
+
+    const generatedOpForReview = page.locator("li").filter({ hasText: /Draft task suggestion/i }).first();
+    await generatedOpForReview.getByRole("button", { name: "Confirm task" }).click();
+    record(
+      "3b. Confirm generated task",
+      await page.getByText(/Office confirmed/i).first().isVisible(),
+    );
+    record(
+      "3c. Send still blocked before Save execution impact",
+      await page.getByRole("button", { name: "Send change order" }).isDisabled(),
+    );
+
+    await page.getByRole("button", { name: "Save execution impact" }).click();
+    await page.waitForTimeout(2000);
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    record(
+      "3d. Reload keeps Office confirmed",
+      await page.getByText(/Office confirmed/i).first().isVisible(),
+    );
+
+    const coForReview = await db.changeOrder.findFirst({ where: { jobId }, orderBy: { createdAt: "desc" } });
+    const storedDelta = JSON.stringify(coForReview?.executionDeltaJson ?? {});
+    record(
+      "3e. DB stores officeReviewConfirmed audit fields",
+      storedDelta.includes('"officeReviewConfirmed":true') &&
+        storedDelta.includes('"officeReviewConfirmedAt"'),
+    );
 
     await page.getByRole("button", { name: "Add task cancellation" }).click();
     const cancelForm = page
@@ -153,19 +185,16 @@ async function main() {
     );
     await page.locator("textarea").first().fill("Customer approved battery backup add-on for QA.");
 
+    record(
+      "8. Save execution impact after manual ops",
+      true,
+    );
     await page.getByRole("button", { name: "Save execution impact" }).click();
     await page.waitForTimeout(2000);
     record(
-      "8. Save execution impact",
+      "8b. Unsaved work impact cleared",
       !(await page.getByText(/unsaved work impact/i).isVisible().catch(() => false)),
     );
-
-    const generatedOp = page.locator("li").filter({ hasText: /Draft task suggestion/i }).first();
-    await generatedOp.getByRole("button", { name: "Edit" }).click();
-    await generatedOp.locator("textarea").last().fill("Reviewed by office before send.");
-    await generatedOp.getByRole("button", { name: "Save op" }).click();
-    await page.getByRole("button", { name: "Save execution impact" }).click();
-    await page.waitForTimeout(1500);
 
     await page.getByRole("button", { name: "Send change order" }).click();
     await page.waitForTimeout(2500);

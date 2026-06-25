@@ -125,7 +125,7 @@ export function deriveChangeOrderOfficeNextStep(input: {
     case "DRAFT_INCOMPLETE":
       return "Complete commercial scope lines and reason.";
     case "EXECUTION_NEEDS_REVIEW":
-      return "Review work impact and confirm suggested tasks before sending.";
+      return "Confirm each generated task in Work impact, then save execution impact before sending.";
     case "READY_TO_SEND":
       return input.requiresCustomerApproval
         ? "Send to the customer for approval when commercial and work impact are saved."

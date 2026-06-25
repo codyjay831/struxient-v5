@@ -1,30 +1,39 @@
 "use client";
 
 import { useActionState } from "react";
-import { Check, Loader2, MessageSquare, Printer } from "lucide-react";
+import { Check, Loader2, MessageSquare, Printer, Send } from "lucide-react";
 import { ChangeOrderStatus } from "@prisma/client";
 import {
   acceptChangeOrderFromTokenAction,
   requestChangeOrderChangesAction,
+  sendChangeOrderOfficeNoteAction,
 } from "@/app/co/[token]/change-order-share-actions";
 import type {
   ChangeOrderAcceptState,
+  ChangeOrderOfficeNoteState,
   ChangeOrderRequestChangesState,
 } from "@/app/co/[token]/change-order-share-types";
 import type { ChangeOrderCustomerPreviewDocument } from "@/lib/change-order-customer-projection";
+import {
+  CHANGE_ORDER_CUSTOMER_ONLINE_APPROVAL_UNAVAILABLE_MESSAGE,
+  type ChangeOrderCustomerPortalActions,
+} from "@/lib/change-order/change-order-customer-accept-readiness";
 import { formatMoneyCents } from "@/lib/quote-display";
 
 export function ChangeOrderPublicPreview({
   token,
   document,
   status,
+  portalActions,
 }: {
   token: string;
   document: ChangeOrderCustomerPreviewDocument;
   status: ChangeOrderStatus;
+  portalActions: ChangeOrderCustomerPortalActions;
 }) {
   const boundAccept = acceptChangeOrderFromTokenAction.bind(null, token);
   const boundRequestChanges = requestChangeOrderChangesAction.bind(null, token);
+  const boundOfficeNote = sendChangeOrderOfficeNoteAction.bind(null, token);
   const [acceptState, acceptAction, acceptPending] = useActionState<ChangeOrderAcceptState, FormData>(
     boundAccept,
     {},
@@ -33,9 +42,13 @@ export function ChangeOrderPublicPreview({
     ChangeOrderRequestChangesState,
     FormData
   >(boundRequestChanges, {});
+  const [officeNoteState, officeNoteAction, officeNotePending] = useActionState<
+    ChangeOrderOfficeNoteState,
+    FormData
+  >(boundOfficeNote, {});
 
   const isAccepted = status === ChangeOrderStatus.ACCEPTED || status === ChangeOrderStatus.APPLIED;
-  const canRespond = status === ChangeOrderStatus.SENT;
+  const { canAccept, canRequestChanges, canSendOfficeNote } = portalActions;
   const requestChangesRecorded = status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES;
 
   return (
@@ -205,13 +218,50 @@ export function ChangeOrderPublicPreview({
           </section>
         ) : null}
 
-        {canRespond ? (
+        {canSendOfficeNote ? (
+          <section className="rounded-xl border border-warning/30 bg-warning/10 p-6">
+            <h2 className="text-lg font-bold text-foreground">Online approval unavailable</h2>
+            <p className="mt-2 text-sm text-foreground-muted">
+              {CHANGE_ORDER_CUSTOMER_ONLINE_APPROVAL_UNAVAILABLE_MESSAGE}
+            </p>
+
+            <form action={officeNoteAction} className="mt-5 space-y-4">
+              <textarea
+                name="message"
+                required
+                minLength={5}
+                placeholder="Let the office know how to reach you or what you need."
+                className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              {officeNoteState.error ? (
+                <p className="text-xs font-medium text-destructive">{officeNoteState.error}</p>
+              ) : null}
+              {officeNoteState.success ? (
+                <p className="text-xs font-medium text-success">Your note was sent to the office.</p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={officeNotePending}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground"
+              >
+                {officeNotePending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                Send note to office
+              </button>
+            </form>
+          </section>
+        ) : null}
+
+        {canAccept ? (
           <section className="rounded-xl border-2 border-accent bg-surface p-6">
             <h2 className="text-lg font-bold text-foreground">Respond to this Change Order</h2>
             <p className="mt-1 text-sm text-foreground-muted">
               You are approving the scope changes, revised total
               {document.paymentTerms ? ", and payment allocation" : ""} shown above. You can also
-              changes for the office to review.
+              request changes for the office to review.
             </p>
 
             <form action={acceptAction} className="mt-5 space-y-4">
@@ -242,36 +292,38 @@ export function ChangeOrderPublicPreview({
               </button>
             </form>
 
-            <form action={requestAction} className="mt-8 space-y-4 border-t border-border pt-6">
-              <h3 className="text-sm font-semibold text-foreground">Request changes</h3>
-              <textarea
-                name="message"
-                required
-                minLength={5}
-                placeholder="Describe what you would like changed."
-                className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              />
-              {requestState.error ? (
-                <p className="text-xs font-medium text-destructive">{requestState.error}</p>
-              ) : null}
-              {requestState.success ? (
-                <p className="text-xs font-medium text-success">
-                  Your change request was sent to the company.
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={requestPending}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground"
-              >
-                {requestPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <MessageSquare className="size-4" />
-                )}
-                Request changes
-              </button>
-            </form>
+            {canRequestChanges ? (
+              <form action={requestAction} className="mt-8 space-y-4 border-t border-border pt-6">
+                <h3 className="text-sm font-semibold text-foreground">Request changes</h3>
+                <textarea
+                  name="message"
+                  required
+                  minLength={5}
+                  placeholder="Describe what you would like changed."
+                  className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                />
+                {requestState.error ? (
+                  <p className="text-xs font-medium text-destructive">{requestState.error}</p>
+                ) : null}
+                {requestState.success ? (
+                  <p className="text-xs font-medium text-success">
+                    Your change request was sent to the company.
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  disabled={requestPending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground"
+                >
+                  {requestPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="size-4" />
+                  )}
+                  Request changes
+                </button>
+              </form>
+            ) : null}
           </section>
         ) : null}
 
