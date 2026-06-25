@@ -5,6 +5,7 @@ import {
   type ChangeOrderExecutionDeltaProposal,
 } from "@/lib/change-order/execution-delta-schema";
 import { validateChangeOrderExecutionDelta } from "@/lib/change-order/execution-delta-validation";
+import { parseNoWorkImpactConfirmed } from "@/lib/change-order/execution-delta-no-work-impact";
 import {
   getTaskOperationSourceKind,
   mapValidationErrorsByOpId,
@@ -61,6 +62,7 @@ export type ChangeOrderExecutionImpactView = {
   validationErrors: string[];
   stalePlan: boolean;
   conflict: boolean;
+  noWorkImpactConfirmed: boolean;
 };
 
 export type ChangeOrderLifecycleReadiness =
@@ -283,6 +285,8 @@ export function projectChangeOrderExecutionImpact(input: {
   baseJobPlanVersion: number;
   currentJobPlanVersion: number;
   priceDeltaCents: number;
+  paymentImpactJson?: unknown;
+  allowMissingPaymentImpactForDraft?: boolean;
   scopeItems: Array<{ id: string; description: string; executionRelevant: boolean; status: import("@prisma/client").JobScopeItemStatus }>;
   tasks: ChangeOrderJobTaskSnapshot[];
   scopeLabelsByOpId?: Map<string, string>;
@@ -303,6 +307,7 @@ export function projectChangeOrderExecutionImpact(input: {
       validationErrors: parsed.errors,
       stalePlan: false,
       conflict: false,
+      noWorkImpactConfirmed: false,
     };
   }
 
@@ -326,6 +331,8 @@ export function projectChangeOrderExecutionImpact(input: {
     baseJobPlanVersion: input.baseJobPlanVersion,
     currentJobPlanVersion: input.currentJobPlanVersion,
     priceDeltaCents: input.priceDeltaCents,
+    paymentImpactJson: input.paymentImpactJson ?? null,
+    allowMissingPaymentImpactForDraft: input.allowMissingPaymentImpactForDraft ?? true,
     scopeItems: input.scopeItems,
     tasks: input.tasks.map((task) => ({
       id: task.id,
@@ -399,6 +406,7 @@ export function projectChangeOrderExecutionImpact(input: {
     validationErrors: validationErrors.map(userFacingValidationMessage),
     stalePlan,
     conflict,
+    noWorkImpactConfirmed: parseNoWorkImpactConfirmed(proposal.meta),
   };
 }
 

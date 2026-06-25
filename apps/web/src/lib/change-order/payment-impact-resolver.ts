@@ -19,6 +19,7 @@ export type JobPaymentRequirementForResolver = {
   amountCents: number | null;
   status: JobPaymentRequirementStatus;
   sourcePaymentScheduleItemId: string | null;
+  sourceChangeOrderId?: string | null;
   scheduleSortOrder: number | null;
   anchorType: PaymentScheduleAnchorType | null;
   schedulePercentage?: number | null;
@@ -43,6 +44,26 @@ export function getUnsettledPaymentRequirements(
   return requirements.filter((req) => isUnsettledPaymentRequirement(req.status));
 }
 
+/** Original quote payment schedule row — not a prior CO or ad-hoc manual payment. */
+export function isContractPlanPaymentRequirement(
+  req: JobPaymentRequirementForResolver,
+): boolean {
+  return req.sourceChangeOrderId == null && req.sourcePaymentScheduleItemId != null;
+}
+
+export function getAutoAllocationEligibleRequirements(
+  requirements: JobPaymentRequirementForResolver[],
+): JobPaymentRequirementForResolver[] {
+  return getUnsettledPaymentRequirements(requirements).filter(isContractPlanPaymentRequirement);
+}
+
+/** MVP: custom allocation edits are limited to contract-plan unsettled rows. */
+export function getCustomAllocationEligibleRequirements(
+  requirements: JobPaymentRequirementForResolver[],
+): JobPaymentRequirementForResolver[] {
+  return getAutoAllocationEligibleRequirements(requirements);
+}
+
 function sortRequirementsForResolution(
   requirements: JobPaymentRequirementForResolver[],
 ): JobPaymentRequirementForResolver[] {
@@ -57,21 +78,23 @@ function sortRequirementsForResolution(
 export function resolveNextUnpaidPaymentRequirement(
   requirements: JobPaymentRequirementForResolver[],
 ): JobPaymentRequirementForResolver | null {
-  const unsettled = sortRequirementsForResolution(getUnsettledPaymentRequirements(requirements));
-  return unsettled[0] ?? null;
+  const contractUnsettled = sortRequirementsForResolution(
+    getAutoAllocationEligibleRequirements(requirements),
+  );
+  return contractUnsettled[0] ?? null;
 }
 
 export function resolveFinalUnpaidPaymentRequirement(
   requirements: JobPaymentRequirementForResolver[],
 ): JobPaymentRequirementForResolver | null {
-  const unsettled = getUnsettledPaymentRequirements(requirements);
-  const finalAnchored = unsettled.filter(
+  const contractUnsettled = getAutoAllocationEligibleRequirements(requirements);
+  const finalAnchored = contractUnsettled.filter(
     (req) => req.anchorType === PaymentScheduleAnchorType.FINAL_BALANCE,
   );
   if (finalAnchored.length > 0) {
     return sortRequirementsForResolution(finalAnchored).at(-1) ?? null;
   }
-  return sortRequirementsForResolution(unsettled).at(-1) ?? null;
+  return sortRequirementsForResolution(contractUnsettled).at(-1) ?? null;
 }
 
 export function sumUnsettledPaymentBalanceCents(
@@ -174,12 +197,12 @@ export function buildPaymentImpactForStrategy(params: {
   if (params.strategy === "ADD_TO_NEXT_UNPAID_PAYMENT") {
     target = resolveNextUnpaidPaymentRequirement(params.requirements);
     if (!target) {
-      errors.push("No unpaid payment requirement is available for the next payment strategy.");
+      errors.push("No contract payment is available for the next payment strategy.");
     }
   } else if (params.strategy === "ADD_TO_FINAL_PAYMENT") {
     target = resolveFinalUnpaidPaymentRequirement(params.requirements);
     if (!target) {
-      errors.push("No unpaid final payment requirement is available.");
+      errors.push("No contract final payment is available.");
     }
   } else if (params.strategy === "CREDIT_REMAINING_BALANCE") {
     const unsettledBalance = sumUnsettledPaymentBalanceCents(params.requirements);
@@ -257,11 +280,14 @@ export function derivePaymentImpactWarnings(params: {
 
   const warnings: PaymentImpactWarning[] = [];
   const unsettled = getUnsettledPaymentRequirements(params.requirements);
-
-  if (unsettled.length === 0 && params.priceDeltaCents > 0) {
+  const contractUnsettled = getAutoAllocationEligibleRequirements(params.requirements);
+  if (contractUnsettled.length === 0 && params.priceDeltaCents > 0) {
     warnings.push({
       code: "NO_UNSETTLED_PAYMENTS",
-      message: "No unpaid payment requirements exist on this job. Due before added work is recommended.",
+      message:
+        unsettled.length > 0
+          ? "No contract payment is available for automatic plans. Collect before added work is recommended."
+          : "No unpaid contract payments remain on this job. Collect before added work is recommended.",
     });
   }
 
@@ -276,7 +302,8 @@ export function derivePaymentImpactWarnings(params: {
     if (!target) {
       warnings.push({
         code: "MISSING_TARGET",
-        message: "No suitable unpaid payment requirement was found for this strategy.",
+        message:
+          "No contract payment is available for this plan. Choose collect before added work or wait until a contract payment is open.",
       });
     } else if (
       params.targetPaymentRequirementId &&
@@ -380,10 +407,10 @@ export function humanizePaymentApplyError(message: string): string {
     return "The selected payment was already collected or closed after the customer accepted. Update payment terms in the commercial column, save, and review before applying again.";
   }
   if (/no longer matches the earliest unsettled payment/i.test(message)) {
-    return "The next unpaid payment on this job changed after the customer accepted. Review payment terms and save commercial changes before applying again.";
+    return "The next contract payment on this job changed after the customer accepted. Review payment terms and save commercial changes before applying again.";
   }
   if (/no longer matches the final unsettled payment/i.test(message)) {
-    return "The final unpaid payment on this job changed after the customer accepted. Review payment terms and save commercial changes before applying again.";
+    return "The final contract payment on this job changed after the customer accepted. Review payment terms and save commercial changes before applying again.";
   }
   if (/must not coexist with approved paymentImpactJson/i.test(message)) {
     return "This Change Order has conflicting payment instructions. Save approved payment terms in the commercial column and remove legacy payment operations.";

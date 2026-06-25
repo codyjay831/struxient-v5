@@ -118,3 +118,39 @@ test("accept gate mirrors send gate", () => {
   assert.equal(send.ok, true);
   assert.equal(accept.ok, true);
 });
+
+test("manual allocation basis requires exact total match", () => {
+  const gate = validateChangeOrderPaymentImpactGate({
+    priceDeltaCents: 5000,
+    paymentImpactJson: {
+      schemaVersion: 2,
+      strategy: "ADD_TO_FINAL_PAYMENT",
+      customerTermsText: "Manual plan",
+      allocationBasis: "MANUAL",
+      originPreset: "ADD_TO_FINAL_PAYMENT",
+      allocations: [
+        {
+          paymentRequirementId: "pay-1",
+          title: "Progress",
+          statusAtApproval: "PENDING",
+          currentAmountCents: 50_000,
+          adjustmentCents: 1200,
+          newAmountCents: 51_200,
+        },
+        {
+          paymentRequirementId: "pay-2",
+          title: "Final",
+          statusAtApproval: "PENDING",
+          currentAmountCents: 50_000,
+          adjustmentCents: 1200,
+          newAmountCents: 51_200,
+        },
+      ],
+      resolvedPreview: {
+        strategyLabel: "Add to final payment",
+        customerSummary: "Manual plan",
+      },
+    },
+  });
+  assert.equal(gate.ok, false);
+});

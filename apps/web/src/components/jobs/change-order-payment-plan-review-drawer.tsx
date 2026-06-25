@@ -4,14 +4,17 @@ import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { ChangeOrderPaymentAllocationBasis } from "@/lib/change-order/payment-impact-schema";
 import {
+  isDepositStrategy,
   isPaymentImpactV2,
   changeOrderPaymentImpactToJson,
   parseChangeOrderPaymentImpact,
   type ChangeOrderPaymentImpactAny,
 } from "@/lib/change-order/payment-impact-schema";
 import {
+  buildManualImpactFromPresetImpact,
   buildImpactForPreset,
   buildPaymentPlanReviewModel,
+  isManualPaymentAllocation,
   PAYMENT_PLAN_PRESET_LABELS,
   presetNeedsBasis,
   presetNeedsDeposit,
@@ -24,6 +27,7 @@ import {
   type JobPaymentRequirementForResolver,
 } from "@/lib/change-order/payment-impact-resolver";
 import { formatCents, formatJobPaymentStatus } from "@/lib/job-payment-display";
+import { ChangeOrderCustomAllocationIndicator } from "@/components/jobs/change-order-custom-allocation-indicator";
 import { Drawer } from "@/components/ui/drawer";
 
 function defaultDepositCents(priceDeltaCents: number): number {
@@ -66,27 +70,52 @@ export function ChangeOrderPaymentPlanReviewDrawer({
     () => parseChangeOrderPaymentImpact(paymentImpactJson),
     [paymentImpactJson],
   );
+  const storedImpact = parsedStored.ok ? parsedStored.impact : null;
 
   const availablePresets = presetsForPriceDelta(priceDeltaCents);
-  const [preset, setPreset] = useState<PaymentPlanPreset>(
-    inferPresetFromImpact(parsedStored.ok ? parsedStored.impact : null, priceDeltaCents),
+  const [preset, setPreset] = useState<PaymentPlanPreset>(() =>
+    inferPresetFromImpact(storedImpact, priceDeltaCents),
   );
   const [depositDollars, setDepositDollars] = useState(() => {
-    const stored = parsedStored.ok ? parsedStored.impact : null;
-    if (stored && "initialPayment" in stored && stored.initialPayment) {
-      return (stored.initialPayment.amountCents / 100).toFixed(2);
+    if (storedImpact && "initialPayment" in storedImpact && storedImpact.initialPayment) {
+      return (storedImpact.initialPayment.amountCents / 100).toFixed(2);
     }
     return (defaultDepositCents(priceDeltaCents) / 100).toFixed(2);
   });
-  const [basis, setBasis] = useState<ChangeOrderPaymentAllocationBasis>(
-    parsedStored.ok && parsedStored.impact && "allocationBasis" in parsedStored.impact
-      ? (parsedStored.impact.allocationBasis ?? "ORIGINAL_PAYMENT_PERCENTAGES")
-      : "ORIGINAL_PAYMENT_PERCENTAGES",
+  const [basis, setBasis] = useState<ChangeOrderPaymentAllocationBasis>(() => {
+    if (!storedImpact || !isPaymentImpactV2(storedImpact)) {
+      return "ORIGINAL_PAYMENT_PERCENTAGES";
+    }
+    const persistedBasis = storedImpact.allocationBasis ?? "ORIGINAL_PAYMENT_PERCENTAGES";
+    return persistedBasis === "MANUAL"
+      ? (storedImpact.originAllocationBasis ?? "ORIGINAL_PAYMENT_PERCENTAGES")
+      : persistedBasis;
+  });
+  const [customizeAllocation, setCustomizeAllocation] = useState(
+    storedImpact != null &&
+      isPaymentImpactV2(storedImpact) &&
+      storedImpact.allocationBasis === "MANUAL",
   );
+  const [manualNewAmountsById, setManualNewAmountsById] = useState<Map<string, number>>(() => {
+    if (
+      storedImpact != null &&
+      isPaymentImpactV2(storedImpact) &&
+      storedImpact.allocationBasis === "MANUAL" &&
+      storedImpact.allocations?.length
+    ) {
+      return new Map(
+        storedImpact.allocations.map((allocation) => [
+          allocation.paymentRequirementId,
+          allocation.newAmountCents,
+        ]),
+      );
+    }
+    return new Map();
+  });
 
   const depositCents = Math.round(Number.parseFloat(depositDollars) * 100);
 
-  const built = useMemo(() => {
+  const builtPresetImpact = useMemo(() => {
     if (priceDeltaCents === 0) return null;
     return buildImpactForPreset({
       preset,
@@ -107,10 +136,10 @@ export function ChangeOrderPaymentPlanReviewDrawer({
     changeOrderNumber,
   ]);
 
-  const reviewModel = useMemo(() => {
+  const baseReviewModel = useMemo(() => {
     const adjustments = new Map<string, number>();
-    if (built?.ok && built.impact.allocations) {
-      for (const row of built.impact.allocations) {
+    if (builtPresetImpact?.ok && builtPresetImpact.impact.allocations) {
+      for (const row of builtPresetImpact.impact.allocations) {
         adjustments.set(row.paymentRequirementId, row.adjustmentCents);
       }
     }
@@ -119,10 +148,70 @@ export function ChangeOrderPaymentPlanReviewDrawer({
       requirements: paymentRequirements,
       adjustments,
     });
-  }, [built, priceDeltaCents, paymentRequirements]);
+  }, [builtPresetImpact, priceDeltaCents, paymentRequirements]);
+
+  const customizationAvailable =
+    builtPresetImpact?.ok === true &&
+    builtPresetImpact.impact.strategy !== "DUE_BEFORE_ADDED_WORK" &&
+    builtPresetImpact.impact.strategy !== "CREDIT_REMAINING_BALANCE" &&
+    baseReviewModel.contractPlanCount > 0;
+
+  const built = useMemo(() => {
+    if (!builtPresetImpact || !builtPresetImpact.ok) return builtPresetImpact;
+    if (!customizeAllocation || !customizationAvailable) return builtPresetImpact;
+    return buildManualImpactFromPresetImpact({
+      baseImpact: builtPresetImpact.impact,
+      preset,
+      priceDeltaCents,
+      reviewModel: baseReviewModel,
+      manualNewAmountsById,
+    });
+  }, [
+    builtPresetImpact,
+    customizeAllocation,
+    customizationAvailable,
+    preset,
+    priceDeltaCents,
+    baseReviewModel,
+    manualNewAmountsById,
+  ]);
 
   const impact = built?.ok ? built.impact : null;
   const preview = impact?.resolvedPreview ?? null;
+
+  const reviewModel = useMemo(() => {
+    const adjustments = new Map<string, number>();
+    if (impact?.allocations) {
+      for (const row of impact.allocations) {
+        adjustments.set(row.paymentRequirementId, row.adjustmentCents);
+      }
+    }
+    return buildPaymentPlanReviewModel({
+      priceDeltaCents,
+      requirements: paymentRequirements,
+      adjustments,
+    });
+  }, [impact, priceDeltaCents, paymentRequirements]);
+
+  const allocationTotalCents = impact?.allocations?.reduce((sum, row) => sum + row.adjustmentCents, 0) ?? 0;
+  const allocatedTotalCents =
+    (impact && isDepositStrategy(impact.strategy) ? (impact.initialPayment?.amountCents ?? 0) : 0) +
+    allocationTotalCents;
+  const remainingAllocationCents = priceDeltaCents - allocatedTotalCents;
+
+  function handleManualAdjustmentChange(rowId: string, currentAmountCents: number, value: string) {
+    setManualNewAmountsById((prev) => {
+      const next = new Map(prev);
+      const parsed = Number.parseFloat(value);
+      if (!Number.isFinite(parsed)) {
+        next.delete(rowId);
+        return next;
+      }
+      const adjustmentCents = Math.round(parsed * 100);
+      next.set(rowId, currentAmountCents + adjustmentCents);
+      return next;
+    });
+  }
 
   function handleConfirm() {
     if (built?.ok) {
@@ -147,9 +236,17 @@ export function ChangeOrderPaymentPlanReviewDrawer({
               <dd className="font-semibold text-foreground">{formatCents(priceDeltaCents)}</dd>
             </div>
             <div>
-              <dt className="text-foreground-muted">Eligible payments</dt>
-              <dd className="font-medium text-foreground">{reviewModel.eligibleCount}</dd>
+              <dt className="text-foreground-muted">Contract payments</dt>
+              <dd className="font-medium text-foreground">{reviewModel.contractPlanCount}</dd>
             </div>
+            {reviewModel.excludedOpenPaymentCount > 0 ? (
+              <div>
+                <dt className="text-foreground-muted">Other open payments</dt>
+                <dd className="font-medium text-foreground">
+                  {reviewModel.excludedOpenPaymentCount} excluded
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </div>
 
@@ -158,7 +255,11 @@ export function ChangeOrderPaymentPlanReviewDrawer({
           <select
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             value={preset}
-            onChange={(event) => setPreset(event.target.value as PaymentPlanPreset)}
+            onChange={(event) => {
+              setPreset(event.target.value as PaymentPlanPreset);
+              setCustomizeAllocation(false);
+              setManualNewAmountsById(new Map());
+            }}
           >
             {availablePresets.map((option) => (
               <option key={option} value={option}>
@@ -225,25 +326,51 @@ export function ChangeOrderPaymentPlanReviewDrawer({
                 <tr
                   key={row.paymentRequirementId}
                   className={`border-b border-border last:border-0 ${
-                    row.eligible ? "" : "opacity-50"
+                    row.ineligibleReason ? "opacity-50" : ""
                   }`}
                 >
                   <td className="px-3 py-2 font-medium text-foreground">{row.title}</td>
                   <td className="px-3 py-2 text-foreground-muted">
                     {formatJobPaymentStatus(row.status)}
-                    {!row.eligible && row.ineligibleReason ? (
+                    {row.ineligibleReason ? (
                       <span className="block text-xs">{row.ineligibleReason}</span>
+                    ) : null}
+                    {!row.isAutoAllocationEligible && row.exclusionReason ? (
+                      <>
+                        <span className="mt-1 block text-xs text-foreground-muted">
+                          Excluded from auto split
+                        </span>
+                        <span className="block text-xs">{row.exclusionReason}</span>
+                      </>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-right text-foreground-muted">
                     {formatCents(row.currentAmountCents)}
                   </td>
                   <td className="px-3 py-2 text-right font-medium text-foreground">
-                    {row.adjustmentCents !== 0
-                      ? row.adjustmentCents > 0
-                        ? `+${formatCents(row.adjustmentCents)}`
-                        : formatCents(row.adjustmentCents)
-                      : "—"}
+                    {customizeAllocation && customizationAvailable && row.isCustomAllocationEligible ? (
+                      <input
+                        type="number"
+                        step={0.01}
+                        className="w-28 rounded border border-border bg-background px-2 py-1 text-right text-xs text-foreground"
+                        value={(row.adjustmentCents / 100).toFixed(2)}
+                        onChange={(event) =>
+                          handleManualAdjustmentChange(
+                            row.paymentRequirementId,
+                            row.currentAmountCents,
+                            event.target.value,
+                          )
+                        }
+                      />
+                    ) : row.adjustmentCents !== 0 ? (
+                      row.adjustmentCents > 0 ? (
+                        `+${formatCents(row.adjustmentCents)}`
+                      ) : (
+                        formatCents(row.adjustmentCents)
+                      )
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right font-medium text-foreground">
                     {row.adjustmentCents !== 0 ? formatCents(row.newAmountCents) : "—"}
@@ -255,6 +382,46 @@ export function ChangeOrderPaymentPlanReviewDrawer({
               ))}
             </tbody>
           </table>
+        </div>
+
+        {customizationAvailable ? (
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={customizeAllocation}
+              onChange={(event) => {
+                setCustomizeAllocation(event.target.checked);
+                if (!event.target.checked) {
+                  setManualNewAmountsById(new Map());
+                }
+              }}
+            />
+            <span className="text-foreground">Customize allocation</span>
+          </label>
+        ) : null}
+
+        {impact && isManualPaymentAllocation(impact) ? (
+          <ChangeOrderCustomAllocationIndicator impact={impact} />
+        ) : null}
+
+        <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+            Allocation validation
+          </p>
+          <dl className="mt-2 grid gap-2 sm:grid-cols-3">
+            <div>
+              <dt className="text-foreground-muted">Change Order amount</dt>
+              <dd className="font-medium text-foreground">{formatCents(priceDeltaCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-foreground-muted">Allocated amount</dt>
+              <dd className="font-medium text-foreground">{formatCents(allocatedTotalCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-foreground-muted">Remaining amount</dt>
+              <dd className="font-medium text-foreground">{formatCents(remainingAllocationCents)}</dd>
+            </div>
+          </dl>
         </div>
 
         {impact && isPaymentImpactV2(impact) && impact.initialPayment ? (
@@ -316,10 +483,14 @@ export function ChangeOrderPaymentPlanReviewDrawer({
           </div>
         ) : null}
 
-        {reviewModel.eligibleCount === 0 && priceDeltaCents > 0 ? (
+        {reviewModel.contractPlanCount === 0 && priceDeltaCents > 0 ? (
           <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p>No unpaid payments remain. Collect before added work is the only option.</p>
+            <p>
+              {reviewModel.excludedOpenPaymentCount > 0
+                ? "No contract payment is available for automatic plans. Prior Change Order and manual payments stay visible but cannot be selected. Collect before added work is recommended."
+                : "No unpaid contract payments remain. Collect before added work is the only option."}
+            </p>
           </div>
         ) : null}
 
@@ -333,7 +504,7 @@ export function ChangeOrderPaymentPlanReviewDrawer({
           </button>
           <button
             type="button"
-            disabled={!built?.ok}
+            disabled={!built?.ok || remainingAllocationCents !== 0}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
             onClick={handleConfirm}
           >

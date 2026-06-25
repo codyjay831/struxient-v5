@@ -52,6 +52,7 @@ import {
   buildPaymentImpactForStrategy,
   suggestDefaultPaymentStrategy,
 } from "@/lib/change-order/payment-impact-resolver";
+import { buildNoWorkImpactExecutionDelta } from "@/lib/change-order/execution-delta-no-work-impact";
 import {
   changeOrderPaymentImpactToJson,
   type ChangeOrderPaymentImpactAny,
@@ -232,12 +233,14 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
       baseJobPlanVersion: selectedChangeOrder.baseJobPlanVersion ?? data.jobPlanVersion,
       currentJobPlanVersion: data.jobPlanVersion,
       priceDeltaCents: selectedChangeOrder.priceDeltaCents,
+      paymentImpactJson: activeEditState?.paymentImpactJson ?? selectedChangeOrder.paymentImpactJson,
       scopeItems: scopeItemsForProjection,
       tasks: data.jobTasks,
     });
   }, [
     selectedChangeOrder,
     executionDeltaProposal,
+    activeEditState?.paymentImpactJson,
     data.jobPlanVersion,
     data.jobTasks,
     scopeItemsForProjection,
@@ -358,6 +361,40 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     });
   }
 
+  function handleConfirmNoWorkImpact() {
+    if (!selectedChangeOrder || !activeEditState || !editValidation.ok) {
+      setError("Complete commercial changes before confirming no work impact.");
+      return;
+    }
+    const linesWithNoWorkImpact = editLines.map((line) => ({
+      ...line,
+      executionRelevant: false,
+    }));
+    const confirmedDelta = buildNoWorkImpactExecutionDelta({
+      baseJobPlanVersion: selectedChangeOrder.baseJobPlanVersion ?? data.jobPlanVersion,
+      changeOrderId: selectedChangeOrder.id,
+      number: selectedChangeOrder.number,
+      priceDeltaCents: editValidation.priceDeltaCents,
+      reasoning: editReasoning.trim(),
+      lines: linesWithNoWorkImpact.map((line, index) => ({
+        id: line.id ?? `line-${index + 1}`,
+        operation: line.operation,
+        sourceJobScopeItemId: line.sourceJobScopeItemId ?? null,
+        description: line.description,
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents ?? null,
+        priceDeltaCents: line.priceDeltaCents ?? 0,
+        executionRelevant: false,
+      })),
+    });
+    setEditState({
+      ...activeEditState,
+      lines: linesWithNoWorkImpact,
+      executionDeltaProposal: confirmedDelta,
+    });
+    setError(null);
+  }
+
   function handleSaveDraft(saveKind: "commercial_only" | "execution_only") {
     const saveState =
       saveKind === "commercial_only"
@@ -387,7 +424,15 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
           proposal: executionDeltaProposal,
         })
       : false;
-    const saveIntent = resolveDraftUpdateSaveIntent({ commercialChanged, executionChanged });
+    const paymentImpactChanged = activeEditState
+      ? JSON.stringify(activeEditState.baselinePaymentImpactJson ?? null) !==
+        JSON.stringify(activeEditState.paymentImpactJson ?? null)
+      : false;
+    const saveIntent = resolveDraftUpdateSaveIntent({
+      commercialChanged,
+      executionChanged,
+      paymentImpactChanged,
+    });
 
     if (saveIntent.kind !== saveKind) {
       setError(
@@ -417,15 +462,30 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
               paymentImpactJson:
                 commercialPriceDeltaCents === 0
                   ? null
-                  : activeEditState?.paymentImpactJson
-                    ? (activeEditState.paymentImpactJson as Record<string, unknown>)
-                    : undefined,
+                  : ((activeEditState?.paymentImpactJson ?? null) as Record<
+                      string,
+                      unknown
+                    > | null),
             }),
       });
       if (!result.ok) {
         setError(result.error);
         setPhase("idle");
         return;
+      }
+      if (saveKind === "commercial_only" && activeEditState) {
+        setEditState({
+          ...activeEditState,
+          baselineReasoning: editReasoning.trim(),
+          baselineLines: editLines,
+          baselinePaymentImpactJson: activeEditState.paymentImpactJson,
+        });
+      }
+      if (saveKind === "execution_only" && activeEditState) {
+        setEditState({
+          ...activeEditState,
+          baselineExecutionDeltaProposal: executionDeltaProposal,
+        });
       }
       setPhase("idle");
       router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
@@ -881,6 +941,10 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                   }}
                   composerError={composerError}
                   onComposerError={setComposerError}
+                  showConfirmNoWorkImpact={selectedReadiness.sendBlockers.some(
+                    (blocker) => blocker.code === "CONFIRM_NO_WORK_IMPACT",
+                  )}
+                  onConfirmNoWorkImpact={handleConfirmNoWorkImpact}
                 />
               ) : null}
               <ChangeOrderReadinessPanel readiness={selectedReadiness} mode="selected" />

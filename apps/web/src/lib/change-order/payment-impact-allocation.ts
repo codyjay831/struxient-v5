@@ -13,10 +13,13 @@ import type {
 import {
   CHANGE_ORDER_PAYMENT_IMPACT_SCHEMA_VERSION_V2,
   CHANGE_ORDER_PAYMENT_STRATEGY_LABELS,
+  isDepositStrategy,
+  isPaymentImpactV2,
   validatePaymentImpactAllocationSum,
 } from "@/lib/change-order/payment-impact-schema";
 import {
-  getUnsettledPaymentRequirements,
+  getAutoAllocationEligibleRequirements,
+  isContractPlanPaymentRequirement,
   isUnsettledPaymentRequirement,
   resolveFinalUnpaidPaymentRequirement,
   resolveNextUnpaidPaymentRequirement,
@@ -60,8 +63,13 @@ export type PaymentPlanReviewRow = {
   schedulePercentage: number | null;
   anchorType: PaymentScheduleAnchorType | null;
   dueAnchorLabel: string | null;
+  isContractPlanRow: boolean;
+  /** @deprecated Use isAutoAllocationEligible */
   eligible: boolean;
+  isAutoAllocationEligible: boolean;
+  isCustomAllocationEligible: boolean;
   ineligibleReason: string | null;
+  exclusionReason: string | null;
   adjustmentCents: number;
   newAmountCents: number;
 };
@@ -69,9 +77,16 @@ export type PaymentPlanReviewRow = {
 export type PaymentPlanReviewModel = {
   priceDeltaCents: number;
   rows: PaymentPlanReviewRow[];
+  /** Contract-plan unsettled rows eligible for automatic split. */
+  contractPlanCount: number;
+  /** Open payments visible but excluded from automatic split (prior CO / manual). */
+  excludedOpenPaymentCount: number;
+  /** @deprecated Use contractPlanCount */
   eligibleCount: number;
   unsettledTotalCents: number;
 };
+
+type ManualAllocationNewAmounts = Map<string, number>;
 
 function formatAnchorLabel(params: {
   anchorType: PaymentScheduleAnchorType | null;
@@ -107,6 +122,19 @@ function ineligibleReasonForStatus(status: JobPaymentRequirementStatus): string 
   }
 }
 
+function autoExclusionReason(req: JobPaymentRequirementForResolver): string | null {
+  if (!isUnsettledPaymentRequirement(req.status)) {
+    return null;
+  }
+  if (req.sourceChangeOrderId) {
+    return "Prior Change Order payment";
+  }
+  if (!isContractPlanPaymentRequirement(req)) {
+    return "Manual payment — not part of original contract plan";
+  }
+  return null;
+}
+
 export function buildPaymentPlanReviewModel(params: {
   priceDeltaCents: number;
   requirements: JobPaymentRequirementForResolver[];
@@ -120,15 +148,23 @@ export function buildPaymentPlanReviewModel(params: {
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  let eligibleCount = 0;
+  let contractPlanCount = 0;
+  let excludedOpenPaymentCount = 0;
   let unsettledTotalCents = 0;
 
   const rows: PaymentPlanReviewRow[] = sorted.map((req) => {
-    const eligible = isUnsettledPaymentRequirement(req.status);
+    const unsettled = isUnsettledPaymentRequirement(req.status);
+    const isContractPlanRow = isContractPlanPaymentRequirement(req);
+    const isAutoAllocationEligible = unsettled && isContractPlanRow;
+    const isCustomAllocationEligible = isAutoAllocationEligible;
     const currentAmountCents = Math.max(0, req.amountCents ?? 0);
-    if (eligible) {
-      eligibleCount += 1;
+    if (unsettled) {
       unsettledTotalCents += currentAmountCents;
+      if (isAutoAllocationEligible) {
+        contractPlanCount += 1;
+      } else {
+        excludedOpenPaymentCount += 1;
+      }
     }
     const adjustmentCents = adjustments.get(req.id) ?? 0;
     return {
@@ -143,8 +179,12 @@ export function buildPaymentPlanReviewModel(params: {
         anchorType: req.anchorType,
         requiredBeforeStageTitle: req.requiredBeforeStageTitle ?? null,
       }),
-      eligible,
-      ineligibleReason: eligible ? null : ineligibleReasonForStatus(req.status),
+      isContractPlanRow,
+      eligible: isAutoAllocationEligible,
+      isAutoAllocationEligible,
+      isCustomAllocationEligible,
+      ineligibleReason: unsettled ? null : ineligibleReasonForStatus(req.status),
+      exclusionReason: autoExclusionReason(req),
       adjustmentCents,
       newAmountCents: currentAmountCents + adjustmentCents,
     };
@@ -153,7 +193,9 @@ export function buildPaymentPlanReviewModel(params: {
   return {
     priceDeltaCents: params.priceDeltaCents,
     rows,
-    eligibleCount,
+    contractPlanCount,
+    excludedOpenPaymentCount,
+    eligibleCount: contractPlanCount,
     unsettledTotalCents,
   };
 }
@@ -204,7 +246,24 @@ export function allocateByOriginalPaymentPercentages(params: {
   basisUsed: ChangeOrderPaymentAllocationBasis;
   basisFallback: ChangeOrderPaymentAllocationBasis | null;
 } {
-  const percentages = params.eligible.map((r) => r.schedulePercentage ?? 0);
+  const scheduleBacked = params.eligible.filter(
+    (row) =>
+      row.sourcePaymentScheduleItemId != null &&
+      row.schedulePercentage != null &&
+      row.schedulePercentage > 0,
+  );
+  const hasFullCoverage =
+    params.eligible.length > 0 && scheduleBacked.length === params.eligible.length;
+  if (!hasFullCoverage) {
+    const fallback = allocateByCurrentRemainingAmounts(params);
+    return {
+      adjustments: fallback.adjustments,
+      basisUsed: "CURRENT_REMAINING_AMOUNTS",
+      basisFallback: "CURRENT_REMAINING_AMOUNTS",
+    };
+  }
+
+  const percentages = scheduleBacked.map((row) => row.schedulePercentage ?? 0);
   const hasPercentages = percentages.some((p) => p > 0);
   if (!hasPercentages) {
     const fallback = allocateByCurrentRemainingAmounts(params);
@@ -214,6 +273,7 @@ export function allocateByOriginalPaymentPercentages(params: {
       basisFallback: "CURRENT_REMAINING_AMOUNTS",
     };
   }
+
   return {
     adjustments: distributeCentsByWeights(params.totalCents, percentages),
     basisUsed: "ORIGINAL_PAYMENT_PERCENTAGES",
@@ -259,6 +319,12 @@ export function allocateByBasis(params: {
       return { ...allocateByCurrentRemainingAmounts(params), basisFallback: null };
     case "EQUAL_SPLIT":
       return { ...allocateEqualSplit(params), basisFallback: null };
+    case "MANUAL":
+      return {
+        adjustments: allocateByCurrentRemainingAmounts(params).adjustments,
+        basisUsed: "MANUAL",
+        basisFallback: null,
+      };
   }
 }
 
@@ -273,6 +339,118 @@ function allocationLinesFromRows(
       adjustmentCents: row.adjustmentCents,
       newAmountCents: row.newAmountCents,
     }));
+}
+
+export function buildManualAllocationRowsFromReviewModel(params: {
+  reviewModel: PaymentPlanReviewModel;
+  manualNewAmountsById: ManualAllocationNewAmounts;
+}): { allocations: ChangeOrderPaymentAllocationRow[]; errors: string[] } {
+  const errors: string[] = [];
+  const allocations: ChangeOrderPaymentAllocationRow[] = [];
+
+  for (const row of params.reviewModel.rows) {
+    const hasManualEdit = params.manualNewAmountsById.has(row.paymentRequirementId);
+    const nextAmount = hasManualEdit
+      ? Math.round(params.manualNewAmountsById.get(row.paymentRequirementId) ?? row.newAmountCents)
+      : row.newAmountCents;
+
+    if (hasManualEdit && !row.isCustomAllocationEligible) {
+      errors.push(`Payment "${row.title}" cannot be adjusted.`);
+    }
+    if (nextAmount < 0) {
+      errors.push(`Payment "${row.title}" would have a negative amount.`);
+    }
+
+    const adjustmentCents = nextAmount - row.currentAmountCents;
+    allocations.push({
+      paymentRequirementId: row.paymentRequirementId,
+      title: row.title,
+      statusAtApproval: row.status,
+      currentAmountCents: row.currentAmountCents,
+      adjustmentCents,
+      newAmountCents: nextAmount,
+      sourcePaymentScheduleItemId: row.sourcePaymentScheduleItemId,
+      schedulePercentage: row.schedulePercentage,
+    });
+  }
+
+  const adjustedIds = allocations
+    .filter((row) => row.adjustmentCents !== 0)
+    .map((row) => row.paymentRequirementId);
+  if (new Set(adjustedIds).size !== adjustedIds.length) {
+    errors.push("Duplicate payment requirement targets are not allowed.");
+  }
+
+  return { allocations, errors };
+}
+
+export function buildManualImpactFromPresetImpact(params: {
+  baseImpact: ChangeOrderPaymentImpactV2;
+  preset: PaymentPlanPreset;
+  priceDeltaCents: number;
+  reviewModel: PaymentPlanReviewModel;
+  manualNewAmountsById: ManualAllocationNewAmounts;
+}): { ok: true; impact: ChangeOrderPaymentImpactV2 } | { ok: false; errors: string[] } {
+  const { allocations, errors } = buildManualAllocationRowsFromReviewModel({
+    reviewModel: params.reviewModel,
+    manualNewAmountsById: params.manualNewAmountsById,
+  });
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const baseBasis = params.baseImpact.allocationBasis;
+  const withManual: ChangeOrderPaymentImpactV2 = {
+    ...params.baseImpact,
+    allocationBasis: "MANUAL",
+    originPreset: params.baseImpact.originPreset ?? params.preset,
+    originAllocationBasis:
+      params.baseImpact.originAllocationBasis ??
+      (baseBasis && baseBasis !== "MANUAL" ? baseBasis : undefined),
+    allocations,
+  };
+
+  const targetAllocation =
+    withManual.targetPaymentRequirementId != null
+      ? allocations.find((row) => row.paymentRequirementId === withManual.targetPaymentRequirementId)
+      : allocations.find((row) => row.adjustmentCents !== 0) ?? null;
+  const terms = generateCustomerTermsFromImpact({
+    strategy: withManual.strategy,
+    priceDeltaCents: params.priceDeltaCents,
+    initialPayment: withManual.initialPayment ?? null,
+    allocationLines: allocationLinesFromRows(allocations),
+    targetTitle: targetAllocation?.title ?? withManual.resolvedPreview.targetPaymentTitle ?? null,
+    targetBefore: targetAllocation?.currentAmountCents ?? withManual.resolvedPreview.targetAmountBeforeCents ?? null,
+    targetAfter: targetAllocation?.newAmountCents ?? withManual.resolvedPreview.targetAmountAfterCents ?? null,
+  });
+  withManual.customerTermsText = terms.customerTermsText;
+  withManual.resolvedPreview = {
+    ...withManual.resolvedPreview,
+    customerSummary: terms.customerSummary,
+    allocationLines: allocationLinesFromRows(allocations),
+    targetPaymentTitle:
+      targetAllocation?.title ?? withManual.resolvedPreview.targetPaymentTitle ?? null,
+    targetAmountBeforeCents:
+      targetAllocation?.currentAmountCents ??
+      withManual.resolvedPreview.targetAmountBeforeCents ??
+      null,
+    targetAmountAfterCents:
+      targetAllocation?.newAmountCents ?? withManual.resolvedPreview.targetAmountAfterCents ?? null,
+    adjustmentTotalCents: params.priceDeltaCents,
+    depositAmountCents: isDepositStrategy(withManual.strategy)
+      ? (withManual.initialPayment?.amountCents ?? 0)
+      : (withManual.resolvedPreview.depositAmountCents ?? null),
+  };
+
+  const sumErrors = validatePaymentImpactAllocationSum({
+    priceDeltaCents: params.priceDeltaCents,
+    impact: withManual,
+  });
+  if (sumErrors.length > 0) {
+    return { ok: false, errors: sumErrors };
+  }
+
+  return { ok: true, impact: withManual };
 }
 
 export function generateCustomerTermsFromImpact(params: {
@@ -379,7 +557,7 @@ export function buildImpactForPreset(params: {
     return { ok: false, errors: ["Zero-dollar Change Orders do not require payment impact."] };
   }
 
-  const eligible = getUnsettledPaymentRequirements(params.requirements);
+  const eligible = getAutoAllocationEligibleRequirements(params.requirements);
 
   if (params.preset === "CREDIT_REMAINING_BALANCE") {
     if (params.priceDeltaCents >= 0) {
@@ -465,7 +643,10 @@ export function buildImpactForPreset(params: {
     case "ADD_TO_NEXT_UNPAID_PAYMENT": {
       const target = resolveNextUnpaidPaymentRequirement(params.requirements);
       if (!target) {
-        return { ok: false, errors: ["No unpaid payment requirement is available."] };
+        return buildImpactForPreset({
+          ...params,
+          preset: "DUE_BEFORE_ADDED_WORK",
+        });
       }
       const current = Math.max(0, target.amountCents ?? 0);
       const allocation: ChangeOrderPaymentAllocationRow = {
@@ -514,7 +695,10 @@ export function buildImpactForPreset(params: {
     case "ADD_TO_FINAL_PAYMENT": {
       const target = resolveFinalUnpaidPaymentRequirement(params.requirements);
       if (!target) {
-        return { ok: false, errors: ["No unpaid final payment requirement is available."] };
+        return buildImpactForPreset({
+          ...params,
+          preset: "DUE_BEFORE_ADDED_WORK",
+        });
       }
       const current = Math.max(0, target.amountCents ?? 0);
       const allocation: ChangeOrderPaymentAllocationRow = {
@@ -564,7 +748,10 @@ export function buildImpactForPreset(params: {
       const depositCents = params.depositCents ?? 0;
       const finalTarget = resolveFinalUnpaidPaymentRequirement(params.requirements);
       if (!finalTarget) {
-        return { ok: false, errors: ["No unpaid final payment requirement is available."] };
+        return buildImpactForPreset({
+          ...params,
+          preset: "DUE_BEFORE_ADDED_WORK",
+        });
       }
       const remainder = params.priceDeltaCents - depositCents;
       const current = Math.max(0, finalTarget.amountCents ?? 0);
@@ -760,4 +947,47 @@ export function presetsForPriceDelta(priceDeltaCents: number): PaymentPlanPreset
     ];
   }
   return [];
+}
+
+const AUTOMATIC_ALLOCATION_BASIS_STAFF_LABELS: Record<
+  Exclude<ChangeOrderPaymentAllocationBasis, "MANUAL">,
+  string
+> = {
+  ORIGINAL_PAYMENT_PERCENTAGES: "Original contract percentages",
+  CURRENT_REMAINING_AMOUNTS: "Current unpaid balances",
+  EQUAL_SPLIT: "Equal split",
+};
+
+export function formatCustomAllocationOriginLabel(params: {
+  originPreset?: ChangeOrderPaymentStrategy | PaymentPlanPreset | null;
+  originAllocationBasis?: ChangeOrderPaymentAllocationBasis | null;
+}): string {
+  if (
+    params.originAllocationBasis &&
+    params.originAllocationBasis !== "MANUAL" &&
+    params.originAllocationBasis in AUTOMATIC_ALLOCATION_BASIS_STAFF_LABELS
+  ) {
+    return AUTOMATIC_ALLOCATION_BASIS_STAFF_LABELS[params.originAllocationBasis];
+  }
+  if (params.originPreset && params.originPreset in PAYMENT_PLAN_PRESET_LABELS) {
+    return PAYMENT_PLAN_PRESET_LABELS[params.originPreset as PaymentPlanPreset];
+  }
+  if (params.originPreset && params.originPreset in CHANGE_ORDER_PAYMENT_STRATEGY_LABELS) {
+    return CHANGE_ORDER_PAYMENT_STRATEGY_LABELS[params.originPreset];
+  }
+  return "Selected payment plan";
+}
+
+export function getCustomAllocationStaffNote(impact: ChangeOrderPaymentImpactV2): string {
+  const origin = formatCustomAllocationOriginLabel({
+    originPreset: impact.originPreset,
+    originAllocationBasis: impact.originAllocationBasis,
+  });
+  return `Started from ${origin}. Amounts were adjusted manually.`;
+}
+
+export function isManualPaymentAllocation(
+  impact: ChangeOrderPaymentImpactAny | null,
+): impact is ChangeOrderPaymentImpactV2 {
+  return impact != null && isPaymentImpactV2(impact) && impact.allocationBasis === "MANUAL";
 }

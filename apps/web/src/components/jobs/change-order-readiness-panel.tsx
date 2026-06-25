@@ -107,6 +107,40 @@ export function ChangeOrderReadinessPanel({
         </div>
       ) : null}
 
+      {mode === "selected" ? (
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <ReadinessRow label="Commercial" value={readiness.commercialStatusLabel} />
+          <ReadinessRow label="Payment plan" value={readiness.paymentPlanStatusLabel} />
+          <ReadinessRow label="Work impact" value={readiness.workImpactStatusLabel} />
+        </dl>
+      ) : null}
+
+      {mode === "selected" && readiness.sendBlockers.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-foreground-muted">Send blockers</p>
+          {readiness.sendBlockers.map((blocker) => (
+            <div
+              key={blocker.code}
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2"
+            >
+              <p className="text-sm font-medium text-destructive">{blocker.title}</p>
+              <p className="mt-1 text-xs text-destructive/90">{blocker.explanation}</p>
+              {blocker.actionLabel ? (
+                <p className="mt-2 text-xs font-medium text-foreground">
+                  Next action: {blocker.actionLabel}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {mode === "selected" && readiness.sendBlockers.length === 0 && readiness.send.disabled === false ? (
+        <div className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+          Send is available — commercial, payment plan, and work impact are ready.
+        </div>
+      ) : null}
+
       {readiness.mixedEditBlocked && readiness.mixedEditMessage ? (
         <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />

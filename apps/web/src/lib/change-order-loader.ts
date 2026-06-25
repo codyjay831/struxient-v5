@@ -125,6 +125,7 @@ export async function loadChangeOrderWorkspace(input: {
           amountCents: true,
           status: true,
           sourcePaymentScheduleItemId: true,
+          sourceChangeOrderId: true,
           requiredBeforeStageId: true,
           createdAt: true,
         },
@@ -196,6 +197,7 @@ export async function loadChangeOrderWorkspace(input: {
         amountCents: requirement.amountCents,
         status: requirement.status,
         sourcePaymentScheduleItemId: requirement.sourcePaymentScheduleItemId,
+        sourceChangeOrderId: requirement.sourceChangeOrderId,
         scheduleSortOrder: scheduleItem?.sortOrder ?? null,
         anchorType: scheduleItem?.anchorType ?? null,
         schedulePercentage:
@@ -234,6 +236,7 @@ export async function loadChangeOrderWorkspace(input: {
   const changeOrders: LoadedChangeOrder[] = job.changeOrders.map((changeOrder) => {
     const lines = changeOrder.lines.map(
       (line): ChangeOrderLineDraft => ({
+        id: line.id,
         operation: line.operation,
         sourceJobScopeItemId: line.sourceJobScopeItemId,
         description: line.description,
@@ -249,6 +252,7 @@ export async function loadChangeOrderWorkspace(input: {
       baseJobPlanVersion: changeOrder.baseJobPlanVersion,
       currentJobPlanVersion: job.jobPlanVersion,
       priceDeltaCents: changeOrder.priceDeltaCents,
+      paymentImpactJson: changeOrder.paymentImpactJson,
       scopeItems: scopeItemsForProjection,
       tasks: jobTasks,
     });

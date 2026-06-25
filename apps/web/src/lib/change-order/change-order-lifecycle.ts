@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
 import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
+import { parseNoWorkImpactConfirmed } from "@/lib/change-order/execution-delta-no-work-impact";
 import {
   canEditChangeOrderDraft,
   canStaffAcceptChangeOrder,
@@ -29,6 +30,14 @@ import {
   parseChangeOrderPaymentImpact,
 } from "@/lib/change-order/payment-impact-schema";
 import { validateChangeOrderPaymentImpactGate } from "@/lib/change-order/payment-impact-gates";
+import {
+  deriveChangeOrderSendBlockers,
+  getSendChangeOrderButtonStateFromBlockers,
+} from "@/lib/change-order/change-order-send-readiness";
+import {
+  projectChangeOrderExecutionImpact,
+} from "@/lib/change-order/change-order-execution-projection";
+import { deriveChangeOrderPermissions } from "@/lib/change-order-flow";
 import {
   loadJobPaymentRequirementsForMaterializer,
   materializeChangeOrderPaymentImpactInTx,
@@ -224,6 +233,116 @@ export async function validateStoredPaymentImpactForChangeOrder(
   });
   if (!gate.ok) {
     return { ok: false as const, error: gate.error };
+  }
+  return { ok: true as const };
+}
+
+export async function validateChangeOrderSendReadinessForStored(
+  changeOrderId: string,
+  organizationId: string,
+  role: StaffRole,
+) {
+  const changeOrder = await db.changeOrder.findFirst({
+    where: { id: changeOrderId, organizationId },
+    select: {
+      id: true,
+      status: true,
+      reasoning: true,
+      priceDeltaCents: true,
+      paymentImpactJson: true,
+      executionDeltaJson: true,
+      baseJobPlanVersion: true,
+      lines: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          operation: true,
+          sourceJobScopeItemId: true,
+          description: true,
+          quantity: true,
+          unitPriceCents: true,
+          priceDeltaCents: true,
+          executionRelevant: true,
+        },
+      },
+      job: {
+        select: {
+          jobPlanVersion: true,
+          scopeItems: {
+            select: {
+              id: true,
+              description: true,
+              executionRelevant: true,
+              status: true,
+            },
+          },
+          tasks: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              scopes: { select: { jobScopeItemId: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!changeOrder) {
+    return { ok: false as const, error: "Change Order not found." };
+  }
+
+  const paymentGate = validateChangeOrderPaymentImpactGate({
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+  });
+
+  const executionImpact = projectChangeOrderExecutionImpact({
+    executionDeltaJson: changeOrder.executionDeltaJson,
+    baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+    currentJobPlanVersion: changeOrder.job.jobPlanVersion,
+    priceDeltaCents: changeOrder.priceDeltaCents,
+    paymentImpactJson: changeOrder.paymentImpactJson,
+    scopeItems: changeOrder.job.scopeItems,
+    tasks: changeOrder.job.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      scopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
+    })),
+  });
+
+  const permissions = deriveChangeOrderPermissions(role);
+  const blockers = deriveChangeOrderSendBlockers({
+    permissions,
+    pageBlocked: false,
+    isPending: false,
+    selectedRevision: {
+      id: changeOrder.id,
+      status: changeOrder.status,
+      reasoning: changeOrder.reasoning,
+      priceDeltaCents: changeOrder.priceDeltaCents,
+      lines: changeOrder.lines.map((line) => ({
+        operation: line.operation,
+        sourceJobScopeItemId: line.sourceJobScopeItemId,
+        description: line.description,
+        quantity: line.quantity.toString(),
+        unitPriceCents: line.unitPriceCents,
+        priceDeltaCents: line.priceDeltaCents,
+        executionRelevant: line.executionRelevant,
+      })),
+      paymentImpactJson: changeOrder.paymentImpactJson,
+      executionImpact,
+    },
+    executionImpact,
+    hasUnsavedDraftChanges: false,
+    unsavedDraftChangesReason: null,
+    paymentImpactReady: paymentGate.ok,
+    paymentImpactBlockReason: paymentGate.ok ? null : paymentGate.error,
+  });
+
+  const sendState = getSendChangeOrderButtonStateFromBlockers({ blockers });
+  if (sendState.disabled) {
+    return { ok: false as const, error: sendState.reason ?? "Change Order is not ready to send." };
   }
   return { ok: true as const };
 }
@@ -685,6 +804,9 @@ export async function updateChangeOrderDraftWithActor(
           updated: true,
           baseJobPlanVersion: row.baseJobPlanVersion,
           operationCount: executionDelta.operations.length,
+          ...(parseNoWorkImpactConfirmed(executionDelta.meta)
+            ? { noWorkImpactConfirmed: true }
+            : {}),
         },
       },
       tx,

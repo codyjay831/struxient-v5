@@ -12,7 +12,7 @@ import {
   markChangeOrderAcceptedWithActor,
   rejectChangeOrderWithActor,
   updateChangeOrderDraftWithActor,
-  validateStoredExecutionDeltaForChangeOrder,
+  validateChangeOrderSendReadinessForStored,
   voidChangeOrderWithActor,
   type CreateChangeOrderDraftInput,
   type UpdateChangeOrderDraftInput,
@@ -88,11 +88,12 @@ export async function sendChangeOrderAction(
   const id = changeOrderId.trim();
   if (!id) return { ok: false, error: "Missing Change Order id." };
 
-  const deltaReady = await validateStoredExecutionDeltaForChangeOrder(id, session.organizationId);
-  if (!deltaReady.ok) return { ok: false, error: deltaReady.error };
-
-  const paymentReady = await validateStoredPaymentImpactForChangeOrder(id, session.organizationId);
-  if (!paymentReady.ok) return { ok: false, error: paymentReady.error };
+  const sendReady = await validateChangeOrderSendReadinessForStored(
+    id,
+    session.organizationId,
+    session.role,
+  );
+  if (!sendReady.ok) return { ok: false, error: sendReady.error };
 
   const sent = await sendChangeOrder(id, options);
   if (!sent.ok) {

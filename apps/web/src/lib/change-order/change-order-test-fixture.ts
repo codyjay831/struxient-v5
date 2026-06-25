@@ -22,8 +22,15 @@ import {
 import {
   changeOrderPaymentImpactToJson,
   type ChangeOrderPaymentImpact,
+  type ChangeOrderPaymentAllocationBasis,
+  type ChangeOrderPaymentImpactV2,
 } from "@/lib/change-order/payment-impact-schema";
-import { buildImpactForPreset } from "@/lib/change-order/payment-impact-allocation";
+import {
+  buildImpactForPreset,
+  buildManualImpactFromPresetImpact,
+  buildPaymentPlanReviewModel,
+  type PaymentPlanPreset,
+} from "@/lib/change-order/payment-impact-allocation";
 import {
   buildPaymentImpactForStrategy,
 } from "@/lib/change-order/payment-impact-resolver";
@@ -473,6 +480,93 @@ export function buildDepositRestToFinalImpactJson(params: {
     throw new Error(built.errors.join(" "));
   }
   return changeOrderPaymentImpactToJson(built.impact);
+}
+
+type ManualPaymentImpactPreset =
+  | "SPLIT_ACROSS_REMAINING_PAYMENTS"
+  | "DEPOSIT_NOW_REST_TO_FINAL";
+
+export function buildManualPaymentImpactJson(params: {
+  preset: ManualPaymentImpactPreset;
+  priceDeltaCents: number;
+  depositRequirementId: string;
+  finalRequirementId: string;
+  manualNewAmountsById: Record<string, number>;
+  allocationBasis?: ChangeOrderPaymentAllocationBasis;
+  depositCents?: number;
+  changeOrderNumber?: number;
+}): Record<string, unknown> {
+  const requirements = [
+    {
+      id: params.depositRequirementId,
+      title: "Deposit",
+      amountCents: 50_000,
+      status: JobPaymentRequirementStatus.PENDING,
+      sourcePaymentScheduleItemId: "schedule-deposit",
+      scheduleSortOrder: 0,
+      anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
+      createdAt: new Date(),
+    },
+    {
+      id: params.finalRequirementId,
+      title: "Final Balance",
+      amountCents: 50_000,
+      status: JobPaymentRequirementStatus.PENDING,
+      sourcePaymentScheduleItemId: "schedule-final",
+      scheduleSortOrder: 1,
+      anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
+      createdAt: new Date(),
+    },
+  ];
+
+  const built =
+    params.preset === "DEPOSIT_NOW_REST_TO_FINAL"
+      ? buildImpactForPreset({
+          preset: "DEPOSIT_NOW_REST_TO_FINAL",
+          priceDeltaCents: params.priceDeltaCents,
+          depositCents: params.depositCents ?? 0,
+          changeOrderNumber: params.changeOrderNumber,
+          requirements,
+        })
+      : buildImpactForPreset({
+          preset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+          priceDeltaCents: params.priceDeltaCents,
+          allocationBasis: params.allocationBasis ?? "EQUAL_SPLIT",
+          requirements,
+        });
+  if (!built.ok) {
+    throw new Error(built.errors.join(" "));
+  }
+
+  const adjustments = new Map(
+    (built.impact.allocations ?? []).map((row) => [row.paymentRequirementId, row.adjustmentCents]),
+  );
+  const reviewModel = buildPaymentPlanReviewModel({
+    priceDeltaCents: params.priceDeltaCents,
+    requirements,
+    adjustments,
+  });
+  const manual = buildManualImpactFromPresetImpact({
+    baseImpact: built.impact,
+    preset: params.preset,
+    priceDeltaCents: params.priceDeltaCents,
+    reviewModel,
+    manualNewAmountsById: new Map(Object.entries(params.manualNewAmountsById)),
+  });
+  if (!manual.ok) {
+    throw new Error(manual.errors.join(" "));
+  }
+  assertManualImpact(manual.impact, params.preset);
+  return changeOrderPaymentImpactToJson(manual.impact);
+}
+
+function assertManualImpact(impact: ChangeOrderPaymentImpactV2, preset: ManualPaymentImpactPreset) {
+  if (impact.allocationBasis !== "MANUAL") {
+    throw new Error("Expected MANUAL allocation basis for manual payment impact fixture.");
+  }
+  if (impact.originPreset !== preset) {
+    throw new Error(`Expected originPreset ${preset}, got ${String(impact.originPreset)}`);
+  }
 }
 
 export async function markChangeOrderSent(changeOrderId: string) {

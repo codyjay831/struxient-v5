@@ -9,6 +9,19 @@ Use on a dev job with active scope, tasks, office permissions, and at least depo
 - [ ] Job has unsettled payment requirements (deposit and final balance) for add-to / credit scenarios
 - [ ] `DATABASE_URL` set for integration sanity (optional but recommended)
 
+### Fresh customer `/co/[token]` link
+
+Stale share tokens 404 after re-send or token rotation. Before customer-page QA, mint a fresh URL:
+
+```bash
+cd apps/web
+npx tsx scripts/print-change-order-share-token.ts --changeOrderId=<change-order-id>
+# or latest CO on a job:
+npx tsx scripts/print-change-order-share-token.ts --jobId=<job-id>
+```
+
+The script marks DRAFT / CUSTOMER_REQUESTED_CHANGES COs as **SENT** (dev QA only) and rotates the token. Open the printed URL in a private window.
+
 ## Create and commercial flow
 
 - [ ] Create a **price-impact** Change Order (non-zero price delta)
@@ -31,6 +44,12 @@ Use on a dev job with active scope, tasks, office permissions, and at least depo
 - [ ] **Deposit now, rest to final** — deposit DUE row + final payment increase; customer page shows deposit + allocation table
 - [ ] **Deposit now, spread remainder** — deposit DUE row + multiple payment increases
 - [ ] **Percentage-based split** — uses original contract % when available; falls back to current balances with warning
+- [ ] **Customize allocation mode** can be toggled from payment plan review and starts from selected preset allocation
+- [ ] Saved **Custom allocation** shows staff badge and note (`Started from … Amounts were adjusted manually.`) on payment terms card and/or plan review drawer — customer page does not
+- [ ] In customize mode, only eligible rows allow editing **CO change** amount; settled rows remain read-only
+- [ ] Validation summary shows **Change Order amount**, **Allocated amount**, and **Remaining amount** updating live
+- [ ] **Use this payment plan** stays disabled until remaining amount is exactly $0.00 and no invalid row edits exist
+- [ ] Manual edits persist as generated customer terms from saved allocations (no freeform payment text)
 - [ ] **Target paid after acceptance** — apply fails with payment allocation drift message
 - [ ] **Customer allocation preview** — customer page shows allocation table without internal IDs
 - [ ] Payment terms are **generated from allocation** (no freeform contradicting table)
@@ -54,6 +73,18 @@ Use on a dev job with active scope, tasks, office permissions, and at least depo
 - [ ] Save commercial changes first — work impact manual ops remain intact
 - [ ] Save execution impact second — no silent clobber of manual ops
 - [ ] Payment strategy changes appear on customer preview/checkpoint **after** save commercial changes
+
+## Send readiness and price-only Change Orders
+
+- [ ] Price-impact CO with **saved payment plan** but no work impact shows **Confirm no work impact** blocker (not vague “must pass validation”)
+- [ ] Readiness panel lists **Commercial / Payment plan / Work impact** status separately
+- [ ] Send blockers show **title**, **explanation**, and **Next action** (not one generic string)
+- [ ] **Mark as price-only / no work impact** in Work impact panel → save execution impact → send unblocks (if payment saved)
+- [ ] Price-only path does **not** create fake ADD_TASK rows
+- [ ] Work-impact CO with generated tasks shows **Review generated task suggestions** with count
+- [ ] Saved payment plan does **not** also show payment-save blocker
+- [ ] Legacy payment instruction conflict shows **Refresh work impact** / save commercial guidance with exact error
+- [ ] Server send rejection matches readiness panel reason (try send via UI; error toast matches blocker)
 
 ## Send and customer flow
 

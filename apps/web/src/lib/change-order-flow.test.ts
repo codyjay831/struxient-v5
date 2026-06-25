@@ -8,7 +8,10 @@ import {
   JobStatus,
   StaffRole,
 } from "@prisma/client";
-import { buildDueBeforeAddedWorkPaymentImpactJson } from "@/lib/change-order/change-order-test-fixture";
+import {
+  buildDueBeforeAddedWorkPaymentImpactJson,
+  buildSplitPaymentImpactJson,
+} from "@/lib/change-order/change-order-test-fixture";
 import {
   buildProposedLineFromSource,
   changeOrderPageBlockMessage,
@@ -550,6 +553,105 @@ test("mixed commercial and execution edits disable update draft with explicit re
   assert.match(readiness.saveCommercial.reason ?? "", /Save commercial changes first/i);
 });
 
+const paidCommercialLines = [
+  {
+    operation: ChangeOrderLineOperation.ADD,
+    description: "Premium upgrade",
+    quantity: "1",
+    priceDeltaCents: 5000,
+    executionRelevant: true,
+  },
+];
+
+const reviewedExecutionImpact = {
+  parsed: true as const,
+  parseErrors: [] as string[],
+  summary: null,
+  baseJobPlanVersion: 1,
+  addedTasks: [mockTaskOp({ isGenerated: false, sourceKind: "manual_added" })],
+  canceledTasks: [] as ChangeOrderExecutionTaskOpView[],
+  modifiedTasks: [] as ChangeOrderExecutionTaskOpView[],
+  paymentImpact: null,
+  scopeOperationCount: 1,
+  validationOk: true,
+  validationErrors: [] as string[],
+  stalePlan: false,
+  conflict: false,
+};
+
+test("unsaved v2 payment impact enables commercial save and blocks send", () => {
+  const selectedPaymentImpact = buildSplitPaymentImpactJson({
+    priceDeltaCents: 5000,
+    depositRequirementId: "dep-req",
+    finalRequirementId: "fin-req",
+  });
+  const readiness = deriveChangeOrderReadiness({
+    permissions: officePermissions,
+    pageBlocked: false,
+    draftLines: paidCommercialLines,
+    reasoning: "Customer approved upgrade",
+    activeScopeItems: [sampleScopeItem],
+    selectedRevision: {
+      id: "rev-1",
+      status: ChangeOrderStatus.DRAFT,
+      reasoning: "Customer approved upgrade",
+      priceDeltaCents: 5000,
+      lines: paidCommercialLines,
+      paymentImpactJson: null,
+      executionImpact: reviewedExecutionImpact,
+    },
+    jobPlanVersion: 1,
+    expectedJobPlanVersion: 1,
+    isPending: false,
+    baselineReasoning: "Customer approved upgrade",
+    baselineLines: paidCommercialLines,
+    baselinePaymentImpactJson: null,
+    paymentImpactJson: selectedPaymentImpact,
+    baselineExecutionProposal: null,
+    currentExecutionProposal: null,
+  });
+
+  assert.equal(readiness.paymentImpactChanged, true);
+  assert.equal(readiness.saveCommercial.disabled, false);
+  assert.equal(readiness.send.disabled, true);
+  assert.match(readiness.send.reason ?? "", /Save payment impact before sending/i);
+  assert.match(readiness.unsavedDraftChangesReason ?? "", /Save payment impact before sending/i);
+});
+
+test("saved payment impact clears unsaved send blocker when execution is reviewed", () => {
+  const savedPaymentImpact = buildDueBeforeAddedWorkPaymentImpactJson(5000);
+  const readiness = deriveChangeOrderReadiness({
+    permissions: officePermissions,
+    pageBlocked: false,
+    draftLines: paidCommercialLines,
+    reasoning: "Customer approved upgrade",
+    activeScopeItems: [sampleScopeItem],
+    selectedRevision: {
+      id: "rev-1",
+      status: ChangeOrderStatus.DRAFT,
+      reasoning: "Customer approved upgrade",
+      priceDeltaCents: 5000,
+      lines: paidCommercialLines,
+      paymentImpactJson: savedPaymentImpact,
+      executionImpact: reviewedExecutionImpact,
+    },
+    jobPlanVersion: 1,
+    expectedJobPlanVersion: 1,
+    isPending: false,
+    baselineReasoning: "Customer approved upgrade",
+    baselineLines: paidCommercialLines,
+    baselinePaymentImpactJson: savedPaymentImpact,
+    paymentImpactJson: savedPaymentImpact,
+    baselineExecutionProposal: null,
+    currentExecutionProposal: null,
+  });
+
+  assert.equal(readiness.paymentImpactChanged, false);
+  assert.equal(readiness.paymentImpactReady, true);
+  assert.equal(readiness.unsavedDraftChangesReason, null);
+  assert.equal(readiness.send.disabled, false);
+});
+
 test("unsaved execution impact blocks send", () => {
   const state = getSendChangeOrderButtonState({
     permissions: officePermissions,
@@ -628,6 +730,22 @@ test("invalid execution impact blocks send", () => {
       reasoning: "Add battery",
       priceDeltaCents: 0,
       lines: [],
+      executionImpact: {
+        parsed: true,
+        parseErrors: [],
+        summary: null,
+        baseJobPlanVersion: 1,
+        addedTasks: [],
+        canceledTasks: [],
+        modifiedTasks: [],
+        paymentImpact: null,
+        scopeOperationCount: 0,
+        validationOk: false,
+        validationErrors: ["Completed tasks cannot be canceled by Change Order delta."],
+        stalePlan: false,
+        conflict: false,
+        noWorkImpactConfirmed: false,
+      },
     },
     executionValidationOk: false,
     hasGeneratedTaskSuggestions: false,
@@ -638,5 +756,5 @@ test("invalid execution impact blocks send", () => {
     isPending: false,
   });
   assert.equal(state.disabled, true);
-  assert.match(state.reason ?? "", /Execution impact must pass validation/i);
+  assert.match(state.reason ?? "", /Fix work impact errors/i);
 });

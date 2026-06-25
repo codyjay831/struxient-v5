@@ -44,11 +44,22 @@ export const ChangeOrderPaymentAllocationBasisSchema = z.enum([
   "ORIGINAL_PAYMENT_PERCENTAGES",
   "CURRENT_REMAINING_AMOUNTS",
   "EQUAL_SPLIT",
+  "MANUAL",
 ]);
 
 export type ChangeOrderPaymentAllocationBasis = z.infer<
   typeof ChangeOrderPaymentAllocationBasisSchema
 >;
+
+const SETTLED_PAYMENT_REQUIREMENT_STATUSES: JobPaymentRequirementStatus[] = [
+  JobPaymentRequirementStatus.PAID,
+  JobPaymentRequirementStatus.WAIVED,
+  JobPaymentRequirementStatus.CANCELED,
+];
+
+function isSettledPaymentRequirementStatus(status: JobPaymentRequirementStatus): boolean {
+  return SETTLED_PAYMENT_REQUIREMENT_STATUSES.includes(status);
+}
 
 export const ChangeOrderPaymentAllocationRowSchema = z.object({
   paymentRequirementId: z.string().min(1),
@@ -140,6 +151,8 @@ export const ChangeOrderPaymentImpactV2Schema = z
     blocksAddedWork: z.boolean().optional(),
     allocationBasis: ChangeOrderPaymentAllocationBasisSchema.optional(),
     allocationBasisFallback: ChangeOrderPaymentAllocationBasisSchema.optional(),
+    originPreset: ChangeOrderPaymentStrategySchema.optional(),
+    originAllocationBasis: ChangeOrderPaymentAllocationBasisSchema.optional(),
     initialPayment: ChangeOrderPaymentInitialPaymentSchema.optional(),
     allocations: z.array(ChangeOrderPaymentAllocationRowSchema).optional(),
     resolvedPreview: ChangeOrderPaymentImpactResolvedPreviewSchema,
@@ -201,11 +214,25 @@ export const ChangeOrderPaymentImpactV2Schema = z
         });
       }
       for (const row of value.allocations) {
+        if (row.newAmountCents !== row.currentAmountCents + row.adjustmentCents) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["allocations"],
+            message: `Payment "${row.title}" has an invalid adjusted total.`,
+          });
+        }
         if (row.newAmountCents < 0) {
           ctx.addIssue({
             code: "custom",
             path: ["allocations"],
             message: `Payment "${row.title}" would have a negative amount.`,
+          });
+        }
+        if (isSettledPaymentRequirementStatus(row.statusAtApproval) && row.adjustmentCents !== 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["allocations"],
+            message: `Payment "${row.title}" is settled and cannot be adjusted.`,
           });
         }
       }
@@ -300,6 +327,26 @@ export function validatePaymentImpactAllocationSum(params: {
   const depositCents = impact.initialPayment?.amountCents ?? 0;
   const allocationSum =
     impact.allocations?.reduce((sum, row) => sum + row.adjustmentCents, 0) ?? 0;
+  const isManualAllocation = impact.allocationBasis === "MANUAL";
+  const allocationIds = new Set<string>();
+
+  if (impact.allocations) {
+    for (const row of impact.allocations) {
+      if (allocationIds.has(row.paymentRequirementId)) {
+        errors.push("Duplicate payment requirement targets are not allowed.");
+      }
+      allocationIds.add(row.paymentRequirementId);
+      if (row.newAmountCents < 0) {
+        errors.push(`Payment "${row.title}" would have a negative amount.`);
+      }
+      if (row.newAmountCents !== row.currentAmountCents + row.adjustmentCents) {
+        errors.push(`Payment "${row.title}" has an invalid adjusted total.`);
+      }
+      if (isSettledPaymentRequirementStatus(row.statusAtApproval) && row.adjustmentCents !== 0) {
+        errors.push(`Payment "${row.title}" is settled and cannot be adjusted.`);
+      }
+    }
+  }
 
   if (isDepositStrategy(impact.strategy) || isAllocationStrategy(impact.strategy)) {
     if (depositCents + allocationSum !== priceDeltaCents) {
@@ -307,6 +354,18 @@ export function validatePaymentImpactAllocationSum(params: {
         `Deposit (${depositCents} cents) plus allocations (${allocationSum} cents) must equal the Change Order amount (${priceDeltaCents} cents).`,
       );
     }
+  }
+
+  if (
+    isManualAllocation &&
+    !isDepositStrategy(impact.strategy) &&
+    impact.strategy !== "CREDIT_REMAINING_BALANCE" &&
+    priceDeltaCents > 0 &&
+    allocationSum !== priceDeltaCents
+  ) {
+    errors.push(
+      `Allocation adjustments (${allocationSum} cents) must equal the Change Order amount (${priceDeltaCents} cents).`,
+    );
   }
 
   if (impact.strategy === "SPLIT_ACROSS_REMAINING_PAYMENTS" && allocationSum !== priceDeltaCents) {

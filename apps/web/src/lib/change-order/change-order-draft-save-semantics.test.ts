@@ -10,6 +10,7 @@ import {
   executionDraftChanged,
   getUnsavedDraftChangesReason,
   MIXED_DRAFT_SAVE_BLOCKED_MESSAGE,
+  paymentImpactDraftChanged,
   resolveDraftUpdateSaveIntent,
   UNSAVED_EXECUTION_IMPACT_BANNER,
 } from "./change-order-draft-save-semantics";
@@ -67,6 +68,42 @@ test("execution-only save intent is allowed without commercial regeneration conf
   assert.equal(intent.kind, "execution_only");
 });
 
+test("payment-impact-only save intent routes to commercial save", () => {
+  const intent = resolveDraftUpdateSaveIntent({
+    commercialChanged: false,
+    executionChanged: false,
+    paymentImpactChanged: true,
+  });
+  assert.equal(intent.kind, "commercial_only");
+});
+
+test("payment impact plus execution edits are blocked from one save", () => {
+  const intent = resolveDraftUpdateSaveIntent({
+    commercialChanged: false,
+    executionChanged: true,
+    paymentImpactChanged: true,
+  });
+  assert.equal(intent.kind, "blocked_mixed");
+});
+
+test("paymentImpactDraftChanged detects v2 payment plan selection", () => {
+  const baseline = null;
+  const selected = {
+    schemaVersion: 2,
+    strategy: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+    customerTermsText: "Spread across remaining payments.",
+    allocations: [],
+    resolvedPreview: {
+      strategyLabel: "Spread across remaining payments",
+      customerSummary: "Spread across remaining payments.",
+    },
+  };
+  assert.equal(
+    paymentImpactDraftChanged({ baselinePaymentImpactJson: baseline, paymentImpactJson: selected }),
+    true,
+  );
+});
+
 test("commercialDraftChanged ignores whitespace-only reasoning changes", () => {
   assert.equal(
     commercialDraftChanged({
@@ -108,6 +145,10 @@ test("getUnsavedDraftChangesReason blocks send until execution is saved", () => 
   assert.equal(
     getUnsavedDraftChangesReason({ commercialChanged: true, executionChanged: true }),
     MIXED_DRAFT_SAVE_BLOCKED_MESSAGE,
+  );
+  assert.equal(
+    getUnsavedDraftChangesReason({ commercialChanged: false, executionChanged: false, paymentImpactChanged: true }),
+    "Save payment impact before sending.",
   );
 });
 

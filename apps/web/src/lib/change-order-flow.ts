@@ -24,6 +24,11 @@ import {
   type ChangeOrderLifecycleReadiness,
 } from "@/lib/change-order/change-order-execution-projection";
 import {
+  deriveChangeOrderSendBlockers,
+  getSendChangeOrderButtonStateFromBlockers,
+  type ChangeOrderSendBlocker,
+} from "@/lib/change-order/change-order-send-readiness";
+import {
   commercialDraftChanged,
   deriveChangeOrderOfficeNextStep,
   executionDraftChanged,
@@ -34,6 +39,7 @@ import {
 export type ChangeOrderIntent = "add" | "modify" | "remove";
 
 export type ChangeOrderLineDraft = {
+  id?: string;
   operation: ChangeOrderLineOperation;
   sourceJobScopeItemId?: string | null;
   description: string;
@@ -155,6 +161,10 @@ export type ChangeOrderReadiness = {
   paymentImpactBlockReason: string | null;
   storedPaymentTermsText: string | null;
   unsavedDraftChangesReason: string | null;
+  sendBlockers: ChangeOrderSendBlocker[];
+  commercialStatusLabel: string;
+  paymentPlanStatusLabel: string;
+  workImpactStatusLabel: string;
 };
 
 export function jobChangeOrdersPath(jobId: string): string {
@@ -600,55 +610,24 @@ export function getSendChangeOrderButtonState(input: {
   paymentImpactReady: boolean;
   paymentImpactBlockReason: string | null;
   isPending: boolean;
+  executionImpact?: ChangeOrderExecutionImpactView | null;
+  executionDeltaProposal?: import("@/lib/change-order/execution-delta-schema").ChangeOrderExecutionDeltaProposal | null;
+  paymentImpactChanged?: boolean;
 }): ChangeOrderButtonState {
-  if (input.pageBlocked) {
-    return { disabled: true, reason: "Change Orders are blocked for this job." };
-  }
-  if (input.isPending) {
-    return { disabled: true, reason: "Sending change order…" };
-  }
-  if (!input.selectedRevision) {
-    return { disabled: true, reason: "Select a draft Change Order to send." };
-  }
-  if (
-    input.selectedRevision.status !== ChangeOrderStatus.DRAFT &&
-    input.selectedRevision.status !== ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES
-  ) {
-    return { disabled: true, reason: "Only editable Change Orders can be sent." };
-  }
-  if (!input.permissions.canApprove) {
-    return {
-      disabled: true,
-      reason: input.permissions.approveError ?? "You cannot send Change Orders.",
-    };
-  }
-  if (input.hasUnsavedDraftChanges) {
-    return {
-      disabled: true,
-      reason: input.unsavedDraftChangesReason ?? "Save draft changes before sending.",
-    };
-  }
-  if (!input.executionValidationOk) {
-    return {
-      disabled: true,
-      reason: "Execution impact must pass validation before sending.",
-    };
-  }
-  if (input.hasGeneratedTaskSuggestions) {
-    return {
-      disabled: true,
-      reason: "Review generated task suggestions before sending.",
-    };
-  }
-  if (!input.paymentImpactReady) {
-    return {
-      disabled: true,
-      reason:
-        input.paymentImpactBlockReason ??
-        "Save payment terms in the commercial column before sending this Change Order.",
-    };
-  }
-  return { disabled: false, reason: null };
+  const blockers = deriveChangeOrderSendBlockers({
+    permissions: input.permissions,
+    pageBlocked: input.pageBlocked,
+    isPending: input.isPending,
+    selectedRevision: input.selectedRevision,
+    executionImpact: input.executionImpact ?? input.selectedRevision?.executionImpact ?? null,
+    executionDeltaProposal: input.executionDeltaProposal,
+    hasUnsavedDraftChanges: input.hasUnsavedDraftChanges,
+    unsavedDraftChangesReason: input.unsavedDraftChangesReason,
+    paymentImpactReady: input.paymentImpactReady,
+    paymentImpactBlockReason: input.paymentImpactBlockReason,
+    paymentImpactChanged: input.paymentImpactChanged,
+  });
+  return getSendChangeOrderButtonStateFromBlockers({ blockers });
 }
 
 export function getStaffAcceptButtonState(input: {
@@ -1024,6 +1003,7 @@ export function deriveChangeOrderReadiness(input: {
   const saveIntent = resolveDraftUpdateSaveIntent({
     commercialChanged,
     executionChanged,
+    paymentImpactChanged,
   });
   const mixedEditBlocked = saveIntent.kind === "blocked_mixed";
   const mixedEditMessage = saveIntent.kind === "blocked_mixed" ? saveIntent.message : null;
@@ -1032,6 +1012,47 @@ export function deriveChangeOrderReadiness(input: {
     executionChanged,
     paymentImpactChanged,
   });
+
+  const hasUnsavedDraftChanges = commercialChanged || executionChanged || paymentImpactChanged;
+  const sendBlockers = deriveChangeOrderSendBlockers({
+    permissions: input.permissions,
+    pageBlocked: input.pageBlocked,
+    isPending: input.isPending,
+    selectedRevision: input.selectedRevision,
+    executionImpact,
+    executionDeltaProposal: input.currentExecutionProposal,
+    hasUnsavedDraftChanges,
+    unsavedDraftChangesReason,
+    paymentImpactReady: paymentImpactGate.ok,
+    paymentImpactBlockReason: paymentImpactGate.ok ? null : paymentImpactGate.error,
+    paymentImpactChanged,
+  });
+
+  const commercialStatusLabel =
+    commercialChanged || paymentImpactChanged ? "Unsaved changes" : "Saved";
+  const paymentPlanStatusLabel = paymentImpactChanged
+    ? "Unsaved"
+    : paymentImpactGate.ok
+      ? "Saved"
+      : input.selectedRevision && input.selectedRevision.priceDeltaCents !== 0
+        ? "Missing or invalid"
+        : "Not required";
+  const workImpactStatusLabel = executionImpact?.noWorkImpactConfirmed
+    ? "No work impact confirmed"
+    : executionChanged
+      ? "Unsaved changes"
+      : hasGeneratedTaskSuggestions
+        ? "Generated tasks need review"
+        : executionImpact && !executionImpact.validationOk
+          ? "Needs fixes"
+          : executionImpact &&
+              (executionImpact.addedTasks.length > 0 ||
+                executionImpact.modifiedTasks.length > 0 ||
+                executionImpact.canceledTasks.length > 0)
+            ? "Reviewed"
+            : sendBlockers.some((blocker) => blocker.code === "CONFIRM_NO_WORK_IMPACT")
+              ? "Confirmation required"
+              : "No task changes";
 
   return {
     impact: input.selectedRevision ? selectedImpact : draftImpact,
@@ -1082,11 +1103,14 @@ export function deriveChangeOrderReadiness(input: {
       selectedRevision: input.selectedRevision,
       executionValidationOk,
       hasGeneratedTaskSuggestions,
-      hasUnsavedDraftChanges: commercialChanged || executionChanged || paymentImpactChanged,
+      hasUnsavedDraftChanges,
       unsavedDraftChangesReason,
       paymentImpactReady: paymentImpactGate.ok,
       paymentImpactBlockReason: paymentImpactGate.ok ? null : paymentImpactGate.error,
       isPending: input.isPending,
+      executionImpact,
+      executionDeltaProposal: input.currentExecutionProposal,
+      paymentImpactChanged,
     }),
     staffAccept: getStaffAcceptButtonState({
       permissions: input.permissions,
@@ -1135,6 +1159,10 @@ export function deriveChangeOrderReadiness(input: {
     paymentImpactBlockReason: paymentImpactGate.ok ? null : paymentImpactGate.error,
     storedPaymentTermsText,
     unsavedDraftChangesReason,
+    sendBlockers,
+    commercialStatusLabel,
+    paymentPlanStatusLabel,
+    workImpactStatusLabel,
   };
 }
 

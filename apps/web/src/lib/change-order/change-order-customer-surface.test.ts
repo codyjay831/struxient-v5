@@ -199,7 +199,8 @@ test("customer preview includes allocation lines for split payment impact", () =
         title: "Progress",
         amountCents: 40_000,
         status: JobPaymentRequirementStatus.PENDING,
-        sourcePaymentScheduleItemId: null,
+        sourcePaymentScheduleItemId: "sched-1",
+        sourceChangeOrderId: null,
         scheduleSortOrder: 0,
         anchorType: PaymentScheduleAnchorType.UPON_APPROVAL,
         createdAt: new Date(),
@@ -209,7 +210,8 @@ test("customer preview includes allocation lines for split payment impact", () =
         title: "Final",
         amountCents: 60_000,
         status: JobPaymentRequirementStatus.PENDING,
-        sourcePaymentScheduleItemId: null,
+        sourcePaymentScheduleItemId: "sched-2",
+        sourceChangeOrderId: null,
         scheduleSortOrder: 1,
         anchorType: PaymentScheduleAnchorType.FINAL_BALANCE,
         createdAt: new Date(),
@@ -249,4 +251,88 @@ test("customer preview includes allocation lines for split payment impact", () =
   const serialized = JSON.stringify(document.paymentTerms);
   assert.doesNotMatch(serialized, /paymentRequirementId/i);
   assert.doesNotMatch(serialized, /pay-1/);
+});
+
+test("customer preview renders custom manual allocation lines safely", () => {
+  const { document } = buildCustomerChangeOrderDocument(
+    {
+      quoteTitle: "Solar install",
+      quoteTotalCents: 100_000,
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      changeOrderNumber: 2,
+      changeOrderTitle: "Custom allocation",
+      customerDocumentTitle: null,
+      reasoning: "Customer requested staged payment amounts",
+      lines: [
+        {
+          id: "line-1",
+          operation: ChangeOrderLineOperation.ADD,
+          description: "Extra labor",
+          quantity: "1",
+          unitPriceCents: 5000,
+          priceDeltaCents: 5000,
+        },
+      ],
+      paymentSchedule: [],
+      paymentImpact: {
+        schemaVersion: 2,
+        strategy: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+        customerTermsText:
+          "The additional $50.00 will be spread across your remaining unpaid payments. Progress: $400.00 -> $435.00 Final: $600.00 -> $615.00",
+        allocationBasis: "MANUAL",
+        originPreset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+        originAllocationBasis: "EQUAL_SPLIT",
+        allocations: [
+          {
+            paymentRequirementId: "pay-progress",
+            title: "Progress",
+            statusAtApproval: JobPaymentRequirementStatus.PENDING,
+            currentAmountCents: 40_000,
+            adjustmentCents: 3500,
+            newAmountCents: 43_500,
+          },
+          {
+            paymentRequirementId: "pay-final",
+            title: "Final",
+            statusAtApproval: JobPaymentRequirementStatus.PENDING,
+            currentAmountCents: 60_000,
+            adjustmentCents: 1500,
+            newAmountCents: 61_500,
+          },
+        ],
+        resolvedPreview: {
+          strategyLabel: "Spread across remaining payments",
+          customerSummary:
+            "The additional $50.00 will be spread across your remaining unpaid payments.",
+          adjustmentTotalCents: 5000,
+          allocationLines: [
+            {
+              title: "Progress",
+              currentAmountCents: 40_000,
+              adjustmentCents: 3500,
+              newAmountCents: 43_500,
+            },
+            {
+              title: "Final",
+              currentAmountCents: 60_000,
+              adjustmentCents: 1500,
+              newAmountCents: 61_500,
+            },
+          ],
+        },
+      },
+    },
+    { organizationDisplayName: "Acme Solar" },
+  );
+
+  assert.ok(document.paymentTerms?.allocationLines.length);
+  const serializedTerms = JSON.stringify(document.paymentTerms);
+  assert.doesNotMatch(serializedTerms, /paymentRequirementId/i);
+  assert.doesNotMatch(serializedTerms, /originPreset/i);
+  assert.doesNotMatch(serializedTerms, /originAllocationBasis/i);
+  assert.doesNotMatch(serializedTerms, /MANUAL/i);
+  assert.doesNotMatch(serializedTerms, /manual/i);
+  assert.doesNotMatch(serializedTerms, /exclusionReason/i);
+  assert.doesNotMatch(serializedTerms, /Excluded from auto split/i);
+  assert.doesNotMatch(serializedTerms, /sourceChangeOrderId/i);
 });

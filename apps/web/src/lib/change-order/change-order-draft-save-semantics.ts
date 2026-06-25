@@ -88,17 +88,30 @@ export function executionDraftChanged(input: {
   return !executionDeltaProposalsEqual(input.baselineProposal, input.proposal);
 }
 
+export function paymentImpactDraftChanged(input: {
+  baselinePaymentImpactJson: unknown;
+  paymentImpactJson: unknown;
+}): boolean {
+  return (
+    JSON.stringify(input.baselinePaymentImpactJson ?? null) !==
+    JSON.stringify(input.paymentImpactJson ?? null)
+  );
+}
+
 export function resolveDraftUpdateSaveIntent(input: {
   commercialChanged: boolean;
   executionChanged: boolean;
+  paymentImpactChanged?: boolean;
 }): DraftUpdateSaveIntent {
-  if (input.commercialChanged && input.executionChanged) {
+  const commercialSideChanged =
+    input.commercialChanged || input.paymentImpactChanged === true;
+  if (commercialSideChanged && input.executionChanged) {
     return { kind: "blocked_mixed", message: MIXED_DRAFT_SAVE_BLOCKED_MESSAGE };
   }
-  if (!input.commercialChanged && !input.executionChanged) {
+  if (!commercialSideChanged && !input.executionChanged) {
     return { kind: "unchanged" };
   }
-  if (input.commercialChanged) {
+  if (commercialSideChanged) {
     return { kind: "commercial_only" };
   }
   return { kind: "execution_only" };

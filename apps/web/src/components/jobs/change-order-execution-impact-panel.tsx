@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Plus, RefreshCw, Save, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Plus, RefreshCw, Save, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChangeOrderButtonState } from "@/lib/change-order-flow";
 import type {
@@ -277,6 +277,8 @@ export function ChangeOrderExecutionImpactPanel({
   onProposalChange,
   composerError,
   onComposerError,
+  showConfirmNoWorkImpact,
+  onConfirmNoWorkImpact,
 }: {
   impact: ChangeOrderExecutionImpactView;
   editable: boolean;
@@ -294,6 +296,8 @@ export function ChangeOrderExecutionImpactPanel({
   onProposalChange: (proposal: ChangeOrderExecutionDeltaProposal) => void;
   composerError?: string | null;
   onComposerError?: (error: string | null) => void;
+  showConfirmNoWorkImpact?: boolean;
+  onConfirmNoWorkImpact?: () => void;
 }) {
   const [activeForm, setActiveForm] = useState<ComposerForm>(null);
   const [editingOpId, setEditingOpId] = useState<string | null>(null);
@@ -499,6 +503,32 @@ export function ChangeOrderExecutionImpactPanel({
       {!editable ? (
         <div className="rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-sm text-foreground-muted">
           Work impact is read-only at this stage. Review the proposed changes below.
+        </div>
+      ) : null}
+
+      {impact.noWorkImpactConfirmed ? (
+        <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">No work impact confirmed</p>
+            <p className="mt-1 text-success/90">
+              This Change Order changes commercial terms only. No job tasks will be added, changed,
+              or canceled.
+            </p>
+          </div>
+        </div>
+      ) : editable && showConfirmNoWorkImpact && onConfirmNoWorkImpact ? (
+        <div className="rounded-lg border border-border bg-foreground/[0.02] p-3 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Price-only Change Order</p>
+            <p className="mt-1 text-xs text-foreground-muted">
+              This Change Order changes price only. Confirm it does not change the work plan before
+              sending.
+            </p>
+          </div>
+          <Button type="button" size="sm" variant="secondary" onClick={onConfirmNoWorkImpact}>
+            Mark as price-only / no work impact
+          </Button>
         </div>
       ) : null}
 
@@ -769,13 +799,15 @@ export function ChangeOrderExecutionImpactPanel({
 
       {!impact.validationOk ? (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <p className="font-medium">Work impact needs fixes before send or apply</p>
+          <p className="font-medium">Fix work impact errors</p>
           <ul className="mt-2 list-disc pl-5">
             {impact.validationErrors.map((error) => (
               <li key={error}>{error}</li>
             ))}
           </ul>
         </div>
+      ) : impact.noWorkImpactConfirmed ? (
+        <p className="text-sm text-success">Price-only — no task changes will apply.</p>
       ) : (
         <p className="text-sm text-success">Work impact passes validation.</p>
       )}

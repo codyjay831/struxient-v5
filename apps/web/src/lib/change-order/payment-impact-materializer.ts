@@ -174,7 +174,7 @@ export function validatePaymentImpactForMaterialization(
       const resolvedNext = resolveNextUnpaidPaymentRequirement(input.requirements);
       if (target && resolvedNext && target.id !== resolvedNext.id) {
         errors.push(
-          "Selected next payment target no longer matches the earliest unsettled payment on this job.",
+          "Selected next payment target no longer matches the earliest unsettled contract payment on this job.",
         );
       }
       break;
@@ -198,7 +198,7 @@ export function validatePaymentImpactForMaterialization(
       const resolvedFinal = resolveFinalUnpaidPaymentRequirement(input.requirements);
       if (target && resolvedFinal && target.id !== resolvedFinal.id) {
         errors.push(
-          "Selected final payment target no longer matches the final unsettled payment on this job.",
+          "Selected final payment target no longer matches the final unsettled contract payment on this job.",
         );
       }
       break;
@@ -256,6 +256,7 @@ export async function loadJobPaymentRequirementsForMaterializer(
         amountCents: true,
         status: true,
         sourcePaymentScheduleItemId: true,
+        sourceChangeOrderId: true,
         requiredBeforeStageId: true,
         createdAt: true,
       },
@@ -289,6 +290,7 @@ export async function loadJobPaymentRequirementsForMaterializer(
       amountCents: requirement.amountCents,
       status: requirement.status,
       sourcePaymentScheduleItemId: requirement.sourcePaymentScheduleItemId,
+      sourceChangeOrderId: requirement.sourceChangeOrderId,
       scheduleSortOrder: scheduleItem?.sortOrder ?? null,
       anchorType: scheduleItem?.anchorType ?? null,
       schedulePercentage:

@@ -26,6 +26,7 @@ import { changeOrderExecutionDeltaToJson } from "@/lib/change-order/execution-de
 import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
 import { applyChangeOrderExecutionDeltaInTx } from "@/lib/change-order/execution-delta-apply";
 import type { ChangeOrderExecutionDeltaProposal } from "@/lib/change-order/execution-delta-schema";
+import { parseChangeOrderPaymentImpact } from "@/lib/change-order/payment-impact-schema";
 import {
   buildAddLine,
   buildAddToFinalPaymentImpactJson,
@@ -33,6 +34,7 @@ import {
   buildCreditPaymentImpactJson,
   buildDepositRestToFinalImpactJson,
   buildDueBeforeAddedWorkPaymentImpactJson,
+  buildManualPaymentImpactJson,
   buildSplitPaymentImpactJson,
   cleanupChangeOrderJobFixture,
   countActiveScopeItems,
@@ -572,6 +574,248 @@ test("integration: payment materialization failure rolls back scope mutations", 
   }
 });
 
+test("integration: MANUAL allocation applies exact saved target amounts", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("manual-split-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Manual split add",
+      priceDeltaCents: 10_000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 10_000 }],
+      paymentImpactJson: buildManualPaymentImpactJson({
+        preset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+        priceDeltaCents: 10_000,
+        depositRequirementId: payments.depositRequirement.id,
+        finalRequirementId: payments.finalRequirement.id,
+        manualNewAmountsById: {
+          [payments.depositRequirement.id]: 52_000,
+          [payments.finalRequirement.id]: 58_000,
+        },
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, 52_000);
+    assert.equal(final?.amountCents, 58_000);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: MANUAL deposit allocation creates CO DUE row and updates target rows", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("manual-deposit-apply");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Manual deposit and final",
+      priceDeltaCents: 10_000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 10_000 }],
+      paymentImpactJson: buildManualPaymentImpactJson({
+        preset: "DEPOSIT_NOW_REST_TO_FINAL",
+        priceDeltaCents: 10_000,
+        depositCents: 4000,
+        changeOrderNumber: 1,
+        depositRequirementId: payments.depositRequirement.id,
+        finalRequirementId: payments.finalRequirement.id,
+        manualNewAmountsById: {
+          [payments.finalRequirement.id]: 56_000,
+        },
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, true);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    const coSourced = await db.jobPaymentRequirement.findMany({
+      where: { sourceChangeOrderId: created.changeOrderId },
+      select: { amountCents: true, status: true },
+    });
+
+    assert.equal(deposit?.amountCents, 50_000);
+    assert.equal(final?.amountCents, 56_000);
+    assert.equal(coSourced.length, 1);
+    assert.equal(coSourced[0]?.amountCents, 4000);
+    assert.equal(coSourced[0]?.status, JobPaymentRequirementStatus.DUE);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: MANUAL allocation fails safely when target paid after acceptance", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("manual-paid-target-guard");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Manual add to deposit",
+      priceDeltaCents: 5000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 5000 }],
+      paymentImpactJson: buildManualPaymentImpactJson({
+        preset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+        priceDeltaCents: 5000,
+        depositRequirementId: payments.depositRequirement.id,
+        finalRequirementId: payments.finalRequirement.id,
+        manualNewAmountsById: {
+          [payments.depositRequirement.id]: 52_500,
+          [payments.finalRequirement.id]: 52_500,
+        },
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    await db.jobPaymentRequirement.update({
+      where: { id: payments.depositRequirement.id },
+      data: { status: JobPaymentRequirementStatus.PAID },
+    });
+
+    const scopeBefore = await countActiveScopeItems(fixture.jobId);
+    const depositBefore = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true, status: true },
+    });
+    const finalBefore = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true, status: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, depositBefore?.amountCents);
+    assert.equal(deposit?.status, depositBefore?.status);
+    assert.equal(final?.amountCents, finalBefore?.amountCents);
+    assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: MANUAL allocation fails safely when target amount changed after acceptance", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("manual-amount-drift");
+  try {
+    const payments = await seedJobPaymentRequirements(fixture);
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Manual stale target",
+      priceDeltaCents: 5000,
+      lines: [{ ...buildAddLine("Paid add"), priceDeltaCents: 5000 }],
+      paymentImpactJson: buildManualPaymentImpactJson({
+        preset: "SPLIT_ACROSS_REMAINING_PAYMENTS",
+        priceDeltaCents: 5000,
+        depositRequirementId: payments.depositRequirement.id,
+        finalRequirementId: payments.finalRequirement.id,
+        manualNewAmountsById: {
+          [payments.depositRequirement.id]: 52_500,
+          [payments.finalRequirement.id]: 52_500,
+        },
+      }),
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    await markChangeOrderSent(created.changeOrderId);
+    assert.equal((await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId)).ok, true);
+
+    await db.jobPaymentRequirement.update({
+      where: { id: payments.depositRequirement.id },
+      data: { amountCents: 48_000 },
+    });
+
+    const scopeBefore = await countActiveScopeItems(fixture.jobId);
+    const tasksBefore = await countActiveTasks(fixture.jobId);
+    const applied = await applyChangeOrderWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(applied.ok, false);
+    assert.equal(await countActiveScopeItems(fixture.jobId), scopeBefore);
+    assert.equal(await countActiveTasks(fixture.jobId), tasksBefore);
+
+    const deposit = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.depositRequirement.id },
+      select: { amountCents: true },
+    });
+    const final = await db.jobPaymentRequirement.findUnique({
+      where: { id: payments.finalRequirement.id },
+      select: { amountCents: true },
+    });
+    assert.equal(deposit?.amountCents, 48_000);
+    assert.equal(final?.amountCents, 50_000);
+
+    const coSourced = await db.jobPaymentRequirement.count({
+      where: { sourceChangeOrderId: created.changeOrderId },
+    });
+    assert.equal(coSourced, 0);
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
 test("integration: legacy payment op with paymentImpactJson is rejected at apply", async (t) => {
   if (!(await requireDevOrgForIntegrationTest(t))) {
     return;
@@ -778,6 +1022,99 @@ test("integration: draft update refreshes stored execution delta", async (t) => 
     assert.equal(row?.reasoning, "Updated reasoning");
     assert.equal(row?.baseJobPlanVersion, fixture.jobPlanVersion);
     assert.ok(JSON.stringify(row?.executionDeltaJson).includes("Updated line"));
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: draft update persists v2 paymentImpactJson", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("payment-impact-save-v2");
+  try {
+    const paidLine = { ...buildAddLine("Paid add"), priceDeltaCents: 10_000 };
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Paid add",
+      priceDeltaCents: 10_000,
+      lines: [paidLine],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    const payments = await seedJobPaymentRequirements(fixture);
+    const paymentImpactJson = buildSplitPaymentImpactJson({
+      priceDeltaCents: 10_000,
+      depositRequirementId: payments.depositRequirement.id,
+      finalRequirementId: payments.finalRequirement.id,
+    });
+
+    const updated = await updateChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      changeOrderId: created.changeOrderId,
+      reasoning: "Paid add",
+      priceDeltaCents: 10_000,
+      lines: [paidLine],
+      paymentImpactJson,
+    });
+    assert.equal(updated.ok, true);
+
+    const row = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { paymentImpactJson: true },
+    });
+    const parsed = parseChangeOrderPaymentImpact(row?.paymentImpactJson);
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.impact.schemaVersion, 2);
+    assert.equal(parsed.impact.strategy, "SPLIT_ACROSS_REMAINING_PAYMENTS");
+    assert.equal(parsed.impact.allocations.length, 2);
+    assert.equal(
+      parsed.impact.allocations.reduce((sum, row) => sum + row.adjustmentCents, 0),
+      10_000,
+    );
+  } finally {
+    await cleanupChangeOrderJobFixture(fixture);
+  }
+});
+
+test("integration: draft update persists v1 paymentImpactJson", async (t) => {
+  if (!(await requireDevOrgForIntegrationTest(t))) {
+    return;
+  }
+  const fixture = await createChangeOrderJobFixture("payment-impact-save-v1");
+  try {
+    const paidLine = { ...buildAddLine("Paid add"), priceDeltaCents: 5000 };
+    const created = await createChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      quoteId: fixture.quoteId,
+      jobId: fixture.jobId,
+      reasoning: "Paid add",
+      priceDeltaCents: 5000,
+      lines: [paidLine],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    const paymentImpactJson = buildDueBeforeAddedWorkPaymentImpactJson(5000);
+    const updated = await updateChangeOrderDraftWithActor(OFFICE_ACTOR, {
+      changeOrderId: created.changeOrderId,
+      reasoning: "Paid add",
+      priceDeltaCents: 5000,
+      lines: [paidLine],
+      paymentImpactJson,
+    });
+    assert.equal(updated.ok, true);
+
+    const row = await db.changeOrder.findUnique({
+      where: { id: created.changeOrderId },
+      select: { paymentImpactJson: true },
+    });
+    const parsed = parseChangeOrderPaymentImpact(row?.paymentImpactJson);
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.impact.schemaVersion, 1);
+    assert.equal(parsed.impact.strategy, "DUE_BEFORE_ADDED_WORK");
   } finally {
     await cleanupChangeOrderJobFixture(fixture);
   }

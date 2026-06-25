@@ -1,6 +1,7 @@
 import {
   isAllocationStrategy,
   isDepositStrategy,
+  isPaymentImpactV2,
   parseChangeOrderPaymentImpact,
   validatePaymentImpactAllocationSum,
   type ChangeOrderPaymentImpactAny,
@@ -73,7 +74,12 @@ export function validateChangeOrderPaymentImpactGate(params: {
     };
   }
 
-  if (isAllocationStrategy(impact.strategy) || isDepositStrategy(impact.strategy)) {
+  const requiresAllocationValidation =
+    isAllocationStrategy(impact.strategy) ||
+    isDepositStrategy(impact.strategy) ||
+    (isPaymentImpactV2(impact) && impact.allocationBasis === "MANUAL");
+
+  if (requiresAllocationValidation) {
     const sumErrors = validatePaymentImpactAllocationSum({
       priceDeltaCents: params.priceDeltaCents,
       impact,

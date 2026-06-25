@@ -8,13 +8,14 @@ import {
   isPaymentImpactV2,
   type ChangeOrderPaymentImpactAny,
 } from "@/lib/change-order/payment-impact-schema";
-import { reviewModelFromImpact } from "@/lib/change-order/payment-impact-allocation";
+import { reviewModelFromImpact, isManualPaymentAllocation } from "@/lib/change-order/payment-impact-allocation";
 import {
   derivePaymentImpactWarnings,
   getStaffPaymentAfterApplySummary,
   type JobPaymentRequirementForResolver,
 } from "@/lib/change-order/payment-impact-resolver";
 import { formatCents, formatJobPaymentStatus } from "@/lib/job-payment-display";
+import { ChangeOrderCustomAllocationIndicator } from "@/components/jobs/change-order-custom-allocation-indicator";
 import { ChangeOrderPaymentPlanReviewDrawer } from "@/components/jobs/change-order-payment-plan-review-drawer";
 
 export function ChangeOrderPaymentImpactCard({
@@ -142,6 +143,10 @@ export function ChangeOrderPaymentImpactCard({
           </button>
         ) : null}
 
+        {isManualPaymentAllocation(activeImpact) ? (
+          <ChangeOrderCustomAllocationIndicator impact={activeImpact} />
+        ) : null}
+
         {activeImpact ? (
           <>
             <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm">
@@ -262,7 +267,7 @@ export function ChangeOrderPaymentImpactCard({
         ) : null}
       </div>
 
-      {editable ? (
+      {editable && drawerOpen ? (
         <ChangeOrderPaymentPlanReviewDrawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
