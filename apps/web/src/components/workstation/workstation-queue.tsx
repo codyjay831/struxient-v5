@@ -41,6 +41,9 @@ const TAB_FILTERS: Partial<
     { label: "All", filter: "all" },
     { label: "Leads", filter: "leads" },
     { label: "Quotes", filter: "quotes" },
+    { label: "Change Orders", filter: "change-orders" },
+    { label: "Customer responses", filter: "customer-responses" },
+    { label: "Needs setup", filter: "needs-setup" },
   ],
   money: [
     { label: "All", filter: "all" },
@@ -53,7 +56,7 @@ const TAB_EMPTY: Record<Exclude<WorkstationTab, "overview">, string> = {
   tasks: "No tasks need attention right now.",
   jobs: "No active jobs need review.",
   calendar: "No schedule items flagged.",
-  commercial: "No leads or quotes need follow-up.",
+  commercial: "No commercial actions need attention.",
   money: "No payment actions due.",
   activity: "No recent changes to review.",
 };

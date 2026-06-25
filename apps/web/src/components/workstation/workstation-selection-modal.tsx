@@ -17,6 +17,7 @@ import {
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
+import { resolveWorkstationSelectionSurface } from "@/lib/workstation/selection-routing";
 
 const QUOTE_READINESS_ACTIONS: readonly QuoteReadinessActionKind[] = [
   "ADD_LINE_ITEM",
@@ -88,48 +89,68 @@ export function WorkstationSelectionModal({
   }, [router, searchParams]);
 
   const body =
-    item == null ? null : item.kind === "lead" ? (
-      <OpportunityWorkspaceDialogBody
-        key={item.id}
-        leadId={item.recordId}
-        initialTab="review"
-        onClose={handleClose}
-      />
-    ) : item.kind === "quote" && item.leadAnchorId ? (
-      <OpportunityWorkspaceDialogBody
-        key={item.id}
-        leadId={item.leadAnchorId}
-        initialTab="quote"
-        onClose={handleClose}
-      />
-    ) : item.kind === "quote" ? (
-      <QuoteWorkspaceDialogBody
-        key={item.id}
-        display={quoteDisplayFromWorkstationItem(item)}
-        onClose={handleClose}
-        embeddedInWorkstation
-      />
-    ) : (
-      <WorkstationModalShell
-        key={item.id}
-        kindLabel={item.kind.replace("-", " ")}
-        title={item.title}
-        subtitle={item.contextLine ?? item.subtitle}
-        statusLabel={item.status}
-        onClose={handleClose}
-        footer={
-          <WorkstationWorkPanelFooter
-            item={item}
+    item == null ? null : (() => {
+      const surface = resolveWorkstationSelectionSurface(item);
+
+      if (surface === "lead-opportunity") {
+        return (
+          <OpportunityWorkspaceDialogBody
+            key={item.id}
+            leadId={item.recordId}
+            initialTab="review"
             onClose={handleClose}
-            showClose={false}
           />
-        }
-      >
-        <WorkstationWorkPanel item={item} onClose={handleClose} chrome="embedded">
-          {genericContent}
-        </WorkstationWorkPanel>
-      </WorkstationModalShell>
-    );
+        );
+      }
+
+      if (surface === "quote-opportunity") {
+        return (
+          <OpportunityWorkspaceDialogBody
+            key={item.id}
+            leadId={item.leadAnchorId!}
+            initialTab="quote"
+            onClose={handleClose}
+          />
+        );
+      }
+
+      if (surface === "quote-workspace") {
+        return (
+          <QuoteWorkspaceDialogBody
+            key={item.id}
+            display={quoteDisplayFromWorkstationItem(item)}
+            onClose={handleClose}
+            embeddedInWorkstation
+          />
+        );
+      }
+
+      if (surface === "change-order-panel" || surface === "generic-panel") {
+        return (
+          <WorkstationModalShell
+            key={item.id}
+            kindLabel={item.typeLabel ?? item.kind.replace("-", " ")}
+            title={item.title}
+            subtitle={item.contextLine ?? item.subtitle}
+            statusLabel={item.status}
+            onClose={handleClose}
+            footer={
+              <WorkstationWorkPanelFooter
+                item={item}
+                onClose={handleClose}
+                showClose={false}
+              />
+            }
+          >
+            <WorkstationWorkPanel item={item} onClose={handleClose} chrome="embedded">
+              {genericContent}
+            </WorkstationWorkPanel>
+          </WorkstationModalShell>
+        );
+      }
+
+      return null;
+    })();
 
   return (
     <Drawer

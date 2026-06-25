@@ -12,7 +12,7 @@ The **v5 web shell** uses **`/workstation`** as the main **Workstation destinati
 | **Tasks** | Assigned, blocked, and ready work |
 | **Jobs** | Active job health and next steps |
 | **Calendar** | Schedule, due work, timing risk |
-| **Leads & Quotes** | Pipeline follow-up and commercial decisions |
+| **Commercial** | Sales follow-up and change orders needing action |
 | **Money** | Payments due and execution holds |
 | **Activity** | Recent changes and log review |
 

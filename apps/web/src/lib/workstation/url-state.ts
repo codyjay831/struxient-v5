@@ -136,7 +136,7 @@ export const WORKSTATION_TABS: {
   { tab: "tasks", label: "Tasks", description: "Assigned, blocked, and ready work" },
   { tab: "jobs", label: "Jobs", description: "Active job health and next steps" },
   { tab: "calendar", label: "Calendar", description: "Schedule, due work, and timing risk" },
-  { tab: "commercial", label: "Leads & Quotes", description: "Pipeline follow-up and decisions" },
+  { tab: "commercial", label: "Commercial", description: "Sales follow-up & change orders needing action" },
   { tab: "money", label: "Money", description: "Payments due and execution holds" },
   { tab: "activity", label: "Activity", description: "Recent changes and log review" },
 ];

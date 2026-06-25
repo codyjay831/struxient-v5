@@ -84,6 +84,7 @@ type WorkstationRowProps = {
   primary: string;
   secondary?: string;
   detail?: string;
+  nextAction?: string;
   tone?: WorkstationPresentationTone;
   badgeLabel?: string;
   badgeLabels?: string[];
@@ -96,6 +97,7 @@ export function WorkstationRow({
   primary,
   secondary,
   detail,
+  nextAction,
   tone = "neutral",
   badgeLabel,
   badgeLabels,
@@ -125,6 +127,11 @@ export function WorkstationRow({
           ) : null}
           {detail ? (
             <p className="mt-0.5 text-xs text-foreground-subtle">{detail}</p>
+          ) : null}
+          {nextAction ? (
+            <p className="mt-0.5 text-xs font-medium text-foreground-muted">
+              Next: {nextAction}
+            </p>
           ) : null}
           {badges.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -521,6 +528,7 @@ export function QueueRowList({
           primary={item.subtitle || item.title}
           secondary={item.addressLine ?? (item.subtitle ? item.title : undefined)}
           detail={item.reason}
+          nextAction={item.nextAction}
           tone={item.tone}
           badgeLabel={item.statusLabel ?? item.categoryLabel}
           badgeLabels={item.badgeLabels}

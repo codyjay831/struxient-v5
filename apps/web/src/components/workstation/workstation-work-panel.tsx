@@ -27,6 +27,7 @@ function fullRecordLinkLabel(item: WorkstationWorkItem): string {
   if (item.filterCategory === "payments") return "Open job payments";
   if (item.kind === "schedule") return "Open job schedule";
   if (item.kind === "daily-log") return "Open job logs";
+  if (item.kind === "change-order") return "Open change order";
   if (item.kind === "quote") return "Open quote record";
   if (item.kind === "lead") return "Open lead workspace";
   return "Open full record";

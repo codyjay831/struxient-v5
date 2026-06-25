@@ -6,9 +6,11 @@ import {
   buildCriticalGroups,
   buildDomainQueues,
   resolveCriticalCategory,
+  resolveCommercialSegments,
 } from "./workstation-presentation";
-import { applyWorkstationQueueFilter } from "./workstation/queue-filters";
-import { resolveWorkstationTab } from "./workstation/url-state";
+import { applyWorkstationQueueFilter, countWorkstationQueueFilters } from "./workstation/queue-filters";
+import { resolveWorkstationTab, WORKSTATION_TABS } from "./workstation/url-state";
+import { resolveWorkstationSelectionSurface } from "./workstation/selection-routing";
 
 const now = new Date("2026-06-18T08:00:00.000Z");
 
@@ -301,7 +303,7 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
   );
   assert.equal(result.overviewNextActions[0]?.nextAction, "Build execution plan");
   assert.equal(result.overviewNextActions[0]?.categoryLabel, "Sales to Production");
-  assert.deepEqual(result.overviewNextActions[0]?.badgeLabels, ["Quote", "Approved"]);
+  assert.deepEqual(result.overviewNextActions[0]?.badgeLabels, ["Quote", "Set up job"]);
   assert.equal(
     result.overviewCriticalGroups.find((group) => group.category === "sales_handoffs")?.items[0]
       ?.categoryLabel,
@@ -454,4 +456,164 @@ test("applyWorkstationQueueFilter waiting filter matches prerequisite holds", ()
   const filtered = applyWorkstationQueueFilter([waiting, ready], "tasks", "waiting");
   assert.equal(filtered.length, 1);
   assert.equal(filtered[0]?.id, "row-wait");
+});
+
+test("WORKSTATION_TABS commercial label and description", () => {
+  const commercial = WORKSTATION_TABS.find((t) => t.tab === "commercial");
+  assert.equal(commercial?.label, "Commercial");
+  assert.equal(commercial?.tab, "commercial");
+  assert.match(commercial?.description ?? "", /change orders needing action/i);
+});
+
+test("resolveCommercialSegments separates change orders from quotes", () => {
+  const changeOrder = makeItem({
+    id: "change-order-co1",
+    kind: "change-order",
+    filterCategory: "quotes",
+    typeLabel: "Change Order",
+    status: "Change Order SENT",
+    title: "CO-001 · Add panel",
+  });
+
+  assert.deepEqual(resolveCommercialSegments(changeOrder), [
+    "change_order",
+    "customer_response",
+  ]);
+});
+
+test("commercial queue filters use segments not title substring", () => {
+  const lead = makeItem({ id: "lead-1", kind: "lead", filterCategory: "leads" });
+  const quote = makeItem({
+    id: "quote-1",
+    kind: "quote",
+    filterCategory: "quotes",
+    title: "Bathroom remodel",
+    status: "DRAFT",
+  });
+  const changeOrder = makeItem({
+    id: "change-order-1",
+    kind: "change-order",
+    filterCategory: "quotes",
+    typeLabel: "Change Order",
+    status: "Change Order ACCEPTED",
+    title: "CO-001 · Extra work",
+    nextStep: "Apply accepted Change Order.",
+  });
+  const handoff = makeItem({
+    id: "quote-handoff",
+    kind: "quote",
+    filterCategory: "quotes",
+    status: "APPROVED",
+    nextStep: "Build execution plan.",
+  });
+  const customerQuote = makeItem({
+    id: "quote-sent",
+    kind: "quote",
+    filterCategory: "quotes",
+    status: "SENT",
+  });
+
+  const rows = buildDomainQueues([lead, quote, changeOrder, handoff, customerQuote]).commercial;
+
+  assert.equal(applyWorkstationQueueFilter(rows, "commercial", "leads").length, 1);
+  assert.equal(applyWorkstationQueueFilter(rows, "commercial", "quotes").length, 3);
+  assert.equal(applyWorkstationQueueFilter(rows, "commercial", "change-orders").length, 1);
+  assert.equal(applyWorkstationQueueFilter(rows, "commercial", "needs-setup").length, 2);
+  assert.equal(applyWorkstationQueueFilter(rows, "commercial", "customer-responses").length, 1);
+
+  const filters = [
+    { label: "All", filter: "all" },
+    { label: "Leads", filter: "leads" },
+    { label: "Quotes", filter: "quotes" },
+    { label: "Change Orders", filter: "change-orders" },
+    { label: "Customer responses", filter: "customer-responses" },
+    { label: "Needs setup", filter: "needs-setup" },
+  ];
+  const counts = countWorkstationQueueFilters(rows, "commercial", filters);
+  assert.equal(counts["change-orders"], 1);
+  assert.equal(counts["needs-setup"], 2);
+});
+
+test("change order queue row uses Change Order badge not Quote", () => {
+  const changeOrder = makeItem({
+    id: "change-order-1",
+    kind: "change-order",
+    filterCategory: "quotes",
+    typeLabel: "Change Order",
+    status: "Change Order ACCEPTED",
+    title: "CO-001 · Panel upgrade",
+    nextStep: "Apply accepted Change Order.",
+  });
+
+  const row = buildDomainQueues([changeOrder]).commercial[0];
+  assert.deepEqual(row?.badgeLabels, ["Change Order", "Apply change order"]);
+  assert.equal(row?.categoryLabel, "Commercial");
+});
+
+test("customer requested quote changes appear under customer responses filter", () => {
+  const quote = makeItem({
+    id: "quote-revision",
+    kind: "quote",
+    filterCategory: "quotes",
+    status: "Customer requested changes",
+    nextStep: "Create revision draft.",
+  });
+
+  const row = buildDomainQueues([quote]).commercial[0];
+  assert.ok(row?.commercialSegments?.includes("customer_response"));
+  assert.ok(row?.commercialSegments?.includes("quote"));
+  assert.deepEqual(row?.badgeLabels, ["Quote", "Review customer request"]);
+  assert.equal(
+    applyWorkstationQueueFilter([row!], "commercial", "customer-responses").length,
+    1,
+  );
+});
+
+test("approved quote handoff appears under needs setup with Set up job chip", () => {
+  const handoff = makeItem({
+    id: "quote-handoff",
+    kind: "quote",
+    filterCategory: "quotes",
+    status: "APPROVED",
+    nextStep: "Activate job.",
+    reason: "Approved quote is waiting for job setup.",
+  });
+
+  const row = buildDomainQueues([handoff]).commercial[0];
+  assert.ok(row?.commercialSegments?.includes("needs_setup"));
+  assert.deepEqual(row?.badgeLabels, ["Quote", "Set up job"]);
+  assert.equal(applyWorkstationQueueFilter([row!], "commercial", "needs-setup").length, 1);
+});
+
+test("queue rows expose nextAction for commercial cards", () => {
+  const quote = makeItem({
+    id: "quote-1",
+    kind: "quote",
+    filterCategory: "quotes",
+    reason: "Quote draft needs review.",
+    nextStep: "Send quote.",
+  });
+
+  const row = buildDomainQueues([quote]).commercial[0];
+  assert.equal(row?.nextAction, "Send quote");
+  assert.equal(row?.reason, "Quote draft needs review.");
+});
+
+test("change order selection surface avoids quote workspace drawer", () => {
+  const changeOrder = makeItem({
+    id: "change-order-1",
+    kind: "change-order",
+    recordId: "co-record-id",
+    filterCategory: "quotes",
+    href: "/jobs/job-1/change-orders?focus=co-record-id",
+  });
+  const quote = makeItem({
+    id: "quote-1",
+    kind: "quote",
+    recordId: "quote-id",
+    filterCategory: "quotes",
+  });
+
+  assert.equal(resolveWorkstationSelectionSurface(changeOrder), "change-order-panel");
+  assert.equal(resolveWorkstationSelectionSurface(quote), "quote-workspace");
 });

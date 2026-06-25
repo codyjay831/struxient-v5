@@ -1,6 +1,8 @@
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
+import { resolveWorkstationSelectionSurface } from "@/lib/workstation/selection-routing";
 
-/** Task, job, and issue items use WorkstationWorkPanel; lead/quote use dedicated dialog bodies. */
+/** Task, job, issue, and change-order items use WorkstationWorkPanel; lead/quote use dedicated dialog bodies. */
 export function usesGenericPanel(item: WorkstationWorkItem): boolean {
-  return item.kind !== "lead" && item.kind !== "quote";
+  const surface = resolveWorkstationSelectionSurface(item);
+  return surface === "generic-panel" || surface === "change-order-panel";
 }

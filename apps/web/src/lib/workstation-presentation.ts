@@ -191,6 +191,13 @@ export type UnassignedItem = {
   tone: WorkstationPresentationTone;
 };
 
+export type CommercialSegment =
+  | "lead"
+  | "quote"
+  | "change_order"
+  | "customer_response"
+  | "needs_setup";
+
 export type QueueRowItem = {
   id: string;
   selectedId: string;
@@ -204,6 +211,8 @@ export type QueueRowItem = {
   statusLabel?: string;
   categoryLabel?: string;
   badgeLabels?: string[];
+  /** Commercial tab sidebar filters — an item may belong to multiple segments. */
+  commercialSegments?: CommercialSegment[];
   /** YYYY-MM-DD local day key for calendar queue filtering. */
   calendarDay?: string;
   /** Task waiting on prerequisite signals — used by queue filters. */
@@ -287,7 +296,12 @@ function isBlockedItem(item: WorkstationWorkItem): boolean {
   return Boolean(item.isBlocked) && !item.isWaitingOnSignals;
 }
 
+function isChangeOrderItem(item: WorkstationWorkItem): boolean {
+  return item.kind === "change-order" || item.id.startsWith("change-order-");
+}
+
 function isQuoteJobSetupHandoff(item: WorkstationWorkItem): boolean {
+  if (isChangeOrderItem(item)) return false;
   if (item.kind !== "quote" || item.filterCategory !== "quotes") return false;
   const actionType = item.workflow?.nextAction?.type;
   if (actionType === "OPEN_EXECUTION_REVIEW" || actionType === "ACTIVATE_JOB") {
@@ -345,24 +359,122 @@ function formatStatusBadgeLabel(status?: string): string | null {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function isQuoteCustomerResponse(item: WorkstationWorkItem): boolean {
+  if (item.kind !== "quote" || isChangeOrderItem(item)) return false;
+  const status = (item.status ?? "").toLowerCase();
+  if (status === "sent") return true;
+  if (status.includes("customer requested")) return true;
+  if (status.includes("revision")) return true;
+  if (item.workflow?.statusLabel?.toLowerCase().includes("awaiting customer")) return true;
+  return false;
+}
+
+function isChangeOrderCustomerResponse(item: WorkstationWorkItem): boolean {
+  if (!isChangeOrderItem(item)) return false;
+  const status = (item.status ?? "").toLowerCase();
+  return status.includes("sent") || status.includes("requested");
+}
+
+function isChangeOrderNeedsSetup(item: WorkstationWorkItem): boolean {
+  if (!isChangeOrderItem(item)) return false;
+  const status = (item.status ?? "").toLowerCase();
+  return (
+    status.includes("accepted") ||
+    status.includes("execution review") ||
+    status.includes("apply failed")
+  );
+}
+
+function isLeadCustomerResponse(item: WorkstationWorkItem): boolean {
+  if (item.kind !== "lead") return false;
+  const status = (item.status ?? "").toLowerCase();
+  return status.includes("waiting") || item.group === "waiting";
+}
+
+/** Derive commercial tab filter segments from existing work item fields. */
+export function resolveCommercialSegments(item: WorkstationWorkItem): CommercialSegment[] {
+  const segments = new Set<CommercialSegment>();
+
+  if (item.kind === "lead") {
+    segments.add("lead");
+  }
+
+  if (item.kind === "quote" && !isChangeOrderItem(item)) {
+    segments.add("quote");
+  }
+
+  if (isChangeOrderItem(item)) {
+    segments.add("change_order");
+  }
+
+  if (
+    isQuoteCustomerResponse(item) ||
+    isChangeOrderCustomerResponse(item) ||
+    isLeadCustomerResponse(item)
+  ) {
+    segments.add("customer_response");
+  }
+
+  if (isQuoteJobSetupHandoff(item) || isChangeOrderNeedsSetup(item)) {
+    segments.add("needs_setup");
+  }
+
+  return [...segments];
+}
+
+function resolveCommercialActionChip(item: WorkstationWorkItem): string | null {
+  if (isQuoteJobSetupHandoff(item)) return "Set up job";
+
+  if (isChangeOrderItem(item)) {
+    const status = (item.status ?? "").toLowerCase();
+    if (status.includes("apply failed") || status.includes("execution review")) {
+      return "Review and apply";
+    }
+    if (status.includes("accepted")) return "Apply change order";
+    if (status.includes("sent")) return "Waiting on customer";
+    if (status.includes("requested")) return "Review customer request";
+    return null;
+  }
+
+  if (item.kind === "quote") {
+    if (isQuoteCustomerResponse(item)) {
+      const status = (item.status ?? "").toLowerCase();
+      if (status.includes("requested") || status.includes("revision")) {
+        return "Review customer request";
+      }
+      if (status === "sent" || item.workflow?.statusLabel?.toLowerCase().includes("awaiting")) {
+        return "Waiting on customer";
+      }
+    }
+  }
+
+  return null;
+}
+
 function resolveBadgeLabels(item: WorkstationWorkItem): string[] {
   const typeLabel =
     item.typeLabel ??
-    (item.kind === "quote"
-      ? "Quote"
-      : item.kind === "lead"
-        ? "Lead"
-        : item.kind === "job"
-          ? "Job"
-          : item.kind === "task"
-            ? "Task"
-            : item.filterCategory === "payments"
-              ? "Payment"
-              : item.kind === "schedule"
-                ? "Calendar"
-                : null);
-  const statusLabel = formatStatusBadgeLabel(item.status);
-  const labels = [typeLabel, statusLabel].filter((label): label is string => Boolean(label));
+    (isChangeOrderItem(item)
+      ? "Change Order"
+      : item.kind === "quote"
+        ? "Quote"
+        : item.kind === "lead"
+          ? "Lead"
+          : item.kind === "job"
+            ? "Job"
+            : item.kind === "task"
+              ? "Task"
+              : item.filterCategory === "payments"
+                ? "Payment"
+                : item.kind === "schedule"
+                  ? "Calendar"
+                  : null);
+
+  const commercialChip = resolveCommercialActionChip(item);
+  const statusLabel = commercialChip ? null : formatStatusBadgeLabel(item.status);
+  const labels = [typeLabel, commercialChip ?? statusLabel].filter(
+    (label): label is string => Boolean(label),
+  );
   if (item.paymentHoldLabel) {
     labels.push("Payment hold");
   }
@@ -423,7 +535,7 @@ function resolveCategoryLabel(item: WorkstationWorkItem): string | undefined {
   if (isQuoteJobSetupHandoff(item)) {
     return "Sales to Production";
   }
-  if (item.filterCategory === "leads" || item.filterCategory === "quotes") return "Leads & Quotes";
+  if (item.filterCategory === "leads" || item.filterCategory === "quotes") return "Commercial";
   if (item.filterCategory === "tasks") return "Tasks";
   if (item.filterCategory === "jobs" || item.filterCategory === "issues") return "Jobs";
   if (item.filterCategory === "logs") return "Activity";
@@ -593,6 +705,7 @@ function toQueueRow(item: WorkstationWorkItem): QueueRowItem {
     statusLabel: item.status,
     categoryLabel: resolveCategoryLabel(item),
     badgeLabels: resolveBadgeLabels(item),
+    commercialSegments: resolveCommercialSegments(item),
     calendarDay: calendarDate ? formatCalendarDayKey(calendarDate) : undefined,
     isWaiting: Boolean(item.isWaitingOnSignals) || item.group === "waiting",
   };
@@ -685,6 +798,7 @@ export function buildDomainQueues(sorted: WorkstationWorkItem[]): DomainQueues {
       (item) =>
         item.kind === "lead" ||
         item.kind === "quote" ||
+        item.kind === "change-order" ||
         item.filterCategory === "leads" ||
         item.filterCategory === "quotes",
     ),

@@ -108,6 +108,7 @@ import { formatCompactAge } from "@/lib/compact-age";
 export type WorkstationWorkItemKind =
   | "lead"
   | "quote"
+  | "change-order"
   | "job"
   | "task"
   | "schedule"
@@ -928,9 +929,10 @@ export async function queryWorkstationWorkItems(
 
     items.push({
       id: `change-order-${changeOrder.id}`,
-      kind: "quote",
+      kind: "change-order",
       title: `CO-${String(changeOrder.number).padStart(3, "0")} · ${changeOrder.title}`,
       subtitle: customerLabel ?? changeOrder.job.title,
+      typeLabel: "Change Order",
       status: attention.statusLabel,
       priority,
       group,

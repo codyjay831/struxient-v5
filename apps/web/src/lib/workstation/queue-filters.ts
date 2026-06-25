@@ -1,5 +1,13 @@
 import type { WorkstationTab } from "./url-state";
-import type { QueueRowItem } from "@/lib/workstation-presentation";
+import type { CommercialSegment, QueueRowItem } from "@/lib/workstation-presentation";
+
+const COMMERCIAL_FILTER_TO_SEGMENT: Record<string, CommercialSegment> = {
+  leads: "lead",
+  quotes: "quote",
+  "change-orders": "change_order",
+  "customer-responses": "customer_response",
+  "needs-setup": "needs_setup",
+};
 
 export function applyWorkstationQueueFilter(
   items: QueueRowItem[],
@@ -39,8 +47,10 @@ export function applyWorkstationQueueFilter(
   }
 
   if (tab === "commercial") {
-    if (queueFilter === "leads") return items.filter((i) => i.categoryLabel === "Leads & Quotes");
-    if (queueFilter === "quotes") return items.filter((i) => i.title.toLowerCase().includes("quote"));
+    const segment = COMMERCIAL_FILTER_TO_SEGMENT[queueFilter];
+    if (segment) {
+      return items.filter((i) => i.commercialSegments?.includes(segment));
+    }
   }
 
   if (tab === "money") {
