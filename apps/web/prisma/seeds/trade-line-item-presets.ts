@@ -156,7 +156,7 @@ const ELECTRICAL: TradeBlock = {
   lines: [
     {
       slug: "service-panel-upgrade-200a",
-      description: "[Hero] 200A Service Upgrade (Smart System)",
+      description: "200A Main Electrical Service Upgrade",
       defaultQuantity: "1",
       defaultUnitAmountCents: 485_000,
       customerScopeTitle: "200A Service Panel Upgrade",
@@ -373,7 +373,7 @@ const ROOFING: TradeBlock = {
   lines: [
     {
       slug: "full-tearoff-reroof",
-      description: "[Hero] Full Tear-off & Re-roof (Smart System)",
+      description: "Full Tear-off and Re-roof",
       defaultQuantity: "24",
       defaultUnitAmountCents: 56_500,
       customerScopeTitle: "Full Architectural Re-roof",

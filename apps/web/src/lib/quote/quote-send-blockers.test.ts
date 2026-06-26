@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  QuoteScopeDecisionSourceType,
   QuoteScopeDecisionQuoteImpact,
   QuoteScopeDecisionStatus,
   QuoteStatus,
@@ -26,6 +27,7 @@ function decision(
 ): QuoteSendBlockerScopeDecision {
   return {
     quoteLineItemId: null,
+    sourceType: QuoteScopeDecisionSourceType.MANUAL,
     status: QuoteScopeDecisionStatus.OPEN,
     quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
     title: "Example gap",
@@ -51,6 +53,7 @@ test("buildQuoteSendBlockers blocks OPEN REQUIRED scope gap", () => {
     scopeDecisions: [
       decision({
         id: "d-req",
+        sourceType: QuoteScopeDecisionSourceType.CLARIFICATION,
         quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
         title: "Exact square footage",
       }),
@@ -78,6 +81,23 @@ test("buildQuoteSendBlockers does not block OPEN NONE scope gap", () => {
   });
   assert.equal(result.canSend, true);
   assert.equal(result.blockers.length, 0);
+});
+
+test("buildQuoteSendBlockers ignores QUICK_SCOPE rows", () => {
+  const result = buildQuoteSendBlockers({
+    ...baseInput,
+    scopeDecisions: [
+      decision({
+        id: "d-quick",
+        sourceType: QuoteScopeDecisionSourceType.QUICK_SCOPE,
+        quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+        title: "Raw quick scope uncertainty",
+      }),
+    ],
+  });
+  assert.equal(result.canSend, true);
+  assert.equal(result.blockers.length, 0);
+  assert.equal(result.warnings.length, 0);
 });
 
 test("buildQuoteSendBlockers does not block DEFERRED scope decision", () => {

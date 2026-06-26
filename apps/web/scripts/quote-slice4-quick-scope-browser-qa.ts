@@ -1,20 +1,14 @@
 /**
- * Browser QA for Phase 1 Slice 4 — Quick Scope gap dedupe + classification.
+ * Browser QA for Quick Scope internal-observation behavior.
  * Run: npx tsx scripts/quote-slice4-quick-scope-browser-qa.ts
  */
 import assert from "node:assert/strict";
 import { chromium, type Page } from "playwright";
-import {
-  PaymentScheduleAnchorType,
-  QuoteScopeDecisionQuoteImpact,
-  QuoteScopeDecisionStatus,
-  QuoteStatus,
-} from "@prisma/client";
+import { PaymentScheduleAnchorType, QuoteStatus } from "@prisma/client";
 import { buildQuoteSendBlockers } from "@/lib/quote/quote-send-blockers";
 import { db } from "@/lib/db";
 import { DEV_ORGANIZATION_ID } from "@/lib/dev-organization";
 import { mapCommercialSuggestionToLineFields } from "@/lib/ai/quote-scope-suggestion-persist";
-import { createQuoteScopeDecisionsFromMissingInfoStrings } from "@/lib/quote-scope-decision-core";
 import { computeLineTotalCents } from "@/lib/quote-money";
 import { Prisma } from "@prisma/client";
 
@@ -114,13 +108,6 @@ async function seedQuoteWithQuickScopeApply() {
       select: { id: true },
     });
 
-    await createQuoteScopeDecisionsFromMissingInfoStrings(tx, {
-      organizationId: DEV_ORGANIZATION_ID,
-      quoteId: QA_QUOTE_ID,
-      quoteLineItemId: line.id,
-      missingInfo: item.missingInfo,
-      parentSourceRefId: item.tempId,
-    });
   });
 }
 
@@ -152,38 +139,21 @@ async function main() {
       line.description,
     );
     record(
-      "Slice 4: missingInfo not dumped into internal notes",
-      !/Missing info \(this line\):/i.test(line.internalNotes ?? "") &&
-        !(line.internalNotes ?? "").includes("Confirm existing service size"),
+      "Slice 4: legacy missing-info header absent from internal notes",
+      !/Missing info \(this line\):/i.test(line.internalNotes ?? ""),
+      line.internalNotes ?? "(empty)",
+    );
+    record(
+      "Slice 4: hidden observations persisted to internal notes",
+      (line.internalNotes ?? "").includes("Quick scope observations (internal):") &&
+        (line.internalNotes ?? "").includes("Confirm existing service size"),
       line.internalNotes ?? "(empty)",
     );
     record(
       "Slice 4: execution planning notes preserved",
       (line.internalNotes ?? "").includes("Coordinate utility disconnect"),
     );
-    record("Slice 4: gap records created", gaps.length === 2, `count=${gaps.length}`);
-
-    const commercialGap = gaps.find((g) => g.title.includes("service size"));
-    const scheduleGap = gaps.find((g) => g.title.includes("timeline"));
-    record(
-      "Slice 4: commercial gap classified REQUIRED OPEN",
-      commercialGap?.quoteImpact === QuoteScopeDecisionQuoteImpact.REQUIRED &&
-        commercialGap.status === QuoteScopeDecisionStatus.OPEN,
-      commercialGap
-        ? `impact=${commercialGap.quoteImpact}, status=${commercialGap.status}`
-        : "missing",
-    );
-    record(
-      "Slice 4: scheduling gap classified DEFERRED (non-blocking)",
-      scheduleGap?.status === QuoteScopeDecisionStatus.DEFERRED,
-      scheduleGap ? `status=${scheduleGap.status}` : "missing",
-    );
-    record(
-      "Slice 4: stable source metadata on gaps",
-      gaps.every(
-        (g) => g.sourceRefType === "quick_scope_missing_info" && Boolean(g.sourceRefId?.startsWith("qa-c1:")),
-      ),
-    );
+    record("Slice 4: no Quick Scope gap records created", gaps.length === 0, `count=${gaps.length}`);
 
     const quote = await db.quote.findFirst({
       where: { id: QA_QUOTE_ID },
@@ -213,8 +183,8 @@ async function main() {
       scopeDecisions: quote.scopeDecisions,
     });
     record(
-      "Slice 4: required commercial gap blocks send",
-      !send.canSend,
+      "Slice 4: Quick Scope observations do not block send",
+      send.canSend,
       `canSend=${send.canSend}, blockers=${send.blockers.length}`,
     );
 
@@ -240,8 +210,8 @@ async function main() {
     );
 
     record(
-      "Slice 4 browser: line shows Clarify badge for blocking gap",
-      /Clarify \(1\)/.test(await page.locator("body").innerText()),
+      "Slice 4 browser: no Clarify badge count from Quick Scope",
+      !/Clarify \(\d+\)/.test(await page.locator("body").innerText()),
     );
 
     await page.getByRole("button", { name: /Clarify/i }).first().click();
@@ -265,9 +235,9 @@ async function main() {
     }
     const dialogText = await dialog.innerText();
     record(
-      "Slice 4 browser: Clarify shows open gap records",
-      /Clear open gap records/i.test(dialogText) &&
-        /Confirm existing service size/i.test(dialogText),
+      "Slice 4 browser: Clarify does not show Quick Scope gap section",
+      !/Clear open gap records/i.test(dialogText) &&
+        !/Confirm existing service size/i.test(dialogText),
       /Clear open gap records/i.test(dialogText) ? "gap section visible" : "gap section missing",
     );
     await browser.close();

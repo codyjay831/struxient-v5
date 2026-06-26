@@ -1,6 +1,7 @@
 import { Prisma, QuoteStatus } from "@prisma/client";
 import type { ExtendedTransactionClient } from "@/lib/db";
 import {
+  appendQuickScopeObservationsToQuoteInternalNotes,
   appendQuoteJobContextToQuoteInternalNotes,
   mapCommercialSuggestionToLineFields,
   mapOptionalAddOnToLineFields,
@@ -14,7 +15,6 @@ import {
   recalculateQuoteRollupsInTx,
 } from "@/lib/quote-line-item-template-apply-tx";
 import { computeLineTotalCents } from "@/lib/quote-money";
-import { createQuoteScopeDecisionsFromMissingInfoStrings } from "@/lib/quote-scope-decision-core";
 
 export class QuoteScopeApplyTxError extends Error {
   constructor(message: string) {
@@ -30,8 +30,10 @@ export type ApplyQuoteScopeSuggestionsTxInput = {
   selectedCommercialLineItems: ApprovedCommercialLineItem[];
   selectedOptionalAddOns: OptionalAddOnSuggestion[];
   selectedQuoteJobContext: string[];
-  /** Quote-wide missing info from the reviewed proposal — persisted when any line is applied. */
+  /** Quote-wide hidden internal observations from Quick Scope draft review. */
   quoteMissingInfo: string[];
+  /** Optional quote-level context summary to ground title sanitization. */
+  sourceContextSummary?: string | null;
   createdByUserId?: string | null;
 };
 
@@ -102,6 +104,10 @@ export async function performApplyQuoteScopeSuggestionsInTx(
       input.quoteId,
       templateId,
       input.organizationId,
+      {
+        sanitizeTitleForQuickScope: true,
+        sourceGroundingText: input.sourceContextSummary,
+      },
     );
     if (!result.ok) {
       throw new QuoteScopeApplyTxError(
@@ -112,20 +118,12 @@ export async function performApplyQuoteScopeSuggestionsInTx(
   }
 
   for (const item of input.selectedCommercialLineItems) {
-    const fields = mapCommercialSuggestionToLineFields(item);
+    const fields = mapCommercialSuggestionToLineFields(item, {
+      sourceGroundingText: input.sourceContextSummary,
+    });
     try {
-      const lineId = await createCommercialLineRow(tx, input.quoteId, fields);
+      await createCommercialLineRow(tx, input.quoteId, fields);
       createdCount += 1;
-      if (item.missingInfo.length > 0) {
-        await createQuoteScopeDecisionsFromMissingInfoStrings(tx, {
-          organizationId: input.organizationId,
-          quoteId: input.quoteId,
-          quoteLineItemId: lineId,
-          missingInfo: item.missingInfo,
-          parentSourceRefId: item.tempId,
-          createdByUserId: input.createdByUserId ?? null,
-        });
-      }
     } catch (e) {
       throw new QuoteScopeApplyTxError(
         e instanceof Error ? e.message : "Failed to create line items from scope suggestions.",
@@ -145,25 +143,18 @@ export async function performApplyQuoteScopeSuggestionsInTx(
     }
   }
 
-  if (input.selectedQuoteJobContext.length > 0) {
-    const mergedNotes = appendQuoteJobContextToQuoteInternalNotes(
-      quote.internalNotes,
-      input.selectedQuoteJobContext,
-    );
+  const mergedJobContext = appendQuoteJobContextToQuoteInternalNotes(
+    quote.internalNotes,
+    input.selectedQuoteJobContext,
+  );
+  const mergedNotes = appendQuickScopeObservationsToQuoteInternalNotes(
+    mergedJobContext,
+    input.quoteMissingInfo,
+  );
+  if (mergedNotes !== (quote.internalNotes ?? null)) {
     await tx.quote.update({
       where: { id: input.quoteId },
       data: { internalNotes: mergedNotes },
-    });
-  }
-
-  if (createdCount > 0 && input.quoteMissingInfo.length > 0) {
-    await createQuoteScopeDecisionsFromMissingInfoStrings(tx, {
-      organizationId: input.organizationId,
-      quoteId: input.quoteId,
-      quoteLineItemId: null,
-      missingInfo: input.quoteMissingInfo,
-      parentSourceRefId: input.quoteId,
-      createdByUserId: input.createdByUserId ?? null,
     });
   }
 

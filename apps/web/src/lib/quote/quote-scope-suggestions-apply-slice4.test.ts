@@ -109,7 +109,7 @@ function createApplyMockTx(input: {
   return tx;
 }
 
-test("mapCommercialSuggestionToLineFields does not append missingInfo to internalNotes", () => {
+test("mapCommercialSuggestionToLineFields stores hidden observations in internal notes", () => {
   const fields = mapCommercialSuggestionToLineFields({
     tempId: "c1",
     description: "Panel upgrade",
@@ -128,8 +128,8 @@ test("mapCommercialSuggestionToLineFields does not append missingInfo to interna
   assert.match(notes, /Line-specific details:/);
   assert.match(notes, /Execution planning notes:/);
   assert.match(notes, /Coordinate utility disconnect/);
-  assert.doesNotMatch(notes, /Missing info \(this line\):/);
-  assert.doesNotMatch(notes, /Confirm existing service size/);
+  assert.match(notes, /Quick scope observations \(internal\):/);
+  assert.match(notes, /Confirm existing service size/);
 });
 
 test("createQuoteScopeDecisionsFromMissingInfoStrings classifies and sets stable source metadata", async () => {

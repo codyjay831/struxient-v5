@@ -108,6 +108,9 @@ function toKnownHeading(heading: string | null): string | null {
   if (lower === "execution planning notes") return "Execution planning notes";
   if (lower === "line-specific details") return "Line-specific details";
   if (lower === "missing info (this line)") return "Missing info (this line)";
+  if (lower === "quick scope observations (internal)") {
+    return "Quick scope observations (internal)";
+  }
   return null;
 }
 
@@ -201,7 +204,11 @@ export function buildQuoteExecutionPlanningContextManifest(
           });
           continue;
         }
-        if (known === "Line-specific details" || known === "Missing info (this line)") {
+        if (
+          known === "Line-specific details" ||
+          known === "Missing info (this line)" ||
+          known === "Quick scope observations (internal)"
+        ) {
           addItem(items, counters, {
             source: "line_internal_notes",
             bucket: "job_technical_detail",

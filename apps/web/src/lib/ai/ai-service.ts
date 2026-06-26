@@ -42,6 +42,7 @@ import {
   type RecommendedTemplateSuggestion,
 } from "./quote-line-items-proposal-schema";
 import { normalizeScopeSuggestionGrouping } from "./normalize-scope-suggestion-grouping";
+import { sanitizeQuickScopeLineTitle } from "./quick-scope-title-guardrails";
 import {
   QuotePaymentScheduleProposalSchema,
   type PaymentScheduleMilestoneSuggestion,
@@ -1513,7 +1514,9 @@ Return ONLY a valid JSON object matching this structure:
       params.recommendedTemplates.map((match) => ({
         tempId: crypto.randomUUID(),
         templateId: match.templateId,
-        templateDescription: match.templateDescription,
+        templateDescription: sanitizeQuickScopeLineTitle(match.templateDescription, {
+          groundingText: params.contextText,
+        }),
         confidence: match.confidence,
         reasoning: match.reasoning,
       }));
@@ -1551,15 +1554,24 @@ A quote line item = what the customer is buying. Do NOT create one line item per
 description MUST be a short, reusable-grade commercial label. Do NOT put in description:
 - address, access notes, customer schedule, pets, locked gates, one-off site facts
 - brand names (e.g. Zinsco) unless the brand IS the sellable product
+- marketing labels, package names, or bracketed tags (e.g. [Hero], [Primary], [Recommended], Premium, Elite, Best Value, Advanced Package, Smart System)
+- invented feature claims (e.g. smart/monitoring/system claims) unless explicitly present in provided context/template text
 
-Put LINE-SPECIFIC facts in lineItemDetails, executionPlanningNotes, or per-line missingInfo:
+Put LINE-SPECIFIC facts in lineItemDetails, executionPlanningNotes, or per-line missingInfo (internal observations only):
 - remove/demo/install, utility, permit, inspection, grounding for THAT line
 - panel brand/type, amperage questions for THAT line
 
 Put JOB-WIDE facts in quoteJobContext only (do not duplicate on every line):
 - locked gate, dog in yard, customer available after 3 PM, whole-job access preferences
 
-Put whole-quote gaps in quoteMissingInfo (not repeated on every line).
+Put whole-quote internal observations in quoteMissingInfo (not repeated on every line).
+
+IMPORTANT:
+- missingInfo and quoteMissingInfo are internal-only observations. They are not customer-facing wording and not automatic blockers.
+- Keep observations high-value and tied to price/scope/material/execution-handoff risk.
+- Avoid generic uncertainty lines like gate code missing, site access unclear, customer preferences unclear, utility approval process unclear, or building department specifics unclear unless directly required by the trade scope text.
+- Never use customer-facing uncertainty wording like "missing info", "gap", "scope gap", or "details pending from missing info" in customerScopeTitle/customerScopeDescription.
+- Commercial line titles must be plain contractor scope labels. Never output bracketed labels or marketing/package terms.
 
 Only create a SEPARATE commercialLineItem or optionalAddOn when scope is separately priced, optional/upsell, or materially distinct.
 
@@ -1602,7 +1614,7 @@ OUTPUT JSON ONLY:
       "customerScopeDescription": "optional string",
       "reasoning": "optional string",
       "confidence": "high" | "medium" | "low",
-      "missingInfo": ["string"],
+      "missingInfo": ["internal observation string"],
       "lineItemDetails": [{ "label": "optional", "content": "string", "audience": "internal"|"customer"|"both" }],
       "executionPlanningNotes": ["string"]
     }
@@ -1649,10 +1661,15 @@ OUTPUT JSON ONLY:
         .filter((item: Record<string, unknown>) => typeof item?.description === "string")
         .map((item: Record<string, unknown>) => ({
           tempId: crypto.randomUUID(),
-          description: String(item.description).trim().slice(0, 2000),
+          description: sanitizeQuickScopeLineTitle(
+            String(item.description).trim().slice(0, 2000),
+            { groundingText: params.contextText },
+          ),
           customerScopeTitle:
             typeof item.customerScopeTitle === "string"
-              ? item.customerScopeTitle.slice(0, 500)
+              ? sanitizeQuickScopeLineTitle(item.customerScopeTitle.slice(0, 500), {
+                  groundingText: params.contextText,
+                })
               : null,
           customerScopeDescription:
             typeof item.customerScopeDescription === "string"
@@ -1869,7 +1886,9 @@ OUTPUT JSON ONLY:
       if (firstLine) {
         commercialLineItems.push({
           tempId: crypto.randomUUID(),
-          description: firstLine,
+          description: sanitizeQuickScopeLineTitle(firstLine, {
+            groundingText: params.contextText,
+          }),
           confidence: "low",
           reasoning: "Simulated fallback from capture text.",
           customerScopeTitle: null,

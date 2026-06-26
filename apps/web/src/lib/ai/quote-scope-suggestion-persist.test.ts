@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  appendQuickScopeObservationsToQuoteInternalNotes,
   appendQuoteJobContextToQuoteInternalNotes,
   mapCommercialSuggestionToLineFields,
   mapOptionalAddOnToLineFields,
+  QUICK_SCOPE_INTERNAL_OBSERVATIONS_HEADER,
   QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER,
 } from "./quote-scope-suggestion-persist";
 
@@ -35,9 +37,62 @@ test("mapCommercialSuggestionToLineFields maps line-specific sections", () => {
   assert.match(fields.internalNotes ?? "", /Line-specific details:/);
   assert.match(fields.internalNotes ?? "", /Zinsco/);
   assert.match(fields.internalNotes ?? "", /Execution planning notes:/);
-  assert.doesNotMatch(fields.internalNotes ?? "", /Missing info \(this line\):/);
-  assert.doesNotMatch(fields.internalNotes ?? "", /Confirm existing service size/);
+  assert.match(fields.internalNotes ?? "", /Quick scope observations \(internal\):/);
+  assert.match(fields.internalNotes ?? "", /Confirm existing service size/);
   assert.doesNotMatch(fields.internalNotes ?? "", /Locked side gate/);
+});
+
+test("mapCommercialSuggestionToLineFields sanitizes forbidden customer-facing uncertainty copy", () => {
+  const fields = mapCommercialSuggestionToLineFields({
+    tempId: "c1",
+    description: "Roof replacement",
+    customerScopeTitle: "Roof system details pending from missing info",
+    customerScopeDescription:
+      "Install roofing system with details pending from missing info and scope gap review.",
+    lineItemDetails: [],
+    executionPlanningNotes: [],
+    missingInfo: [],
+  });
+
+  assert.doesNotMatch(fields.customerScopeTitle ?? "", /missing info|gap/i);
+  assert.doesNotMatch(fields.customerScopeDescription ?? "", /missing info|gap/i);
+});
+
+test("mapCommercialSuggestionToLineFields strips marketing labels from customer-facing projection text", () => {
+  const fields = mapCommercialSuggestionToLineFields({
+    tempId: "c1",
+    description: "Main Electrical Service Upgrade",
+    customerScopeTitle: "[Hero] Main Electrical Service Upgrade",
+    customerScopeDescription: "Install new service panel (Smart System) with utility coordination.",
+    lineItemDetails: [],
+    executionPlanningNotes: [],
+    missingInfo: [],
+  });
+
+  assert.doesNotMatch(fields.customerScopeTitle ?? "", /\[[^\]]+\]|Hero/i);
+  assert.doesNotMatch(fields.customerScopeDescription ?? "", /Smart System/i);
+});
+
+test("mapCommercialSuggestionToLineFields strips marketing labels from titles", () => {
+  const fields = mapCommercialSuggestionToLineFields(
+    {
+      tempId: "c1",
+      description: "[Hero] 200A Service Upgrade (Smart System)",
+      customerScopeTitle: "[Recommended] 200A Service Upgrade (Premium)",
+      customerScopeDescription: "Install upgraded panel.",
+      lineItemDetails: [],
+      executionPlanningNotes: [],
+      missingInfo: [],
+    },
+    {
+      sourceGroundingText: "Customer wants a 200 amp service upgrade.",
+    },
+  );
+
+  assert.equal(fields.description, "200A Service Upgrade");
+  assert.equal(fields.customerScopeTitle, "200A Service Upgrade");
+  assert.doesNotMatch(fields.description, /\[Hero\]|Smart System/i);
+  assert.doesNotMatch(fields.customerScopeTitle ?? "", /\[Recommended\]|Premium/i);
 });
 
 test("mapOptionalAddOnToLineFields stores whySeparate in internalNotes", () => {
@@ -65,4 +120,28 @@ test("appendQuoteJobContextToQuoteInternalNotes appends under existing header", 
   const merged = appendQuoteJobContextToQuoteInternalNotes(existing, ["Dog in yard"]);
   assert.match(merged ?? "", /Dog in yard/);
   assert.equal((merged?.match(new RegExp(QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER, "g")) ?? []).length, 1);
+});
+
+test("appendQuickScopeObservationsToQuoteInternalNotes stores hidden observations under one header", () => {
+  const merged = appendQuickScopeObservationsToQuoteInternalNotes(null, [
+    "Material selection not confirmed",
+    "Permit inclusion not confirmed",
+  ]);
+  assert.match(merged ?? "", /Quick scope observations \(internal\):/);
+  assert.match(merged ?? "", /Material selection not confirmed/);
+  assert.match(merged ?? "", /Permit inclusion not confirmed/);
+});
+
+test("appendQuickScopeObservationsToQuoteInternalNotes avoids duplicate headers on rerun", () => {
+  const first = appendQuickScopeObservationsToQuoteInternalNotes(null, [
+    "Material selection not confirmed",
+  ]);
+  const second = appendQuickScopeObservationsToQuoteInternalNotes(first, [
+    "Permit inclusion not confirmed",
+  ]);
+
+  const headerCount = (second?.split(QUICK_SCOPE_INTERNAL_OBSERVATIONS_HEADER).length ?? 1) - 1;
+  assert.equal(headerCount, 1);
+  assert.doesNotMatch(second ?? "", /Material selection not confirmed/);
+  assert.match(second ?? "", /Permit inclusion not confirmed/);
 });

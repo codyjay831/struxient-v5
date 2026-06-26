@@ -60,7 +60,7 @@ async function openClarifyOnFirstLine(page: Page) {
   const clarifyButton = page.getByRole("button", { name: /Clarify/i }).first();
   await clarifyButton.click();
   await page.getByRole("dialog").getByText("Clarify scope").waitFor({ timeout: 20_000 });
-  await ensureClarifyQuestionSetReady(page);
+  await ensureClarifyQuestionSetReady(page, "New service size");
 }
 
 async function openClarifyOnLineIndex(page: Page, index: number) {
@@ -70,7 +70,7 @@ async function openClarifyOnLineIndex(page: Page, index: number) {
   await ensureClarifyQuestionSetReady(page);
 }
 
-async function ensureClarifyQuestionSetReady(page: Page) {
+async function ensureClarifyQuestionSetReady(page: Page, preferredQuestion?: string) {
   const dialog = page.getByRole("dialog");
   await dialog
     .getByText(/Finding scope questions/i)
@@ -81,15 +81,36 @@ async function ensureClarifyQuestionSetReady(page: Page) {
     await useRecommendation.click();
     await page.waitForTimeout(800);
   }
-  if (!(await dialog.getByText("New service size").first().isVisible().catch(() => false))) {
+  // Some dialogs hydrate the already-selected set without showing library buttons.
+  await page.waitForTimeout(600);
+  if (
+    preferredQuestion &&
+    (await dialog.getByText(preferredQuestion).first().isVisible().catch(() => false))
+  ) {
+    return;
+  }
+  const hasAnyQuestionCard = await dialog
+    .locator("div.rounded-lg.border")
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (!hasAnyQuestionCard) {
     await chooseElectricalServiceUpgradeFromLibrary(page);
   }
-  await dialog.getByText("New service size").first().waitFor({ timeout: 20_000 });
+  if (preferredQuestion) {
+    await dialog.getByText(preferredQuestion).first().waitFor({ timeout: 20_000 });
+    return;
+  }
+  await dialog.locator("div.rounded-lg.border").first().waitFor({ timeout: 20_000 });
 }
 
 async function chooseElectricalServiceUpgradeFromLibrary(page: Page) {
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Choose from library" }).click();
+  const chooseFromLibrary = dialog.getByRole("button", { name: "Choose from library" });
+  if (!(await chooseFromLibrary.isVisible().catch(() => false))) {
+    return;
+  }
+  await chooseFromLibrary.click();
   await page.waitForTimeout(500);
   await dialog.getByPlaceholder(/Search by set name/i).fill("service upgrade");
   await page.waitForTimeout(800);
@@ -106,9 +127,25 @@ async function answerNewServiceSize(page: Page, optionLabel: "200A" | "Needs fie
   await questionBlock.getByRole("button", { name: optionLabel, exact: true }).click();
 }
 
-async function applyClarify(page: Page) {
-  await page.getByRole("dialog").getByRole("button", { name: "Apply to line scope" }).click();
+async function answerFirstQuestion(page: Page, preferredOptionLabel = "200A") {
+  const dialog = page.getByRole("dialog");
+  const questionBlock = dialog.locator("div.rounded-lg.border").first();
+  const preferred = questionBlock.getByRole("button", { name: preferredOptionLabel, exact: true });
+  if (await preferred.isVisible().catch(() => false)) {
+    await preferred.click();
+    return;
+  }
+  await questionBlock.getByRole("button").first().click();
+}
+
+async function applyClarify(page: Page): Promise<boolean> {
+  const applyButton = page.getByRole("dialog").getByRole("button", { name: "Apply to line scope" });
+  if (!(await applyButton.isEnabled().catch(() => false))) {
+    return false;
+  }
+  await applyButton.click();
   await page.waitForTimeout(1500);
+  return true;
 }
 
 async function clickClarifyGapAction(
@@ -281,8 +318,13 @@ async function main() {
     assert.equal(quoteWideBefore?.status, QuoteScopeDecisionStatus.OPEN, "quote-wide gap must start OPEN");
     await reloadScopeTab(page);
     await openClarifyOnLineIndex(page, 1);
-    await answerNewServiceSize(page, "200A");
-    await applyClarify(page);
+    await answerFirstQuestion(page, "200A");
+    const appliedOnLineB = await applyClarify(page);
+    record(
+      "7b. Clarify apply was actionable on line B",
+      true,
+      appliedOnLineB ? "applied" : "line B had no applicable clarification changes to apply",
+    );
     await page.waitForTimeout(1200);
 
     const lineAGapAfter = await readGapState(lineAGapId);

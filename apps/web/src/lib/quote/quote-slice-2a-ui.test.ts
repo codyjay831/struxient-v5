@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  QuoteScopeDecisionSourceType,
   QuoteScopeDecisionQuoteImpact,
   QuoteScopeDecisionStatus,
   QuoteStatus,
@@ -21,7 +22,7 @@ function decision(
   return {
     quoteId: "quote-1",
     quoteLineItemId: overrides.quoteLineItemId ?? "line-a",
-    sourceType: "QUICK_SCOPE",
+    sourceType: QuoteScopeDecisionSourceType.MANUAL,
     title: overrides.title ?? "Example gap",
     detail: null,
     status: overrides.status ?? QuoteScopeDecisionStatus.OPEN,

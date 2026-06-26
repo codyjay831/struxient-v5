@@ -163,6 +163,7 @@ async function loadOpenScopeDecisionsForLineContext(
       organizationId,
       quoteId,
       status: "OPEN",
+      sourceType: { not: "QUICK_SCOPE" },
       OR: [{ quoteLineItemId: lineId }, { quoteLineItemId: null }],
     },
     orderBy: [{ quoteLineItemId: "desc" }, { createdAt: "asc" }],

@@ -27,6 +27,7 @@ export const CommercialLineItemSuggestionSchema = z.object({
   customerScopeDescription: z.string().max(10_000).optional().nullable(),
   lineItemDetails: z.array(LineItemDetailSuggestionSchema).default([]),
   executionPlanningNotes: z.array(z.string().max(2000)).default([]),
+  /** Internal-only Quick Scope observations (never direct send blockers). */
   missingInfo: z.array(z.string()).default([]),
 });
 
@@ -61,6 +62,7 @@ export const QuoteScopeSuggestionsProposalSchema = z.object({
   assumptions: z.array(z.string()).default([]),
   warnings: z.array(z.string()).default([]),
   quoteJobContext: z.array(z.string()).default([]),
+  /** Internal-only quote-wide observations from Quick Scope drafting. */
   quoteMissingInfo: z.array(z.string()).default([]),
   recommendedTemplates: z.array(RecommendedTemplateSuggestionSchema).default([]),
   commercialLineItems: z.array(CommercialLineItemSuggestionSchema).default([]),

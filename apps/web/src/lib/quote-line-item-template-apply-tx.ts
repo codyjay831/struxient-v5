@@ -3,6 +3,7 @@ import "server-only";
 import { QuoteStatus } from "@prisma/client";
 import { computeLineTotalCents } from "@/lib/quote-money";
 import type { ExtendedTransactionClient } from "@/lib/db";
+import { sanitizeQuickScopeLineTitle } from "@/lib/ai/quick-scope-title-guardrails";
 
 export type QuoteRollupTx = Pick<ExtendedTransactionClient, "quoteLineItem" | "quote">;
 
@@ -62,6 +63,7 @@ export async function performApplyLineItemTemplateToQuoteTx(
   quoteId: string,
   templateId: string,
   organizationId: string,
+  options?: { sanitizeTitleForQuickScope?: boolean; sourceGroundingText?: string | null },
 ): Promise<{ ok: true } | { ok: false; message: string | null }> {
   const template = await tx.lineItemTemplate.findFirst({
     where: {
@@ -97,12 +99,25 @@ export async function performApplyLineItemTemplateToQuoteTx(
   });
   const nextOrder = (agg._max.sortOrder ?? -1) + 1;
 
+  const description = options?.sanitizeTitleForQuickScope
+    ? sanitizeQuickScopeLineTitle(template.description, {
+        groundingText: options.sourceGroundingText,
+      })
+    : template.description;
+  const customerScopeTitle = options?.sanitizeTitleForQuickScope
+    ? template.defaultCustomerScopeTitle
+      ? sanitizeQuickScopeLineTitle(template.defaultCustomerScopeTitle, {
+          groundingText: options.sourceGroundingText,
+        })
+      : null
+    : template.defaultCustomerScopeTitle;
+
   const createdLine = await tx.quoteLineItem.create({
     data: {
       quoteId,
       sortOrder: nextOrder,
-      description: template.description,
-      customerScopeTitle: template.defaultCustomerScopeTitle,
+      description,
+      customerScopeTitle,
       customerScopeDescription: template.defaultCustomerScopeDescription,
       customerIncludedNotes: template.defaultCustomerIncludedNotes,
       customerExcludedNotes: template.defaultCustomerExcludedNotes,

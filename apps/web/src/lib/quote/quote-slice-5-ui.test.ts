@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  QuoteScopeDecisionSourceType,
   QuoteScopeDecisionQuoteImpact,
   QuoteScopeDecisionStatus,
   QuoteStatus,
@@ -91,7 +92,7 @@ test("Slice 5: required commercial gaps still route to Clarify not draft executi
       id: "gap-1",
       quoteId: "quote-1",
       quoteLineItemId: "line-a",
-      sourceType: "QUICK_SCOPE",
+      sourceType: QuoteScopeDecisionSourceType.CLARIFICATION,
       title: "Panel amperage",
       detail: null,
       status: QuoteScopeDecisionStatus.OPEN,

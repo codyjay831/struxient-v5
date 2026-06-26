@@ -64,16 +64,18 @@ test("buildQuoteExecutionPlanningContext includes status-qualified site details 
 test("context manifest classifies internal notes sections with defaults", () => {
   const manifest = buildQuoteExecutionPlanningContextManifest({
     lineInternalNotes:
-      "Line-specific details:\n- Existing panel is Zinsco\n\nExecution planning notes:\n- Coordinate utility release\n\nMissing info (this line):\n- Confirm amperage",
+      "Line-specific details:\n- Existing panel is Zinsco\n\nExecution planning notes:\n- Coordinate utility release\n\nQuick scope observations (internal):\n- Confirm amperage",
   });
   const planning = manifest.items.find((item) => item.label === "Execution planning notes");
   const lineDetails = manifest.items.find((item) => item.label === "Line-specific details");
-  const missing = manifest.items.find((item) => item.label === "Missing info (this line)");
+  const observations = manifest.items.find(
+    (item) => item.label === "Quick scope observations (internal)",
+  );
   assert.equal(planning?.bucket, "reusable_execution_guidance");
   assert.equal(planning?.includedByDefault, true);
   assert.equal(lineDetails?.bucket, "job_technical_detail");
   assert.equal(lineDetails?.includedByDefault, false);
-  assert.equal(missing?.bucket, "job_technical_detail");
+  assert.equal(observations?.bucket, "job_technical_detail");
 });
 
 test("context rendering excludes site/access by default but can opt in", () => {

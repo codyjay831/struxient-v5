@@ -389,7 +389,7 @@ export function QuoteScopeCapturePanel({
               {proposal.quoteMissingInfo.length > 0 ? (
                 <div className="rounded-md border border-border bg-foreground/[0.02] px-3 py-2">
                   <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
-                    Quote-wide missing info
+                    Quote-wide internal observations
                   </p>
                   <ul className="mt-1 space-y-1 text-xs text-foreground-muted">
                     {proposal.quoteMissingInfo.map((item) => (
@@ -509,7 +509,7 @@ export function QuoteScopeCapturePanel({
                     {item.missingInfo.length > 0 ? (
                       <div className="ml-6 space-y-1">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">
-                          Missing info (this line)
+                          Internal observations
                         </p>
                         <ul className="space-y-1 text-xs text-foreground-muted">
                           {item.missingInfo.map((info) => (

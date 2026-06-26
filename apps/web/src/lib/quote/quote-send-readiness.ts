@@ -37,6 +37,7 @@ const quoteSendReadinessSelect = {
 const scopeDecisionSendSelect = {
   id: true,
   quoteLineItemId: true,
+  sourceType: true,
   status: true,
   quoteImpact: true,
   resolutionTiming: true,

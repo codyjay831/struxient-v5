@@ -3,8 +3,11 @@ import type {
   LineItemDetailSuggestion,
   OptionalAddOnSuggestion,
 } from "./quote-line-items-proposal-schema";
+import { sanitizeQuickScopeLineTitle } from "./quick-scope-title-guardrails";
 
 export const QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER = "Quick scope capture job context:";
+export const QUICK_SCOPE_INTERNAL_OBSERVATIONS_HEADER =
+  "Quick scope observations (internal):";
 
 export type PersistedCommercialLineFields = {
   description: string;
@@ -13,6 +16,56 @@ export type PersistedCommercialLineFields = {
   customerIncludedNotes: string | null;
   internalNotes: string | null;
 };
+
+const CUSTOMER_SCOPE_FORBIDDEN_PHRASES: readonly RegExp[] = [
+  /\bmissing info\b/i,
+  /\bmissing[-\s]?information\b/i,
+  /\bscope gap(s)?\b/i,
+  /\bgap(s)?\b/i,
+  /\buncertain(ty)?\b/i,
+  /\binternal ai\b/i,
+];
+
+const CUSTOMER_SCOPE_MARKETING_LABELS: readonly RegExp[] = [
+  /\[[^\]]+\]/gi,
+  /\((?:[^)]*(?:smart system|premium|best value|advanced package|complete system|elite)[^)]*)\)/gi,
+];
+
+function removeBlock(text: string, header: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i]?.trim() === header) {
+      i += 1;
+      while (i < lines.length && lines[i]?.trim() !== "") {
+        i += 1;
+      }
+      if (i < lines.length && lines[i]?.trim() === "") {
+        i += 1;
+      }
+      continue;
+    }
+    out.push(lines[i] ?? "");
+    i += 1;
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function mergeInternalBulletBlock(
+  existing: string | null | undefined,
+  header: string,
+  values: readonly string[],
+): string | null {
+  const base = removeBlock((existing ?? "").trim(), header);
+  const deduped = [...new Set(values.map((item) => item.trim()).filter(Boolean))];
+  if (deduped.length === 0) {
+    return base.length > 0 ? base : null;
+  }
+  const block = `${header}\n${deduped.map((item) => `- ${item}`).join("\n")}`;
+  if (!base) return block;
+  return `${base}\n\n${block}`;
+}
 
 function formatDetailLine(detail: LineItemDetailSuggestion): string {
   const label = detail.label?.trim();
@@ -24,12 +77,27 @@ function isCustomerFacing(audience: LineItemDetailSuggestion["audience"]): boole
   return audience === "customer" || audience === "both";
 }
 
+function sanitizeCustomerFacingText(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const stripped = CUSTOMER_SCOPE_MARKETING_LABELS.reduce(
+    (next, pattern) => next.replace(pattern, " "),
+    value,
+  );
+  const trimmed = stripped.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  if (CUSTOMER_SCOPE_FORBIDDEN_PHRASES.some((pattern) => pattern.test(trimmed))) {
+    return "Final selections and field conditions must be confirmed before material order or installation.";
+  }
+  return trimmed;
+}
+
 /**
  * Maps a grouped commercial scope suggestion to persisted QuoteLineItem fields.
  * Pricing is always applied separately (qty 1, $0).
  */
 export function mapCommercialSuggestionToLineFields(
   item: ApprovedCommercialLineItem,
+  options?: { sourceGroundingText?: string | null },
 ): PersistedCommercialLineFields {
   const internalDetailLines: string[] = [];
   const customerDetailLines: string[] = [];
@@ -43,6 +111,10 @@ export function mapCommercialSuggestionToLineFields(
     }
   }
 
+  const hiddenObservations = item.missingInfo
+    .map((observation) => observation.trim())
+    .filter(Boolean);
+
   const internalSections: string[] = [];
   if (internalDetailLines.length > 0) {
     internalSections.push(`Line-specific details:\n${internalDetailLines.join("\n")}`);
@@ -51,19 +123,37 @@ export function mapCommercialSuggestionToLineFields(
     const notes = item.executionPlanningNotes.map((n) => `- ${n.trim()}`).join("\n");
     internalSections.push(`Execution planning notes:\n${notes}`);
   }
+  if (hiddenObservations.length > 0) {
+    internalSections.push(
+      `${QUICK_SCOPE_INTERNAL_OBSERVATIONS_HEADER}\n${hiddenObservations
+        .map((note) => `- ${note}`)
+        .join("\n")}`,
+    );
+  }
 
-  const customerScopeDescription =
+  const customerScopeDescription = sanitizeCustomerFacingText(
     item.customerScopeDescription?.trim() ||
-    (customerDetailLines.length > 0 ? customerDetailLines.join("\n") : null);
+      (customerDetailLines.length > 0 ? customerDetailLines.join("\n") : null),
+  );
 
-  const customerIncludedNotes =
+  const customerIncludedNotes = sanitizeCustomerFacingText(
     customerDetailLines.length > 0 && item.customerScopeDescription?.trim()
       ? customerDetailLines.join("\n")
-      : null;
+      : null,
+  );
+
+  const safeDescription = sanitizeQuickScopeLineTitle(item.description.trim(), {
+    groundingText: options?.sourceGroundingText,
+  });
+  const safeCustomerScopeTitle = item.customerScopeTitle
+    ? sanitizeQuickScopeLineTitle(item.customerScopeTitle.trim(), {
+        groundingText: options?.sourceGroundingText,
+      })
+    : null;
 
   return {
-    description: item.description.trim(),
-    customerScopeTitle: item.customerScopeTitle?.trim() || null,
+    description: safeDescription,
+    customerScopeTitle: sanitizeCustomerFacingText(safeCustomerScopeTitle),
     customerScopeDescription,
     customerIncludedNotes,
     internalNotes: internalSections.length > 0 ? internalSections.join("\n\n") : null,
@@ -92,21 +182,20 @@ export function appendQuoteJobContextToQuoteInternalNotes(
   existingNotes: string | null | undefined,
   newItems: readonly string[],
 ): string | null {
-  const items = newItems.map((item) => item.trim()).filter(Boolean);
-  if (items.length === 0) {
-    const trimmed = existingNotes?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : null;
-  }
+  return mergeInternalBulletBlock(
+    existingNotes,
+    QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER,
+    newItems,
+  );
+}
 
-  const bullets = items.map((item) => `- ${item}`).join("\n");
-  const block = `${QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER}\n${bullets}`;
-  const existing = existingNotes?.trim() ?? "";
-
-  if (!existing) {
-    return block;
-  }
-  if (existing.includes(QUOTE_SCOPE_CAPTURE_JOB_CONTEXT_HEADER)) {
-    return `${existing}\n${bullets}`;
-  }
-  return `${existing}\n\n${block}`;
+export function appendQuickScopeObservationsToQuoteInternalNotes(
+  existingNotes: string | null | undefined,
+  observations: readonly string[],
+): string | null {
+  return mergeInternalBulletBlock(
+    existingNotes,
+    QUICK_SCOPE_INTERNAL_OBSERVATIONS_HEADER,
+    observations,
+  );
 }

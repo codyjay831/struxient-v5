@@ -11,7 +11,11 @@ import {
   scopeDecisionPreviewChip,
 } from "@/lib/quote-scope-decision-display";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
-import { QuoteScopeDecisionQuoteImpact, QuoteScopeDecisionStatus } from "@prisma/client";
+import {
+  QuoteScopeDecisionQuoteImpact,
+  QuoteScopeDecisionSourceType,
+  QuoteScopeDecisionStatus,
+} from "@prisma/client";
 
 function decision(
   overrides: Partial<QuoteScopeDecisionPayload> & Pick<QuoteScopeDecisionPayload, "title">,
@@ -20,7 +24,7 @@ function decision(
     id: overrides.id ?? "decision-1",
     quoteId: overrides.quoteId ?? "quote-1",
     quoteLineItemId: overrides.quoteLineItemId ?? null,
-    sourceType: overrides.sourceType ?? "QUICK_SCOPE",
+    sourceType: overrides.sourceType ?? QuoteScopeDecisionSourceType.MANUAL,
     title: overrides.title,
     detail: overrides.detail ?? null,
     status: overrides.status ?? "OPEN",

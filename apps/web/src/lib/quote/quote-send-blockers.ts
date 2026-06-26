@@ -1,4 +1,5 @@
 import {
+  QuoteScopeDecisionSourceType,
   QuoteScopeDecisionQuoteImpact,
   QuoteScopeDecisionResolutionTiming,
   QuoteScopeDecisionStatus,
@@ -38,6 +39,7 @@ export type QuoteSendBlockerResult = {
 export type QuoteSendBlockerScopeDecision = {
   id: string;
   quoteLineItemId: string | null;
+  sourceType?: QuoteScopeDecisionSourceType;
   status: QuoteScopeDecisionStatus;
   quoteImpact: QuoteScopeDecisionQuoteImpact;
   resolutionTiming?: QuoteScopeDecisionResolutionTiming | null;
@@ -55,6 +57,10 @@ export type QuoteSendBlockerInput = {
 export function isSendBlockingScopeDecision(
   decision: QuoteSendBlockerScopeDecision,
 ): boolean {
+  if (decision.sourceType === QuoteScopeDecisionSourceType.QUICK_SCOPE) {
+    return false;
+  }
+
   if (decision.status !== QuoteScopeDecisionStatus.OPEN) {
     return false;
   }
@@ -101,7 +107,11 @@ function buildDeferredScopeWarnings(
   decisions: readonly QuoteSendBlockerScopeDecision[],
 ): QuoteSendBlocker[] {
   return decisions
-    .filter((d) => d.status === QuoteScopeDecisionStatus.DEFERRED)
+    .filter(
+      (d) =>
+        d.status === QuoteScopeDecisionStatus.DEFERRED &&
+        d.sourceType !== QuoteScopeDecisionSourceType.QUICK_SCOPE,
+    )
     .map((decision) => ({
       code: "UNKNOWN" as const,
       severity: "warning" as const,

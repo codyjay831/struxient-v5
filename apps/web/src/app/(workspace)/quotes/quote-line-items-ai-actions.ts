@@ -238,6 +238,7 @@ export async function applyQuoteScopeSuggestionsAction(
           selectedOptionalAddOns,
           selectedQuoteJobContext: approved.selectedQuoteJobContext,
           quoteMissingInfo: parsedProposal.quoteMissingInfo,
+          sourceContextSummary: parsedProposal.sourceContextSummary ?? null,
           createdByUserId: ctx.userId ?? null,
         }),
       );

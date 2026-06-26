@@ -4,12 +4,19 @@ import type {
   OptionalAddOnSuggestion,
   QuoteScopeSuggestionsProposal,
 } from "./quote-line-items-proposal-schema";
+import { sanitizeQuickScopeLineTitle } from "./quick-scope-title-guardrails";
 
 const EXECUTION_STEP_PATTERN =
   /\b(permit|inspection|utility|coordinate|coordination|remove|removal|install|grounding|mobilize|demolition|demo|tear.?off|access|verify|verification|schedule|logistics)\b/i;
 
 const VAGUE_COMMERCIAL_PATTERN =
   /\b(manage project logistics|project logistics|coordination fee|general coordination|project management)\b/i;
+
+const GENERIC_OBSERVATION_PATTERN =
+  /\b(gate code|site access|customer preference|building department|inspection schedule|utility approval process)\b/i;
+
+const HIGH_VALUE_OBSERVATION_PATTERN =
+  /\b(price|cost|allowance|material|equipment|model|color|selection|include|included|exclude|exclusion|assumption|warranty|change order|handoff|order|ordering|lead time|permit|inspection|policy|scope|quantity|measurement|sheathing|decking|low[-\s]?slope|amperage|service size)\b/i;
 
 function normalizeKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -44,6 +51,63 @@ function isExecutionStepDescription(description: string): boolean {
 
 function isVagueCommercial(description: string): boolean {
   return VAGUE_COMMERCIAL_PATTERN.test(description);
+}
+
+function normalizeObservation(value: string): string | null {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  if (GENERIC_OBSERVATION_PATTERN.test(trimmed)) return null;
+  if (!HIGH_VALUE_OBSERVATION_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
+function capHiddenObservations(
+  proposal: QuoteScopeSuggestionsProposal,
+): QuoteScopeSuggestionsProposal {
+  const lineCount = proposal.commercialLineItems.length;
+
+  if (lineCount >= 5) {
+    return {
+      ...proposal,
+      quoteMissingInfo: [
+        "Multiple work areas detected. Use Clarify Scope for a contractor-led deep review when needed.",
+      ],
+      commercialLineItems: proposal.commercialLineItems.map((item) => ({
+        ...item,
+        missingInfo: [],
+      })),
+    };
+  }
+
+  const filteredLineItems = proposal.commercialLineItems.map((item) => ({
+    ...item,
+    missingInfo: [...new Set(item.missingInfo.map(normalizeObservation).filter(Boolean))],
+  }));
+  const quoteObservations = [
+    ...new Set(proposal.quoteMissingInfo.map(normalizeObservation).filter(Boolean)),
+  ];
+
+  const perLineMax = lineCount <= 1 ? 3 : 2;
+  const totalMax = lineCount <= 1 ? 3 : 6;
+  let remaining = totalMax;
+
+  const cappedLineItems = filteredLineItems.map((item) => {
+    if (remaining <= 0) {
+      return { ...item, missingInfo: [] };
+    }
+    const capped = item.missingInfo.slice(0, Math.min(perLineMax, remaining));
+    remaining -= capped.length;
+    return { ...item, missingInfo: capped };
+  });
+
+  const cappedQuoteObservations =
+    remaining > 0 ? quoteObservations.slice(0, remaining) : [];
+
+  return {
+    ...proposal,
+    commercialLineItems: cappedLineItems,
+    quoteMissingInfo: cappedQuoteObservations,
+  };
 }
 
 function pickBestParent(
@@ -84,17 +148,32 @@ export function normalizeScopeSuggestionGrouping(
   const deferredVague: CommercialLineItemSuggestion[] = [];
 
   for (const item of proposal.commercialLineItems) {
-    if (isVagueCommercial(item.description)) {
-      deferredVague.push(item);
+    const sanitizedItem: CommercialLineItemSuggestion = {
+      ...item,
+      description: sanitizeQuickScopeLineTitle(item.description, {
+        groundingText: proposal.sourceContextSummary ?? "",
+      }),
+      customerScopeTitle: item.customerScopeTitle
+        ? sanitizeQuickScopeLineTitle(item.customerScopeTitle, {
+            groundingText: proposal.sourceContextSummary ?? "",
+          })
+        : null,
+    };
+
+    if (isVagueCommercial(sanitizedItem.description)) {
+      deferredVague.push(sanitizedItem);
       continue;
     }
 
-    if (isExecutionStepDescription(item.description) && item.lineItemDetails.length === 0) {
-      orphanSteps.push(item);
+    if (
+      isExecutionStepDescription(sanitizedItem.description) &&
+      sanitizedItem.lineItemDetails.length === 0
+    ) {
+      orphanSteps.push(sanitizedItem);
       continue;
     }
 
-    parents.push(item);
+    parents.push(sanitizedItem);
   }
 
   for (const item of deferredVague) {
@@ -179,7 +258,12 @@ export function normalizeScopeSuggestionGrouping(
   return {
     ...proposal,
     warnings: [...new Set(warnings)],
-    commercialLineItems: dedupedParents,
+    ...capHiddenObservations({
+      ...proposal,
+      warnings: [...new Set(warnings)],
+      commercialLineItems: dedupedParents,
+      optionalAddOns,
+    }),
     optionalAddOns,
   };
 }

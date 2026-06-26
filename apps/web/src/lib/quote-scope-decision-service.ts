@@ -1,4 +1,5 @@
 import "server-only";
+import { QuoteScopeDecisionSourceType } from "@prisma/client";
 
 export {
   applyQuoteScopeDecisionManualAction,
@@ -48,6 +49,7 @@ export async function listQuoteScopeDecisionsForQuote(
     where: {
       organizationId: params.organizationId,
       quoteId: params.quoteId,
+      sourceType: { not: QuoteScopeDecisionSourceType.QUICK_SCOPE },
       ...(params.includeInactive
         ? {}
         : {
@@ -88,6 +90,7 @@ export async function listScopeDecisionContextStringsForLine(
     where: {
       organizationId: params.organizationId,
       quoteId: params.quoteId,
+      sourceType: { not: QuoteScopeDecisionSourceType.QUICK_SCOPE },
       status: { in: ["OPEN", "DEFERRED"] },
       OR: [{ quoteLineItemId: params.lineId }, { quoteLineItemId: null }],
     },
