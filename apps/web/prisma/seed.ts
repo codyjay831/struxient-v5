@@ -16,7 +16,13 @@
  * Stage rows are dynamic and per-org under the Signal Engine model.
  */
 
-import { LeadChannel, Prisma, PrismaClient, StaffRole } from "@prisma/client";
+import {
+  CustomerServiceLocationSource,
+  LeadChannel,
+  Prisma,
+  PrismaClient,
+  StaffRole,
+} from "@prisma/client";
 import { hashSync } from "bcryptjs";
 import { seedTradeLineItemPresets } from "./seeds/trade-line-item-presets";
 import { seedClarificationQuestionSets } from "./seeds/clarification-question-sets";
@@ -38,6 +44,63 @@ const DEV_USER_EMAIL = "owner@dev.local";
 const DEV_USER_NAME = "Dev Owner";
 const DEV_USER_PASSWORD = "devpassword123";
 const DEV_USER_PASSWORD_HASH = hashSync(DEV_USER_PASSWORD, 10);
+
+const DEV_CUSTOMER_SERVICE_LOCATIONS = [
+  {
+    id: "dev-service-location-walsh",
+    customerId: "dev-customer-walsh",
+    formattedAddress: "1248 Cedar Grove Dr, Austin, TX 78745",
+    addressLine1: "1248 Cedar Grove Dr",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78745",
+  },
+  {
+    id: "dev-service-location-novak",
+    customerId: "dev-customer-novak",
+    formattedAddress: "812 Barton Hills Ave, Austin, TX 78704",
+    addressLine1: "812 Barton Hills Ave",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78704",
+  },
+  {
+    id: "dev-service-location-martinez",
+    customerId: "dev-customer-martinez",
+    formattedAddress: "501 W Koenig Ln, Austin, TX 78751",
+    addressLine1: "501 W Koenig Ln",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78751",
+  },
+  {
+    id: "dev-service-location-patel",
+    customerId: "dev-customer-patel",
+    formattedAddress: "2124 Mesa Ridge Trl, Austin, TX 78732",
+    addressLine1: "2124 Mesa Ridge Trl",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78732",
+  },
+  {
+    id: "dev-service-location-foster",
+    customerId: "dev-customer-foster",
+    formattedAddress: "900 Bluebonnet St, Austin, TX 78703",
+    addressLine1: "900 Bluebonnet St",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78703",
+  },
+  {
+    id: "dev-service-location-chen",
+    customerId: "dev-customer-chen",
+    formattedAddress: "3304 Rivercrest Dr, Austin, TX 78746",
+    addressLine1: "3304 Rivercrest Dr",
+    city: "Austin",
+    state: "TX",
+    postalCode: "78746",
+  },
+] as const;
 
 const LEGACY_STAGE_NAMES: ReadonlyArray<string> = [
   "Pre-Construction",
@@ -164,6 +227,44 @@ async function seedLegacyStages() {
   }
 }
 
+async function seedDevCustomerServiceLocations() {
+  for (const location of DEV_CUSTOMER_SERVICE_LOCATIONS) {
+    const addressFingerprint =
+      `${location.addressLine1}|${location.city}|${location.state}|${location.postalCode}`.toLowerCase();
+
+    await prisma.customerServiceLocation.upsert({
+      where: { id: location.id },
+      update: {
+        organizationId: DEV_ORG_ID,
+        customerId: location.customerId,
+        formattedAddress: location.formattedAddress,
+        addressLine1: location.addressLine1,
+        city: location.city,
+        state: location.state,
+        postalCode: location.postalCode,
+        country: "US",
+        source: CustomerServiceLocationSource.manual,
+        addressFingerprint,
+        isPrimary: true,
+      },
+      create: {
+        id: location.id,
+        organizationId: DEV_ORG_ID,
+        customerId: location.customerId,
+        formattedAddress: location.formattedAddress,
+        addressLine1: location.addressLine1,
+        city: location.city,
+        state: location.state,
+        postalCode: location.postalCode,
+        country: "US",
+        source: CustomerServiceLocationSource.manual,
+        addressFingerprint,
+        isPrimary: true,
+      },
+    });
+  }
+}
+
 async function main() {
   console.log("Seeding dev organization, owner membership, and Stage rows…");
   await seedDevOrganization();
@@ -203,6 +304,10 @@ async function main() {
       `  quote[${key}] lines=${summary.lineCount} total=$${(summary.totalCents / 100).toFixed(2)}${jobNote}`,
     );
   }
+
+  console.log("Seeding dev customer service locations...");
+  await seedDevCustomerServiceLocations();
+  console.log(`  ${DEV_CUSTOMER_SERVICE_LOCATIONS.length} service locations`);
 
   console.log("Seeding Site Details reusable knowledge (typed MVP)…");
   const siteDetailsKnowledge = await seedSiteDetailsKnowledge(prisma, DEV_ORG_ID);

@@ -12,7 +12,6 @@ import {
   countOpenSendBlockingGaps,
   createBlockingLineGap,
   createQuoteClarificationQaFixture,
-  QA_CLARIFY_QUOTE_ID,
   readGapState,
   type QuoteClarificationQaFixture,
 } from "@/lib/quote/quote-clarification-qa-fixture";
@@ -47,7 +46,7 @@ async function openScopeTab(page: Page, quoteId: string) {
   }
 }
 
-async function reloadScopeTab(page: Page, quoteId: string) {
+async function reloadScopeTab(page: Page) {
   await page.reload();
   await page.waitForLoadState("networkidle");
   const scopeTab = page.getByRole("button", { name: "Scope", exact: true });
@@ -168,8 +167,7 @@ async function main() {
 
   try {
     fixture = await createQuoteClarificationQaFixture();
-    const { quoteId, lineAId, lineBId, requiredGapId, lineAGapId, quoteWideGapId } =
-      fixture;
+    const { quoteId, lineAId, requiredGapId, lineAGapId, quoteWideGapId } = fixture;
 
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
@@ -239,7 +237,7 @@ async function main() {
       lineId: lineAId,
       title: "Temporary QA gap for not-needed path",
     });
-    await reloadScopeTab(page, quoteId);
+    await reloadScopeTab(page);
     await openClarifyOnFirstLine(page);
     await clickClarifyGapAction(page, "Temporary QA gap for not-needed path", "Not needed");
     await page.waitForTimeout(1200);
@@ -256,7 +254,7 @@ async function main() {
       lineId: lineAId,
       title: "Temporary QA gap for defer path",
     });
-    await reloadScopeTab(page, quoteId);
+    await reloadScopeTab(page);
     await openClarifyOnFirstLine(page);
     await clickClarifyGapAction(page, "Temporary QA gap for defer path", "Defer to execution");
     await page.waitForTimeout(1200);
@@ -281,7 +279,7 @@ async function main() {
     const lineAGapBefore = await readGapState(lineAGapId);
     const quoteWideBefore = await readGapState(quoteWideGapId);
     assert.equal(quoteWideBefore?.status, QuoteScopeDecisionStatus.OPEN, "quote-wide gap must start OPEN");
-    await reloadScopeTab(page, quoteId);
+    await reloadScopeTab(page);
     await openClarifyOnLineIndex(page, 1);
     await answerNewServiceSize(page, "200A");
     await applyClarify(page);
