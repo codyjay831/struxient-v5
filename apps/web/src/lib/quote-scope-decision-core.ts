@@ -1,10 +1,17 @@
 import {
+  QuoteScopeDecisionQuoteImpact,
   QuoteScopeDecisionSourceType,
   QuoteScopeDecisionStatus,
   type QuoteScopeDecisionResolutionTiming,
 } from "@prisma/client";
 import type { ExtendedTransactionClient } from "@/lib/db";
 import type { QuoteScopeDecisionManualAction } from "@/lib/quote-scope-decision-types";
+import { isSendBlockingScopeDecision } from "@/lib/quote/quote-send-blockers";
+import {
+  classifyQuickScopeMissingInfoGap,
+  buildQuickScopeMissingInfoSourceRef,
+  QUICK_SCOPE_MISSING_INFO_SOURCE_REF_TYPE,
+} from "@/lib/quote/quote-scope-gap-classifier";
 
 export type QuoteScopeDecisionTx = Pick<
   ExtendedTransactionClient,
@@ -21,6 +28,9 @@ export type CreateQuoteScopeDecisionInput = {
   sourceRefType?: string | null;
   sourceRefId?: string | null;
   createdByUserId?: string | null;
+  quoteImpact?: QuoteScopeDecisionQuoteImpact;
+  status?: QuoteScopeDecisionStatus;
+  resolutionTiming?: QuoteScopeDecisionResolutionTiming | null;
 };
 
 /** Normalize decision text for duplicate detection. */
@@ -112,6 +122,9 @@ export async function createQuoteScopeDecisionIfAbsent(
       sourceRefType: input.sourceRefType ?? null,
       sourceRefId: input.sourceRefId ?? null,
       createdByUserId: input.createdByUserId ?? null,
+      quoteImpact: input.quoteImpact ?? QuoteScopeDecisionQuoteImpact.NONE,
+      status: input.status ?? QuoteScopeDecisionStatus.OPEN,
+      resolutionTiming: input.resolutionTiming ?? null,
     },
     select: { id: true },
   });
@@ -126,17 +139,25 @@ export async function createQuoteScopeDecisionsFromMissingInfoStrings(
     quoteLineItemId?: string | null;
     missingInfo: readonly string[];
     sourceType?: QuoteScopeDecisionSourceType;
-    sourceRefType?: string | null;
-    sourceRefId?: string | null;
+    /** Parent ref for stable per-gap sourceRefId (line tempId or quote id). */
+    parentSourceRefId?: string | null;
     createdByUserId?: string | null;
   },
 ): Promise<{ createdCount: number; skippedDuplicateCount: number }> {
   let createdCount = 0;
   let skippedDuplicateCount = 0;
 
+  const parentRefId = params.parentSourceRefId?.trim() || params.quoteId;
+
   for (const raw of params.missingInfo) {
     const text = raw.trim();
     if (!text) continue;
+
+    const classification = classifyQuickScopeMissingInfoGap(text);
+    const sourceRefId = buildQuickScopeMissingInfoSourceRef({
+      parentRefId,
+      missingInfoText: text,
+    });
 
     const result = await createQuoteScopeDecisionIfAbsent(tx, {
       organizationId: params.organizationId,
@@ -145,9 +166,12 @@ export async function createQuoteScopeDecisionsFromMissingInfoStrings(
       sourceType: params.sourceType ?? QuoteScopeDecisionSourceType.QUICK_SCOPE,
       title: text,
       detail: null,
-      sourceRefType: params.sourceRefType ?? null,
-      sourceRefId: params.sourceRefId ?? null,
+      sourceRefType: QUICK_SCOPE_MISSING_INFO_SOURCE_REF_TYPE,
+      sourceRefId,
       createdByUserId: params.createdByUserId ?? null,
+      quoteImpact: classification.quoteImpact,
+      status: classification.status,
+      resolutionTiming: classification.resolutionTiming,
     });
     if (result.created) {
       createdCount += 1;
@@ -204,7 +228,7 @@ export async function applyQuoteScopeDecisionManualAction(
       organizationId: params.organizationId,
       quoteId: params.quoteId,
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, quoteImpact: true, quoteLineItemId: true, title: true },
   });
 
   if (!existing) {
@@ -213,6 +237,23 @@ export async function applyQuoteScopeDecisionManualAction(
 
   if (existing.status !== "OPEN" && existing.status !== "DEFERRED") {
     return { ok: false, error: "This scope decision is already closed." };
+  }
+
+  if (
+    params.action === "resolve" &&
+    isSendBlockingScopeDecision({
+      id: existing.id,
+      quoteLineItemId: existing.quoteLineItemId,
+      status: existing.status,
+      quoteImpact: existing.quoteImpact,
+      title: existing.title,
+    })
+  ) {
+    return {
+      ok: false,
+      error:
+        "Use Clarify Scope to answer this required quote gap, or dismiss/defer it with a reason.",
+    };
   }
 
   const update = manualActionToUpdate(params.action);

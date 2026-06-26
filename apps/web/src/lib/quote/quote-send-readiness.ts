@@ -1,12 +1,17 @@
-import { QuoteScopeDecisionStatus, QuoteStatus, type Prisma } from "@prisma/client";
+import { QuoteStatus, type Prisma } from "@prisma/client";
 import type { ExtendedTransactionClient } from "../db";
+import {
+  buildQuoteSendBlockers,
+  primaryQuoteSendBlockerMessage,
+  type QuoteSendBlockerScopeDecision,
+} from "./quote-send-blockers";
 
 export type QuoteSendReadinessInput = {
   status: QuoteStatus;
   lineItemCount: number;
   serviceLocationId: string | null;
   paymentScheduleItemCount: number;
-  openScopeDecisionCount: number;
+  scopeDecisions?: readonly QuoteSendBlockerScopeDecision[];
 };
 
 export type QuoteSendReadinessFailure = {
@@ -25,54 +30,46 @@ const quoteSendReadinessSelect = {
     select: {
       lineItems: true,
       paymentSchedule: true,
-      scopeDecisions: true,
     },
   },
 } satisfies Prisma.QuoteSelect;
 
-type QuoteSendReadinessRow = Prisma.QuoteGetPayload<{ select: typeof quoteSendReadinessSelect }>;
+const scopeDecisionSendSelect = {
+  id: true,
+  quoteLineItemId: true,
+  status: true,
+  quoteImpact: true,
+  resolutionTiming: true,
+  title: true,
+} satisfies Prisma.QuoteScopeDecisionSelect;
 
-function openScopeDecisionWhere(organizationId: string) {
-  return {
-    organizationId,
-    status: QuoteScopeDecisionStatus.OPEN,
-  };
-}
+type QuoteSendReadinessRow = Prisma.QuoteGetPayload<{ select: typeof quoteSendReadinessSelect }>;
 
 export function evaluateQuoteSendReadiness(
   input: QuoteSendReadinessInput,
 ): QuoteSendReadinessResult {
-  if (input.status !== QuoteStatus.DRAFT) {
-    return {
-      ok: false,
-      error: "Only draft quotes can be sent. Refresh and try again.",
-    };
+  const result = buildQuoteSendBlockers(input);
+  if (result.canSend) {
+    return { ok: true };
   }
-  if (input.lineItemCount === 0) {
-    return { ok: false, error: "Add at least one scope line item before sending." };
-  }
-  if (!input.serviceLocationId) {
-    return { ok: false, error: "Add a jobsite address before sending." };
-  }
-  if (input.paymentScheduleItemCount === 0) {
-    return { ok: false, error: "Define payment terms before sending." };
-  }
-  if (input.openScopeDecisionCount > 0) {
-    return {
-      ok: false,
-      error: `Resolve ${input.openScopeDecisionCount} open scope ${input.openScopeDecisionCount === 1 ? "decision" : "decisions"} before sending.`,
-    };
-  }
-  return { ok: true };
+
+  const error = primaryQuoteSendBlockerMessage(result);
+  return {
+    ok: false,
+    error: error ?? "This quote is not ready to send.",
+  };
 }
 
-function rowToInput(row: QuoteSendReadinessRow, openScopeDecisionCount: number): QuoteSendReadinessInput {
+function rowToInput(
+  row: QuoteSendReadinessRow,
+  scopeDecisions: readonly QuoteSendBlockerScopeDecision[],
+): QuoteSendReadinessInput {
   return {
     status: row.status,
     lineItemCount: row._count.lineItems,
     serviceLocationId: row.serviceLocationId,
     paymentScheduleItemCount: row._count.paymentSchedule,
-    openScopeDecisionCount,
+    scopeDecisions,
   };
 }
 
@@ -89,12 +86,18 @@ export async function assertQuoteReadyToSendInTx(
     return { ok: false, error: "Quote not found in your organization." };
   }
 
-  const openScopeDecisionCount = await tx.quoteScopeDecision.count({
+  const scopeDecisions = await tx.quoteScopeDecision.findMany({
     where: {
       quoteId,
-      ...openScopeDecisionWhere(organizationId),
+      organizationId,
     },
+    select: scopeDecisionSendSelect,
   });
 
-  return evaluateQuoteSendReadiness(rowToInput(row, openScopeDecisionCount));
+  return evaluateQuoteSendReadiness(rowToInput(row, scopeDecisions));
+}
+
+/** Exposed for workflow/UI alignment with server send gate. */
+export function evaluateQuoteSendBlockers(input: QuoteSendReadinessInput) {
+  return buildQuoteSendBlockers(input);
 }

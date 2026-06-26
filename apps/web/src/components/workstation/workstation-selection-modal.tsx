@@ -10,14 +10,15 @@ import {
   type QuoteDialogDisplay,
 } from "@/components/work-surfaces/quote-workspace-dialog-body";
 import { WorkstationModalShell } from "@/components/workstation/workstation-modal-shell";
-import {
-  WorkstationWorkPanel,
-  WorkstationWorkPanelFooter,
-} from "@/components/workstation/workstation-work-panel";
+import { ChangeOrderWorkstationPanel } from "@/components/workstation/change-order-workstation-panel";
 import { formatQuoteStatus, quoteStatusBadgeTone } from "@/lib/quote-display";
 import type { QuoteReadinessActionKind } from "@/lib/quote-readiness";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
 import { resolveWorkstationSelectionSurface } from "@/lib/workstation/selection-routing";
+import {
+  WorkstationWorkPanel,
+  WorkstationWorkPanelFooter,
+} from "@/components/workstation/workstation-work-panel";
 
 const QUOTE_READINESS_ACTIONS: readonly QuoteReadinessActionKind[] = [
   "ADD_LINE_ITEM",
@@ -125,7 +126,23 @@ export function WorkstationSelectionModal({
         );
       }
 
-      if (surface === "change-order-panel" || surface === "generic-panel") {
+      if (surface === "change-order-panel") {
+        if (!item.parentRecordId) return null;
+        return (
+          <ChangeOrderWorkstationPanel
+            key={item.id}
+            changeOrderId={item.recordId}
+            jobId={item.parentRecordId}
+            href={item.href ?? `/jobs/${item.parentRecordId}/change-orders?focus=${item.recordId}`}
+            title={item.title}
+            subtitle={item.contextLine ?? item.subtitle}
+            statusLabel={item.status}
+            onClose={handleClose}
+          />
+        );
+      }
+
+      if (surface === "generic-panel") {
         return (
           <WorkstationModalShell
             key={item.id}

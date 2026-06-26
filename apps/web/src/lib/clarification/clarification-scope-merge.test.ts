@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CLARIFICATION_CUSTOMER_HEADER,
   CLARIFICATION_INTERNAL_HEADER,
   mergeClarificationBlock,
 } from "./clarification-scope-merge";
+
+test("customer-facing header uses Confirmed scope wording", () => {
+  assert.equal(CLARIFICATION_CUSTOMER_HEADER, "Confirmed scope:");
+  assert.notEqual(CLARIFICATION_CUSTOMER_HEADER, "Scope details:");
+});
+
+test("internal header stays separate from customer-facing header", () => {
+  assert.equal(CLARIFICATION_INTERNAL_HEADER, "Scope clarification:");
+  assert.notEqual(CLARIFICATION_CUSTOMER_HEADER, CLARIFICATION_INTERNAL_HEADER);
+});
 
 test("inserts a block into empty notes", () => {
   const result = mergeClarificationBlock(null, CLARIFICATION_INTERNAL_HEADER, [

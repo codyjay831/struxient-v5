@@ -1602,6 +1602,9 @@ function ScopeTab({
         reusableTaskOptions={reusableTaskOptions}
         stages={stages}
         scopeDecisions={scopeDecisions}
+        sendCanSend={workflow.canSend}
+        sendBlockers={workflow.blockers}
+        sendWarnings={workflow.sendWarnings}
         shouldFocusAddForm={shouldFocusAddForm}
         onAddOpenConsumed={onAddFormFocusConsumed}
         shouldOpenScopeLibraryPicker={shouldOpenScopeLibraryPicker}

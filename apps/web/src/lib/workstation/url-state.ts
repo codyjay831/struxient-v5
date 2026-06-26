@@ -131,12 +131,19 @@ export const WORKSTATION_TABS: {
   tab: WorkstationTab;
   label: string;
   description: string;
+  /** Queue section heading when different from the tab label. */
+  queueHeading?: string;
 }[] = [
   { tab: "overview", label: "Overview", description: "Morning command center" },
   { tab: "tasks", label: "Tasks", description: "Assigned, blocked, and ready work" },
   { tab: "jobs", label: "Jobs", description: "Active job health and next steps" },
   { tab: "calendar", label: "Calendar", description: "Schedule, due work, and timing risk" },
-  { tab: "commercial", label: "Commercial", description: "Sales follow-up & change orders needing action" },
+  {
+    tab: "commercial",
+    label: "Sales",
+    queueHeading: "Sales Queue",
+    description: "Leads, quotes & change orders needing action",
+  },
   { tab: "money", label: "Money", description: "Payments due and execution holds" },
   { tab: "activity", label: "Activity", description: "Recent changes and log review" },
 ];

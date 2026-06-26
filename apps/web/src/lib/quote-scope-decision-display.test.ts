@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildScopeDecisionPreviewChips,
+  countSendBlockingScopeDecisionsForLine,
   filterLineScopeDecisions,
+  filterOpenScopeDecisions,
   filterQuoteWideScopeDecisions,
+  filterSendBlockingScopeDecisions,
   formatScopeDecisionForAiContext,
   scopeDecisionPreviewChip,
 } from "@/lib/quote-scope-decision-display";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
+import { QuoteScopeDecisionQuoteImpact, QuoteScopeDecisionStatus } from "@prisma/client";
 
 function decision(
   overrides: Partial<QuoteScopeDecisionPayload> & Pick<QuoteScopeDecisionPayload, "title">,
@@ -70,4 +74,55 @@ test("formatScopeDecisionForAiContext includes detail when present", () => {
     }),
     "Fascia condition unknown — Rear elevation only",
   );
+});
+
+test("filterSendBlockingScopeDecisions excludes DEFERRED and DISMISSED", () => {
+  const decisions = [
+    decision({ id: "open-req", quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED }),
+    decision({
+      id: "legacy-none",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      title: "Legacy gap",
+    }),
+    decision({
+      id: "deferred",
+      status: QuoteScopeDecisionStatus.DEFERRED,
+      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+    }),
+    decision({
+      id: "dismissed",
+      status: QuoteScopeDecisionStatus.DISMISSED,
+    }),
+  ];
+  const blocking = filterSendBlockingScopeDecisions(decisions);
+  assert.equal(blocking.length, 2);
+  assert.deepEqual(
+    blocking.map((d) => d.id),
+    ["open-req", "legacy-none"],
+  );
+});
+
+test("countSendBlockingScopeDecisionsForLine counts only blocking rows on one line", () => {
+  const decisions = [
+    decision({ id: "line-a-1", quoteLineItemId: "line-a" }),
+    decision({
+      id: "line-a-def",
+      quoteLineItemId: "line-a",
+      status: QuoteScopeDecisionStatus.DEFERRED,
+      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+    }),
+    decision({ id: "line-b-1", quoteLineItemId: "line-b" }),
+  ];
+  assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-a"), 1);
+  assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-b"), 1);
+  assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-c"), 0);
+});
+
+test("filterOpenScopeDecisions returns OPEN rows for legacy compatibility UI", () => {
+  const decisions = [
+    decision({ id: "open-1" }),
+    decision({ id: "def-1", status: QuoteScopeDecisionStatus.DEFERRED }),
+  ];
+  assert.equal(filterOpenScopeDecisions(decisions).length, 1);
+  assert.equal(filterOpenScopeDecisions(decisions)[0]?.id, "open-1");
 });

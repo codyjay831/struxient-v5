@@ -5,7 +5,7 @@ export function buildQuoteLineExecutionPlanningSummaryLine(params: {
   executionSummaryLine: string | null;
 }): string {
   if (params.taskCount === 0) {
-    return "Execution plan needed";
+    return "No draft tasks yet";
   }
 
   if (params.executionSummaryLine) {

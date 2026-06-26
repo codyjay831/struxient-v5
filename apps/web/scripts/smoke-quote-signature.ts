@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { db } from "../src/lib/db";
 import {
-  QuoteScopeDecisionStatus,
   QuoteSignatureArtifactKind,
   QuoteSignatureRequestStatus,
   QuoteStatus,
@@ -105,11 +104,18 @@ async function findSendReadyDraftQuote(): Promise<string | null> {
   });
 
   for (const q of quotes) {
-    const openScope = await db.quoteScopeDecision.count({
+    const scopeDecisions = await db.quoteScopeDecision.findMany({
       where: {
         quoteId: q.id,
         organizationId: DEV_ORGANIZATION_ID,
-        status: QuoteScopeDecisionStatus.OPEN,
+      },
+      select: {
+        id: true,
+        quoteLineItemId: true,
+        status: true,
+        quoteImpact: true,
+        resolutionTiming: true,
+        title: true,
       },
     });
     const readiness = evaluateQuoteSendReadiness({
@@ -117,7 +123,7 @@ async function findSendReadyDraftQuote(): Promise<string | null> {
       lineItemCount: q._count.lineItems,
       serviceLocationId: q.serviceLocationId,
       paymentScheduleItemCount: q._count.paymentSchedule,
-      openScopeDecisionCount: openScope,
+      scopeDecisions,
     });
     if (readiness.ok) return q.id;
   }

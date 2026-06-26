@@ -39,6 +39,13 @@ Change orders, re-sign thresholds, and **no silent mutation of sold customer-vis
 - The issued quote remains immutable proof; the new draft is sent/approved independently.
 - Quote revisions do not carry accepted execution-plan state by default; planning is re-reviewed.
 
+## Pre-send scope clarification (working quote)
+
+While a quote is **`DRAFT`**, structured scope gaps and answers are captured through **Clarify Scope** before send. That working truth (structured answers + controlled projection into line fields) is **not** a checkpoint and **must not** be confused with post-send commercial proof.
+
+- **Canon:** [quote-clarification-canon.md](./quote-clarification-canon.md) — single user-facing path from gap → confirmed quote truth; AI suggestions are not truth.
+- **Deprecated UX:** “Scope Details Needed” as a separate workflow (internal `QuoteScopeDecision` may remain as compatibility records only).
+
 ## Customer-facing projection (foundation)
 
 The **internal “proposal preview”** and **customer-facing quote projection** (e.g. `customerDocumentTitle`, per-line customer scope fields, template defaults, controlled server projection) are **disclosure and authoring aids** on the **working quote**. They are **not** a substitute for **checkpoints** at commitment time unless the product explicitly defines an exception.
@@ -55,6 +62,7 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 *Canon update (2026-05-06): Added v5 current-state-first model; checkpoints as hidden proof; jobs as execution; activity as explanation; UX and naming guardrails.*  
 *Canon update (2026-05-06): Commercial checkpoints vs future execution/activation proof; Execution Review before job materialization.*  
 *Canon update (2026-06-13): Locked immutable issued quote behavior after send/approval and revise-by-clone pre-activation.*
+*Canon update (2026-06-25): Cross-link pre-send Clarify Scope working truth to quote-clarification-canon.*
 
 ## v5 app slice: quote lifecycle statuses (Draft → Sent → Approved → Archived)
 

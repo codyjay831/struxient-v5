@@ -34,8 +34,9 @@ test("mapCommercialSuggestionToLineFields maps line-specific sections", () => {
   assert.doesNotMatch(fields.description, /Zinsco|gate|dog/i);
   assert.match(fields.internalNotes ?? "", /Line-specific details:/);
   assert.match(fields.internalNotes ?? "", /Zinsco/);
-  assert.match(fields.internalNotes ?? "", /Missing info \(this line\):/);
-  assert.match(fields.internalNotes ?? "", /Confirm existing service size/);
+  assert.match(fields.internalNotes ?? "", /Execution planning notes:/);
+  assert.doesNotMatch(fields.internalNotes ?? "", /Missing info \(this line\):/);
+  assert.doesNotMatch(fields.internalNotes ?? "", /Confirm existing service size/);
   assert.doesNotMatch(fields.internalNotes ?? "", /Locked side gate/);
 });
 

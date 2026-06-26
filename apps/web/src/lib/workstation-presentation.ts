@@ -535,7 +535,7 @@ function resolveCategoryLabel(item: WorkstationWorkItem): string | undefined {
   if (isQuoteJobSetupHandoff(item)) {
     return "Sales to Production";
   }
-  if (item.filterCategory === "leads" || item.filterCategory === "quotes") return "Commercial";
+  if (item.filterCategory === "leads" || item.filterCategory === "quotes") return "Sales";
   if (item.filterCategory === "tasks") return "Tasks";
   if (item.filterCategory === "jobs" || item.filterCategory === "issues") return "Jobs";
   if (item.filterCategory === "logs") return "Activity";

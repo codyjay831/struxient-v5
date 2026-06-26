@@ -1,8 +1,16 @@
-# Scope Clarification — durable schema proposal (NOT YET APPROVED)
+# Scope Clarification — durable schema proposal (PARTIALLY SUPERSEDED)
 
-> **Status:** Proposal only. **No `apps/web/prisma/schema.prisma` change has been made.**
+> **Status (2026-06-25):** Core models **shipped** (`ClarificationQuestionSet`, `ClarificationQuestion`, `QuoteLineClarification`, `QuoteScopeDecision`). **Behavioral canon** lives in [quote-clarification-canon.md](../canon/quote-clarification-canon.md). **Implementation plan:** [quote-clarification-cleanup-phase0-1.md](../plans/quote-clarification-cleanup-phase0-1.md).
+>
+> This document remains useful for **historical schema intent** and any **not-yet-shipped** answer-row normalization (`QuoteLineClarificationAnswer` per-question rows). Do not treat the “NOT YET APPROVED / no schema change” banner below as current for shipped models.
+
+---
+
+# Scope Clarification — durable schema proposal (original draft)
+
+> **Original status:** Proposal only (pre-migration).
 > Per [`.cursor/rules/no-schema-without-approval.mdc`](../../.cursor/rules/no-schema-without-approval.mdc),
-> these models require explicit approval + `ALLOW_SCHEMA=1` before implementation.
+> schema changes require explicit approval + `ALLOW_SCHEMA=1`.
 
 ## Why this exists
 

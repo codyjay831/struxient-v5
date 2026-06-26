@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { WorkstationWorkItem } from "@/lib/workstation-query";
 import { resolveWorkstationSelectionSurface } from "./selection-routing";
+import { usesGenericPanel } from "./uses-generic-panel";
 
 const now = new Date("2026-06-18T08:00:00.000Z");
 
@@ -24,15 +25,17 @@ function makeItem(overrides: Partial<WorkstationWorkItem>): WorkstationWorkItem 
   };
 }
 
-test("resolveWorkstationSelectionSurface routes change orders to change-order-panel", () => {
+test("usesGenericPanel excludes change orders", () => {
   const changeOrder = makeItem({
     id: "change-order-1",
     kind: "change-order",
     recordId: "co-1",
+    parentRecordId: "job-1",
     filterCategory: "quotes",
   });
 
   assert.equal(resolveWorkstationSelectionSurface(changeOrder), "change-order-panel");
+  assert.equal(usesGenericPanel(changeOrder), false);
 });
 
 test("resolveWorkstationSelectionSurface keeps quotes on quote-workspace", () => {

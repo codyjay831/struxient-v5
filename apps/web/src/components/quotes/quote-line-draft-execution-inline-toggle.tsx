@@ -2,13 +2,21 @@
 
 import { useState } from "react";
 import type { QuoteLineExecutionRevalidateScope } from "@/app/(workspace)/quotes/quote-line-execution-types";
-import { workspaceFormSecondaryButtonClass } from "@/components/line-item-templates/line-item-template-form-fields";
 import {
   QuoteLineDraftExecutionInlinePanel,
   type QuoteLineDraftExecutionTaskRow,
 } from "@/components/quotes/quote-line-draft-execution-panel";
 import { useQuoteExecutionReviewFocusOptional } from "@/components/quotes/quote-execution-review-focus";
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
+import {
+  QUOTE_DRAFT_EXECUTION_CONFIRMED_LATER_COPY,
+  QUOTE_DRAFT_EXECUTION_INTERNAL_COPY,
+  quoteDraftExecutionActionLabel,
+  quoteDraftExecutionDefaultExpanded,
+} from "@/lib/quote/quote-draft-execution-ui";
+
+const draftExecutionToggleButtonClass =
+  "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-medium text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground disabled:opacity-50";
 
 /**
  * Client-side toggle that opens the inline draft execution editor directly under the line item.
@@ -22,6 +30,7 @@ export function QuoteLineDraftExecutionInlineToggle({
   stages,
   revalidateScope = "quote",
   openLabelOverride,
+  planningSummaryLine,
   initialPlanningContext,
   panelLayout = "inline",
   hideAiButton = false,
@@ -33,8 +42,10 @@ export function QuoteLineDraftExecutionInlineToggle({
   reusableOptions: ReusableTaskPickerOption[];
   stages: { id: string, name: string }[];
   revalidateScope?: QuoteLineExecutionRevalidateScope;
-  /** Optional override for the open-button label (e.g. "Edit execution" on review). */
+  /** Optional override for the open-button label (e.g. review deep-link surfaces). */
   openLabelOverride?: string;
+  /** One-line staff summary shown only when the panel is expanded. */
+  planningSummaryLine?: string;
   /** Optional seed used for AI planning-context input. */
   initialPlanningContext?: string;
   /** "inline" keeps panel under the button; "fullWidth" right-aligns button and expands panel full width below. */
@@ -43,13 +54,14 @@ export function QuoteLineDraftExecutionInlineToggle({
   hideAiButton?: boolean;
 }) {
   const focusContext = useQuoteExecutionReviewFocusOptional();
-  const defaultOpenLabel = taskCount === 0 ? "Add draft execution" : "Edit draft execution";
-  const openLabel = openLabelOverride ?? defaultOpenLabel;
+  const openLabel = openLabelOverride ?? quoteDraftExecutionActionLabel();
   const focus = focusContext?.focus;
   const focusKey =
     focus && focus.lineId === lineItemId ? `${focus.lineId}:${focus.taskId ?? ""}` : null;
 
-  const [open, setOpen] = useState(() => focusKey != null);
+  const [open, setOpen] = useState(() =>
+    quoteDraftExecutionDefaultExpanded(focusKey != null),
+  );
   const [editingTaskId, setEditingTaskId] = useState<string | null>(() =>
     focusKey != null ? focus?.taskId ?? null : null,
   );
@@ -59,6 +71,19 @@ export function QuoteLineDraftExecutionInlineToggle({
     setOpen(true);
     setEditingTaskId(focus?.taskId ?? null);
   }
+
+  const internalCopyBlock = open ? (
+    <div className="mt-2 space-y-1 text-xs leading-relaxed text-foreground-subtle">
+      <p>{QUOTE_DRAFT_EXECUTION_INTERNAL_COPY}</p>
+      <p>{QUOTE_DRAFT_EXECUTION_CONFIRMED_LATER_COPY}</p>
+      {planningSummaryLine ? (
+        <p className="text-foreground-muted">
+          <span className="font-medium">Summary: </span>
+          {planningSummaryLine}
+        </p>
+      ) : null}
+    </div>
+  ) : null;
 
   const panel = open ? (
     <QuoteLineDraftExecutionInlinePanel
@@ -81,19 +106,26 @@ export function QuoteLineDraftExecutionInlineToggle({
 
   if (panelLayout === "fullWidth") {
     return (
-      <>
+      <div className="w-full">
         {!open ? (
           <button
             type="button"
-            className={workspaceFormSecondaryButtonClass}
+            className={draftExecutionToggleButtonClass}
             onClick={() => setOpen(true)}
             aria-expanded={open}
+            aria-label={
+              taskCount > 0 ? `${openLabel}, ${taskCount} draft tasks` : openLabel
+            }
           >
             {openLabel}
           </button>
-        ) : null}
-        {open ? <div className="mt-3 w-full basis-full">{panel}</div> : null}
-      </>
+        ) : (
+          <div className="w-full">
+            {internalCopyBlock}
+            {panel}
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -102,14 +134,21 @@ export function QuoteLineDraftExecutionInlineToggle({
       {!open ? (
         <button
           type="button"
-          className={workspaceFormSecondaryButtonClass}
+          className={draftExecutionToggleButtonClass}
           onClick={() => setOpen(true)}
           aria-expanded={open}
+          aria-label={
+            taskCount > 0 ? `${openLabel}, ${taskCount} draft tasks` : openLabel
+          }
         >
           {openLabel}
         </button>
-      ) : null}
-      {panel}
+      ) : (
+        <>
+          {internalCopyBlock}
+          {panel}
+        </>
+      )}
     </div>
   );
 }

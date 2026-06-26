@@ -28,11 +28,6 @@ import {
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import {
-  generateQuoteLineExecutionAIProposalAction,
-  assessQuoteLineExecutionContextAction,
-  applyQuoteLineExecutionAIProposalAction,
-} from "@/app/(workspace)/quotes/quote-line-execution-actions";
-import {
   generateQuoteScopeSuggestionsAction,
   applyQuoteScopeSuggestionsAction,
 } from "@/app/(workspace)/quotes/quote-line-items-ai-actions";
@@ -47,6 +42,7 @@ import {
   checkClarificationSetKeyAction,
   updateClarificationQuestionSetForLineAction,
 } from "@/app/(workspace)/quotes/quote-line-clarification-actions";
+import { updateQuoteScopeDecisionAction } from "@/app/(workspace)/quotes/quote-scope-decision-actions";
 import type {
   ClarificationQuestionSetPickerRow,
   ClarificationLineModel,
@@ -68,17 +64,7 @@ import type {
   QuoteScopeSuggestionsProposal,
   QuoteScopeSuggestionsGenerationMeta,
 } from "@/lib/ai/quote-line-items-proposal-schema";
-import type { ExecutionContextAssessment } from "@/app/(workspace)/quotes/quote-line-execution-types";
-import type {
-  ExecutionPlanningContextBucket,
-  ExecutionPlanningContextManifest,
-  ExecutionPlanningContextSourceFlags,
-} from "@/app/(workspace)/quotes/quote-line-execution-types";
 import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
-import type { AILibraryProposal } from "@/lib/ai/library-proposal-schema";
-import type { AILibraryProposalGenerationMeta } from "@/lib/ai/ai-execution-plan-generation";
-import { getStagesForAiExecutionPlanning } from "@/lib/ai/ai-execution-plan-corrections";
-import { AILibraryProposalReviewPanel } from "@/components/scope-library/ai-library-proposal-review-panel";
 import { QuoteScopeCapturePanel } from "@/components/quotes/quote-line-items-ai-review-panel";
 import { 
   QUOTE_FIELD_LIMITS,
@@ -115,15 +101,17 @@ import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SignalCard } from "@/components/ui/signal-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { parseIntakeNotes } from "@/lib/lead-display";
-import { buildQuoteExecutionPlanningContextManifest } from "@/lib/ai/quote-execution-planning-context";
 import { deriveNeedsForQuoteLines } from "@/lib/derived-needs/derive-needs";
 import type { DerivedNeed } from "@/lib/derived-needs/types";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import {
-  QuoteScopeDetailsNeededLineSummary,
-  QuoteScopeDetailsNeededQuoteSummary,
+  QuoteLegacyGapHandlingLineSection,
+  QuoteLegacyGapHandlingQuoteSection,
+  QuoteSendReadinessSummary,
 } from "@/components/quotes/quote-scope-decisions-panel";
-import { filterLineScopeDecisions } from "@/lib/quote-scope-decision-display";
+import { countSendBlockingScopeDecisionsForLine } from "@/lib/quote-scope-decision-display";
+import { lineClarifyActionLabel } from "@/lib/quote/quote-clarify-scope-ui";
+import type { QuoteWorkflowBlocker } from "@/lib/quote-workflow-presenter";
 
 const initialState: QuoteWorkspaceActionState = {};
 const fieldLabelClass = workspaceFormFieldLabelClass;
@@ -131,16 +119,9 @@ const controlClass = workspaceFormControlClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
 const secondaryButtonClass = workspaceFormSecondaryButtonClass;
 const dangerButtonClass = workspaceFormDangerButtonClass;
-const aiExecutionContextPreflightEnabled =
-  process.env.NEXT_PUBLIC_AI_EXECUTION_CONTEXT_PREFLIGHT === "1";
-const lineExecutionAiRetired = true;
 
 const sectionLabelClass =
   "text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle";
-
-type AiRegenerateArgs = {
-  planningContext: string;
-};
 
 export function ArchivedQuoteReadOnlyNotice() {
   return (
@@ -705,6 +686,10 @@ export type QuoteAuthoringSurfaceProps = {
   stages: { id: string; name: string }[];
   /** Open/deferred scope decisions loaded with the quote workspace. */
   scopeDecisions?: readonly QuoteScopeDecisionPayload[];
+  /** Slice 1 send readiness — aligns scope tab with server send gate. */
+  sendCanSend?: boolean;
+  sendBlockers?: readonly QuoteWorkflowBlocker[];
+  sendWarnings?: readonly QuoteWorkflowBlocker[];
   /**
    * When true, the editor mounts with the add-line form open and focuses
    * the first field. The editor calls `onAddOpenConsumed` once it has
@@ -743,6 +728,9 @@ export function QuoteAuthoringSurface({
   reusableTaskOptions,
   stages,
   scopeDecisions = [],
+  sendCanSend = true,
+  sendBlockers = [],
+  sendWarnings = [],
   shouldFocusAddForm = false,
   onAddOpenConsumed,
   shouldOpenScopeLibraryPicker = false,
@@ -754,33 +742,6 @@ export function QuoteAuthoringSurface({
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [autoFocusAdd, setAutoFocusAdd] = useState(false);
-  const [isGenerating, setIsGenerating] = useState<string | null>(null);
-  const [aiProposal, setAiProposal] = useState<AILibraryProposal | null>(null);
-  const [activeAiLineId, setActiveAiLineId] = useState<string | null>(null);
-  const [aiProposalGeneration, setAiProposalGeneration] =
-    useState<AILibraryProposalGenerationMeta | null>(null);
-  const [aiRegenerating, setAiRegenerating] = useState(false);
-  const [aiContextAssessment, setAiContextAssessment] =
-    useState<ExecutionContextAssessment | null>(null);
-  const [aiContextManifest, setAiContextManifest] =
-    useState<ExecutionPlanningContextManifest | null>(null);
-  const [aiContextPreview, setAiContextPreview] = useState("");
-  const [aiContextSourceFlags, setAiContextSourceFlags] = useState<ExecutionPlanningContextSourceFlags>({
-    includeReusableExecutionGuidance: true,
-    includeJobTechnicalDetails: false,
-    includeSiteAccessSchedule: false,
-    includeCustomerProposal: false,
-    includeBackground: false,
-    includePriorMissingContext: true,
-    includeSiteDetailsFacts: true,
-  });
-  const [aiContextItemOverrides, setAiContextItemOverrides] = useState<
-    Record<string, { include?: boolean; bucket?: ExecutionPlanningContextBucket }>
-  >({});
-  const [aiKeepTaskIds, setAiKeepTaskIds] = useState<string[]>([]);
-  const [isAiAssessing, setIsAiAssessing] = useState(false);
-  const aiAssessRequestSeqRef = useRef(0);
-  const [planningContextByLineId, setPlanningContextByLineId] = useState<Record<string, string>>({});
   const [scopeCaptureOpen, setScopeCaptureOpen] = useState(false);
   const [scopeCaptureText, setScopeCaptureText] = useState("");
   const [scopeAdditionalInstructions, setScopeAdditionalInstructions] = useState("");
@@ -818,155 +779,6 @@ export function QuoteAuthoringSurface({
   const hasIntakeNotes = Boolean(lead?.notes?.trim());
   const hasScopeSummary = Boolean(lead?.scopeSummary?.trim());
   const hasInternalNotesForCapture = Boolean(initialInternalNotes?.trim());
-
-  const ensurePlanningContextSeed = (lineId: string): string => {
-    const existing = planningContextByLineId[lineId];
-    if (typeof existing === "string") {
-      return existing;
-    }
-    const line = lineItems.find((item) => item.id === lineId);
-    const manifest = buildQuoteExecutionPlanningContextManifest({
-      userInstructions: "",
-      lineInternalNotes: line?.internalNotes ?? null,
-      customerScopeTitle: null,
-      customerScopeDescription: null,
-      customerIncludedNotes: null,
-      customerExcludedNotes: null,
-      quoteInternalNotes: null,
-      leadNotes: null,
-      priorMissingContext: [],
-    });
-    const seed = manifest.items
-      .filter((item) => item.bucket === "reusable_execution_guidance")
-      .map((item) => item.content.trim())
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-    setPlanningContextByLineId((prev) => ({ ...prev, [lineId]: seed }));
-    return seed;
-  };
-
-  const setPlanningContextForLine = (lineId: string, value: string) => {
-    setPlanningContextByLineId((prev) => ({ ...prev, [lineId]: value }));
-  };
-
-  const openAiPanelForLine = (lineId: string) => {
-    ensurePlanningContextSeed(lineId);
-    if (activeAiLineId && activeAiLineId !== lineId) {
-      closeAiPanel();
-    }
-    setAiContextItemOverrides({});
-    setAiKeepTaskIds([]);
-    setActiveAiLineId(lineId);
-  };
-
-  const handleGeneratePlan = async (lineId: string, options?: AiRegenerateArgs) => {
-    const planningContext = options?.planningContext ?? ensurePlanningContextSeed(lineId);
-    setActiveAiLineId(lineId);
-    setIsGenerating(lineId);
-    try {
-      const result = await generateQuoteLineExecutionAIProposalAction(quoteId, lineId, {
-        userInstructions: planningContext,
-        priorMissingContext: aiProposal?.missingContext,
-        sourceFlags: aiContextSourceFlags,
-        itemOverrides: aiContextItemOverrides,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        setAiProposal(null);
-        setAiProposalGeneration(null);
-      } else if (result.proposal) {
-        setAiProposal(result.proposal);
-        setAiProposalGeneration(result.generation ?? null);
-        setAiContextManifest(result.contextManifest ?? null);
-        setAiContextPreview(result.contextPreview ?? "");
-      } else {
-        toast.error("AI returned no execution plan. Try again.");
-        setAiProposal(null);
-        setAiProposalGeneration(null);
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error(getAiActionErrorMessage(e, "Failed to generate AI proposal."));
-      setAiProposal(null);
-      setAiProposalGeneration(null);
-    } finally {
-      setIsGenerating(null);
-    }
-  };
-
-  const handleApplyAiProposal = async (
-    approvedProposal: AILibraryProposal,
-    options?: { applyMode?: "append" | "replace"; keepTaskIds?: string[] },
-  ) => {
-    if (!activeAiLineId) {
-      return;
-    }
-    const result = await applyQuoteLineExecutionAIProposalAction(
-      quoteId,
-      activeAiLineId,
-      approvedProposal,
-      aiProposalGeneration ?? undefined,
-      {
-        mode: options?.applyMode ?? "replace",
-        keepTaskIds: options?.keepTaskIds ?? aiKeepTaskIds,
-      },
-    );
-    if (result.error) {
-      throw new Error(result.error);
-    }
-    if (result.warnings?.length) {
-      result.warnings.forEach((w) => toast.warning(w));
-    }
-    onMutated();
-  };
-
-  const closeAiPanel = () => {
-    setActiveAiLineId(null);
-    setAiProposal(null);
-    setAiProposalGeneration(null);
-    setAiContextAssessment(null);
-    setAiContextManifest(null);
-    setAiContextPreview("");
-    setAiContextItemOverrides({});
-    setAiKeepTaskIds([]);
-    setIsAiAssessing(false);
-    aiAssessRequestSeqRef.current += 1;
-  };
-
-  const handleAssessExecutionContext = async (lineId: string, planningContext: string) => {
-    const seq = aiAssessRequestSeqRef.current + 1;
-    aiAssessRequestSeqRef.current = seq;
-    setIsAiAssessing(true);
-    try {
-      const result = await assessQuoteLineExecutionContextAction(quoteId, lineId, {
-        userInstructions: planningContext,
-        priorMissingContext: aiProposal?.missingContext,
-        sourceFlags: aiContextSourceFlags,
-        itemOverrides: aiContextItemOverrides,
-      });
-      if (aiAssessRequestSeqRef.current !== seq) {
-        return;
-      }
-      if (result.error) {
-        toast.warning(result.error);
-        return;
-      }
-      setAiContextAssessment(result.assessment ?? null);
-      setAiContextManifest(result.contextManifest ?? null);
-      setAiContextPreview(result.contextPreview ?? "");
-    } catch (error) {
-      if (aiAssessRequestSeqRef.current !== seq) {
-        return;
-      }
-      console.error(error);
-      toast.warning(getAiActionErrorMessage(error, "Failed to assess execution context."));
-    } finally {
-      if (aiAssessRequestSeqRef.current === seq) {
-        setIsAiAssessing(false);
-      }
-    }
-  };
 
   const openScopeCapture = () => {
     setScopeCaptureOpen(true);
@@ -1086,6 +898,20 @@ export function QuoteAuthoringSurface({
     }
   };
 
+  const refreshClarifyLineModel = async (lineId: string) => {
+    const result = await getClarificationLineModelAction(quoteId, lineId);
+    if (result.error) {
+      toast.error(result.error);
+      return false;
+    }
+    if (result.model) {
+      setClarifyModel(result.model);
+      setClarifyAlternatives(result.model.alternatives);
+      setClarifyAutoMatchedSetKey(result.model.matchedSet?.key ?? null);
+    }
+    return true;
+  };
+
   const openClarifyScope = async (lineId: string) => {
     setClarifyLineId(lineId);
     setClarifyModel(null);
@@ -1097,16 +923,10 @@ export function QuoteAuthoringSurface({
     setClarifyAiGeneration(null);
     setIsClarifyLoading(true);
     try {
-      const result = await getClarificationLineModelAction(quoteId, lineId);
-      if (result.error) {
-        toast.error(result.error);
+      const ok = await refreshClarifyLineModel(lineId);
+      if (!ok) {
         setClarifyLineId(null);
         return;
-      }
-      if (result.model) {
-        setClarifyModel(result.model);
-        setClarifyAlternatives(result.model.alternatives);
-        setClarifyAutoMatchedSetKey(result.model.matchedSet?.key ?? null);
       }
       await handleSearchClarificationSets(lineId);
     } catch (e) {
@@ -1201,6 +1021,26 @@ export function QuoteAuthoringSurface({
     }
   };
 
+  const handleClarifyScopeGapAction = async (
+    decisionId: string,
+    action: "not_needed" | "defer_to_execution",
+  ): Promise<{ error?: string }> => {
+    if (!clarifyLineId) {
+      return { error: "Clarify scope is not open for a line." };
+    }
+    const mappedAction =
+      action === "defer_to_execution"
+        ? "defer_to_execution"
+        : ("dismiss" as const);
+    const result = await updateQuoteScopeDecisionAction(quoteId, decisionId, mappedAction);
+    if ("error" in result && result.error) {
+      return { error: result.error };
+    }
+    await Promise.resolve(onMutated());
+    await refreshClarifyLineModel(clarifyLineId);
+    return {};
+  };
+
   const handleGenerateClarifySetProposal = async (): Promise<ClarificationQuestionSetProposal | null> => {
     if (!clarifyLineId) return null;
     setIsClarifySetGenerating(true);
@@ -1245,6 +1085,7 @@ export function QuoteAuthoringSurface({
               alternatives: [],
               recommendedConfidence: null,
               savedAnswers: null,
+              openScopeDecisions: [],
             },
       );
       setClarifyAlternatives([]);
@@ -1410,7 +1251,13 @@ export function QuoteAuthoringSurface({
 
             <DerivedNeedsPreview needs={derivedNeeds} />
 
-            <QuoteScopeDetailsNeededQuoteSummary
+            <QuoteSendReadinessSummary
+              canSend={sendCanSend}
+              blockers={sendBlockers}
+              warnings={sendWarnings}
+            />
+
+            <QuoteLegacyGapHandlingQuoteSection
               quoteId={quoteId}
               decisions={scopeDecisions}
               onUpdated={onMutated}
@@ -1474,10 +1321,12 @@ export function QuoteAuthoringSurface({
               <ul className="mt-6 divide-y divide-border rounded-lg border border-border bg-surface">
                 {lineItems.map((line) => {
                   const isEditing = editingLineId === line.id;
-                  const lineScopeDecisionCount = filterLineScopeDecisions(
+                  const lineBlockingGapCount = countSendBlockingScopeDecisionsForLine(
                     scopeDecisions,
                     line.id,
-                  ).length;
+                  );
+                  const clarifyLabel = lineClarifyActionLabel(lineBlockingGapCount);
+                  const clarifyIsPrimary = lineBlockingGapCount > 0;
                   return (
                     <li key={line.id} className="px-3 py-3 @lg:px-4 @lg:py-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1509,34 +1358,21 @@ export function QuoteAuthoringSurface({
                                 onSuccess={onMutated}
                               />
                             </div>
-                            {lineScopeDecisionCount === 0 ? (
-                              <button
-                                type="button"
-                                disabled={isClarifyLoading && clarifyLineId === line.id}
-                                onClick={() => void openClarifyScope(line.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted hover:text-foreground hover:border-border-strong transition-colors disabled:opacity-50"
-                              >
-                                {isClarifyLoading && clarifyLineId === line.id ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : null}
-                                Clarify scope
-                              </button>
-                            ) : null}
-                            {!lineExecutionAiRetired ? (
-                              <button
-                                type="button"
-                                disabled={isGenerating === line.id}
-                                onClick={() => openAiPanelForLine(line.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                              >
-                                {isGenerating === line.id ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : (
-                                  <Sparkles className="size-3" />
-                                )}
-                                {isGenerating === line.id ? "Thinking…" : "AI Execution Plan"}
-                              </button>
-                            ) : null}
+                            <button
+                              type="button"
+                              disabled={isClarifyLoading && clarifyLineId === line.id}
+                              onClick={() => void openClarifyScope(line.id)}
+                              className={
+                                clarifyIsPrimary
+                                  ? `${primaryButtonClass} inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px]`
+                                  : "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted hover:text-foreground hover:border-border-strong transition-colors disabled:opacity-50"
+                              }
+                            >
+                              {isClarifyLoading && clarifyLineId === line.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : null}
+                              {clarifyLabel}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1548,17 +1384,14 @@ export function QuoteAuthoringSurface({
                           draftTasks={draftTasksByLineId[line.id] ?? []}
                           reusableOptions={reusableTaskOptions}
                           stages={stages}
-                          hideAiButton={lineExecutionAiRetired}
                         />
                       ) : null}
                       {!isEditing ? (
-                        <QuoteScopeDetailsNeededLineSummary
+                        <QuoteLegacyGapHandlingLineSection
                           quoteId={quoteId}
                           lineId={line.id}
                           decisions={scopeDecisions}
-                          onClarifyScope={() => void openClarifyScope(line.id)}
                           onUpdated={onMutated}
-                          isClarifyLoading={isClarifyLoading && clarifyLineId === line.id}
                         />
                       ) : null}
                       {isEditing && (
@@ -1604,64 +1437,6 @@ export function QuoteAuthoringSurface({
           ) : null}
       </div>
 
-      {activeAiLineId && !lineExecutionAiRetired ? (
-        <AILibraryProposalReviewPanel
-          proposal={aiProposal}
-          generation={aiProposalGeneration ?? undefined}
-          contextAssessment={aiExecutionContextPreflightEnabled ? aiContextAssessment : null}
-          contextManifest={aiContextManifest}
-          contextPreview={aiContextPreview}
-          contextSourceFlags={aiContextSourceFlags}
-          onContextSourceFlagsChange={setAiContextSourceFlags}
-          contextItemOverrides={aiContextItemOverrides}
-          onContextItemOverridesChange={setAiContextItemOverrides}
-          stages={getStagesForAiExecutionPlanning(stages)}
-          lineLabel={lineItems.find((item) => item.id === activeAiLineId)?.description}
-          planningContext={planningContextByLineId[activeAiLineId] ?? ""}
-          onPlanningContextChange={(value) => {
-            setPlanningContextForLine(activeAiLineId, value);
-          }}
-          isGenerating={isGenerating === activeAiLineId}
-          isAssessing={isAiAssessing}
-          isRegenerating={aiRegenerating}
-          onAssessContext={async ({ planningContext }) => {
-            setPlanningContextForLine(activeAiLineId, planningContext);
-            await handleAssessExecutionContext(activeAiLineId, planningContext);
-          }}
-          onGenerate={async ({ planningContext }) => {
-            setPlanningContextForLine(activeAiLineId, planningContext);
-            await handleGeneratePlan(activeAiLineId, { planningContext });
-          }}
-          onRegenerate={async ({ planningContext }) => {
-            setAiRegenerating(true);
-            try {
-              setPlanningContextForLine(activeAiLineId, planningContext);
-              await handleGeneratePlan(activeAiLineId, { planningContext });
-            } finally {
-              setAiRegenerating(false);
-            }
-          }}
-          applyMode="replace"
-          existingDraftTasks={(draftTasksByLineId[activeAiLineId] ?? []).map((task) => ({
-            id: task.id,
-            title: task.title,
-          }))}
-          selectedKeepTaskIds={aiKeepTaskIds}
-          onSelectedKeepTaskIdsChange={setAiKeepTaskIds}
-          onClarifyMissingContext={({ missingContext }) => {
-            if (!activeAiLineId) return;
-            void openClarifyScope(activeAiLineId);
-            toast.info(
-              missingContext.length > 0
-                ? `Clarify scope opened with ${missingContext.length} gap${missingContext.length === 1 ? "" : "s"} to resolve.`
-                : "Clarify scope opened for this line.",
-            );
-          }}
-          onClose={closeAiPanel}
-          onApply={handleApplyAiProposal}
-        />
-      ) : null}
-
       <ClarifyScopePanel
         open={clarifyLineId !== null}
         onClose={closeClarifyScope}
@@ -1693,6 +1468,8 @@ export function QuoteAuthoringSurface({
         checkSetKey={checkClarificationSetKeyAction}
         isApplying={isClarifyApplying}
         onApply={handleApplyClarifyAnswers}
+        openScopeDecisions={clarifyModel?.openScopeDecisions ?? []}
+        onScopeGapAction={handleClarifyScopeGapAction}
       />
 
       <QuoteScopeCapturePanel

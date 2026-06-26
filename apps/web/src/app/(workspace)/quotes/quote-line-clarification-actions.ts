@@ -33,6 +33,7 @@ import {
   CLARIFICATION_INTERNAL_HEADER,
   mergeClarificationBlock,
 } from "@/lib/clarification/clarification-scope-merge";
+import { resolveMatchingScopeDecisionsForClarificationApply } from "@/lib/quote/quote-clarification-gap-resolution";
 import { AIService } from "@/lib/ai/ai-service";
 import { getAiActionErrorMessage } from "@/lib/ai/ai-provider-errors";
 import {
@@ -152,6 +153,33 @@ async function loadSavedAnswersForLineSet(
   return parsed.success ? parsed.data : null;
 }
 
+async function loadOpenScopeDecisionsForLineContext(
+  organizationId: string,
+  quoteId: string,
+  lineId: string,
+) {
+  return db.quoteScopeDecision.findMany({
+    where: {
+      organizationId,
+      quoteId,
+      status: "OPEN",
+      OR: [{ quoteLineItemId: lineId }, { quoteLineItemId: null }],
+    },
+    orderBy: [{ quoteLineItemId: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      quoteId: true,
+      quoteLineItemId: true,
+      sourceType: true,
+      title: true,
+      detail: true,
+      status: true,
+      resolutionTiming: true,
+      quoteImpact: true,
+    },
+  });
+}
+
 function normalizeSetKey(value: string): string {
   return value
     .trim()
@@ -250,6 +278,11 @@ export async function getClarificationLineModelAction(
     const savedAnswers = matchedSet
       ? await loadSavedAnswersForLineSet(line.id, matchedSet.key, matchedSet.version)
       : null;
+    const openScopeDecisions = await loadOpenScopeDecisionsForLineContext(
+      ctx.organizationId,
+      qid,
+      lid,
+    );
 
     return {
       model: {
@@ -261,6 +294,7 @@ export async function getClarificationLineModelAction(
           .map((m) => ({ key: m.questionSetKey, label: m.label, confidence: m.confidence })),
         recommendedConfidence: top?.confidence ?? null,
         savedAnswers,
+        openScopeDecisions,
       },
     };
   } catch (e) {
@@ -293,6 +327,11 @@ export async function getClarificationSetByKeyAction(
     return { error: "That question set is not available." };
   }
   const savedAnswers = await loadSavedAnswersForLineSet(line.id, set.key, set.version);
+  const openScopeDecisions = await loadOpenScopeDecisionsForLineContext(
+    ctx.organizationId,
+    qid,
+    lid,
+  );
   return {
     model: {
       lineId: line.id,
@@ -308,6 +347,7 @@ export async function getClarificationSetByKeyAction(
       alternatives: [],
       recommendedConfidence: null,
       savedAnswers,
+      openScopeDecisions,
     },
   };
 }
@@ -973,7 +1013,7 @@ export async function applyLineClarificationAnswersAction(
         select: { id: true },
       });
 
-      await tx.quoteLineClarification.upsert({
+      const savedClarification = await tx.quoteLineClarification.upsert({
         where: {
           quoteLineItemId_questionSetKey_questionSetVersion: {
             quoteLineItemId: lid,
@@ -992,9 +1032,20 @@ export async function applyLineClarificationAnswersAction(
           clarificationSetId: clarificationSet?.id ?? null,
           answersJson: parsed as unknown as Prisma.InputJsonValue,
         },
+        select: { id: true },
       });
 
-      return { ok: true as const };
+      const resolutionResult = await resolveMatchingScopeDecisionsForClarificationApply(tx, {
+        organizationId: ctx.organizationId,
+        quoteId: qid,
+        lineId: lid,
+        questionSetKey: parsed.questionSetKey,
+        answers: parsed.answers,
+        clarificationId: savedClarification.id,
+        resolvedByUserId: ctx.userId ?? null,
+      });
+
+      return { ok: true as const, resolvedGapCount: resolutionResult.resolvedGapCount };
     });
 
     if (!outcome.ok) {
@@ -1012,6 +1063,7 @@ export async function applyLineClarificationAnswersAction(
       success: true,
       customerLineCount: customerLines.length,
       internalLineCount: internalLines.length,
+      resolvedGapCount: outcome.resolvedGapCount,
     };
   } catch (e) {
     console.error("[quote-clarification] apply failed", { quoteId: qid, lineId: lid, error: e });

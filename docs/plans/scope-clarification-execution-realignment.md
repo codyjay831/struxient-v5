@@ -1,9 +1,6 @@
 # Execution realignment from clarified scope (future, proposal-only)
 
-> **Status:** Forward plan. **Not implemented.** Do not start until (a) the
-> durable clarification schema is approved + shipped
-> ([scope-clarification-schema-proposal.md](../specs/scope-clarification-schema-proposal.md))
-> and (b) clarification answers are in real use.
+> **Status:** Forward plan. **Not implemented.** Do not start until (a) **Phase 1 quote clarification cleanup** is shipped ([quote-clarification-cleanup-phase0-1.md](./quote-clarification-cleanup-phase0-1.md), canon [quote-clarification-canon.md](../canon/quote-clarification-canon.md)) and (b) clarification answers are in real use via Clarify Scope (not deprecated Scope Details Needed UI).
 >
 > **Hard rule:** This layer must NOT rebuild or break the existing execution
 > builder. The existing pieces stay authoritative:

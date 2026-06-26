@@ -56,7 +56,7 @@ const TAB_EMPTY: Record<Exclude<WorkstationTab, "overview">, string> = {
   tasks: "No tasks need attention right now.",
   jobs: "No active jobs need review.",
   calendar: "No schedule items flagged.",
-  commercial: "No commercial actions need attention.",
+  commercial: "Nothing in the sales queue needs action right now.",
   money: "No payment actions due.",
   activity: "No recent changes to review.",
 };
@@ -140,7 +140,9 @@ export function WorkstationQueueView({
 
       <section>
         <div className="mb-4">
-          <h2 className="text-sm font-semibold text-foreground">{tabMeta?.label}</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            {tabMeta?.queueHeading ?? tabMeta?.label}
+          </h2>
           <p className="text-xs text-foreground-muted">
             {tabMeta?.description} · {filtered.length} item{filtered.length === 1 ? "" : "s"}
           </p>

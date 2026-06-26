@@ -134,7 +134,13 @@
 | Lead intake projection (AI-ready DTO) | **Derived** | `buildLeadIntakeProjection()` in `lead-intake-projection.ts` | Duplicating readiness/progress in prompt strings |
 | Lead→Quote handoff | **Stored writes via canonical promotion** | `promoteLeadToQuote()` in `promote-to-quote.ts` | `createQuoteDraft` bypass for lead-origin flows |
 | Sales site visit display state | **Derived** | `getOpportunityFlow()`, Sales list/board serializers, `schedule-query.ts`, `workstation-query.ts` reading `LeadVisitRequest` | Duplicated appointment/status state on `Lead`, `Quote`, calendar DTOs, or Workstation cards |
-| Quote readiness | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
+| Quote readiness (lifecycle headline) | **Derived** | `getQuoteReadiness()` in `quote-readiness.ts` | Ad-hoc quote state in components |
+| Quote send blockers (commercial prerequisites + required gaps) | **Derived** | `buildQuoteSendBlockers()` in `quote/quote-send-blockers.ts`; consumed by `evaluateQuoteSendReadiness()` | UI Send enabled while server rejects; duplicate gap rules |
+| Scope gap / clarification send blocking | **Derived** from stored gap rows | `QuoteScopeDecision` + `isSendBlockingScopeDecision()` (target in `quote-send-blockers.ts`); canon [quote-clarification-canon.md](./canon/quote-clarification-canon.md) | Counting OPEN+DEFERRED in UI but OPEN-only on server |
+| Structured clarification answers | **Stored** | `QuoteLineClarification.answersJson` | Free-text notes as only structured truth |
+| Clarification customer/internal projection | **Stored (denormalized)** | `QuoteLineItem.customerIncludedNotes`, `internalNotes` via `mergeClarificationBlock()` | Duplicate bullet blocks on re-apply |
+| Scope facts for derivation | **Derived** | `toScopeFactsFromLineClarifications()` in `scope-facts/scope-facts.ts` | Parsing notes ad hoc |
+| Quote workflow presentation / `canSend` | **Derived** | `getQuoteWorkflowPresentation()` in `quote-workflow-presenter.ts` via `buildQuoteSendBlockers()` | `canSend` from readiness alone while blockers exist |
 | Quote activation readiness | **Derived** | `evaluateQuoteJobActivationReadiness()` (accepted plan + hash/version + coverage + blockers) | One-off checks in activation action |
 | Quote plan proposal dependency apply guard | **Derived** | `validateQuotePlanProposalForApply()` in `quote-plan/quote-plan-validation.ts` (tasks-first: hard orphans block, soft orphans become review gaps) | Save-time deadlocks that block valid plans |
 | Quote plan staleness (`isStale`) | **Derived** | `currentPlanningInputHash !== QuoteExecutionPlan.planningInputHash` | Stored stale status drift |

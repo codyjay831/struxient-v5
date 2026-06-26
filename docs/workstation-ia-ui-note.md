@@ -12,13 +12,22 @@ The **v5 web shell** uses **`/workstation`** as the main **Workstation destinati
 | **Tasks** | Assigned, blocked, and ready work |
 | **Jobs** | Active job health and next steps |
 | **Calendar** | Schedule, due work, timing risk |
-| **Commercial** | Sales follow-up and change orders needing action |
+| **Sales** | **Sales Queue** — action-needed leads, quotes, change orders, customer responses, and setup/apply work (`tab=commercial`) |
 | **Money** | Payments due and execution holds |
 | **Activity** | Recent changes and log review |
 
 Legacy redirect routes (`/workstation/tasks`, `/workstation/jobs`, `/workstation/schedule`) map to tab query params on `/workstation`.
 
 Selection opens **embedded work surfaces** (task, lead, quote, payment, visit, daily log, issue recovery) in a modal drawer — not a forked editor.
+
+## Sales vs Workstation Sales Queue
+
+| Surface | Purpose |
+|---------|---------|
+| **Left-nav Sales** (`/leads`) | Full sales records / CRM — every open opportunity, pipeline lanes, and record browsing |
+| **Workstation Sales tab** (`/workstation?tab=commercial`) | **Sales Queue** only — leads, quotes, change orders, customer responses, and setup/apply work that **needs action now** |
+
+The tab label is **Sales**; the queue section heading is **Sales Queue**. Internal route/state remains `tab=commercial`.
 
 ## Role landing behavior
 
@@ -40,4 +49,5 @@ Until then, names should be read as: **Workstation Jobs / Schedule** = **operati
 ---
 
 *Added so future refactors do not mistake this wiring for frozen product law.*
+*Updated 2026-06-25 — Sales Queue naming; Sales vs left-nav Sales distinction.*
 *Updated 2026-06-21 — Reflects real tabbed Workstation, overview sections, embedded surfaces, and role landing; removed stale stub language.*

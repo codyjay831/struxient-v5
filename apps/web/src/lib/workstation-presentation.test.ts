@@ -458,11 +458,12 @@ test("applyWorkstationQueueFilter waiting filter matches prerequisite holds", ()
   assert.equal(filtered[0]?.id, "row-wait");
 });
 
-test("WORKSTATION_TABS commercial label and description", () => {
+test("WORKSTATION_TABS commercial tab uses Sales copy", () => {
   const commercial = WORKSTATION_TABS.find((t) => t.tab === "commercial");
-  assert.equal(commercial?.label, "Commercial");
   assert.equal(commercial?.tab, "commercial");
-  assert.match(commercial?.description ?? "", /change orders needing action/i);
+  assert.equal(commercial?.label, "Sales");
+  assert.equal(commercial?.queueHeading, "Sales Queue");
+  assert.equal(commercial?.description, "Leads, quotes & change orders needing action");
 });
 
 test("resolveCommercialSegments separates change orders from quotes", () => {
@@ -547,7 +548,7 @@ test("change order queue row uses Change Order badge not Quote", () => {
 
   const row = buildDomainQueues([changeOrder]).commercial[0];
   assert.deepEqual(row?.badgeLabels, ["Change Order", "Apply change order"]);
-  assert.equal(row?.categoryLabel, "Commercial");
+  assert.equal(row?.categoryLabel, "Sales");
 });
 
 test("customer requested quote changes appear under customer responses filter", () => {

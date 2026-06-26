@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QuoteStatus } from "@prisma/client";
 import {
+  QuoteScopeDecisionQuoteImpact,
+  QuoteScopeDecisionStatus,
+  QuoteStatus,
+} from "@prisma/client";
+import {
+  evaluateQuoteSendBlockers,
   evaluateQuoteSendReadiness,
   type QuoteSendReadinessInput,
 } from "./quote-send-readiness";
@@ -33,7 +38,7 @@ function readySendInput(overrides: Partial<QuoteSendReadinessInput> = {}): Quote
     lineItemCount: 2,
     serviceLocationId: "loc-1",
     paymentScheduleItemCount: 1,
-    openScopeDecisionCount: 0,
+    scopeDecisions: [],
     ...overrides,
   };
 }
@@ -74,11 +79,82 @@ test("evaluateQuoteSendReadiness blocks incomplete drafts", () => {
     false,
   );
   assert.equal(
-    evaluateQuoteSendReadiness(readySendInput({ openScopeDecisionCount: 2 })).ok,
-    false,
-  );
-  assert.equal(
     evaluateQuoteSendReadiness(readySendInput({ status: QuoteStatus.SENT })).ok,
     false,
   );
+});
+
+test("evaluateQuoteSendReadiness blocks OPEN scope gaps", () => {
+  assert.equal(
+    evaluateQuoteSendReadiness(
+      readySendInput({
+        scopeDecisions: [
+          {
+            id: "d-1",
+            quoteLineItemId: null,
+            status: QuoteScopeDecisionStatus.OPEN,
+            quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+            title: "Square footage",
+          },
+        ],
+      }),
+    ).ok,
+    false,
+  );
+});
+
+test("evaluateQuoteSendReadiness blocks legacy OPEN NONE scope gaps", () => {
+  const result = evaluateQuoteSendReadiness(
+    readySendInput({
+      scopeDecisions: [
+        {
+          id: "d-legacy",
+          quoteLineItemId: "line-1",
+          status: QuoteScopeDecisionStatus.OPEN,
+          quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+          title: "Schedule preference",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /Clarify scope/i);
+  }
+});
+
+test("evaluateQuoteSendReadiness allows send with DEFERRED scope gap", () => {
+  assert.equal(
+    evaluateQuoteSendReadiness(
+      readySendInput({
+        scopeDecisions: [
+          {
+            id: "d-def",
+            quoteLineItemId: null,
+            status: QuoteScopeDecisionStatus.DEFERRED,
+            quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+            title: "Internal crew plan",
+          },
+        ],
+      }),
+    ).ok,
+    true,
+  );
+});
+
+test("evaluateQuoteSendBlockers matches evaluateQuoteSendReadiness canSend", () => {
+  const input = readySendInput({
+    scopeDecisions: [
+      {
+        id: "d-1",
+        quoteLineItemId: null,
+        status: QuoteScopeDecisionStatus.OPEN,
+        quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+        title: "Gap",
+      },
+    ],
+  });
+  const blockers = evaluateQuoteSendBlockers(input);
+  const readiness = evaluateQuoteSendReadiness(input);
+  assert.equal(blockers.canSend, readiness.ok);
 });

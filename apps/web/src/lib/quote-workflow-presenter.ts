@@ -9,6 +9,12 @@ import type {
   QuoteActivationBlockReason,
   QuoteJobActivationReadiness,
 } from "@/lib/quote-job-activation-readiness";
+import {
+  buildQuoteSendBlockers,
+  type QuoteSendBlocker,
+  type QuoteSendBlockerActionTarget,
+} from "@/lib/quote/quote-send-blockers";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 
 /**
  * Workspace-facing quote lifecycle states for the commercial quote workspace.
@@ -58,6 +64,8 @@ export type QuoteWorkflowPresentation = {
   canBuildExecutionPlan: boolean;
   canActivateJob: boolean;
   activityItems: QuoteWorkflowActivityItem[];
+  /** Non-blocking scope gaps (e.g. deferred to execution). */
+  sendWarnings: QuoteWorkflowBlocker[];
   /** Underlying readiness for progress/badge tone compatibility. */
   readiness: QuoteReadiness;
 };
@@ -70,7 +78,7 @@ export type QuoteWorkflowPresenterInput = {
   activationReadiness: QuoteJobActivationReadiness;
   isCommercialEditable: boolean;
   paymentScheduleItemCount: number;
-  openScopeDecisionCount: number;
+  scopeDecisions: readonly QuoteScopeDecisionPayload[];
   latestSendAt?: Date | null;
   latestApprovalAt?: Date | null;
   revisionDriftSinceLastProof?: boolean;
@@ -88,29 +96,54 @@ const STATE_LABEL: Record<QuoteWorkflowState, string> = {
   ARCHIVED: "Archived",
 };
 
-function draftSendBlockers(input: QuoteWorkflowPresenterInput): QuoteWorkflowBlocker[] {
-  const blockers: QuoteWorkflowBlocker[] = [];
-  if (input.quote.lineItemCount === 0) {
-    blockers.push({ message: "Add at least one scope line item.", fixTab: "scope" });
+function actionTargetToFixTab(
+  target: QuoteSendBlockerActionTarget | undefined,
+): QuoteWorkflowBlocker["fixTab"] {
+  switch (target) {
+    case "clarify":
+    case "quote":
+      return "scope";
+    case "payments":
+      return "payments";
+    case "jobsite":
+      return "context";
+    default:
+      return undefined;
   }
-  if (input.quote.jobsiteMissing) {
-    blockers.push({ message: "Add a jobsite address.", fixTab: "context" });
-  }
-  if (input.paymentScheduleItemCount === 0) {
-    blockers.push({ message: "Define payment terms and milestones.", fixTab: "payments" });
-  }
-  if (input.openScopeDecisionCount > 0) {
-    blockers.push({
-      message: `Resolve ${input.openScopeDecisionCount} open scope ${input.openScopeDecisionCount === 1 ? "decision" : "decisions"}.`,
-      fixTab: "scope",
-    });
-  }
-  return blockers;
+}
+
+function sendBlockerToWorkflowBlocker(blocker: QuoteSendBlocker): QuoteWorkflowBlocker {
+  return {
+    message: blocker.message,
+    fixTab: actionTargetToFixTab(blocker.actionTarget),
+  };
+}
+
+function buildDraftSendBlockerResult(input: QuoteWorkflowPresenterInput) {
+  return buildQuoteSendBlockers({
+    status: input.quote.status,
+    lineItemCount: input.quote.lineItemCount,
+    serviceLocationId: input.quote.jobsiteMissing ? null : "jobsite-present",
+    paymentScheduleItemCount: input.paymentScheduleItemCount,
+    scopeDecisions: input.scopeDecisions,
+  });
+}
+
+function mapDraftSendBlockersToWorkflow(
+  result: ReturnType<typeof buildDraftSendBlockerResult>,
+): QuoteWorkflowBlocker[] {
+  return result.blockers.map(sendBlockerToWorkflowBlocker);
+}
+
+function mapDraftSendWarningsToWorkflow(
+  result: ReturnType<typeof buildDraftSendBlockerResult>,
+): QuoteWorkflowBlocker[] {
+  return result.warnings.map(sendBlockerToWorkflowBlocker);
 }
 
 function mapWorkflowState(
-  input: QuoteWorkflowPresenterInput,
   readiness: QuoteReadiness,
+  draftSendBlockers: QuoteWorkflowBlocker[],
 ): QuoteWorkflowState {
   if (readiness.state === "ARCHIVED") return "ARCHIVED";
   if (readiness.state === "JOB_ACTIVE") return "JOB_ACTIVATED";
@@ -124,8 +157,7 @@ function mapWorkflowState(
     readiness.state === "DRAFT_IN_PROGRESS" ||
     readiness.state === "EMPTY_DRAFT"
   ) {
-    const blockers = draftSendBlockers(input);
-    if (blockers.length > 0) return "BLOCKED_FROM_SEND";
+    if (draftSendBlockers.length > 0) return "BLOCKED_FROM_SEND";
     if (readiness.state === "EMPTY_DRAFT") return "BLOCKED_FROM_SEND";
     return "READY_TO_SEND";
   }
@@ -273,14 +305,17 @@ export function getQuoteWorkflowPresentation(
     revisionDriftSinceLastProof: input.revisionDriftSinceLastProof,
   });
 
-  const workflowState = mapWorkflowState(input, readiness);
+  const draftSendResult = buildDraftSendBlockerResult(input);
+  const draftBlockers = mapDraftSendBlockersToWorkflow(draftSendResult);
+  const draftWarnings = mapDraftSendWarningsToWorkflow(draftSendResult);
+
+  const workflowState = mapWorkflowState(readiness, draftBlockers);
   const { primaryHeadline, primaryMessage } = buildHeadlineAndMessage(
     workflowState,
     input,
     readiness,
   );
 
-  const draftBlockers = draftSendBlockers(input);
   const activationBlockers = activationBlockersToWorkflowBlockers(
     input.activationReadiness.blockReasons,
   );
@@ -301,7 +336,10 @@ export function getQuoteWorkflowPresentation(
   }
 
   const isCommercialLocked = !input.isCommercialEditable;
-  const canSend = readiness.primaryAction?.kind === "SEND_QUOTE";
+  const draftCanSend =
+    input.quote.status === QuoteStatus.DRAFT && draftSendResult.canSend;
+  const canSend =
+    draftCanSend && readiness.primaryAction?.kind === "SEND_QUOTE";
   const canApprove = readiness.primaryAction?.kind === "MARK_APPROVED";
   const canBuildExecutionPlan =
     workflowState === "APPROVED_EXECUTION_NEEDED" ||
@@ -326,6 +364,7 @@ export function getQuoteWorkflowPresentation(
     canBuildExecutionPlan,
     canActivateJob,
     activityItems: input.activityItems,
+    sendWarnings: draftWarnings,
     readiness,
   };
 }

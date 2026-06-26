@@ -51,10 +51,6 @@ export function mapCommercialSuggestionToLineFields(
     const notes = item.executionPlanningNotes.map((n) => `- ${n.trim()}`).join("\n");
     internalSections.push(`Execution planning notes:\n${notes}`);
   }
-  if (item.missingInfo.length > 0) {
-    const missing = item.missingInfo.map((m) => `- ${m.trim()}`).join("\n");
-    internalSections.push(`Missing info (this line):\n${missing}`);
-  }
 
   const customerScopeDescription =
     item.customerScopeDescription?.trim() ||

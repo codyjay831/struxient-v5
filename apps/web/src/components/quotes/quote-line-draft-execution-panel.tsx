@@ -27,6 +27,9 @@ import {
 import type { ReusableTaskPickerOption } from "@/lib/line-item-template-default-execution-display";
 import type { LineItemTemplateTaskSource, TaskTemplateCategory } from "@prisma/client";
 import { quoteLineDraftExecutionSourceLabel } from "@/lib/quote-line-execution-source-label";
+import {
+  QUOTE_DRAFT_EXECUTION_PANEL_HEADING,
+} from "@/lib/quote/quote-draft-execution-ui";
 import { SmartTaskDisclosure } from "@/components/tasks/smart-task-disclosure";
 import { QuoteLineExecutionAiDrawer } from "@/components/quotes/quote-line-execution-ai-drawer";
 import { Sparkles } from "lucide-react";
@@ -640,10 +643,10 @@ export function QuoteLineDraftExecutionInlinePanel({
   }
 
   return (
-    <div className="@container mt-3 rounded-lg border border-border bg-surface/80 p-4">
+    <div className="@container mt-3 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-foreground-subtle">
-          Draft execution for this line
+          {QUOTE_DRAFT_EXECUTION_PANEL_HEADING}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {!hideAiButton ? (

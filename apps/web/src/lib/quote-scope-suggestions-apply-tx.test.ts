@@ -61,7 +61,7 @@ function createDecisionMockTx(initial: DecisionRow[] = []): QuoteScopeDecisionTx
   } as unknown as QuoteScopeDecisionTx & { _rows: DecisionRow[] };
 }
 
-test("commercial missingInfo still maps to internal notes unchanged", () => {
+test("commercial missingInfo is not duplicated into internal notes", () => {
   const fields = mapCommercialSuggestionToLineFields({
     tempId: "c1",
     description: "Panel upgrade",
@@ -79,8 +79,8 @@ test("commercial missingInfo still maps to internal notes unchanged", () => {
   const notes = fields.internalNotes ?? "";
   assert.match(notes, /Line-specific details:/);
   assert.match(notes, /Zinsco/);
-  assert.match(notes, /Missing info \(this line\):/);
-  assert.match(notes, /Confirm amperage/);
+  assert.doesNotMatch(notes, /Missing info \(this line\):/);
+  assert.doesNotMatch(notes, /Confirm amperage/);
 });
 
 test("line-level decisions are created from commercial missingInfo after line exists", async () => {
@@ -92,8 +92,7 @@ test("line-level decisions are created from commercial missingInfo after line ex
     quoteId: "quote-1",
     quoteLineItemId: lineId,
     missingInfo: ["Confirm gutter color", "Measure linear feet"],
-    sourceRefType: "commercial_line_temp_id",
-    sourceRefId: "c1",
+    parentSourceRefId: "c1",
   });
 
   assert.equal(result.createdCount, 2);

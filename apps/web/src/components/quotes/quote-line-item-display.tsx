@@ -114,26 +114,26 @@ export function QuoteLineDraftExecutionSummary({
   });
 
   return (
-    <div className="mt-3 w-full border-t border-dashed border-border pt-3">
-      <p className="text-xs text-foreground-subtle">
-        <span className="font-medium text-foreground-muted">Internal: </span>
-        {text}
-      </p>
+    <div className="mt-3 w-full">
       {isExecutionEditable ? (
-        <div className="mt-2 flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
-          <QuoteLineDraftExecutionInlineToggle
-            quoteId={quoteId}
-            lineItemId={line.id}
-            taskCount={line.executionSummary.taskCount}
-            draftTasks={draftTasks}
-            reusableOptions={reusableOptions}
-            stages={stages}
-            initialPlanningContext={planningSeed}
-            panelLayout="fullWidth"
-            hideAiButton={hideAiButton}
-          />
-        </div>
-      ) : null}
+        <QuoteLineDraftExecutionInlineToggle
+          quoteId={quoteId}
+          lineItemId={line.id}
+          taskCount={line.executionSummary.taskCount}
+          draftTasks={draftTasks}
+          reusableOptions={reusableOptions}
+          stages={stages}
+          initialPlanningContext={planningSeed}
+          planningSummaryLine={text}
+          panelLayout="fullWidth"
+          hideAiButton={hideAiButton}
+        />
+      ) : (
+        <p className="text-xs text-foreground-subtle">
+          <span className="font-medium text-foreground-muted">Internal: </span>
+          {text}
+        </p>
+      )}
     </div>
   );
 }

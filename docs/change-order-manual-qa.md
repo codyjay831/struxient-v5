@@ -107,6 +107,15 @@ The script marks DRAFT / CUSTOMER_REQUESTED_CHANGES COs as **SENT** (dev QA only
 - [ ] **Apply failed** state shows failure summary in readiness panel; customer-approved payment terms still visible
 - [ ] Settled target after accept — apply blocked; job payments unchanged after failed apply
 
+## Workstation Sales Queue panel
+
+Open **Workstation → Sales** (`tab=commercial`), select a Change Order card, and verify the in-panel actions (not the generic launcher).
+
+- [ ] **SENT price-impact CO** as office role shows **Mark internally accepted** primary action when canon allows staff accept
+- [ ] Same **SENT price-impact CO** as viewer / no approve permission does **not** show staff accept as primary (Open full change order only)
+- [ ] **Apply-blocked** accepted CO shows a short reason near **Review and apply** (e.g. `Apply is not available yet: …`) without duplicating the full blocker list
+- [ ] **Apply-ready** accepted CO applies from the panel; drawer clears or updates after success (item leaves Sales attention when applied)
+
 ## Read-only lifecycle
 
 - [ ] **SENT**, **ACCEPTED**, **APPLIED**, **VOID**, **REJECTED**, **SUPERSEDED** — no add/edit/remove controls in work impact

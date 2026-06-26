@@ -36,7 +36,6 @@ import type {
   QuoteWorkspaceLead,
   QuoteWorkspaceTabData,
 } from "@/lib/quote-workspace-payload";
-import { isActiveQuoteScopeDecisionStatus } from "@/lib/quote-scope-decision-types";
 import {
   getQuoteWorkflowPresentation,
 } from "@/lib/quote-workflow-presenter";
@@ -686,10 +685,6 @@ export async function loadQuoteWorkSurface(
     quoteId: row.id,
   });
 
-  const openScopeDecisionCount = scopeDecisions.filter((d) =>
-    isActiveQuoteScopeDecisionStatus(d.status),
-  ).length;
-
   const activityItems = [
     ...sendCheckpoints.map((cp) => ({
       kind: "send" as const,
@@ -717,7 +712,7 @@ export async function loadQuoteWorkSurface(
     activationReadiness,
     isCommercialEditable,
     paymentScheduleItemCount: row.paymentSchedule.length,
-    openScopeDecisionCount,
+    scopeDecisions,
     latestSendAt: latestSend?.createdAt ?? undefined,
     latestApprovalAt: latestApproval?.createdAt ?? undefined,
     revisionDriftSinceLastProof,

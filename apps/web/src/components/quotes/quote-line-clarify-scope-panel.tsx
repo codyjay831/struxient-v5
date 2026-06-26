@@ -34,6 +34,7 @@ import type {
   ClarificationSetOption,
 } from "@/app/(workspace)/quotes/quote-line-clarification-types";
 import type { ClarificationMatchConfidence } from "@/lib/clarification/clarification-matching";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import {
   workspaceFormControlClass,
   workspaceFormFieldLabelClass,
@@ -130,6 +131,11 @@ export type ClarifyScopePanelProps = {
   ) => Promise<{ existing?: { label: string; latestVersion: number }; error?: string }>;
   isApplying: boolean;
   onApply: (answers: LineClarificationAnswers) => Promise<void>;
+  openScopeDecisions: readonly QuoteScopeDecisionPayload[];
+  onScopeGapAction: (
+    decisionId: string,
+    action: "not_needed" | "defer_to_execution",
+  ) => Promise<{ error?: string }>;
 };
 
 type AnswerMap = Record<string, ClarificationAnswerValue>;
@@ -242,6 +248,8 @@ export function ClarifyScopePanel({
   checkSetKey,
   isApplying,
   onApply,
+  openScopeDecisions,
+  onScopeGapAction,
 }: ClarifyScopePanelProps) {
   const mounted = useIsClientMounted();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -262,11 +270,13 @@ export function ClarifyScopePanel({
   const [recommendedSetSnapshot, setRecommendedSetSnapshot] =
     useState<ClarifyScopeQuestionSet | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [gapActionPendingId, setGapActionPendingId] = useState<string | null>(null);
+  const [gapActionErrorById, setGapActionErrorById] = useState<Record<string, string>>({});
   const prevSetIdentityRef = useRef<string | null>(null);
   const prevLineIdRef = useRef<string | null>(null);
   const prevProposalRef = useRef<ClarificationAnswerProposal | null>(null);
 
-  const canClose = !isApplying;
+  const canClose = !isApplying && gapActionPendingId == null;
 
   // Reset / hydrate answers when the question set changes.
   const currentSetKey = questionSet?.key ?? null;
@@ -290,6 +300,8 @@ export function ClarifyScopePanel({
       setPanelMode("start");
       setActiveSetSource(null);
       setRecommendedSetSnapshot(null);
+      setGapActionPendingId(null);
+      setGapActionErrorById({});
       prevSetIdentityRef.current = null;
       prevLineIdRef.current = null;
       prevProposalRef.current = null;
@@ -306,6 +318,8 @@ export function ClarifyScopePanel({
       setIsEditingExistingSet(false);
       setExpandedDraftQuestionIndices(new Set());
       setError(null);
+      setGapActionPendingId(null);
+      setGapActionErrorById({});
       prevProposalRef.current = null;
     }
     prevLineIdRef.current = lineId;
@@ -814,6 +828,14 @@ export function ClarifyScopePanel({
     () => Object.values(answers).filter((v) => isAnswerProvided(v)).length,
     [answers],
   );
+  const lineScopeDecisions = useMemo(
+    () => openScopeDecisions.filter((decision) => decision.quoteLineItemId === lineId),
+    [lineId, openScopeDecisions],
+  );
+  const quoteWideScopeDecisions = useMemo(
+    () => openScopeDecisions.filter((decision) => decision.quoteLineItemId == null),
+    [openScopeDecisions],
+  );
 
   const handleApply = async () => {
     if (!questionSet) return;
@@ -838,6 +860,19 @@ export function ClarifyScopePanel({
       questionSetVersion: questionSet.version,
       answers: built,
     });
+  };
+
+  const handleScopeGapAction = async (
+    decisionId: string,
+    action: "not_needed" | "defer_to_execution",
+  ) => {
+    setGapActionPendingId(decisionId);
+    setGapActionErrorById((prev) => ({ ...prev, [decisionId]: "" }));
+    const result = await onScopeGapAction(decisionId, action);
+    if (result.error) {
+      setGapActionErrorById((prev) => ({ ...prev, [decisionId]: result.error ?? "Failed to update gap." }));
+    }
+    setGapActionPendingId(null);
   };
 
   const goBackToStart = () => {
@@ -1935,6 +1970,90 @@ export function ClarifyScopePanel({
 
               <div className="space-y-3">{questionSet.questions.map(renderQuestion)}</div>
 
+              {(lineScopeDecisions.length > 0 || quoteWideScopeDecisions.length > 0) ? (
+                <div className="space-y-3 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Clear open gap records</p>
+                    <p className="mt-1 text-xs text-foreground-muted">
+                      Save to quote is preferred. Use these only when a gap is not needed yet or should move to execution.
+                    </p>
+                  </div>
+                  {lineScopeDecisions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+                        This line
+                      </p>
+                      {lineScopeDecisions.map((decision) => (
+                        <div key={decision.id} className="rounded-md border border-border bg-surface p-2">
+                          <p className="text-xs font-medium text-foreground">{decision.title}</p>
+                          {decision.detail ? (
+                            <p className="mt-0.5 text-[11px] text-foreground-muted">{decision.detail}</p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={workspaceFormSecondaryButtonClass}
+                              disabled={gapActionPendingId === decision.id}
+                              onClick={() => void handleScopeGapAction(decision.id, "not_needed")}
+                            >
+                              {gapActionPendingId === decision.id ? <Loader2 className="size-4 animate-spin" /> : null}
+                              Not needed
+                            </button>
+                            <button
+                              type="button"
+                              className={workspaceFormSecondaryButtonClass}
+                              disabled={gapActionPendingId === decision.id}
+                              onClick={() => void handleScopeGapAction(decision.id, "defer_to_execution")}
+                            >
+                              Defer to execution
+                            </button>
+                          </div>
+                          {gapActionErrorById[decision.id] ? (
+                            <p className="mt-1 text-[11px] text-danger">{gapActionErrorById[decision.id]}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {quoteWideScopeDecisions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+                        Quote-wide gaps
+                      </p>
+                      {quoteWideScopeDecisions.map((decision) => (
+                        <div key={decision.id} className="rounded-md border border-border bg-surface p-2">
+                          <p className="text-xs font-medium text-foreground">{decision.title}</p>
+                          {decision.detail ? (
+                            <p className="mt-0.5 text-[11px] text-foreground-muted">{decision.detail}</p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={workspaceFormSecondaryButtonClass}
+                              disabled={gapActionPendingId === decision.id}
+                              onClick={() => void handleScopeGapAction(decision.id, "not_needed")}
+                            >
+                              Not needed
+                            </button>
+                            <button
+                              type="button"
+                              className={workspaceFormSecondaryButtonClass}
+                              disabled={gapActionPendingId === decision.id}
+                              onClick={() => void handleScopeGapAction(decision.id, "defer_to_execution")}
+                            >
+                              Defer to execution
+                            </button>
+                          </div>
+                          {gapActionErrorById[decision.id] ? (
+                            <p className="mt-1 text-[11px] text-danger">{gapActionErrorById[decision.id]}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               {error ? (
                 <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-danger" role="alert">
                   {error}
@@ -1968,7 +2087,13 @@ export function ClarifyScopePanel({
             <button
               type="button"
               className={workspaceFormPrimaryButtonClass}
-              disabled={isApplying || answeredCount === 0 || !questionSet || panelMode !== "answer"}
+              disabled={
+                isApplying ||
+                gapActionPendingId !== null ||
+                answeredCount === 0 ||
+                !questionSet ||
+                panelMode !== "answer"
+              }
               onClick={() => void handleApply()}
             >
               {isApplying ? (

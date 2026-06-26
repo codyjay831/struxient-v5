@@ -122,8 +122,7 @@ export async function performApplyQuoteScopeSuggestionsInTx(
           quoteId: input.quoteId,
           quoteLineItemId: lineId,
           missingInfo: item.missingInfo,
-          sourceRefType: "commercial_line_temp_id",
-          sourceRefId: item.tempId,
+          parentSourceRefId: item.tempId,
           createdByUserId: input.createdByUserId ?? null,
         });
       }
@@ -163,6 +162,7 @@ export async function performApplyQuoteScopeSuggestionsInTx(
       quoteId: input.quoteId,
       quoteLineItemId: null,
       missingInfo: input.quoteMissingInfo,
+      parentSourceRefId: input.quoteId,
       createdByUserId: input.createdByUserId ?? null,
     });
   }

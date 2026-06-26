@@ -1,4 +1,5 @@
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
+import { isSendBlockingScopeDecision } from "@/lib/quote/quote-send-blockers";
 
 const TITLE_PREFIX_PATTERN =
   /^(confirm|verify|measure|determine|identify|check|validate|assess|clarify)\s+/i;
@@ -16,6 +17,28 @@ export function filterLineScopeDecisions(
   lineId: string,
 ): QuoteScopeDecisionPayload[] {
   return decisions.filter((d) => d.quoteLineItemId === lineId);
+}
+
+/** OPEN scope decisions — legacy compatibility clearing UI (Slice 2A). */
+export function filterOpenScopeDecisions(
+  decisions: readonly QuoteScopeDecisionPayload[],
+): QuoteScopeDecisionPayload[] {
+  return decisions.filter((d) => d.status === "OPEN");
+}
+
+/** Scope decisions that block quote send (Slice 1 rules). */
+export function filterSendBlockingScopeDecisions(
+  decisions: readonly QuoteScopeDecisionPayload[],
+): QuoteScopeDecisionPayload[] {
+  return decisions.filter(isSendBlockingScopeDecision);
+}
+
+/** Send-blocking scope decision count for one line. */
+export function countSendBlockingScopeDecisionsForLine(
+  decisions: readonly QuoteScopeDecisionPayload[],
+  lineId: string,
+): number {
+  return filterLineScopeDecisions(decisions, lineId).filter(isSendBlockingScopeDecision).length;
 }
 
 /** Short chip label derived from a scope decision title. */

@@ -7,7 +7,7 @@
  * of stacking duplicates. Pure + unit tested.
  */
 
-export const CLARIFICATION_CUSTOMER_HEADER = "Scope details:";
+export const CLARIFICATION_CUSTOMER_HEADER = "Confirmed scope:";
 export const CLARIFICATION_INTERNAL_HEADER = "Scope clarification:";
 
 /**

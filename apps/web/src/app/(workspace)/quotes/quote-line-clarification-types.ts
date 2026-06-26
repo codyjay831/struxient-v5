@@ -10,6 +10,7 @@ import type {
   ClarificationAnswerProposal,
 } from "@/lib/ai/clarification-answer-proposal-schema";
 import type { LineClarificationAnswers } from "@/lib/clarification/clarification-types";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 
 export type ClarificationSetOption = {
   key: string;
@@ -37,6 +38,8 @@ export type ClarificationLineModel = {
   recommendedConfidence: ClarificationMatchConfidence | null;
   /** Previously saved answers for the matched set on this line, if any. */
   savedAnswers: LineClarificationAnswers | null;
+  /** OPEN scope-gap compatibility records linked to this line context. */
+  openScopeDecisions: QuoteScopeDecisionPayload[];
 };
 
 export type GetClarificationLineModelResult = {
@@ -49,6 +52,7 @@ export type ApplyLineClarificationResult = {
   success?: boolean;
   customerLineCount?: number;
   internalLineCount?: number;
+  resolvedGapCount?: number;
 };
 
 export type SuggestLineClarificationResult = {

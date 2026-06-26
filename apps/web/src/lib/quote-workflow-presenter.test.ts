@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { JobStatus, QuoteStatus } from "@prisma/client";
+import {
+  QuoteScopeDecisionQuoteImpact,
+  QuoteScopeDecisionStatus,
+  JobStatus,
+  QuoteStatus,
+} from "@prisma/client";
 import { getQuoteWorkflowPresentation } from "./quote-workflow-presenter";
+import { evaluateQuoteSendReadiness } from "@/lib/quote/quote-send-readiness";
+import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 
 const baseInput = {
   quote: {
@@ -19,9 +26,25 @@ const baseInput = {
   },
   isCommercialEditable: true,
   paymentScheduleItemCount: 2,
-  openScopeDecisionCount: 0,
+  scopeDecisions: [] as QuoteScopeDecisionPayload[],
   activityItems: [],
 };
+
+function scopeDecision(
+  overrides: Partial<QuoteScopeDecisionPayload> & Pick<QuoteScopeDecisionPayload, "id">,
+): QuoteScopeDecisionPayload {
+  return {
+    quoteId: "quote-1",
+    quoteLineItemId: null,
+    sourceType: "QUICK_SCOPE",
+    title: "Example gap",
+    detail: null,
+    status: QuoteScopeDecisionStatus.OPEN,
+    resolutionTiming: null,
+    quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+    ...overrides,
+  };
+}
 
 test("getQuoteWorkflowPresentation: draft blocked by missing scope, site, and payment", () => {
   const presentation = getQuoteWorkflowPresentation({
@@ -47,6 +70,89 @@ test("getQuoteWorkflowPresentation: ready to send", () => {
   assert.equal(presentation.canSend, true);
   assert.equal(presentation.primaryAction?.kind, "SEND_QUOTE");
   assert.equal(presentation.isCommercialLocked, false);
+});
+
+test("getQuoteWorkflowPresentation: OPEN scope gap blocks send and matches server readiness", () => {
+  const scopeDecisions = [
+    scopeDecision({
+      id: "gap-1",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+      title: "Square footage",
+    }),
+  ];
+  const presentation = getQuoteWorkflowPresentation({
+    ...baseInput,
+    scopeDecisions,
+  });
+
+  const server = evaluateQuoteSendReadiness({
+    status: QuoteStatus.DRAFT,
+    lineItemCount: 2,
+    serviceLocationId: "loc-1",
+    paymentScheduleItemCount: 2,
+    scopeDecisions,
+  });
+
+  assert.equal(presentation.workflowState, "BLOCKED_FROM_SEND");
+  assert.equal(presentation.canSend, false);
+  assert.equal(server.ok, false);
+  assert.ok(presentation.blockers.some((b) => /Clarify scope/i.test(b.message)));
+});
+
+test("getQuoteWorkflowPresentation: legacy OPEN NONE scope gap blocks send", () => {
+  const scopeDecisions = [
+    scopeDecision({
+      id: "legacy-1",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      title: "Schedule preference",
+    }),
+  ];
+  const presentation = getQuoteWorkflowPresentation({
+    ...baseInput,
+    scopeDecisions,
+  });
+
+  assert.equal(presentation.canSend, false);
+  assert.equal(
+    evaluateQuoteSendReadiness({
+      status: QuoteStatus.DRAFT,
+      lineItemCount: 2,
+      serviceLocationId: "loc-1",
+      paymentScheduleItemCount: 2,
+      scopeDecisions,
+    }).ok,
+    false,
+  );
+});
+
+test("getQuoteWorkflowPresentation: DEFERRED scope gap does not block send", () => {
+  const scopeDecisions = [
+    scopeDecision({
+      id: "def-1",
+      status: QuoteScopeDecisionStatus.DEFERRED,
+      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      title: "Crew assignment",
+    }),
+  ];
+  const presentation = getQuoteWorkflowPresentation({
+    ...baseInput,
+    scopeDecisions,
+  });
+
+  assert.equal(presentation.workflowState, "READY_TO_SEND");
+  assert.equal(presentation.canSend, true);
+  assert.equal(presentation.blockers.length, 0);
+  assert.ok(presentation.sendWarnings.length > 0);
+  assert.equal(
+    evaluateQuoteSendReadiness({
+      status: QuoteStatus.DRAFT,
+      lineItemCount: 2,
+      serviceLocationId: "loc-1",
+      paymentScheduleItemCount: 2,
+      scopeDecisions,
+    }).ok,
+    true,
+  );
 });
 
 test("getQuoteWorkflowPresentation: sent pending approval", () => {
@@ -142,4 +248,26 @@ test("getQuoteWorkflowPresentation: exposes at most one primary action", () => {
     const primaryCount = p.primaryAction ? 1 : 0;
     assert.ok(primaryCount <= 1);
   }
+});
+
+test("getQuoteWorkflowPresentation: canSend matches evaluateQuoteSendReadiness for draft quotes", () => {
+  const scopeDecisions = [
+    scopeDecision({ id: "open-1" }),
+    scopeDecision({
+      id: "def-1",
+      status: QuoteScopeDecisionStatus.DEFERRED,
+    }),
+  ];
+  const presentation = getQuoteWorkflowPresentation({
+    ...baseInput,
+    scopeDecisions,
+  });
+  const readiness = evaluateQuoteSendReadiness({
+    status: QuoteStatus.DRAFT,
+    lineItemCount: 2,
+    serviceLocationId: "jobsite",
+    paymentScheduleItemCount: 2,
+    scopeDecisions,
+  });
+  assert.equal(presentation.canSend, readiness.ok);
 });
