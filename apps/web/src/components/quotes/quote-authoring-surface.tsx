@@ -105,8 +105,6 @@ import { deriveNeedsForQuoteLines } from "@/lib/derived-needs/derive-needs";
 import type { DerivedNeed } from "@/lib/derived-needs/types";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import {
-  QuoteLegacyGapHandlingLineSection,
-  QuoteLegacyGapHandlingQuoteSection,
   QuoteSendReadinessSummary,
 } from "@/components/quotes/quote-scope-decisions-panel";
 import { countSendBlockingScopeDecisionsForLine } from "@/lib/quote-scope-decision-display";
@@ -1257,12 +1255,6 @@ export function QuoteAuthoringSurface({
               warnings={sendWarnings}
             />
 
-            <QuoteLegacyGapHandlingQuoteSection
-              quoteId={quoteId}
-              decisions={scopeDecisions}
-              onUpdated={onMutated}
-            />
-
             {isAddOpen && (
               <div className="mb-6">
                 <AddLineItemForm
@@ -1384,14 +1376,6 @@ export function QuoteAuthoringSurface({
                           draftTasks={draftTasksByLineId[line.id] ?? []}
                           reusableOptions={reusableTaskOptions}
                           stages={stages}
-                        />
-                      ) : null}
-                      {!isEditing ? (
-                        <QuoteLegacyGapHandlingLineSection
-                          quoteId={quoteId}
-                          lineId={line.id}
-                          decisions={scopeDecisions}
-                          onUpdated={onMutated}
                         />
                       ) : null}
                       {isEditing && (

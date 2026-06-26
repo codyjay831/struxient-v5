@@ -103,12 +103,12 @@ test("evaluateQuoteSendReadiness blocks OPEN scope gaps", () => {
   );
 });
 
-test("evaluateQuoteSendReadiness blocks legacy OPEN NONE scope gaps", () => {
+test("evaluateQuoteSendReadiness allows OPEN NONE scope gaps", () => {
   const result = evaluateQuoteSendReadiness(
     readySendInput({
       scopeDecisions: [
         {
-          id: "d-legacy",
+          id: "d-none-open",
           quoteLineItemId: "line-1",
           status: QuoteScopeDecisionStatus.OPEN,
           quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
@@ -117,10 +117,7 @@ test("evaluateQuoteSendReadiness blocks legacy OPEN NONE scope gaps", () => {
       ],
     }),
   );
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.error, /Clarify scope/i);
-  }
+  assert.equal(result.ok, true);
 });
 
 test("evaluateQuoteSendReadiness allows send with DEFERRED scope gap", () => {
@@ -149,7 +146,7 @@ test("evaluateQuoteSendBlockers matches evaluateQuoteSendReadiness canSend", () 
         id: "d-1",
         quoteLineItemId: null,
         status: QuoteScopeDecisionStatus.OPEN,
-        quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+        quoteImpact: QuoteScopeDecisionQuoteImpact.POSSIBLE,
         title: "Gap",
       },
     ],

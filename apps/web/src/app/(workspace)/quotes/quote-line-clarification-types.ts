@@ -38,7 +38,7 @@ export type ClarificationLineModel = {
   recommendedConfidence: ClarificationMatchConfidence | null;
   /** Previously saved answers for the matched set on this line, if any. */
   savedAnswers: LineClarificationAnswers | null;
-  /** OPEN scope-gap compatibility records linked to this line context. */
+  /** OPEN scope-gap records linked to this line context. */
   openScopeDecisions: QuoteScopeDecisionPayload[];
 };
 

@@ -13,7 +13,6 @@ export type QuoteSendBlockerCode =
   | "PAYMENT_PLAN_REQUIRED"
   | "PAYMENT_PLAN_INVALID"
   | "REQUIRED_SCOPE_GAP_OPEN"
-  | "LEGACY_SCOPE_GAP_OPEN"
   | "QUOTE_STATUS_NOT_SENDABLE"
   | "UNKNOWN";
 
@@ -53,10 +52,6 @@ export type QuoteSendBlockerInput = {
   scopeDecisions?: readonly QuoteSendBlockerScopeDecision[];
 };
 
-/**
- * Phase 1 legacy compat: OPEN rows with quoteImpact NONE remain send-blocking until
- * Phase 2 backfill. See docs/canon/quote-clarification-canon.md.
- */
 export function isSendBlockingScopeDecision(
   decision: QuoteSendBlockerScopeDecision,
 ): boolean {
@@ -71,10 +66,6 @@ export function isSendBlockingScopeDecision(
     return true;
   }
 
-  if (decision.quoteImpact === QuoteScopeDecisionQuoteImpact.NONE) {
-    return true;
-  }
-
   return false;
 }
 
@@ -82,15 +73,6 @@ export function countSendBlockingScopeDecisions(
   decisions: readonly QuoteSendBlockerScopeDecision[],
 ): number {
   return decisions.filter(isSendBlockingScopeDecision).length;
-}
-
-function scopeGapBlockerCode(
-  decision: QuoteSendBlockerScopeDecision,
-): QuoteSendBlockerCode {
-  if (decision.quoteImpact === QuoteScopeDecisionQuoteImpact.NONE) {
-    return "LEGACY_SCOPE_GAP_OPEN";
-  }
-  return "REQUIRED_SCOPE_GAP_OPEN";
 }
 
 function scopeGapMessage(decision: QuoteSendBlockerScopeDecision): string {
@@ -105,7 +87,7 @@ function buildScopeGapBlockers(
   decisions: readonly QuoteSendBlockerScopeDecision[],
 ): QuoteSendBlocker[] {
   return decisions.filter(isSendBlockingScopeDecision).map((decision) => ({
-    code: scopeGapBlockerCode(decision),
+    code: "REQUIRED_SCOPE_GAP_OPEN",
     severity: "blocking" as const,
     message: scopeGapMessage(decision),
     quoteLineItemId: decision.quoteLineItemId,
@@ -199,8 +181,7 @@ export function primaryQuoteSendBlockerMessage(
   result: QuoteSendBlockerResult,
 ): string | null {
   const scopeBlockers = result.blockers.filter(
-    (b) =>
-      b.code === "REQUIRED_SCOPE_GAP_OPEN" || b.code === "LEGACY_SCOPE_GAP_OPEN",
+    (b) => b.code === "REQUIRED_SCOPE_GAP_OPEN",
   );
 
   if (scopeBlockers.length === 1) {

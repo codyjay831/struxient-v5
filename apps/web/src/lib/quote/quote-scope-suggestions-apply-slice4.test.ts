@@ -158,24 +158,24 @@ test("createQuoteScopeDecisionsFromMissingInfoStrings classifies and sets stable
   assert.equal(scheduling.resolutionTiming, QuoteScopeDecisionResolutionTiming.EXECUTION);
 });
 
-test("legacy OPEN NONE contract remains blocking in send helper", async () => {
+test("OPEN NONE does not block send helper after legacy cleanup", async () => {
   const { buildQuoteSendBlockers, isSendBlockingScopeDecision } = await import(
     "@/lib/quote/quote-send-blockers"
   );
-  const legacy = {
-    id: "legacy-1",
+  const schedulingOnlyGap = {
+    id: "gap-none-1",
     quoteLineItemId: "line-1",
     status: QuoteScopeDecisionStatus.OPEN,
     quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
-    title: "Old legacy gap",
+    title: "Scheduling preference",
   };
-  assert.equal(isSendBlockingScopeDecision(legacy), true);
+  assert.equal(isSendBlockingScopeDecision(schedulingOnlyGap), false);
   const send = buildQuoteSendBlockers({
     status: QuoteStatus.DRAFT,
     lineItemCount: 1,
     serviceLocationId: "loc-1",
     paymentScheduleItemCount: 1,
-    scopeDecisions: [legacy],
+    scopeDecisions: [schedulingOnlyGap],
   });
-  assert.equal(send.canSend, false);
+  assert.equal(send.canSend, true);
 });

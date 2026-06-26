@@ -76,13 +76,18 @@ test("formatScopeDecisionForAiContext includes detail when present", () => {
   );
 });
 
-test("filterSendBlockingScopeDecisions excludes DEFERRED and DISMISSED", () => {
+test("filterSendBlockingScopeDecisions keeps only OPEN REQUIRED/POSSIBLE rows", () => {
   const decisions = [
     decision({ id: "open-req", quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED }),
     decision({
-      id: "legacy-none",
+      id: "open-possible",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.POSSIBLE,
+      title: "Ambiguous commercial term",
+    }),
+    decision({
+      id: "open-none",
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
-      title: "Legacy gap",
+      title: "Scheduling note",
     }),
     decision({
       id: "deferred",
@@ -98,27 +103,35 @@ test("filterSendBlockingScopeDecisions excludes DEFERRED and DISMISSED", () => {
   assert.equal(blocking.length, 2);
   assert.deepEqual(
     blocking.map((d) => d.id),
-    ["open-req", "legacy-none"],
+    ["open-req", "open-possible"],
   );
 });
 
 test("countSendBlockingScopeDecisionsForLine counts only blocking rows on one line", () => {
   const decisions = [
-    decision({ id: "line-a-1", quoteLineItemId: "line-a" }),
+    decision({
+      id: "line-a-1",
+      quoteLineItemId: "line-a",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+    }),
     decision({
       id: "line-a-def",
       quoteLineItemId: "line-a",
       status: QuoteScopeDecisionStatus.DEFERRED,
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
     }),
-    decision({ id: "line-b-1", quoteLineItemId: "line-b" }),
+    decision({
+      id: "line-b-1",
+      quoteLineItemId: "line-b",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+    }),
   ];
   assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-a"), 1);
   assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-b"), 1);
   assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-c"), 0);
 });
 
-test("filterOpenScopeDecisions returns OPEN rows for legacy compatibility UI", () => {
+test("filterOpenScopeDecisions returns OPEN rows", () => {
   const decisions = [
     decision({ id: "open-1" }),
     decision({ id: "def-1", status: QuoteScopeDecisionStatus.DEFERRED }),

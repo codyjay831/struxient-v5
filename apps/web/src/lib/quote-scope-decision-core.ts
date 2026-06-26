@@ -6,7 +6,6 @@ import {
 } from "@prisma/client";
 import type { ExtendedTransactionClient } from "@/lib/db";
 import type { QuoteScopeDecisionManualAction } from "@/lib/quote-scope-decision-types";
-import { isSendBlockingScopeDecision } from "@/lib/quote/quote-send-blockers";
 import {
   classifyQuickScopeMissingInfoGap,
   buildQuickScopeMissingInfoSourceRef,
@@ -189,20 +188,15 @@ type ManualActionUpdate = {
   clearResolvedAt?: boolean;
 };
 
+const UNSUPPORTED_GAP_ACTION_ERROR =
+  "This gap action is no longer supported. Use Clarify Scope, Not needed, or Defer to execution.";
+
 export function manualActionToUpdate(
   action: QuoteScopeDecisionManualAction,
 ): ManualActionUpdate {
   switch (action) {
-    case "resolve":
-      return { status: "RESOLVED", resolutionTiming: null };
-    case "ask_customer":
-      return { status: "OPEN", resolutionTiming: "ASK_CUSTOMER", clearResolvedAt: true };
-    case "verify_on_site":
-      return { status: "OPEN", resolutionTiming: "SITE_VISIT", clearResolvedAt: true };
     case "defer_to_execution":
       return { status: "DEFERRED", resolutionTiming: "EXECUTION", clearResolvedAt: true };
-    case "use_assumption":
-      return { status: "RESOLVED", resolutionTiming: "ASSUMPTION" };
     case "dismiss":
       return { status: "DISMISSED", resolutionTiming: "NOT_NEEDED" };
     default: {
@@ -239,20 +233,10 @@ export async function applyQuoteScopeDecisionManualAction(
     return { ok: false, error: "This scope decision is already closed." };
   }
 
-  if (
-    params.action === "resolve" &&
-    isSendBlockingScopeDecision({
-      id: existing.id,
-      quoteLineItemId: existing.quoteLineItemId,
-      status: existing.status,
-      quoteImpact: existing.quoteImpact,
-      title: existing.title,
-    })
-  ) {
+  if (params.action !== "dismiss" && params.action !== "defer_to_execution") {
     return {
       ok: false,
-      error:
-        "Use Clarify Scope to answer this required quote gap, or dismiss/defer it with a reason.",
+      error: UNSUPPORTED_GAP_ACTION_ERROR,
     };
   }
 

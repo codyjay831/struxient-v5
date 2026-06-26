@@ -271,3 +271,12 @@ After Phase 2 classification, flip legacy flag off per org or after backfill.
 ---
 
 **This is ready for a Cursor planning prompt** (Phase 1 Slice 1–2 implementation prompt, one slice per PR).
+
+---
+
+## Post-Phase 1 Option A operational note (reset-approved)
+
+- This cleanup removes legacy compatibility behavior for older `QuoteScopeDecision` rows that were `OPEN` with `quoteImpact = NONE`.
+- Before launch, if any stale development data exists, run a normal database reset/reseed workflow so quote fixtures are rebuilt under current classification rules.
+- Seed data must recreate the baseline workspace records required for QA and development flows (owner user, organization/membership, admin/settings defaults, and clarification question sets).
+- This plan does **not** run reset logic automatically in app code and does **not** add destructive runtime scripts.

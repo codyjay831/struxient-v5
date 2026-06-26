@@ -26,7 +26,6 @@ export type QuoteClarificationQaFixture = {
   lineAId: string;
   lineBId: string;
   requiredGapId: string;
-  legacyGapId: string;
   deferredGapId: string;
   lineAGapId: string;
   quoteWideGapId: string;
@@ -142,19 +141,6 @@ export async function createQuoteClarificationQaFixture(): Promise<QuoteClarific
     select: { id: true },
   });
 
-  const legacyGap = await db.quoteScopeDecision.create({
-    data: {
-      organizationId: DEV_ORGANIZATION_ID,
-      quoteId: QA_CLARIFY_QUOTE_ID,
-      quoteLineItemId: lineAId,
-      sourceType: QuoteScopeDecisionSourceType.QUICK_SCOPE,
-      title: "Legacy blocking gap (OPEN + NONE)",
-      status: QuoteScopeDecisionStatus.OPEN,
-      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
-    },
-    select: { id: true },
-  });
-
   const deferredGap = await db.quoteScopeDecision.create({
     data: {
       organizationId: DEV_ORGANIZATION_ID,
@@ -200,7 +186,6 @@ export async function createQuoteClarificationQaFixture(): Promise<QuoteClarific
     lineAId,
     lineBId,
     requiredGapId: requiredGap.id,
-    legacyGapId: legacyGap.id,
     deferredGapId: deferredGap.id,
     lineAGapId: lineAGap.id,
     quoteWideGapId: quoteWideGap.id,
@@ -248,7 +233,6 @@ export async function countOpenSendBlockingGaps(quoteId: string): Promise<number
   return rows.filter(
     (row) =>
       row.quoteImpact === QuoteScopeDecisionQuoteImpact.REQUIRED ||
-      row.quoteImpact === QuoteScopeDecisionQuoteImpact.POSSIBLE ||
-      row.quoteImpact === QuoteScopeDecisionQuoteImpact.NONE,
+      row.quoteImpact === QuoteScopeDecisionQuoteImpact.POSSIBLE,
   ).length;
 }

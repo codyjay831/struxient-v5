@@ -171,7 +171,7 @@ function hasConservativeTextMatch(
 }
 
 /**
- * Conservative matching for closing legacy scope-gap rows when Clarify answers are applied.
+ * Conservative matching for closing scope-gap rows when Clarify answers are applied.
  *
  * Rules:
  * - Same-line OPEN gaps: stable-id match OR high-confidence text match.

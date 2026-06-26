@@ -208,12 +208,12 @@ test("explicit not needed/dismiss/defer remain available while resolve stays blo
       organizationId: "org-1",
       quoteId: "quote-1",
       quoteLineItemId: "line-1",
-      title: "Legacy blocking gap",
+      title: "Ambiguous commercial gap",
       detail: null,
       sourceRefType: null,
       sourceRefId: null,
       status: QuoteScopeDecisionStatus.OPEN,
-      quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      quoteImpact: QuoteScopeDecisionQuoteImpact.POSSIBLE,
       resolutionTiming: null,
       resolvedByUserId: null,
       resolvedByClarificationId: null,
@@ -225,10 +225,11 @@ test("explicit not needed/dismiss/defer remain available while resolve stays blo
     organizationId: "org-1",
     quoteId: "quote-1",
     decisionId: "gap-3",
-    action: "resolve",
+    action: "resolve" as never,
     resolvedByUserId: "user-1",
   });
   assert.equal(resolveAttempt.ok, false);
+  assert.match(resolveAttempt.error, /no longer supported/i);
   assert.equal(rows[0]?.status, QuoteScopeDecisionStatus.OPEN);
 
   const dismissAttempt = await applyQuoteScopeDecisionManualAction(tx, {

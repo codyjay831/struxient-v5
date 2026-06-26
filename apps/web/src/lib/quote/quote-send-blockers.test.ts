@@ -65,23 +65,19 @@ test("buildQuoteSendBlockers blocks OPEN REQUIRED scope gap", () => {
   assert.equal(result.blockers[0]?.actionTarget, "clarify");
 });
 
-test("buildQuoteSendBlockers blocks legacy OPEN + NONE scope gap", () => {
+test("buildQuoteSendBlockers does not block OPEN NONE scope gap", () => {
   const result = buildQuoteSendBlockers({
     ...baseInput,
     scopeDecisions: [
       decision({
-        id: "d-legacy",
+        id: "d-none-open",
         quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
         title: "Preferred schedule",
       }),
     ],
   });
-  assert.equal(result.canSend, false);
-  assert.ok(
-    result.blockers.some(
-      (b) => b.code === "LEGACY_SCOPE_GAP_OPEN" && b.scopeDecisionId === "d-legacy",
-    ),
-  );
+  assert.equal(result.canSend, true);
+  assert.equal(result.blockers.length, 0);
 });
 
 test("buildQuoteSendBlockers does not block DEFERRED scope decision", () => {
@@ -130,12 +126,12 @@ test("buildQuoteSendBlockers does not block RESOLVED scope decision", () => {
   assert.equal(result.canSend, true);
 });
 
-test("isSendBlockingScopeDecision legacy OPEN NONE is blocking", () => {
+test("isSendBlockingScopeDecision OPEN NONE is not blocking", () => {
   assert.equal(
     isSendBlockingScopeDecision(
       decision({ id: "x", quoteImpact: QuoteScopeDecisionQuoteImpact.NONE }),
     ),
-    true,
+    false,
   );
 });
 
@@ -146,7 +142,7 @@ test("countSendBlockingScopeDecisions ignores deferred and dismissed", () => {
       decision({ id: "def", status: QuoteScopeDecisionStatus.DEFERRED }),
       decision({ id: "dis", status: QuoteScopeDecisionStatus.DISMISSED }),
     ]),
-    1,
+    0,
   );
 });
 
@@ -154,8 +150,8 @@ test("primaryQuoteSendBlockerMessage aggregates multiple scope gaps", () => {
   const result = buildQuoteSendBlockers({
     ...baseInput,
     scopeDecisions: [
-      decision({ id: "a", title: "Gap A" }),
-      decision({ id: "b", title: "Gap B" }),
+      decision({ id: "a", title: "Gap A", quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED }),
+      decision({ id: "b", title: "Gap B", quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED }),
     ],
   });
   assert.equal(primaryQuoteSendBlockerMessage(result), "Clarify 2 scope gaps before sending.");

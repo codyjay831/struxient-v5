@@ -88,7 +88,7 @@ Unresolved gaps that affect:
 - Warranty or risk language
 - Legal or customer-facing quote terms
 
-Implementation signal: `QuoteScopeDecision.quoteImpact = REQUIRED` (or legacy compat rule—see implementation plan) with blocking status.
+Implementation signal: `QuoteScopeDecision.quoteImpact = REQUIRED` or `POSSIBLE` with `status = OPEN`.
 
 ### Must NOT block send (default)
 
@@ -196,7 +196,7 @@ Use this taxonomy for prompts, UI grouping, and `quoteImpact` / `resolutionTimin
 | **Scheduling preference** | “After 3pm”, preferred week | No | No |
 | **Site condition** | Subfloor condition | Only if affects price/warranty/terms | Case-by-case |
 
-Phase 1 may use conservative legacy compat (see plan) until AI classification populates `quoteImpact` reliably.
+Reset-approved cleanup path: do not preserve old `OPEN + quoteImpact = NONE` compatibility behavior; classification must mark blocking gaps as `REQUIRED`/`POSSIBLE` at creation time.
 
 ---
 

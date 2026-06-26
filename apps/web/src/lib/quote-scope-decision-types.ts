@@ -19,11 +19,7 @@ export type QuoteScopeDecisionPayload = {
 };
 
 export type QuoteScopeDecisionManualAction =
-  | "resolve"
-  | "ask_customer"
-  | "verify_on_site"
   | "defer_to_execution"
-  | "use_assumption"
   | "dismiss";
 
 export const QUOTE_SCOPE_DECISION_ACTIVE_STATUSES: readonly QuoteScopeDecisionStatus[] = [

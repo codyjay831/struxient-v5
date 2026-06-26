@@ -46,8 +46,8 @@ function createTx(rows: DecisionRow[]): QuoteScopeDecisionTx {
   } as unknown as QuoteScopeDecisionTx;
 }
 
-test("rejects bare resolve for required or legacy send-blocking gaps", async () => {
-  const tx = createTx([
+test("rejects retired manual gap actions", async () => {
+  const rows: DecisionRow[] = [
     {
       id: "d-1",
       organizationId: "org-1",
@@ -60,21 +60,25 @@ test("rejects bare resolve for required or legacy send-blocking gaps", async () 
       resolvedAt: null,
       resolvedByUserId: null,
     },
-  ]);
+  ];
+  const tx = createTx(rows);
 
-  const result = await applyQuoteScopeDecisionManualAction(tx, {
-    organizationId: "org-1",
-    quoteId: "quote-1",
-    decisionId: "d-1",
-    action: "resolve",
-    resolvedByUserId: "user-1",
-  });
+  for (const action of ["resolve", "ask_customer", "verify_on_site", "use_assumption"] as const) {
+    const result = await applyQuoteScopeDecisionManualAction(tx, {
+      organizationId: "org-1",
+      quoteId: "quote-1",
+      decisionId: "d-1",
+      action: action as never,
+      resolvedByUserId: "user-1",
+    });
 
-  assert.equal(result.ok, false);
-  assert.match((result as { error: string }).error, /Use Clarify Scope/i);
+    assert.equal(result.ok, false);
+    assert.match((result as { error: string }).error, /no longer supported/i);
+    assert.equal(rows[0].status, QuoteScopeDecisionStatus.OPEN);
+  }
 });
 
-test("still allows dismiss and defer for send-blocking gaps", async () => {
+test("still allows dismiss and defer for open gaps", async () => {
   const rows: DecisionRow[] = [
     {
       id: "d-2",
@@ -83,7 +87,7 @@ test("still allows dismiss and defer for send-blocking gaps", async () => {
       status: QuoteScopeDecisionStatus.OPEN,
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
       quoteLineItemId: "line-1",
-      title: "Legacy open gap",
+      title: "Scheduling note",
       resolutionTiming: null,
       resolvedAt: null,
       resolvedByUserId: null,

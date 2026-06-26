@@ -88,17 +88,17 @@ test("Slice 2A: blocking scope decisions route readiness toward Clarify", () => 
   assert.ok(presentation.blockers.some((b) => b.fixTab === "scope"));
 });
 
-test("Slice 2A: legacy OPEN gap rows keep compatibility clearing path via OPEN filter", () => {
+test("Slice 2A: OPEN rows are still enumerable for Clarify context", () => {
   const scopeDecisions = [
     decision({
-      id: "legacy-1",
+      id: "open-none-1",
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
       title: "Schedule preference",
     }),
   ];
   const open = filterOpenScopeDecisions(scopeDecisions);
   assert.equal(open.length, 1);
-  assert.equal(filterSendBlockingScopeDecisions(open).length, 1);
+  assert.equal(filterSendBlockingScopeDecisions(open).length, 0);
 });
 
 test("Slice 2A: canSend display stays aligned with Slice 1 server readiness", () => {
@@ -124,12 +124,12 @@ test("Slice 2A: canSend display stays aligned with Slice 1 server readiness", ()
   assert.equal(presentation.canSend, readiness.ok);
 });
 
-test("Slice 2A: removing Scope Details panel does not hide legacy clearing when OPEN rows remain", () => {
+test("Slice 2A: OPEN NONE rows do not block send", () => {
   const scopeDecisions = [
     decision({
-      id: "legacy-open",
+      id: "open-none-row",
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
-      title: "Legacy internal gap",
+      title: "Scheduling note",
     }),
   ];
   assert.equal(filterOpenScopeDecisions(scopeDecisions).length, 1);
@@ -141,6 +141,6 @@ test("Slice 2A: removing Scope Details panel does not hide legacy clearing when 
       paymentScheduleItemCount: 2,
       scopeDecisions,
     }).ok,
-    false,
+    true,
   );
 });

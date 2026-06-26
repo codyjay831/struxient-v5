@@ -9,14 +9,10 @@ import {
 } from "@/lib/quote-scope-decision-core";
 import type { QuoteScopeDecisionManualAction } from "@/lib/quote-scope-decision-types";
 
-const ManualActionSchema = z.enum([
-  "resolve",
-  "ask_customer",
-  "verify_on_site",
-  "defer_to_execution",
-  "use_assumption",
-  "dismiss",
-]);
+const ManualActionSchema = z.enum(["defer_to_execution", "dismiss"]);
+
+const UNSUPPORTED_GAP_ACTION_ERROR =
+  "This gap action is no longer supported. Use Clarify Scope, Not needed, or Defer to execution.";
 
 export type QuoteScopeDecisionActionResult =
   | { success: true }
@@ -41,7 +37,7 @@ export async function updateQuoteScopeDecisionAction(
 
   const parsedAction = ManualActionSchema.safeParse(action);
   if (!parsedAction.success) {
-    return { error: "Invalid scope decision action." };
+    return { error: UNSUPPORTED_GAP_ACTION_ERROR };
   }
 
   const ctx = await getCommercialRequestContextOrThrow();

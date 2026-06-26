@@ -99,10 +99,10 @@ test("getQuoteWorkflowPresentation: OPEN scope gap blocks send and matches serve
   assert.ok(presentation.blockers.some((b) => /Clarify scope/i.test(b.message)));
 });
 
-test("getQuoteWorkflowPresentation: legacy OPEN NONE scope gap blocks send", () => {
+test("getQuoteWorkflowPresentation: OPEN NONE scope gap does not block send", () => {
   const scopeDecisions = [
     scopeDecision({
-      id: "legacy-1",
+      id: "open-none-1",
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
       title: "Schedule preference",
     }),
@@ -112,7 +112,7 @@ test("getQuoteWorkflowPresentation: legacy OPEN NONE scope gap blocks send", () 
     scopeDecisions,
   });
 
-  assert.equal(presentation.canSend, false);
+  assert.equal(presentation.canSend, true);
   assert.equal(
     evaluateQuoteSendReadiness({
       status: QuoteStatus.DRAFT,
@@ -121,7 +121,7 @@ test("getQuoteWorkflowPresentation: legacy OPEN NONE scope gap blocks send", () 
       paymentScheduleItemCount: 2,
       scopeDecisions,
     }).ok,
-    false,
+    true,
   );
 });
 

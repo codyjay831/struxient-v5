@@ -19,7 +19,7 @@ export function filterLineScopeDecisions(
   return decisions.filter((d) => d.quoteLineItemId === lineId);
 }
 
-/** OPEN scope decisions — legacy compatibility clearing UI (Slice 2A). */
+/** OPEN scope decisions for Clarify context/rendering helpers. */
 export function filterOpenScopeDecisions(
   decisions: readonly QuoteScopeDecisionPayload[],
 ): QuoteScopeDecisionPayload[] {

@@ -168,7 +168,7 @@ async function main() {
 
   try {
     fixture = await createQuoteClarificationQaFixture();
-    const { quoteId, lineAId, lineBId, requiredGapId, legacyGapId, lineAGapId, quoteWideGapId } =
+    const { quoteId, lineAId, lineBId, requiredGapId, lineAGapId, quoteWideGapId } =
       fixture;
 
     const browser = await chromium.launch({ headless: true });
@@ -268,38 +268,14 @@ async function main() {
     );
     await closeClarifyIfOpen(page);
 
-    await page
-      .getByRole("button", { name: /Legacy gap handling \(\d+\)/i })
-      .filter({ hasText: /\(\d+\)/ })
-      .last()
-      .click();
-    await page.waitForTimeout(400);
-    const legacyResolveVisible = await page
-      .getByRole("option", { name: /Mark closed|resolve/i })
+    const deprecatedResolveCopyVisible = await page
+      .getByText(/\bMark closed\b|Legacy gap handling|Temporary compatibility only/i)
       .isVisible()
       .catch(() => false);
     record(
-      "6. Legacy resolve protection (no bare resolve option)",
-      !legacyResolveVisible,
-      legacyResolveVisible ? "resolve option still visible" : "resolve option absent",
-    );
-
-    const legacyBefore = await readGapState(legacyGapId);
-    const legacySelect = page.getByLabel("Legacy action for Legacy blocking gap (OPEN + NONE)");
-    if (await legacySelect.isVisible().catch(() => false)) {
-      await legacySelect.selectOption({ label: "Dismiss" });
-      await legacySelect
-        .locator("xpath=ancestor::div[contains(@class,'rounded-md')][1]")
-        .getByRole("button", { name: "Update record" })
-        .click();
-      await page.waitForTimeout(1200);
-    }
-    const legacyAfter = await readGapState(legacyGapId);
-    record(
-      "6a. Legacy dismiss compatibility works",
-      legacyBefore?.status === QuoteScopeDecisionStatus.OPEN &&
-        legacyAfter?.status === QuoteScopeDecisionStatus.DISMISSED,
-      `before=${legacyBefore?.status}, after=${legacyAfter?.status}`,
+      "6. No legacy gap handling section or resolve copy on quote tab",
+      !deprecatedResolveCopyVisible,
+      deprecatedResolveCopyVisible ? "legacy section/copy still visible" : undefined,
     );
 
     const lineAGapBefore = await readGapState(lineAGapId);
@@ -336,11 +312,7 @@ async function main() {
       !deprecatedPrimary,
       deprecatedPrimary ? "deprecated label found in primary scope workflow" : undefined,
     );
-    record(
-      "8a. Legacy compatibility section is collapsed/subdued",
-      (await page.getByRole("button", { name: /Legacy gap handling/i }).first().isVisible()) &&
-        !(await page.getByText(/Temporary compatibility only/i).isVisible()),
-    );
+    record("8a. No legacy compatibility section renders", !deprecatedResolveCopyVisible);
 
     const sendTab = page.getByRole("button", { name: /^Send/i }).first();
     if (await sendTab.isVisible().catch(() => false)) {
