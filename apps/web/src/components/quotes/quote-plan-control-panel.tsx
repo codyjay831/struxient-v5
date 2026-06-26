@@ -24,6 +24,10 @@ import { QuotePlanManualTaskDialog } from "@/components/quotes/quote-plan-manual
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { QuotePlanProposal } from "@/lib/quote-plan/quote-plan-proposal-schema";
+import {
+  QUOTE_PLAN_EMPTY_FALLBACK_ERROR,
+  shouldOpenQuotePlanProposalReview,
+} from "@/lib/quote-plan/proposal-guards";
 
 type PlanStatus = "DRAFT" | "READY_FOR_REVIEW" | "ACCEPTED";
 
@@ -94,6 +98,11 @@ export function QuotePlanControlPanel({
         setPhase("idle");
         return;
       }
+      if (!shouldOpenQuotePlanProposalReview(genResult.proposal)) {
+        setError(QUOTE_PLAN_EMPTY_FALLBACK_ERROR);
+        setPhase("idle");
+        return;
+      }
       if (genResult.usedFallback && genResult.fallbackReason) {
         setFallbackWarning(genResult.fallbackReason);
       }
@@ -116,6 +125,11 @@ export function QuotePlanControlPanel({
         setPhase("idle");
         return;
       }
+      if (!shouldOpenQuotePlanProposalReview(result.proposal)) {
+        setError("No per-line draft tasks found. Add tasks manually or retry generation.");
+        setPhase("idle");
+        return;
+      }
       setProposal(result.proposal);
       setPhase("proposal_ready");
       setReviewPanelOpen(true);
@@ -125,7 +139,6 @@ export function QuotePlanControlPanel({
   async function handleApplyProposal(
     nextProposal: QuotePlanProposal,
     selectedOpIds: string[],
-    _replaceConfirmed: boolean,
   ) {
     if (!nextProposal) {
       setError("Generate a proposal before applying.");

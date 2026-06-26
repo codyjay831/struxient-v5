@@ -23,6 +23,11 @@ import { type QuotePlanProposal, QuotePlanProposalSchema } from "@/lib/quote-pla
 import { validateQuotePlanProposalForApply } from "@/lib/quote-plan/quote-plan-validation";
 import { buildUncoordinatedDraftProposal } from "@/lib/quote-plan/uncoordinated-draft";
 import {
+  hasQuotePlanProposalOperations,
+  quotePlanProposalEmptyError,
+  toQuoteWidePlanGenerationError,
+} from "@/lib/quote-plan/proposal-guards";
+import {
   createQuoteExecutionTaskInTx,
   patchQuoteExecutionPlanTaskSignalsInTx,
 } from "@/lib/quote-plan-mutations";
@@ -697,13 +702,16 @@ export async function generateQuoteExecutionPlanProposalAction(
         tasks: line.draftExecutionTasks,
       })),
     });
+    if (!hasQuotePlanProposalOperations(fallbackProposal)) {
+      return quotePlanProposalEmptyError();
+    }
     return {
       ok: true,
       proposal: fallbackProposal,
       generatedAgainstInputHash,
       planningInputSchemaVersion: QUOTE_PLAN_INPUT_SCHEMA_VERSION,
       usedFallback: true,
-      fallbackReason: getAiActionErrorMessage(error),
+      fallbackReason: toQuoteWidePlanGenerationError(getAiActionErrorMessage(error)),
     };
   }
 }

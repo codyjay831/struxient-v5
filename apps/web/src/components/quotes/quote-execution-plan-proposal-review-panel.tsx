@@ -21,6 +21,7 @@ import {
   workspaceFormPrimaryButtonClass,
   workspaceFormSecondaryButtonClass,
 } from "@/components/line-item-templates/line-item-template-form-fields";
+import { shouldShowQuotePlanProposalApplyAction } from "@/lib/quote-plan/proposal-guards";
 
 const fieldLabelClass = workspaceFormFieldLabelClass;
 const primaryButtonClass = workspaceFormPrimaryButtonClass;
@@ -282,8 +283,10 @@ export function QuoteExecutionPlanProposalReviewPanel({
   const [prevProposal, setPrevProposal] = useState(proposal);
   const [workingProposal, setWorkingProposal] = useState<QuotePlanProposal | null>(proposal);
 
+  const hasProposalOperations = shouldShowQuotePlanProposalApplyAction(workingProposal);
   const allAddOnly =
     workingProposal !== null &&
+    workingProposal.operations.length > 0 &&
     workingProposal.operations.every((operation) => operation.type === "ADD_TASK");
   const needsReplaceConfirm = hasExistingPlan && allAddOnly;
   const canClose = !isApplying;
@@ -345,6 +348,7 @@ export function QuoteExecutionPlanProposalReviewPanel({
 
   const applyDisabled =
     isApplying ||
+    !hasProposalOperations ||
     selectedOpIds.size === 0 ||
     (needsReplaceConfirm && !replaceConfirmed) ||
     !workingProposal;
@@ -409,6 +413,7 @@ export function QuoteExecutionPlanProposalReviewPanel({
         sourceTaskTemplateId: null,
         sourceType: "CUSTOM",
         origin: "MANUAL",
+        planningTags: [],
         lineItemIds: consumer.task.lineItemIds,
       },
     };
@@ -578,7 +583,7 @@ export function QuoteExecutionPlanProposalReviewPanel({
             </div>
           ) : null}
 
-          {workingProposal && workingProposal.operations.length > 0 ? (
+          {hasProposalOperations && workingProposal ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className={fieldLabelClass}>
@@ -678,18 +683,20 @@ export function QuoteExecutionPlanProposalReviewPanel({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!workingProposal) return;
-              onApply(workingProposal, [...selectedOpIds], replaceConfirmed);
-            }}
-            disabled={applyDisabled}
-            className={`${primaryButtonClass} inline-flex items-center gap-2`}
-          >
-            {isApplying ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            Apply selected
-          </button>
+          {hasProposalOperations ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!workingProposal || workingProposal.operations.length === 0) return;
+                onApply(workingProposal, [...selectedOpIds], replaceConfirmed);
+              }}
+              disabled={applyDisabled}
+              className={`${primaryButtonClass} inline-flex items-center gap-2`}
+            >
+              {isApplying ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              Apply selected
+            </button>
+          ) : null}
         </div>
       </div>
     </dialog>
