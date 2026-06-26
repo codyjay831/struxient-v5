@@ -552,6 +552,108 @@ export class AIService {
     return null;
   }
 
+  private static normalizeQuoteExecutionPlanProposal(
+    context: AIQuoteExecutionPlanContext,
+    rawProposal: unknown,
+  ): AIQuoteExecutionPlanProposal {
+    const proposalRecord =
+      rawProposal && typeof rawProposal === "object" && !Array.isArray(rawProposal)
+        ? (rawProposal as Record<string, unknown>)
+        : {};
+    const rawTasks = Array.isArray(proposalRecord.tasks) ? proposalRecord.tasks : [];
+    const allowedLineIds = new Set(context.lines.map((line) => line.id));
+    const executionRelevantLineIds = context.lines
+      .filter((line) => line.executionRelevant)
+      .map((line) => line.id);
+    const allowedStageIds = new Set(context.existingStages.map((stage) => stage.id));
+    const fallbackStageId = context.existingStages[0]?.id ?? null;
+    const warnings = Array.isArray(proposalRecord.warnings)
+      ? proposalRecord.warnings.filter((warning): warning is string => typeof warning === "string")
+      : [];
+
+    const normalizedTasks: AIQuoteExecutionPlanProposal["tasks"] = rawTasks
+      .flatMap((rawTask, index) => {
+        if (!rawTask || typeof rawTask !== "object" || Array.isArray(rawTask)) {
+          warnings.push(`Task ${index + 1}: AI returned a non-object task and it was dropped.`);
+          return [];
+        }
+        const task = rawTask as Record<string, unknown>;
+        const title = typeof task.title === "string" ? task.title.trim() : "";
+        if (!title) {
+          warnings.push(`Task ${index + 1}: AI returned a task without a title and it was dropped.`);
+          return [];
+        }
+        const category = this.normalizeCategory(task.category) ?? TaskTemplateCategory.GENERAL;
+        const rawStageId = typeof task.stageId === "string" ? task.stageId.trim() : null;
+        const stageId =
+          rawStageId && rawStageId.toLowerCase() !== "null" && allowedStageIds.has(rawStageId)
+            ? rawStageId
+            : fallbackStageId;
+        if (rawStageId && rawStageId.toLowerCase() !== "null" && !allowedStageIds.has(rawStageId)) {
+          warnings.push(`${title}: AI returned unknown stage id "${rawStageId}" — assigned the first available stage.`);
+        }
+
+        const rawLineItemIds = Array.isArray(task.lineItemIds) ? task.lineItemIds : [];
+        const lineItemIds = [
+          ...new Set(
+            rawLineItemIds
+              .filter((id): id is string => typeof id === "string")
+              .map((id) => id.trim())
+              .filter((id) => allowedLineIds.has(id)),
+          ),
+        ];
+        const scopedLineItemIds =
+          lineItemIds.length > 0
+            ? lineItemIds
+            : executionRelevantLineIds.length === 1
+              ? executionRelevantLineIds
+              : [];
+        if (lineItemIds.length === 0 && scopedLineItemIds.length > 0) {
+          warnings.push(`${title}: AI omitted scope links — linked to the only execution-relevant line.`);
+        }
+        if (scopedLineItemIds.length === 0) {
+          warnings.push(`${title}: AI returned no valid scope links and the task was dropped.`);
+          return [];
+        }
+
+        return [{
+          title,
+          category,
+          stageId,
+          instructions: typeof task.instructions === "string" ? task.instructions.trim() || null : null,
+          providesSignals: Array.isArray(task.providesSignals)
+            ? task.providesSignals.filter((signal): signal is string => typeof signal === "string")
+            : [],
+          requiresSignals: Array.isArray(task.requiresSignals)
+            ? task.requiresSignals.filter((signal): signal is string => typeof signal === "string")
+            : [],
+          hardSignal: task.hardSignal === true,
+          sourceTaskTemplateId:
+            typeof task.sourceTaskTemplateId === "string" && task.sourceTaskTemplateId.trim()
+              ? task.sourceTaskTemplateId.trim()
+              : null,
+          lineItemIds: scopedLineItemIds,
+        }];
+      });
+
+    if (executionRelevantLineIds.length > 0 && normalizedTasks.length === 0) {
+      throw new AiExecutionPlanInvalidError("AI returned no usable quote execution tasks.");
+    }
+
+    const coveredLineIds = new Set(normalizedTasks.flatMap((task) => task.lineItemIds));
+    for (const lineId of executionRelevantLineIds) {
+      if (!coveredLineIds.has(lineId)) {
+        throw new AiExecutionPlanInvalidError(`AI did not cover execution-relevant line ${lineId}.`);
+      }
+    }
+
+    return AIQuoteExecutionPlanProposalSchema.parse({
+      ...proposalRecord,
+      warnings,
+      tasks: normalizedTasks,
+    });
+  }
+
   /**
    * Maps model-returned confidence (often 0–100) into [0, 1] for Zod.
    * Returns `undefined` when absent or non-numeric so schema defaults apply.
@@ -2256,6 +2358,7 @@ OUTPUT JSON ONLY:
         return {
           proposal: this.simulateQuoteExecutionPlan(context, "GEMINI_API_KEY is missing."),
           generation: buildSimulatedGenerationMeta(),
+          metering: this.emptyMetering(process.env.GEMINI_MODEL?.trim() || this.DEFAULT_GEMINI_MODEL),
         };
       }
       throw new AiProviderTemporarilyUnavailableError();
@@ -2330,7 +2433,7 @@ ${context.userInstructions?.trim() || "- none"}
       });
       tokenUsage.add("generate", usage);
       const parsed = this.parseGeminiJsonResponse(text);
-      const proposal = AIQuoteExecutionPlanProposalSchema.parse(parsed);
+      const proposal = this.normalizeQuoteExecutionPlanProposal(context, parsed);
       return {
         proposal,
         generation: buildValidGenerationMeta(),
@@ -2341,14 +2444,17 @@ ${context.userInstructions?.trim() || "- none"}
         throw new AiProviderTemporarilyUnavailableError();
       }
       if (isAiSimulatedExecutionPlansEnabled()) {
+        console.warn("Gemini quote execution plan failed; returning simulated test output.", e);
         return {
           proposal: this.simulateQuoteExecutionPlan(
             context,
             e instanceof Error ? e.message : "Provider parsing failure",
           ),
           generation: buildSimulatedGenerationMeta(),
+          metering: this.emptyMetering(modelName),
         };
       }
+      console.error("AI quote execution plan generation failed", e);
       throw new AiExecutionPlanInvalidError();
     }
   }
@@ -2360,19 +2466,45 @@ ${context.userInstructions?.trim() || "- none"}
     const fallbackStageId = context.existingStages[0]?.id ?? null;
     const tasks = context.lines
       .filter((line) => line.executionRelevant)
-      .map((line) => ({
-        title: `Plan ${line.description}`,
-        category: TaskTemplateCategory.GENERAL,
-        stageId: fallbackStageId,
-        instructions: null,
-        providesSignals: [],
-        requiresSignals: [],
-        hardSignal: false,
-        sourceTaskTemplateId: null,
-        lineItemIds: [line.id],
-      }));
+      .flatMap((line) => {
+        const text = line.description.toLowerCase();
+        const isRoof = /\broof|shingle|underlayment|flashing\b/.test(text);
+        const baseTasks = isRoof
+          ? [
+              ["Confirm site access and roof details", TaskTemplateCategory.CUSTOMER_COMMUNICATION],
+              ["Verify roofing material and order readiness", TaskTemplateCategory.MATERIAL],
+              ["Schedule roofing crew", TaskTemplateCategory.SCHEDULING],
+              ["Protect property and stage work area", TaskTemplateCategory.GENERAL],
+              ["Tear off existing roof", TaskTemplateCategory.GENERAL],
+              ["Install underlayment and flashing", TaskTemplateCategory.GENERAL],
+              ["Install roofing material", TaskTemplateCategory.GENERAL],
+              ["Cleanup and final photo documentation", TaskTemplateCategory.PHOTO_EVIDENCE],
+              ["Final customer and job review", TaskTemplateCategory.INSPECTION],
+            ] as const
+          : [
+              [`Confirm site access and ${line.description} details`, TaskTemplateCategory.CUSTOMER_COMMUNICATION],
+              [`Verify material and readiness for ${line.description}`, TaskTemplateCategory.MATERIAL],
+              [`Schedule crew for ${line.description}`, TaskTemplateCategory.SCHEDULING],
+              [`Prepare and protect work area for ${line.description}`, TaskTemplateCategory.GENERAL],
+              [`Complete ${line.description}`, TaskTemplateCategory.GENERAL],
+              [`Cleanup and document ${line.description}`, TaskTemplateCategory.PHOTO_EVIDENCE],
+              [`Final review for ${line.description}`, TaskTemplateCategory.INSPECTION],
+            ] as const;
+
+        return baseTasks.map(([title, category]) => ({
+          title,
+          category,
+          stageId: fallbackStageId,
+          instructions: null,
+          providesSignals: [],
+          requiresSignals: [],
+          hardSignal: false,
+          sourceTaskTemplateId: null,
+          lineItemIds: [line.id],
+        }));
+      });
     return AIQuoteExecutionPlanProposalSchema.parse({
-      summary: "Simulated whole-quote draft proposal.",
+      summary: "Simulated whole-quote draft proposal for test/dev planning.",
       assumptions: [`simulated: ${reason}`],
       warnings: ["Demo AI output — not from the live provider."],
       missingContext: [],

@@ -246,3 +246,50 @@ test("validateQuotePlanProposalForApply rejects cancel that breaks coverage", ()
   assert.equal(result.ok, false);
 });
 
+test("validateQuotePlanProposalForApply accepts valid Roof Replacement tasks linked to scope coverage", () => {
+  const result = validateQuotePlanProposalForApply(
+    makeProposal({
+      operations: [
+        "Confirm site access and roof details",
+        "Verify roofing material and order readiness",
+        "Schedule roofing crew",
+        "Protect property and stage work area",
+        "Tear off existing roof",
+        "Install underlayment and flashing",
+        "Install roofing material",
+        "Cleanup and final photo documentation",
+        "Final customer and job review",
+      ].map((title, index) => ({
+        opId: `roof-task-${index + 1}`,
+        type: "ADD_TASK",
+        task: {
+          title,
+          category: index === 1 ? "MATERIAL" : index === 2 ? "SCHEDULING" : "GENERAL",
+          stageId: "stage-1",
+          lineItemIds: ["line-roof"],
+          requiresSignals: [],
+          providesSignals: [],
+          hardSignal: false,
+        },
+      })),
+    }),
+    {
+      quoteId: "q1",
+      allowedLineItemIds: new Set(["line-roof"]),
+      executionRelevantLineItemIds: new Set(["line-roof"]),
+      plan: {
+        status: QuoteExecutionPlanStatus.READY_FOR_REVIEW,
+        planVersion: 3,
+        planningInputHash: "hash-a",
+      },
+      currentPlanningInputHash: "hash-a",
+      existingTasks: [],
+    },
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.proposal.operations.length, 9);
+  }
+});
+

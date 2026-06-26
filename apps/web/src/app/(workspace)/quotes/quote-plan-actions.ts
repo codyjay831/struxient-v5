@@ -691,6 +691,13 @@ export async function generateQuoteExecutionPlanProposalAction(
       usedFallback: false,
     };
   } catch (error) {
+    const aiFailureMessage = getAiActionErrorMessage(error);
+    console.error("Quote execution plan AI generation failed", {
+      quoteId: qid,
+      organizationId: ctx.organizationId,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     // Fallback path: preserve existing per-line draft tasks verbatim as uncoordinated draft.
     const fallbackProposal = buildUncoordinatedDraftProposal({
       quoteId: qid,
@@ -703,7 +710,7 @@ export async function generateQuoteExecutionPlanProposalAction(
       })),
     });
     if (!hasQuotePlanProposalOperations(fallbackProposal)) {
-      return quotePlanProposalEmptyError();
+      return quotePlanProposalEmptyError(toQuoteWidePlanGenerationError(aiFailureMessage));
     }
     return {
       ok: true,
@@ -711,7 +718,7 @@ export async function generateQuoteExecutionPlanProposalAction(
       generatedAgainstInputHash,
       planningInputSchemaVersion: QUOTE_PLAN_INPUT_SCHEMA_VERSION,
       usedFallback: true,
-      fallbackReason: toQuoteWidePlanGenerationError(getAiActionErrorMessage(error)),
+      fallbackReason: toQuoteWidePlanGenerationError(aiFailureMessage),
     };
   }
 }

@@ -37,6 +37,7 @@ export type QuotePlanManualTaskDialogProps = {
   quoteId: string;
   stages: readonly { id: string; name: string }[];
   scopeLines: readonly { id: string; description: string; executionRelevant: boolean }[];
+  initialScopeLineId?: string | null;
 };
 
 export function QuotePlanManualTaskDialog({
@@ -45,6 +46,7 @@ export function QuotePlanManualTaskDialog({
   quoteId,
   stages,
   scopeLines,
+  initialScopeLineId = null,
 }: QuotePlanManualTaskDialogProps) {
   const router = useRouter();
   const mounted = useIsClientMounted();
@@ -68,13 +70,17 @@ export function QuotePlanManualTaskDialog({
     if (open && !dialog.open) {
       dialog.showModal();
       const defaultLines = executionRelevantLines.map((line) => line.id);
-      setSelectedLineIds(new Set(defaultLines.length === 1 ? defaultLines : defaultLines));
+      const scopedDefault =
+        initialScopeLineId && defaultLines.includes(initialScopeLineId)
+          ? [initialScopeLineId]
+          : defaultLines;
+      setSelectedLineIds(new Set(scopedDefault));
       setStageId(stages[0]?.id ?? "");
       setError(null);
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open, executionRelevantLines, stages]);
+  }, [open, executionRelevantLines, stages, initialScopeLineId]);
 
   useEffect(() => {
     const dialog = dialogRef.current;

@@ -91,3 +91,10 @@ test("Quote-wide AI failure copy does not mention adjusting line item descriptio
   assert.equal(message, QUOTE_PLAN_INVALID_AI_ERROR);
   assert.equal(/adjust the line item description/i.test(message), false);
 });
+
+test("empty fallback can preserve the useful AI failure reason", () => {
+  assert.deepEqual(quotePlanProposalEmptyError("AI is temporarily unavailable."), {
+    ok: false,
+    error: "AI is temporarily unavailable.",
+  });
+});

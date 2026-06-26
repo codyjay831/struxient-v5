@@ -387,6 +387,56 @@ test("evaluateQuoteJobActivationReadiness blocks uncovered execution-relevant li
   assert.ok(readiness.blockReasons.some((r) => r.code === "EXECUTION_SCOPE_NOT_COVERED"));
 });
 
+test("applying scoped Roof Replacement tasks clears the execution coverage blocker", () => {
+  const roofTasks = [
+    "Confirm site access and roof details",
+    "Verify roofing material and order readiness",
+    "Schedule roofing crew",
+    "Protect property and stage work area",
+    "Tear off existing roof",
+    "Install underlayment and flashing",
+    "Install roofing material",
+    "Cleanup and final photo documentation",
+    "Final customer and job review",
+  ].map((title, index) => ({
+    id: `roof-task-${index + 1}`,
+    title,
+    stageId: "stage-1",
+    providesSignals: [],
+    requiresSignals: [],
+    hardSignal: false,
+  }));
+
+  const before = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [line({ id: "line-roof", description: "Roof Replacement", tasks: [] })],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+  const after = evaluateQuoteJobActivationReadiness(
+    readinessInput({
+      lines: [line({ id: "line-roof", description: "Roof Replacement", tasks: roofTasks })],
+      executionPlan: {
+        status: "ACCEPTED",
+        planVersion: 3,
+        acceptedPlanningInputHash: "hash-a",
+        currentPlanningInputHash: "hash-a",
+      },
+    }),
+  );
+
+  assert.equal(before.ready, false);
+  assert.ok(before.blockReasons.some((reason) => reason.code === "NO_EXECUTION_TASKS"));
+  assert.ok(before.blockReasons.some((reason) => reason.code === "EXECUTION_SCOPE_NOT_COVERED"));
+  assert.equal(after.ready, true);
+  assert.equal(after.totalTasksToActivate, 9);
+});
+
 test("evaluateQuoteJobActivationReadiness dedupes shared tasks across line coverage", () => {
   const sharedTask = {
     id: "task-shared",

@@ -66,6 +66,7 @@ export function QuotePlanControlPanel({
   const [proposalSource, setProposalSource] = useState<ProposalSource>("ai");
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
   const [manualTaskOpen, setManualTaskOpen] = useState(false);
+  const [manualScopeLineId, setManualScopeLineId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const stageNameById = Object.fromEntries(stages.map((stage) => [stage.id, stage.name]));
@@ -73,6 +74,7 @@ export function QuotePlanControlPanel({
   const hasExistingPlan = executionPlan !== null;
   const planAccepted = executionPlan?.status === "ACCEPTED";
   const planReadyForReview = executionPlan?.status === "READY_FOR_REVIEW";
+  const executionRelevantScopeLines = scopeLines.filter((line) => line.executionRelevant);
   const proposalTaskCount =
     proposal?.operations.filter((operation) => operation.type === "ADD_TASK").length ?? 0;
 
@@ -315,7 +317,10 @@ export function QuotePlanControlPanel({
               <button
                 type="button"
                 disabled={isPending}
-                onClick={() => setManualTaskOpen(true)}
+                onClick={() => {
+                  setManualScopeLineId(null);
+                  setManualTaskOpen(true);
+                }}
                 className={primaryButtonClass}
               >
                 <Plus className="size-3.5" />
@@ -389,6 +394,34 @@ export function QuotePlanControlPanel({
               {error}
             </p>
           )}
+
+          {!hasExistingPlan && executionRelevantScopeLines.length > 0 ? (
+            <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+              <p className="text-xs font-semibold text-foreground">Uncovered scope</p>
+              <div className="mt-2 space-y-2">
+                {executionRelevantScopeLines.map((line) => (
+                  <div
+                    key={line.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background/60 px-3 py-2"
+                  >
+                    <span className="text-xs text-foreground">{line.description}</span>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        setManualScopeLineId(line.id);
+                        setManualTaskOpen(true);
+                      }}
+                      className={secondaryButtonClass}
+                    >
+                      <Plus className="size-3.5" />
+                      Add task for this scope
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </WorkspacePanel>
 
@@ -413,6 +446,7 @@ export function QuotePlanControlPanel({
         quoteId={quoteId}
         stages={stages}
         scopeLines={scopeLines}
+        initialScopeLineId={manualScopeLineId}
       />
     </>
   );
