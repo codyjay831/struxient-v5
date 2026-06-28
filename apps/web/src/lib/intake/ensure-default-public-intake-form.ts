@@ -1,5 +1,5 @@
 import { LeadChannel, Prisma } from "@prisma/client";
-import { db, type ExtendedTransactionClient } from "@/lib/db";
+import { db } from "@/lib/db";
 import {
   DEFAULT_INTAKE_FORM_SCHEMA,
   type IntakeFormDefinitionShape,
@@ -16,7 +16,15 @@ import {
 export const DEFAULT_PRIMARY_INTAKE_SLUG = "default";
 export const DEFAULT_PRIMARY_INTAKE_NAME = "Customer request";
 
-type IntakeFormDb = Pick<ExtendedTransactionClient, "intakeFormDefinition">;
+type IntakeFormDefinitionUpsertPayload = Prisma.IntakeFormDefinitionGetPayload<{
+  select: typeof INTAKE_FORM_DEFINITION_SELECT;
+}>;
+
+type IntakeFormDb = {
+  intakeFormDefinition: {
+    upsert(args: Prisma.IntakeFormDefinitionUpsertArgs): Promise<unknown>;
+  };
+};
 
 function defaultTriageRulesJson(): Prisma.InputJsonValue {
   return {
@@ -36,7 +44,7 @@ export async function provisionDefaultPublicIntakeFormForOrganization(
   organizationId: string,
   tx: IntakeFormDb = db,
 ): Promise<IntakeFormDefinitionShape> {
-  const upserted = await tx.intakeFormDefinition.upsert({
+  const upserted = (await tx.intakeFormDefinition.upsert({
     where: {
       organizationId_slug: {
         organizationId,
@@ -60,7 +68,7 @@ export async function provisionDefaultPublicIntakeFormForOrganization(
       archivedAt: null,
     },
     select: INTAKE_FORM_DEFINITION_SELECT,
-  });
+  })) as IntakeFormDefinitionUpsertPayload;
 
   const result = toIntakeFormDefinitionShape(upserted);
   if (!result) {
