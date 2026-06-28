@@ -1,35 +1,81 @@
 "use client";
 
+import Link from "next/link";
 import type { SettingsSection } from "@/lib/settings/settings-registry";
 import { SETTINGS_CATEGORY_LABELS } from "@/lib/settings/settings-registry";
 
-export function SettingsMobileCategorySelect({
+const mobileMenuLinkClass =
+  "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors";
+const mobileMenuInactiveClass = `${mobileMenuLinkClass} text-foreground-muted hover:bg-foreground/[0.03] hover:text-foreground`;
+const mobileMenuActiveClass = `${mobileMenuLinkClass} bg-brand-muted text-accent ring-1 ring-accent/15`;
+
+export function SettingsMobileMenu({
   availableSections,
-  value,
-  onChange,
+  activeSection,
+  sectionHref,
+  managementLinks,
+  currentPathname,
 }: {
   availableSections: SettingsSection[];
-  value: SettingsSection;
-  onChange: (next: SettingsSection) => void;
+  activeSection: SettingsSection;
+  sectionHref: (section: SettingsSection) => string;
+  managementLinks: readonly { id: string; title: string; href: string }[];
+  currentPathname: string;
 }) {
+  const activeLabel = SETTINGS_CATEGORY_LABELS[activeSection];
+
   return (
-    <div className="lg:hidden">
-      <label htmlFor="settings-mobile-section" className="text-xs font-medium text-foreground-subtle">
-        Category
-      </label>
-      <select
-        id="settings-mobile-section"
-        aria-label="Settings category"
-        value={value}
-        onChange={(event) => onChange(event.target.value as SettingsSection)}
-        className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        {availableSections.map((section) => (
-          <option key={section} value={section}>
-            {SETTINGS_CATEGORY_LABELS[section]}
-          </option>
-        ))}
-      </select>
-    </div>
+    <details className="lg:hidden rounded-lg border border-border bg-surface">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
+        <span>
+          <span className="block text-xs font-medium text-foreground-subtle">Settings menu</span>
+          <span className="block">{activeLabel}</span>
+        </span>
+        <span className="text-xs text-foreground-subtle">Open</span>
+      </summary>
+
+      <div className="border-t border-border px-2 py-3">
+        <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          Settings
+        </p>
+        <ul className="space-y-1">
+          {availableSections.map((section) => {
+            const active = section === activeSection && currentPathname === "/settings";
+            return (
+              <li key={section}>
+                <Link
+                  href={sectionHref(section)}
+                  aria-current={active ? "page" : undefined}
+                  className={active ? mobileMenuActiveClass : mobileMenuInactiveClass}
+                >
+                  {SETTINGS_CATEGORY_LABELS[section]}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        <p className="mt-4 px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+          Management
+        </p>
+        <ul className="space-y-1">
+          {managementLinks.map((link) => {
+            const active =
+              currentPathname === link.href || currentPathname.startsWith(`${link.href}/`);
+            return (
+              <li key={link.id}>
+                <Link
+                  href={link.href}
+                  aria-current={active ? "page" : undefined}
+                  className={active ? mobileMenuActiveClass : mobileMenuInactiveClass}
+                >
+                  {link.title}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </details>
   );
 }

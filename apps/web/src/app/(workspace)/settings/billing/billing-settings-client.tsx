@@ -7,10 +7,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 import {
-  BASE_PLAN_NAME,
   formatUsdFromCents,
   getAiOveragePricePerUnitCents,
-  getBasePlanDisplayAmountCents,
 } from "@/lib/billing/billing-config";
 import { subscriptionStatusLabel } from "@/lib/billing/billing-subscription-status";
 import type { OrganizationSubscriptionStatus } from "@prisma/client";
@@ -45,6 +43,23 @@ type BillingSettingsClientProps = {
   }>;
   portalError?: string | null;
 };
+
+type RecentUsageRow = BillingSettingsClientProps["recentUsage"][number];
+
+function formatUsageUnits(row: RecentUsageRow) {
+  const units = row.billableUnits ?? "—";
+  const billableStatus = row.billableStatus ? ` (${row.billableStatus.toLowerCase()})` : "";
+  const tokens =
+    row.inputTokens != null && row.outputTokens != null
+      ? ` · ${row.inputTokens + row.outputTokens} tokens`
+      : "";
+
+  return `${units}${billableStatus}${tokens}`;
+}
+
+function formatUsageWhen(createdAt: string) {
+  return new Date(createdAt).toLocaleString();
+}
 
 export function BillingSettingsClient(props: BillingSettingsClientProps) {
   const [isPending, startTransition] = useTransition();
@@ -155,7 +170,31 @@ export function BillingSettingsClient(props: BillingSettingsClientProps) {
       {props.recentUsage.length > 0 ? (
         <WorkspacePanel>
           <SectionHeading title="Recent AI activity" />
-          <div className="overflow-x-auto">
+          <ul className="space-y-3 sm:hidden">
+            {props.recentUsage.map((row) => (
+              <li key={row.id} className="rounded-lg border border-border px-3 py-3">
+                <p className="text-sm font-medium text-foreground">{row.feature}</p>
+                <dl className="mt-2 space-y-1 text-xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-foreground-subtle">Status</dt>
+                    <dd className="text-right text-foreground-muted">{row.status}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-foreground-subtle">Units</dt>
+                    <dd className="text-right text-foreground-muted">{formatUsageUnits(row)}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-foreground-subtle">When</dt>
+                    <dd className="text-right text-foreground-muted">
+                      {formatUsageWhen(row.createdAt)}
+                    </dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-x-auto sm:block">
             <table className="min-w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-foreground-muted">
@@ -170,16 +209,8 @@ export function BillingSettingsClient(props: BillingSettingsClientProps) {
                   <tr key={row.id} className="border-b border-border/60">
                     <td className="py-2 pr-4 text-foreground">{row.feature}</td>
                     <td className="py-2 pr-4 text-foreground-muted">{row.status}</td>
-                    <td className="py-2 pr-4 text-foreground-muted">
-                      {row.billableUnits ?? "—"}
-                      {row.billableStatus ? ` (${row.billableStatus.toLowerCase()})` : ""}
-                      {row.inputTokens != null && row.outputTokens != null
-                        ? ` · ${row.inputTokens + row.outputTokens} tokens`
-                        : ""}
-                    </td>
-                    <td className="py-2 text-foreground-muted">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </td>
+                    <td className="py-2 pr-4 text-foreground-muted">{formatUsageUnits(row)}</td>
+                    <td className="py-2 text-foreground-muted">{formatUsageWhen(row.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

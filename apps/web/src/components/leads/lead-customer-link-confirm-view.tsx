@@ -59,7 +59,10 @@ export function LeadCustomerLinkConfirmView({
   );
 
   const onSuccessRef = useRef(onSuccess);
-  onSuccessRef.current = onSuccess;
+
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
 
   useEffect(() => {
     if (!linkState.success) return;

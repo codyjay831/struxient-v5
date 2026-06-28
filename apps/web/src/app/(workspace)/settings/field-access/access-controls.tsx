@@ -44,7 +44,7 @@ export function AccessControls({
           Crew membership expands FIELD visibility through assignment-linked crews only.
         </p>
         <form
-          className="flex flex-wrap gap-2"
+          className="grid gap-2 sm:flex sm:flex-wrap"
           action={(formData) => {
             startTransition(async () => {
               setMessage(null);
@@ -63,15 +63,21 @@ export function AccessControls({
             name="name"
             required
             placeholder="New crew name"
-            className="min-w-[220px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto sm:min-w-[220px]"
           />
-          <Button type="submit" size="sm" variant="primary" disabled={isPending}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+          >
             Create crew
           </Button>
         </form>
 
         <form
-          className="flex flex-wrap gap-2"
+          className="grid gap-2 sm:flex sm:flex-wrap"
           action={(formData) => {
             startTransition(async () => {
               setMessage(null);
@@ -88,7 +94,7 @@ export function AccessControls({
           <select
             name="crewId"
             required
-            className="min-w-[180px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto sm:min-w-[180px]"
             defaultValue=""
           >
             <option value="" disabled>
@@ -105,26 +111,40 @@ export function AccessControls({
             name="email"
             required
             placeholder="member@company.com"
-            className="min-w-[220px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto sm:min-w-[220px]"
           />
-          <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="secondary"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+          >
             Add member
           </Button>
         </form>
 
-        <ul className="space-y-1 text-sm text-foreground-muted">
+        <ul className="space-y-2 text-sm text-foreground-muted">
           {crews.length === 0 ? (
             <li>No crews yet.</li>
           ) : (
             crews.map((crew) => (
-              <li key={crew.id}>
-                {crew.name} {crew.archived ? "(archived)" : ""}
+              <li
+                key={crew.id}
+                className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="break-words font-medium text-foreground">{crew.name}</p>
+                  {crew.archived ? (
+                    <p className="text-xs text-foreground-subtle">Archived</p>
+                  ) : null}
+                </div>
                 {!crew.archived ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="ml-2"
+                    className="w-full sm:w-auto"
                     disabled={isPending}
                     onClick={() => {
                       startTransition(async () => {
@@ -156,7 +176,7 @@ export function AccessControls({
           SUBCONTRACTOR role alone grants no job access; each job requires an active grant.
         </p>
         <form
-          className="flex flex-wrap gap-2"
+          className="grid gap-2 sm:flex sm:flex-wrap"
           action={(formData) => {
             startTransition(async () => {
               setMessage(null);
@@ -173,7 +193,7 @@ export function AccessControls({
           <select
             name="jobId"
             required
-            className="min-w-[220px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto sm:min-w-[220px]"
             defaultValue=""
           >
             <option value="" disabled>
@@ -190,26 +210,39 @@ export function AccessControls({
             name="email"
             required
             placeholder="sub@partner.com"
-            className="min-w-[220px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto sm:min-w-[220px]"
           />
-          <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="secondary"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+          >
             Grant
           </Button>
         </form>
 
-        <ul className="space-y-1 text-sm text-foreground-muted">
+        <ul className="space-y-2 text-sm text-foreground-muted">
           {collaboratorGrants.length === 0 ? (
             <li>No collaborator grants yet.</li>
           ) : (
             collaboratorGrants.map((grant) => (
-              <li key={grant.id}>
-                {grant.email} - {grant.jobTitle} - {grant.status}
+              <li
+                key={grant.id}
+                className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <p className="break-all font-medium text-foreground">{grant.email}</p>
+                  <p className="break-words text-xs text-foreground-muted">{grant.jobTitle}</p>
+                  <p className="text-xs text-foreground-subtle">{grant.status}</p>
+                </div>
                 {grant.status === "ACTIVE" ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="ml-2"
+                    className="w-full sm:w-auto"
                     disabled={isPending}
                     onClick={() => {
                       startTransition(async () => {

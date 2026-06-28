@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { StaffRole } from "@prisma/client";
 import { createOrganizationInviteAction } from "./team-actions";
 import { Button } from "@/components/ui/button";
-import { MANAGEABLE_MEMBER_ROLES } from "@/lib/team/team-membership-rules";
 
 const ROLE_OPTIONS: Array<{ value: StaffRole; label: string; hint: string }> = [
   { value: StaffRole.ADMIN, label: "Admin", hint: "Full org settings except owner-only actions." },
@@ -92,7 +91,13 @@ export function TeamInviteForm() {
         </p>
       ) : null}
 
-      <Button type="submit" variant="primary" size="sm" disabled={isPending}>
+      <Button
+        type="submit"
+        variant="primary"
+        size="sm"
+        className="w-full sm:w-auto"
+        disabled={isPending}
+      >
         {isPending ? "Creating invite..." : "Create invite"}
       </Button>
     </form>

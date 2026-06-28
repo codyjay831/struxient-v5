@@ -160,7 +160,11 @@ function ScopeLibraryCreatePresetForm({ availableTags }: { availableTags: TagDis
         </label>
       </div>
       <CustomerProposalOptionalFields names={TEMPLATE_PROPOSAL_NAMES} variant="template" />
-        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+      <button
+        type="submit"
+        className={`${primaryButtonClass} w-full sm:w-auto`}
+        disabled={isPending}
+      >
         {isPending ? "Saving…" : "Save saved line item"}
       </button>
     </form>
@@ -280,11 +284,20 @@ function ScopeLibraryTemplateEditForm({
           presentationGroup: template.defaultCustomerPresentationGroup,
         }}
       />
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
+        <button
+          type="submit"
+          className={`${primaryButtonClass} w-full sm:w-auto`}
+          disabled={isPending}
+        >
           {isPending ? "Saving…" : "Save changes"}
         </button>
-        <button type="button" className={secondaryButtonClass} onClick={onDone} disabled={isPending}>
+        <button
+          type="button"
+          className={`${secondaryButtonClass} w-full sm:w-auto`}
+          onClick={onDone}
+          disabled={isPending}
+        >
           Cancel
         </button>
       </div>
@@ -299,7 +312,7 @@ function ScopeLibraryArchiveForm({ templateId }: { templateId: string }) {
   );
 
   return (
-    <form action={formAction} className="inline">
+    <form action={formAction} className="w-full sm:inline sm:w-auto">
       {state.error ? (
         <p className="mb-1 text-xs text-danger" role="alert">
           {state.error}
@@ -307,7 +320,7 @@ function ScopeLibraryArchiveForm({ templateId }: { templateId: string }) {
       ) : null}
       <button
         type="submit"
-        className={dangerButtonClass}
+        className={`${dangerButtonClass} w-full sm:w-auto`}
         disabled={isPending}
         title="Hide this preset from the library and quote pickers. Lines already copied onto quotes are not changed."
       >
@@ -382,18 +395,18 @@ export function ScopeLibraryLinePresetsPanel({
                       : t.executionSummary.summaryLine}
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:items-center">
                   {editingId === t.id ? null : (
                     <>
                       <Link
                         href={`/settings/scope-library/line-presets/${t.id}/default-execution`}
-                        className={secondaryButtonClass}
+                        className={`${secondaryButtonClass} w-full sm:w-auto`}
                       >
                         {t.executionSummary.taskCount === 0 ? "Add default execution" : "Edit default execution"}
                       </Link>
                       <button
                         type="button"
-                        className={secondaryButtonClass}
+                        className={`${secondaryButtonClass} w-full sm:w-auto`}
                         onClick={() => setEditingId(t.id)}
                       >
                         Edit pricing and scope

@@ -7,7 +7,7 @@ import { AccessControls } from "./access-controls";
 import { db } from "@/lib/db";
 
 const listLinkClass =
-  "inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground";
+  "inline-flex w-full items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto";
 
 export default async function FieldAccessSettingsPage() {
   const ctx = await getSettingsRequestContextOrNull();

@@ -270,13 +270,22 @@ export function ClarificationLibraryPanel({
           onChange={(event) => setProposalMissingContext(event.target.value)}
           placeholder="Optional missingContext CSV"
         />
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={secondaryButtonClass} onClick={() => void handleGenerateProposal()} disabled={isGenerating}>
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
+          <button
+            type="button"
+            className={`${secondaryButtonClass} w-full sm:w-auto`}
+            onClick={() => void handleGenerateProposal()}
+            disabled={isGenerating}
+          >
             {isGenerating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             Generate set
           </button>
           {proposal ? (
-            <button type="button" className={primaryButtonClass} onClick={() => void handleCreateFromProposal()}>
+            <button
+              type="button"
+              className={`${primaryButtonClass} w-full sm:w-auto`}
+              onClick={() => void handleCreateFromProposal()}
+            >
               Create draft from proposal
             </button>
           ) : null}
@@ -290,7 +299,12 @@ export function ClarificationLibraryPanel({
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         <aside className="rounded-lg border border-border bg-surface p-3 space-y-2">
-          <button type="button" className={primaryButtonClass} onClick={() => void handleCreateSet()} disabled={isCreating}>
+          <button
+            type="button"
+            className={`${primaryButtonClass} w-full`}
+            onClick={() => void handleCreateSet()}
+            disabled={isCreating}
+          >
             <Plus className="size-4" />
             New set
           </button>
@@ -409,13 +423,13 @@ export function ClarificationLibraryPanel({
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-bold uppercase tracking-wider text-foreground-subtle">
                     Questions
                   </p>
                   <button
                     type="button"
-                    className={secondaryButtonClass}
+                    className={`${secondaryButtonClass} w-full sm:w-auto`}
                     onClick={() =>
                       setDraft({
                         ...cloneSet(activeSet),
@@ -553,12 +567,21 @@ export function ClarificationLibraryPanel({
                 </ul>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={primaryButtonClass} onClick={() => void handleSave()} disabled={isSaving}>
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} w-full sm:w-auto`}
+                  onClick={() => void handleSave()}
+                  disabled={isSaving}
+                >
                   {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
                   Save set
                 </button>
-                <button type="button" className={secondaryButtonClass} onClick={() => void handleArchive()}>
+                <button
+                  type="button"
+                  className={`${secondaryButtonClass} w-full sm:w-auto`}
+                  onClick={() => void handleArchive()}
+                >
                   Archive
                 </button>
               </div>

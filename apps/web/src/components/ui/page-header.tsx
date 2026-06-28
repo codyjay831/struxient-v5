@@ -20,6 +20,9 @@ export type PageHeaderProps = {
   actions?: ReactNode;
 };
 
+const actionContainerClass =
+  "flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center";
+
 export function PageHeader({
   variant = "instructional",
   eyebrow,
@@ -35,9 +38,7 @@ export function PageHeader({
             {title}
           </h1>
         </div>
-        {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-        ) : null}
+        {actions ? <div className={actionContainerClass}>{actions}</div> : null}
       </header>
     );
   }
@@ -51,9 +52,7 @@ export function PageHeader({
             <p className="mt-0.5 text-sm text-foreground-muted">{description}</p>
           ) : null}
         </div>
-        {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-        ) : null}
+        {actions ? <div className={actionContainerClass}>{actions}</div> : null}
       </header>
     );
   }
@@ -75,9 +74,7 @@ export function PageHeader({
           </div>
         ) : null}
       </div>
-      {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-      ) : null}
+      {actions ? <div className={actionContainerClass}>{actions}</div> : null}
     </header>
   );
 }

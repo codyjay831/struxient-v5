@@ -52,7 +52,7 @@ function CreateStageForm() {
         New execution stage
       </p>
       {state.error ? <FormError message={state.error} /> : null}
-      <div className="flex gap-2">
+      <div className="grid gap-2 sm:flex">
         <input
           name="name"
           type="text"
@@ -60,7 +60,11 @@ function CreateStageForm() {
           className={controlClass}
           placeholder="e.g. Pre-Construction"
         />
-        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+        <button
+          type="submit"
+          className={`${primaryButtonClass} w-full sm:w-auto`}
+          disabled={isPending}
+        >
           {isPending ? "Adding…" : "Add stage"}
         </button>
       </div>
@@ -92,23 +96,23 @@ export function ScopeLibraryStagesPanel({
         <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
           {stages.map((s, idx) => (
             <li key={s.id} className="px-4 py-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {editingId === s.id ? (
                   <EditStageForm stage={s} onDone={() => setEditingId(null)} />
                 ) : (
                   <>
-                    <span className="text-sm font-medium text-foreground">{s.name}</span>
-                    <div className="flex gap-2">
+                    <span className="break-words text-sm font-medium text-foreground">{s.name}</span>
+                    <div className="grid gap-2 sm:flex sm:flex-wrap">
                       <button
                         type="button"
-                        className={secondaryButtonClass}
+                        className={`${secondaryButtonClass} w-full sm:w-auto`}
                         onClick={() => setEditingId(s.id)}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
-                        className={secondaryButtonClass}
+                        className={`${secondaryButtonClass} w-full sm:w-auto`}
                         onClick={() => moveStageAction(s.id, "up")}
                         disabled={idx === 0}
                       >
@@ -116,7 +120,7 @@ export function ScopeLibraryStagesPanel({
                       </button>
                       <button
                         type="button"
-                        className={secondaryButtonClass}
+                        className={`${secondaryButtonClass} w-full sm:w-auto`}
                         onClick={() => moveStageAction(s.id, "down")}
                         disabled={idx === stages.length - 1}
                       >
@@ -124,7 +128,7 @@ export function ScopeLibraryStagesPanel({
                       </button>
                       <button
                         type="button"
-                        className={dangerButtonClass}
+                        className={`${dangerButtonClass} w-full sm:w-auto`}
                         onClick={() => archiveStageAction(s.id)}
                       >
                         Hide
@@ -148,7 +152,7 @@ function EditStageForm({ stage, onDone }: { stage: { id: string, name: string },
   );
 
   return (
-    <form action={formAction} className="flex w-full gap-2">
+    <form action={formAction} className="grid w-full gap-2 sm:flex">
       <div className="flex-1">
         {state.error ? <FormError message={state.error} /> : null}
         <input
@@ -159,10 +163,18 @@ function EditStageForm({ stage, onDone }: { stage: { id: string, name: string },
           className={controlClass}
         />
       </div>
-      <button type="submit" className={primaryButtonClass} disabled={isPending}>
+      <button
+        type="submit"
+        className={`${primaryButtonClass} w-full sm:w-auto`}
+        disabled={isPending}
+      >
         {isPending ? "Saving…" : "Save"}
       </button>
-      <button type="button" className={secondaryButtonClass} onClick={onDone}>
+      <button
+        type="button"
+        className={`${secondaryButtonClass} w-full sm:w-auto`}
+        onClick={onDone}
+      >
         Cancel
       </button>
     </form>

@@ -44,7 +44,7 @@ export default async function StaffIntakeFieldsPage() {
         actions={
           <div
             id={STAFF_INTAKE_HEADER_ACTIONS_PORTAL_ID}
-            className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+            className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end"
           />
         }
       />

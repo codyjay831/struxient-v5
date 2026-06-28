@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppearanceControl } from "@/components/shell/appearance-control";
 import { SettingsCategoryNav } from "@/components/settings/settings-category-nav";
-import { SettingsMobileCategorySelect } from "@/components/settings/settings-mobile-category-select";
+import { SettingsMobileMenu } from "@/components/settings/settings-mobile-category-select";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { SettingsSaveStatus, type SettingsSaveState } from "@/components/settings/settings-save-status";
 import { SettingsSearch } from "@/components/settings/settings-search";
@@ -132,11 +132,6 @@ export function SettingsPageClient({
     setTimeout(() => setUrgentThresholdFeedback(INITIAL_SAVE_FEEDBACK), 1800);
   }
 
-  function handleSectionChange(section: SettingsSectionKey) {
-    setHighlightRowId(null);
-    router.push(nextSectionUrl(pathname, section));
-  }
-
   function handleSearchResultSelect(entry: SettingsSearchEntry) {
     if (entry.type === "management") {
       router.push(entry.targetRoute);
@@ -241,7 +236,7 @@ export function SettingsPageClient({
                     />
                   </div>
                 </div>
-                <span className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast">
+                <span className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border border-border bg-accent px-3 py-2 text-xs font-medium text-accent-contrast sm:w-auto">
                   Configure intake
                 </span>
               </div>
@@ -284,7 +279,7 @@ export function SettingsPageClient({
                   Choose light, dark, or system appearance.
                 </p>
               </div>
-              <div className="justify-self-start sm:justify-self-end">
+              <div className="w-full justify-self-start sm:w-auto sm:justify-self-end">
                 <AppearanceControl />
               </div>
             </div>
@@ -305,10 +300,12 @@ export function SettingsPageClient({
         />
       }
       mobileCategorySlot={
-        <SettingsMobileCategorySelect
+        <SettingsMobileMenu
           availableSections={availableSections}
-          value={activeSection}
-          onChange={handleSectionChange}
+          activeSection={activeSection}
+          sectionHref={(section) => nextSectionUrl(pathname, section)}
+          managementLinks={SETTINGS_MANAGEMENT_LINKS}
+          currentPathname={pathname}
         />
       }
       desktopCategorySlot={

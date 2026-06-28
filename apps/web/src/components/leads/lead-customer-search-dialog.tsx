@@ -178,7 +178,10 @@ export function LeadCustomerSearchDialog({
 
   useEffect(() => {
     if (open && initialCustomerId) {
-      setSelectedCustomerId(initialCustomerId);
+      const frame = window.requestAnimationFrame(() => {
+        setSelectedCustomerId(initialCustomerId);
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
   }, [open, initialCustomerId]);
 

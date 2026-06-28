@@ -48,7 +48,7 @@ export function SettingsRow({
         .trim()}
     >
       <SettingsRowTitle title={title} description={description} status={status} />
-      <div className="justify-self-start sm:justify-self-end">{control}</div>
+      <div className="w-full justify-self-start sm:w-auto sm:justify-self-end">{control}</div>
     </div>
   );
 }
@@ -175,7 +175,7 @@ export function SettingsManageRow({
       control={
         <Link
           href={href}
-          className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto"
         >
           Manage
         </Link>

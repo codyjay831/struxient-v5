@@ -189,7 +189,10 @@ export function IntakeFormEditor({
       : INTAKE_EDITOR_TOOLBAR_PORTAL_ID;
 
   useEffect(() => {
-    setToolbarPortal(document.getElementById(toolbarPortalId));
+    const frame = window.requestAnimationFrame(() => {
+      setToolbarPortal(document.getElementById(toolbarPortalId));
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [toolbarPortalId]);
 
   const publicIntakeUrl =

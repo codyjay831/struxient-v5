@@ -83,16 +83,16 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SectionHeading
           title="Organization Tags"
           description="Manage tags used across your scope and task libraries."
         />
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
           <button
             onClick={handleSuggestMerges}
             disabled={isSuggesting || activeTags.length < 2}
-            className={secondaryButtonClass}
+            className={`${secondaryButtonClass} w-full sm:w-auto`}
           >
             {isSuggesting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -101,7 +101,10 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
             )}
             Suggest Merges
           </button>
-          <button onClick={() => setIsCreating(true)} className={primaryButtonClass}>
+          <button
+            onClick={() => setIsCreating(true)}
+            className={`${primaryButtonClass} w-full sm:w-auto`}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Create Tag
           </button>
@@ -128,7 +131,10 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
               const target = activeTags.find(t => t.id === s.targetTagId);
               if (!source || !target) return null;
               return (
-                <div key={idx} className="flex items-center justify-between gap-4 bg-surface p-3 rounded-md border border-border">
+                <div
+                  key={idx}
+                  className="flex flex-col gap-3 rounded-md border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
                   <div className="flex-1">
                     <p className="text-xs font-medium">
                       Merge <Badge variant="outline">{source.name}</Badge> into <Badge variant="default">{target.name}</Badge>
@@ -137,7 +143,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
                   </div>
                   <button
                     onClick={() => setMergingTag(source)}
-                    className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+                    className="text-left text-[10px] font-bold uppercase tracking-wider text-primary hover:underline sm:text-right"
                   >
                     Review Merge
                   </button>
@@ -159,7 +165,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
           <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
             {activeTags.map((tag) => (
               <li key={tag.id} className="px-4 py-4">
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <span
                       className="h-3 w-3 shrink-0 rounded-full border border-border"
@@ -185,10 +191,10 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap">
                     <button
                       type="button"
-                      className={secondaryButtonClass}
+                      className={`${secondaryButtonClass} w-full sm:w-auto`}
                       onClick={() => setEditingId(tag)}
                     >
                       <Edit2 className="mr-1.5 h-3.5 w-3.5" />
@@ -196,7 +202,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
                     </button>
                     <button
                       type="button"
-                      className={secondaryButtonClass}
+                      className={`${secondaryButtonClass} w-full sm:w-auto`}
                       onClick={() => setMergingTag(tag)}
                       disabled={activeTags.length < 2}
                     >
@@ -205,7 +211,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
                     </button>
                     <button
                       type="button"
-                      className={dangerButtonClass}
+                      className={`${dangerButtonClass} w-full sm:w-auto`}
                       onClick={() => handleArchive(tag.id)}
                     >
                       <Archive className="mr-1.5 h-3.5 w-3.5" />
@@ -225,7 +231,10 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
             </h3>
             <ul className="divide-y divide-border rounded-lg border border-border bg-surface/50">
               {archivedTags.map((tag) => (
-                <li key={tag.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <li
+                  key={tag.id}
+                  className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
                   <div className="flex items-center gap-3">
                     <span
                       className="h-3 w-3 shrink-0 rounded-full border border-border opacity-50"
@@ -236,7 +245,7 @@ export function TagManagementPanel({ initialTags }: { initialTags: TagWithCounts
                   </div>
                   <button
                     type="button"
-                    className={secondaryButtonClass}
+                    className={`${secondaryButtonClass} w-full sm:w-auto`}
                     onClick={() => setEditingId(tag)}
                   >
                     Edit

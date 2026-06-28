@@ -57,7 +57,7 @@ export function TeamMemberRow({
 
   return (
     <li className="rounded-lg border border-border px-3 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">
             {name || email || "Unnamed member"}
@@ -65,7 +65,7 @@ export function TeamMemberRow({
           {email ? <p className="text-xs text-foreground-muted">{email}</p> : null}
           <p className="mt-1 text-xs text-foreground-subtle">Joined {joinedLabel}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           {role === StaffRole.OWNER && !canEditRole ? (
             <span className="rounded-md bg-brand-muted px-2 py-1 text-xs font-medium text-accent">
               Owner
@@ -75,7 +75,7 @@ export function TeamMemberRow({
               value={selectedRole}
               onChange={(event) => setSelectedRole(event.target.value as StaffRole)}
               disabled={isPending}
-              className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+              className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground sm:w-auto"
             >
               {MANAGEABLE_MEMBER_ROLES.map((memberRole) => (
                 <option key={memberRole} value={memberRole}>
@@ -93,12 +93,13 @@ export function TeamMemberRow({
         <p className="mt-2 text-xs text-foreground-muted">{editRestriction}</p>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-2 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
         {canEditRole && selectedRole !== role ? (
           <Button
             type="button"
             variant="secondary"
             size="sm"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={() => {
               startTransition(async () => {
@@ -123,6 +124,7 @@ export function TeamMemberRow({
             type="button"
             variant="ghost"
             size="sm"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={() => {
               if (!window.confirm("Remove this member from the organization?")) {

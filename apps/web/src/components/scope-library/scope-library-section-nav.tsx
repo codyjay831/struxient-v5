@@ -2,7 +2,7 @@ import Link from "next/link";
 import { WorkspacePanel } from "@/components/ui/workspace-panel";
 
 const baseClass =
-  "inline-flex rounded-lg border px-3 py-2 text-xs font-medium transition-colors";
+  "inline-flex w-full justify-center rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto";
 const inactiveClass = `${baseClass} border-border text-foreground-muted hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground`;
 const activeClass = `${baseClass} border-border-strong bg-foreground/5 text-foreground`;
 
