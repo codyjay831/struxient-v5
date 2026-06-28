@@ -493,13 +493,13 @@ export function ensureProposalForComposer(
 
 export function addManualCancelTaskToProposal(input: {
   proposal: ChangeOrderExecutionDeltaProposal;
-  task: ChangeOrderJobTaskSnapshot;
+  task: ChangeOrderComposerTaskSnapshot;
   reason: string;
   internalNote?: string;
 }): { ok: true; proposal: ChangeOrderExecutionDeltaProposal } | { ok: false; error: string } {
   const { cancelTaskIds } = getTargetedTaskIds(input.proposal);
   const allowed = canSelectTaskForCancel(input.task, cancelTaskIds);
-  if (!allowed.ok) return allowed;
+  if (!allowed.ok) return { ok: false, error: allowed.reason };
 
   if (!input.reason.trim()) {
     return { ok: false, error: "Reason is required for task cancellation." };
@@ -527,7 +527,7 @@ export function addManualCancelTaskToProposal(input: {
 
 export function addManualModifyTaskToProposal(input: {
   proposal: ChangeOrderExecutionDeltaProposal;
-  task: ChangeOrderJobTaskSnapshot;
+  task: ChangeOrderComposerTaskSnapshot;
   title?: string;
   instructions?: string;
   jobScopeItemIds?: string[];
@@ -536,7 +536,7 @@ export function addManualModifyTaskToProposal(input: {
 }): { ok: true; proposal: ChangeOrderExecutionDeltaProposal } | { ok: false; error: string } {
   const { modifyTaskIds } = getTargetedTaskIds(input.proposal);
   const allowed = canSelectTaskForModify(input.task, modifyTaskIds);
-  if (!allowed.ok) return allowed;
+  if (!allowed.ok) return { ok: false, error: allowed.reason };
 
   if (!input.reason.trim()) {
     return { ok: false, error: "Reason is required for task changes." };

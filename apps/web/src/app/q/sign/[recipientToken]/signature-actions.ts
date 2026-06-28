@@ -15,6 +15,7 @@ import {
 import {
   parseFrozenSnapshotJson,
 } from "@/lib/quote-signature/frozen-snapshot";
+import type { QuoteCustomerPreviewDocument } from "@/lib/quote-customer-projection";
 import {
   isRecipientTokenValid,
   resolveQuoteSignatureRecipient,
@@ -38,6 +39,23 @@ async function getClientMeta() {
 export type SignerAcceptState = { error?: string; success?: boolean; alreadyAccepted?: boolean };
 export type SignerChangeState = { error?: string; success?: boolean };
 export type SignerDeclineState = { error?: string; success?: boolean };
+type SignerPageData =
+  | { kind: "invalid" }
+  | { kind: "expired" }
+  | { kind: "revoked" }
+  | {
+      kind: "accepted";
+      document?: QuoteCustomerPreviewDocument;
+      isApproved?: true;
+    }
+  | {
+      kind: "ready";
+      document: QuoteCustomerPreviewDocument;
+      recipientName: string | null;
+      recipientEmail: string | null;
+      quoteStatus: QuoteStatus;
+      isApproved: boolean;
+    };
 
 export async function recordSignerViewAction(recipientToken: string): Promise<void> {
   const { ip, userAgent } = await getClientMeta();
@@ -197,7 +215,7 @@ export async function downloadSentPdfFromSignerAction(
   return { ok: false, error: "PDF download is not available in this environment." };
 }
 
-export async function loadSignerPageData(recipientToken: string) {
+export async function loadSignerPageData(recipientToken: string): Promise<SignerPageData> {
   const recipient = await resolveQuoteSignatureRecipient(recipientToken);
   if (!recipient) return { kind: "invalid" as const };
 

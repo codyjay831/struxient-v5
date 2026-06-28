@@ -189,7 +189,7 @@ function RequirementCard({
     startTransition(async () => {
       setActionError(null);
       const result = await markJobPaymentRequirementPaidAction(requirement.id);
-      if (result.error) {
+      if ("error" in result) {
         setActionError(getActionErrorMessage(result.error));
         return;
       }
@@ -202,7 +202,7 @@ function RequirementCard({
     startTransition(async () => {
       setActionError(null);
       const result = await waiveJobPaymentRequirementAction(requirement.id);
-      if (result.error) {
+      if ("error" in result) {
         setActionError(getActionErrorMessage(result.error));
         return;
       }
@@ -215,7 +215,7 @@ function RequirementCard({
     startTransition(async () => {
       setActionError(null);
       const result = await cancelJobPaymentRequirementAction(requirement.id);
-      if (result.error) {
+      if ("error" in result) {
         setActionError(getActionErrorMessage(result.error));
         return;
       }
@@ -344,7 +344,7 @@ function CreateRequirementForm({
         requiredBeforeStageId: formData.requiredBeforeStageId || undefined,
         notes: formData.notes || undefined,
       });
-      if (result.error) {
+      if ("error" in result) {
         setFormError(getActionErrorMessage(result.error));
         return;
       }
@@ -502,7 +502,7 @@ function PaymentPortalLinkEditor({
               url || null,
               label || null,
             );
-            if (result.error) {
+            if ("error" in result) {
               setSaveError(getActionErrorMessage(result.error));
               return;
             }

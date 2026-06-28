@@ -760,7 +760,17 @@ export default async function JobDetailPage({
         <JobExecutionShell
           initialView={executionView}
           viewModel={executionViewModel}
-          stages={job.stages}
+          stages={job.stages.map((stage) => ({
+            ...stage,
+            tasks: stage.tasks.map((task) => {
+              const crewEvent = task.scheduleEventLinks[0]?.jobScheduleEvent;
+              return {
+                ...task,
+                scheduledStartAt: crewEvent?.startAt ?? null,
+                scheduledEndAt: crewEvent?.endAt ?? null,
+              };
+            }),
+          }))}
           jobIssues={job.issues}
           liveSignals={liveSignals}
           totalTasks={totalTasks}

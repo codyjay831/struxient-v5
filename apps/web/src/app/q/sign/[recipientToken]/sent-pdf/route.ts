@@ -58,7 +58,10 @@ export async function GET(
     return NextResponse.json({ error: "Download unavailable" }, { status: 501 });
   }
 
-  return new NextResponse(buffer, {
+  const pdfBody = new Uint8Array(buffer.byteLength);
+  pdfBody.set(buffer);
+
+  return new NextResponse(pdfBody, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${attachment.fileName}"`,

@@ -61,6 +61,25 @@ function normalizeObservation(value: string): string | null {
   return trimmed;
 }
 
+function isString(value: string | null): value is string {
+  return value !== null;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizeObservationList(value: unknown): string[] {
+  return [
+    ...new Set(normalizeStringList(value).map(normalizeObservation).filter(isString)),
+  ];
+}
+
 function capHiddenObservations(
   proposal: QuoteScopeSuggestionsProposal,
 ): QuoteScopeSuggestionsProposal {
@@ -81,11 +100,9 @@ function capHiddenObservations(
 
   const filteredLineItems = proposal.commercialLineItems.map((item) => ({
     ...item,
-    missingInfo: [...new Set(item.missingInfo.map(normalizeObservation).filter(Boolean))],
+    missingInfo: normalizeObservationList(item.missingInfo),
   }));
-  const quoteObservations = [
-    ...new Set(proposal.quoteMissingInfo.map(normalizeObservation).filter(Boolean)),
-  ];
+  const quoteObservations = normalizeObservationList(proposal.quoteMissingInfo);
 
   const perLineMax = lineCount <= 1 ? 3 : 2;
   const totalMax = lineCount <= 1 ? 3 : 6;
@@ -255,15 +272,17 @@ export function normalizeScopeSuggestionGrouping(
     dedupedParents.push(parent);
   }
 
-  return {
+  const normalizedWarnings = [...new Set(normalizeStringList(warnings))];
+  const cappedProposal = capHiddenObservations({
     ...proposal,
-    warnings: [...new Set(warnings)],
-    ...capHiddenObservations({
-      ...proposal,
-      warnings: [...new Set(warnings)],
-      commercialLineItems: dedupedParents,
-      optionalAddOns,
-    }),
+    warnings: normalizedWarnings,
+    commercialLineItems: dedupedParents,
+    optionalAddOns,
+  });
+
+  return {
+    ...cappedProposal,
+    warnings: normalizedWarnings,
     optionalAddOns,
   };
 }

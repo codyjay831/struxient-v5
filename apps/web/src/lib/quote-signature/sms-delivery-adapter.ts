@@ -1,7 +1,7 @@
 /**
  * Milestone 3: Twilio SMS delivery adapter shell.
  */
-import type { SignatureEmailDeliveryInput, SignatureEmailDeliveryResult } from "../delivery-service";
+import type { SignatureEmailDeliveryInput } from "./delivery-service";
 
 export type SmsDeliveryInput = SignatureEmailDeliveryInput & {
   recipientPhone: string;

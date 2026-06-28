@@ -69,6 +69,39 @@ export type LeadAddressQuoteReadyContext = {
   customerPrimaryLocation?: { googlePlaceId: string } | null;
 };
 
+function isGooglePlaceLocation(value: unknown): value is { googlePlaceId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "googlePlaceId" in value &&
+    typeof value.googlePlaceId === "string"
+  );
+}
+
+function normalizeQuoteReadyContext(
+  context?: LeadAddressQuoteReadyContext | { googlePlaceId: string } | null,
+): LeadAddressQuoteReadyContext {
+  if (!context) {
+    return {};
+  }
+  if (isGooglePlaceLocation(context) && !("resolvedServiceLocation" in context)) {
+    return { customerPrimaryLocation: context };
+  }
+
+  const resolvedServiceLocation =
+    "resolvedServiceLocation" in context &&
+    isGooglePlaceLocation(context.resolvedServiceLocation)
+      ? context.resolvedServiceLocation
+      : null;
+  const customerPrimaryLocation =
+    "customerPrimaryLocation" in context &&
+    isGooglePlaceLocation(context.customerPrimaryLocation)
+      ? context.customerPrimaryLocation
+      : null;
+
+  return { resolvedServiceLocation, customerPrimaryLocation };
+}
+
 /**
  * Quote readiness: resolved service location or verified lead intake.
  * Customer primary does not mask a different unresolved lead jobsite.
@@ -80,10 +113,7 @@ export function isLeadAddressQuoteReady(
   },
   context?: LeadAddressQuoteReadyContext | { googlePlaceId: string } | null,
 ): boolean {
-  const ctx: LeadAddressQuoteReadyContext =
-    context != null && "googlePlaceId" in context && !("resolvedServiceLocation" in context)
-      ? { customerPrimaryLocation: context }
-      : (context ?? {});
+  const ctx = normalizeQuoteReadyContext(context);
 
   if (isCustomerPrimaryLocationQuoteReady(ctx.resolvedServiceLocation)) {
     return true;

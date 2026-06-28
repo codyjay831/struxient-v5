@@ -11,11 +11,31 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { DEV_ORGANIZATION_ID } from "@/lib/dev-organization";
-import { materializeQuoteLinesFromTemplates } from "../../../prisma/seeds/seed-quote-materialization";
+import {
+  materializeQuoteLinesFromTemplates,
+  type QuoteMaterializationDb,
+} from "../../../prisma/seeds/seed-quote-materialization";
 
 export const QA_CLARIFY_QUOTE_ID = "qa-clarify-browser-quote";
 const QA_LEAD_ID = "qa-clarify-browser-lead";
 const QA_CUSTOMER_ID = "dev-customer-patel";
+
+const quoteMaterializationDb: QuoteMaterializationDb = {
+  quoteLineItem: {
+    deleteMany: (args) => db.quoteLineItem.deleteMany(args),
+    create: (args) => db.quoteLineItem.create(args),
+  },
+  lineItemTemplate: {
+    findUnique: (args) => db.lineItemTemplate.findUnique(args),
+  },
+  quoteLineExecutionTask: {
+    createMany: (args) => db.quoteLineExecutionTask.createMany(args),
+  },
+  quote: {
+    update: (args) => db.quote.update(args),
+    upsert: (args) => db.quote.upsert(args),
+  },
+};
 
 export const CLARIFY_SET_KEY = "electrical.service_upgrade";
 export const CLARIFY_QUESTION_KEY = "electrical.service.new_service_size";
@@ -96,7 +116,7 @@ export async function createQuoteClarificationQaFixture(): Promise<QuoteClarific
     },
   });
 
-  await materializeQuoteLinesFromTemplates(db, {
+  await materializeQuoteLinesFromTemplates(quoteMaterializationDb, {
     quoteId: QA_CLARIFY_QUOTE_ID,
     organizationId: DEV_ORGANIZATION_ID,
     lines: [

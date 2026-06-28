@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { INTAKE_ATOMS } from "@/lib/intake/atoms";
 import { IntakeServiceAddressField } from "@/components/intake/intake-service-address-field";
@@ -139,7 +138,8 @@ export function IntakeFormRenderer({
     submitAction,
     {},
   );
-  const containerRef = useRef<HTMLElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const formContainerRef = useRef<HTMLFormElement>(null);
   const headingId = useId();
 
   const [internalStep, setInternalStep] = useState(1);
@@ -160,6 +160,8 @@ export function IntakeFormRenderer({
 
   const sections: IntakeFormSection[] = formDefinition.schema.sections ?? [];
   const isProgressive = layoutMode === "progressive" && sections.length > 1;
+  const getContainerElement = (): HTMLElement | null =>
+    previewContainerRef.current ?? formContainerRef.current;
 
   const isVisible = (field: IntakeFormFieldRef) => {
     if (!field.visibleIf) return true;
@@ -187,7 +189,7 @@ export function IntakeFormRenderer({
     if (typeof tracked === "string" && tracked.trim().length > 0) {
       return tracked.trim();
     }
-    const root = containerRef.current;
+    const root = getContainerElement();
     if (!root) {
       return "";
     }
@@ -241,13 +243,13 @@ export function IntakeFormRenderer({
     const validationError = validatePublicRequestTypeForStep(step);
     if (validationError) {
       setStepError(validationError);
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      getContainerElement()?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     setStepError(null);
     if (step < sections.length) {
       setStep(step + 1);
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      getContainerElement()?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -256,7 +258,7 @@ export function IntakeFormRenderer({
     setStepError(null);
     if (step > 1) {
       setStep(step - 1);
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      getContainerElement()?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -275,7 +277,7 @@ export function IntakeFormRenderer({
         setStep(requestTypeStepIndex + 1);
       }
     }
-    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    getContainerElement()?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handlePreviewSubmit = (e?: React.MouseEvent) => {
@@ -292,10 +294,10 @@ export function IntakeFormRenderer({
           setStep(requestTypeStepIndex + 1);
         }
       }
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      getContainerElement()?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    const root = containerRef.current;
+    const root = getContainerElement();
     if (!root) return;
     formAction(buildFormDataFromElement(root));
   };
@@ -827,7 +829,7 @@ export function IntakeFormRenderer({
   if (previewMode) {
     return (
       <div
-        ref={containerRef}
+        ref={previewContainerRef}
         className="space-y-6"
         aria-labelledby={headingId}
         onKeyDown={isProgressive ? handleKeyDown : undefined}
@@ -839,7 +841,7 @@ export function IntakeFormRenderer({
 
   return (
     <form
-      ref={containerRef as RefObject<HTMLFormElement>}
+      ref={formContainerRef}
       action={formAction}
       className="space-y-6"
       aria-labelledby={headingId}

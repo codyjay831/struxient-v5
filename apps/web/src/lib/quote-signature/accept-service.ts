@@ -416,7 +416,7 @@ export async function recordSignerView(params: {
 
     const request = await tx.quoteSignatureRequest.findUnique({
       where: { id: recipient.signatureRequestId },
-      include: { recipients: { select: { status: true } } },
+      include: { recipients: { select: { id: true, status: true } } },
     });
     if (request && request.status !== QuoteSignatureRequestStatus.ACCEPTED) {
       const viewedCount = request.recipients.filter(

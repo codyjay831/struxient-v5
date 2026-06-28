@@ -8,6 +8,7 @@
     "start": "next start -p 3001",
     "lint": "eslint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "tsx --test src/lib/**/*.test.ts",
     "smoke:portal": "tsx scripts/customer-portal-smoke-test.ts",
     "guardrails": "node ../../scripts/guardrails/run-all.mjs"

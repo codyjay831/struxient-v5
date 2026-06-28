@@ -2,7 +2,7 @@
  * Shared quote line + execution task materialization from Scope Library templates.
  */
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export type QuoteLineTemplateConfig = {
   templateId: string;
@@ -14,8 +14,46 @@ export type MaterializeQuoteLinesResult = {
   totalCents: number;
 };
 
+type MaterializedLineItemTemplate = Prisma.LineItemTemplateGetPayload<{
+  include: { defaultExecutionTasks: true };
+}>;
+
+export type QuoteMaterializationDb = {
+  quoteLineItem: {
+    deleteMany(args: Prisma.QuoteLineItemDeleteManyArgs): Promise<unknown>;
+    create(args: Prisma.QuoteLineItemCreateArgs): Promise<unknown>;
+  };
+  lineItemTemplate: {
+    findUnique(args: Prisma.LineItemTemplateFindUniqueArgs): Promise<unknown>;
+  };
+  quoteLineExecutionTask: {
+    createMany(args: Prisma.QuoteLineExecutionTaskCreateManyArgs): Promise<unknown>;
+  };
+  quote: {
+    update(args: Prisma.QuoteUpdateArgs): Promise<unknown>;
+    upsert(args: Prisma.QuoteUpsertArgs): Promise<unknown>;
+  };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isMaterializedLineItemTemplate(
+  value: unknown,
+): value is MaterializedLineItemTemplate {
+  return isRecord(value) && Array.isArray(value.defaultExecutionTasks);
+}
+
+function getCreatedQuoteLineId(value: unknown): string {
+  if (isRecord(value) && typeof value.id === "string") {
+    return value.id;
+  }
+  throw new Error("Failed to create quote line item.");
+}
+
 export async function materializeQuoteLinesFromTemplates(
-  prisma: PrismaClient,
+  prisma: QuoteMaterializationDb,
   input: {
     quoteId: string;
     organizationId: string;
@@ -31,15 +69,16 @@ export async function materializeQuoteLinesFromTemplates(
 
   for (let i = 0; i < lines.length; i++) {
     const config = lines[i];
-    const template = await prisma.lineItemTemplate.findUnique({
+    const templateResult = await prisma.lineItemTemplate.findUnique({
       where: { id: config.templateId, organizationId },
       include: { defaultExecutionTasks: true },
     });
 
-    if (!template) {
+    if (!isMaterializedLineItemTemplate(templateResult)) {
       console.warn(`[seed] missing template: ${config.templateId}`);
       continue;
     }
+    const template = templateResult;
 
     const quantity = new Prisma.Decimal(config.quantityOverride ?? template.defaultQuantity);
     const lineTotalCents = quantity
@@ -49,7 +88,7 @@ export async function materializeQuoteLinesFromTemplates(
 
     runningSubtotalCents += lineTotalCents;
 
-    const createdLine = await prisma.quoteLineItem.create({
+    const createdLineId = getCreatedQuoteLineId(await prisma.quoteLineItem.create({
       data: {
         quoteId,
         sortOrder: i,
@@ -65,12 +104,12 @@ export async function materializeQuoteLinesFromTemplates(
         internalNotes: template.defaultInternalNotes,
         sourceLineItemTemplateId: template.id,
       },
-    });
+    }));
 
     if (template.defaultExecutionTasks.length > 0) {
       await prisma.quoteLineExecutionTask.createMany({
         data: template.defaultExecutionTasks.map((tt) => ({
-          quoteLineItemId: createdLine.id,
+          quoteLineItemId: createdLineId,
           sourceLineItemTemplateTaskId: tt.id,
           sourceTaskTemplateId: tt.sourceTaskTemplateId,
           sourceType: tt.sourceType,
@@ -98,7 +137,7 @@ export async function materializeQuoteLinesFromTemplates(
 }
 
 export async function upsertQuoteShell(
-  prisma: PrismaClient,
+  prisma: QuoteMaterializationDb,
   input: {
     quoteId: string;
     organizationId: string;

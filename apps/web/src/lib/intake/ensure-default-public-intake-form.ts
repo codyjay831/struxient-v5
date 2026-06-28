@@ -42,9 +42,9 @@ function defaultSchemaJson(): Prisma.InputJsonValue {
  */
 export async function provisionDefaultPublicIntakeFormForOrganization(
   organizationId: string,
-  tx: IntakeFormDb = db,
+  tx?: IntakeFormDb,
 ): Promise<IntakeFormDefinitionShape> {
-  const upserted = (await tx.intakeFormDefinition.upsert({
+  const upsertArgs = {
     where: {
       organizationId_slug: {
         organizationId,
@@ -68,7 +68,11 @@ export async function provisionDefaultPublicIntakeFormForOrganization(
       archivedAt: null,
     },
     select: INTAKE_FORM_DEFINITION_SELECT,
-  })) as IntakeFormDefinitionUpsertPayload;
+  } satisfies Prisma.IntakeFormDefinitionUpsertArgs;
+
+  const upserted = (await (tx
+    ? tx.intakeFormDefinition.upsert(upsertArgs)
+    : db.intakeFormDefinition.upsert(upsertArgs))) as IntakeFormDefinitionUpsertPayload;
 
   const result = toIntakeFormDefinitionShape(upserted);
   if (!result) {
