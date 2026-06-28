@@ -38,7 +38,6 @@ export function getWeekRange(date: Date = new Date()): WeekRange {
  */
 export function getWeekDays(date: Date = new Date()): WeekDay[] {
   const { startAt } = getWeekRange(date);
-  const now = new Date();
 
   return Array.from({ length: 7 }, (_, i) => {
     const dayStart = new Date(startAt);
@@ -52,9 +51,9 @@ export function getWeekDays(date: Date = new Date()): WeekDay[] {
       date: dayStart,
       endOfDay,
       isToday:
-        dayStart.getFullYear() === now.getFullYear() &&
-        dayStart.getMonth() === now.getMonth() &&
-        dayStart.getDate() === now.getDate(),
+        dayStart.getFullYear() === date.getFullYear() &&
+        dayStart.getMonth() === date.getMonth() &&
+        dayStart.getDate() === date.getDate(),
     };
   });
 }

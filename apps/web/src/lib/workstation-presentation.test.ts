@@ -14,31 +14,6 @@ import { resolveWorkstationSelectionSurface } from "./workstation/selection-rout
 import type { ScheduleEvent } from "./schedule-query";
 
 const now = new Date("2026-06-18T08:00:00.000Z");
-const RealDate = Date;
-
-function withFixedSystemDate<T>(fixedNow: Date, run: () => T): T {
-  const fixedMs = fixedNow.getTime();
-  class MockDate extends RealDate {
-    constructor(value?: string | number | Date) {
-      if (value === undefined) {
-        super(fixedMs);
-      } else {
-        super(value);
-      }
-    }
-
-    static now() {
-      return fixedMs;
-    }
-  }
-
-  globalThis.Date = MockDate as unknown as DateConstructor;
-  try {
-    return run();
-  } finally {
-    globalThis.Date = RealDate;
-  }
-}
 
 function makeItem(overrides: Partial<WorkstationWorkItem>): WorkstationWorkItem {
   return {
@@ -351,15 +326,13 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
 });
 
 test("buildWorkstationPresentation builds seven-day week preview", () => {
-  const result = withFixedSystemDate(now, () =>
-    buildWorkstationPresentation({
-      items: [],
-      scheduleEvents: [],
-      recentActivityRaw: [],
-      viewerUserId: "user-1",
-      now,
-    }),
-  );
+  const result = buildWorkstationPresentation({
+    items: [],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
 
   assert.equal(result.overviewWeekPreview.length, 7);
   assert.equal(
@@ -566,6 +539,7 @@ test("applyWorkstationQueueFilter waiting filter matches prerequisite holds", ()
     selectedId: "task-w",
     selectedKind: "task",
     title: "Install panels",
+    subtitle: "Kitchen remodel",
     reason: "Waiting",
     nextAction: "Wait",
     tone: "warning" as const,
@@ -576,6 +550,7 @@ test("applyWorkstationQueueFilter waiting filter matches prerequisite holds", ()
     selectedId: "task-r",
     selectedKind: "task",
     title: "Rough-in",
+    subtitle: "Kitchen remodel",
     reason: "Ready",
     nextAction: "Complete",
     tone: "neutral" as const,
