@@ -128,5 +128,5 @@ test("public token acceptance routes stay separate from staff mutation context",
 
   assert.match(quoteTokenAction, /acceptQuoteViaSignatureToken/);
   assert.match(changeOrderTokenAction, /resolveChangeOrderShareToken/);
-  assert.doesNotMatch(changeOrderTokenAction, /auditPublicTokenEvent\([^)]*token/s);
+  assert.doesNotMatch(changeOrderTokenAction, /auditPublicTokenEvent\([^)]*token[\s\S]*/);
 });

@@ -1076,9 +1076,11 @@ test("integration: draft update persists v2 paymentImpactJson", async (t) => {
     if (!parsed.ok) return;
     assert.equal(parsed.impact.schemaVersion, 2);
     assert.equal(parsed.impact.strategy, "SPLIT_ACROSS_REMAINING_PAYMENTS");
-    assert.equal(parsed.impact.allocations.length, 2);
+    const allocations = parsed.impact.allocations;
+    assert.ok(allocations);
+    assert.equal(allocations.length, 2);
     assert.equal(
-      parsed.impact.allocations.reduce((sum, row) => sum + row.adjustmentCents, 0),
+      allocations.reduce((sum, row) => sum + row.adjustmentCents, 0),
       10_000,
     );
   } finally {
@@ -1292,15 +1294,19 @@ test("integration: permission denied for FIELD and VIEWER apply paths", async (t
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
       reasoning: "Permission test",
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [buildAddLine()],
     });
     assert.equal(created.ok, true);
     if (!created.ok) return;
-    await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
+    const accepted = await markChangeOrderAcceptedWithActor(OFFICE_ACTOR, created.changeOrderId);
+    assert.equal(accepted.ok, true);
 
-    assert.equal((await applyConfirmedChangeOrderWithActor(FIELD_ACTOR, created.changeOrderId)).ok, false);
-    assert.equal((await applyConfirmedChangeOrderWithActor(VIEWER_ACTOR, created.changeOrderId)).ok, false);
-    assert.equal((await createChangeOrderDraftWithActor(FIELD_ACTOR, {
+    const deniedFieldActor = FIELD_ACTOR as unknown as typeof OFFICE_ACTOR;
+    const deniedViewerActor = VIEWER_ACTOR as unknown as typeof OFFICE_ACTOR;
+    assert.equal((await applyConfirmedChangeOrderWithActor(deniedFieldActor, created.changeOrderId)).ok, false);
+    assert.equal((await applyConfirmedChangeOrderWithActor(deniedViewerActor, created.changeOrderId)).ok, false);
+    assert.equal((await createChangeOrderDraftWithActor(deniedFieldActor, {
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
       reasoning: "Denied",
