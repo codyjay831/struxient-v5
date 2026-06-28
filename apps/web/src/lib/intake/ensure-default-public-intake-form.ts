@@ -20,12 +20,6 @@ type IntakeFormDefinitionUpsertPayload = Prisma.IntakeFormDefinitionGetPayload<{
   select: typeof INTAKE_FORM_DEFINITION_SELECT;
 }>;
 
-type IntakeFormDb = {
-  intakeFormDefinition: {
-    upsert(args: Prisma.IntakeFormDefinitionUpsertArgs): Promise<unknown>;
-  };
-};
-
 function defaultTriageRulesJson(): Prisma.InputJsonValue {
   return {
     requestTypeOptions: DEFAULT_PUBLIC_REQUEST_TYPE_OPTIONS,
@@ -36,15 +30,8 @@ function defaultSchemaJson(): Prisma.InputJsonValue {
   return DEFAULT_INTAKE_FORM_SCHEMA as unknown as Prisma.InputJsonValue;
 }
 
-/**
- * Idempotent Primary customer request link for a new org (signup) or slug `default` row.
- * Does not overwrite an existing form name or schema on update.
- */
-export async function provisionDefaultPublicIntakeFormForOrganization(
-  organizationId: string,
-  tx?: IntakeFormDb,
-): Promise<IntakeFormDefinitionShape> {
-  const upsertArgs = {
+function defaultPublicIntakeFormUpsertArgs(organizationId: string) {
+  return {
     where: {
       organizationId_slug: {
         organizationId,
@@ -68,7 +55,24 @@ export async function provisionDefaultPublicIntakeFormForOrganization(
       archivedAt: null,
     },
     select: INTAKE_FORM_DEFINITION_SELECT,
-  } satisfies Prisma.IntakeFormDefinitionUpsertArgs;
+  };
+}
+
+type IntakeFormDb = {
+  intakeFormDefinition: {
+    upsert(args: ReturnType<typeof defaultPublicIntakeFormUpsertArgs>): Promise<unknown>;
+  };
+};
+
+/**
+ * Idempotent Primary customer request link for a new org (signup) or slug `default` row.
+ * Does not overwrite an existing form name or schema on update.
+ */
+export async function provisionDefaultPublicIntakeFormForOrganization(
+  organizationId: string,
+  tx?: IntakeFormDb,
+): Promise<IntakeFormDefinitionShape> {
+  const upsertArgs = defaultPublicIntakeFormUpsertArgs(organizationId);
 
   const upserted = (await (tx
     ? tx.intakeFormDefinition.upsert(upsertArgs)

@@ -183,7 +183,11 @@ export async function createAccountAction(input: unknown): Promise<SignupActionR
       },
     });
 
-    await provisionDefaultPublicIntakeFormForOrganization(organization.id, tx);
+    await provisionDefaultPublicIntakeFormForOrganization(organization.id, {
+      intakeFormDefinition: {
+        upsert: (args) => tx.intakeFormDefinition.upsert(args),
+      },
+    });
 
     if (betaInviteValidation?.ok) {
       const inviteRecord = await tx.betaSignupInvite.findUniqueOrThrow({
