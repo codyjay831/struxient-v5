@@ -3,7 +3,9 @@ import {
   Prisma,
   QuoteStatus,
 } from "@prisma/client";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { recalculateQuoteRollupsInTx } from "@/lib/quote-line-item-template-apply-tx";
 import { revokeActiveSignatureRequestsForQuoteInTx } from "@/lib/quote-signature/request-service";
 

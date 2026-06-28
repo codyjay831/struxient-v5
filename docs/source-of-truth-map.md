@@ -19,6 +19,7 @@
 |---------|-------------------|-------------------|-------------------|
 | Task readiness (blocked / ready / needs proof) | **Derived** | `apps/web/src/lib/task-readiness.ts` — `toTaskReadinessInput()`, `deriveTaskState()` | UI shows ready while server rejects completion, or vice versa |
 | Task completion / cancellation | **Stored** | `JobTask.status`, `completedAt`, `completedByUserId`, `completionNote`, `completionRequirementsJson`, cancellation audit fields | Terminal transitions without audit lineage |
+| Task status timeline / event history (`TaskStatusEvent`) | **No standalone model in v5** (`JobTask.status` is the canonical status fact; `JobActivity` captures selected transitions) | `JobTask.status` + task-mutation services that call `recordJobActivity` | Assuming a complete append-only status-event stream exists today; introducing a parallel status-event table would drift from runtime truth |
 | Stage readiness | **Derived** (helper exists; limited UI use) | `deriveStageState()` in `task-readiness.ts` | Wrong stage-level attention |
 | Stage execution state (`OPEN` / `COMPLETED` / `SKIPPED`) | **Derived** | `job-payment-readiness.ts` payment progression helpers | Deadlocked progression or false stage-anchor payment triggering |
 | Live signals | **Stored facts** | `JobSignal` via `apps/web/src/lib/signal-bus.ts` | Stale or local-only signal lists |
@@ -29,6 +30,7 @@
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
 | Payment requirement status | **Stored** (audit) | `JobPaymentRequirement.status` enum | Treating PENDING as due without anchor rules |
+| Quote payment schedule baseline | **Stored (commercial baseline)** | `PaymentScheduleItem` on quote + approved checkpoint snapshots | Silent rewrite of customer-approved payment terms |
 | Payment effectively due | **Derived** | `isPaymentEffectivelyDue()` in `job-payment-readiness.ts` | Raw `status === "DUE"` misses PENDING + anchor cases |
 | Unsettled due requirements (job) | **Derived** | `getUnsettledEffectivelyDueRequirements()` | Inconsistent job blocking in Workstation vs job page |
 | Task payment hold (display) | **Derived** | `deriveTaskPaymentHold()` | Per-task stored blocker flags in schema |
@@ -68,13 +70,14 @@
 | Legacy job visit | **Stored (deprecated)** | `JobVisit` — bridge only during cutover | Adding permanent behavior to visit model |
 | Legacy task schedule fields | **Stored (deprecated)** | `JobTask.scheduledStartAt/scheduledEndAt` | New writes after canonical cutover |
 
-**Current code (pre-migration):** `task-timing.ts`, `schedule-query.ts`, `workstation-scheduling-attention.ts`, `job-visit-actions.ts` — refactor into targets above during implementation slices.
+**Current code posture:** task schedule/deadline writes route through `task-timing.ts` + scheduling services; Workstation appointment display derives from canonical event links; `JobVisit` and `JobTask.scheduledStartAt/scheduledEndAt` remain compatibility legacy.
 
 ## Workstation & attention
 
 | Concept | Stored or derived? | Canonical location | Risk if duplicated |
 |---------|-------------------|-------------------|-------------------|
 | Work queue items | **Derived** | `queryWorkstationWorkItems()` in `workstation-query.ts` | Second priority engine with different ordering |
+| Workstation appointment display DTO (`scheduledStartAt`) | **Derived from canonical links** | `queryWorkstationWorkItems()` using linked `JobScheduleEvent` data (not legacy `JobTask.scheduledStartAt`) | Calendar strip shows stale/missing commitments after schedule edits |
 | Lane / rank | **Derived** | `apps/web/src/lib/workstation/rank.ts` | Inconsistent critical vs due vs watch |
 | Embedded lead/quote workflow | **Derived** | `record-workflow-surface.ts` + readiness/progress helpers | Duplicate next-action copy in Workstation only |
 | Job blocked (issues + payments) | **Derived** | `workstation-query.ts` (job loop) | Task items ignoring job-level payment block |
@@ -92,7 +95,10 @@
 | Payment read visibility | **Derived from role** | `apps/web/src/lib/authz/payment-visibility.ts` — `canReadPaymentDetails()` | Dollar amounts / portal links leaking to FIELD/SUB |
 | Customer portal staff read/manage gates | **Derived from role** | `apps/web/src/lib/customer-portal/authorize.ts` | Portal access metadata leaking to FIELD/SUB |
 | Quote execution plan permissions | **Derived from role** | `apps/web/src/lib/execution-plan-permissions.ts` | Runtime job auth confused with quote planning auth |
+| Commercial read vs mutation boundary | **Derived from role + action context** | `auth-context.ts` (`getCommercialRequestContextOrThrow` vs `getCommercialMutationContextOrThrow`) + `authz/authorize.ts` | Read-only roles mutating commercial records |
 | Public token access scope | **Stored token metadata + derived checks** | `/q/[token]`, `/co/[token]` actions and token helpers | Raw bearer token misuse and replay scope drift |
+| Invite/public token handling hygiene | **Policy + service boundary** | Invite/token services + route/action handlers (hashed tokens, no raw token logging, production-safe response payloads) | Token leakage in logs/responses/debug telemetry |
+| Request-sensitive route rendering mode | **Route contract** | Next.js route handlers that read session/cookies/headers/token context export `dynamic = "force-dynamic"` | Cached responses can leak per-request auth/token context |
 | Security audit stream | **Stored** | Dedicated security audit events (planned), not `JobActivity` | Lost accountability for role/invite/session/token actions |
 | Platform operator context | **Derived at request time** | `apps/web/src/lib/platform/platform-context.ts` (`getPlatformContext()`) | Platform authority leaking through contractor session or JWT role claims |
 | Platform access grant (current state) | **Stored** | `PlatformAccess` in `apps/web/prisma/schema.prisma` | Accidental auto-grants via seed or membership coupling |
@@ -148,6 +154,7 @@
 | Pre-plan line draft tasks | **Stored (authoring seed)** | `QuoteLineExecutionTask` — not activation truth once whole-quote plan exists | Treating per-line drafts as reviewed activation plan |
 | Quote totals | **Stored** | `Quote.totalCents`, line items | Different totals in UI vs PDF vs checkpoint |
 | Approved commercial baseline | **Stored proof** | `QuoteCheckpoint` — see [quote-truth-and-checkpoints.md](./canon/quote-truth-and-checkpoints.md) | “Version browser” UX or silent sold-truth mutation |
+| Quote immutability boundary after commercial acceptance | **Policy + lifecycle invariant** | `quote-truth-and-checkpoints.md` + change-order lifecycle | Post-approval in-place commercial rewrites bypassing change-order controls |
 | Quote signature request (Standard Acceptance / Verified E-Sign) | **Stored** | `QuoteSignatureRequest`, `QuoteSignatureRecipient`, `QuoteSignatureDelivery`, `QuoteSignatureEvent`, `QuoteSignatureArtifact` in `apps/web/src/lib/quote-signature/` | Duplicate send/accept audit or live-quote signer pages |
 | Signature request status / timeline labels | **Derived** | `timeline-presenter.ts`, `status-service.ts` in `quote-signature/` | Second signature status engine in UI |
 | Frozen sent quote snapshot + PDF hash | **Stored** | `QuoteSignatureRequest.frozenSnapshotJson`, `frozenSnapshotSha256`, sent artifact rows | Rendering signer page from live mutable quote rows |
@@ -173,6 +180,7 @@
 | CO payment strategy & customer terms | **Stored** | `ChangeOrder.paymentImpactJson` + ACCEPTANCE checkpoint snapshot | Payment terms only in execution delta; orphan PENDING CO payment rows |
 | CO payment materialization | **Stored writes at apply** | `payment-impact-materializer.ts` → `JobPaymentRequirement` | Duplicate row + milestone bump; silent recalc vs stored allocations |
 | CO payment plan review / allocation | **Derived at draft, stored at save** | `payment-impact-allocation.ts`, Payment Plan Review drawer | Ad-hoc split math in UI; freeform customer terms |
+| CO no-work-impact confirmation | **Stored/derived separately from payment** | CO execution-impact + internal confirmation flows | Treating zero-dollar as automatic no-impact apply |
 | CO payment due-ness (due-before-work) | **Stored fact + derived** | `JobPaymentRequirement.status = DUE` + optional stage gate; `isPaymentEffectivelyDue()` | Manual orphan PENDING rows never surfacing |
 
 ## Jobs, issues, recovery
@@ -231,3 +239,5 @@
 *Updated 2026-06-20 — Added quote execution plan acceptance + pre-plan line draft boundary rows for Execution Review cleanup.*  
 *Updated 2026-06-24 — Change Order execution delta SoT rows (canon Pass 1; schema proposal pending approval).*
 *Updated 2026-06-24 — Change Order payment strategy SoT rows (canon Pass 0 payment; `paymentImpactJson` schema proposal).*
+*Updated 2026-06-27 — Added commercial read-vs-mutation boundary, token hygiene + force-dynamic route contract, workstation appointment DTO source, and TaskStatusEvent posture.*
+*Updated 2026-06-27 — Clarified TaskStatusEvent posture: `JobTask.status` is canonical; `JobActivity` is transition coverage on selected mutation paths (not a dedicated append-only status-event stream).*

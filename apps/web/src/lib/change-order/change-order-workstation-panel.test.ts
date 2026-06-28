@@ -47,10 +47,15 @@ function mockTaskOp(
   return {
     opId: "task:line-1",
     type: "ADD_TASK",
-    targetEntityType: "JobTask",
+    taskTitle: "Execute change",
+    instructions: null,
+    affectedScopeLabels: [],
+    existingTaskStatus: null,
     reason: "Generated",
     internalNote: "Generated from the commercial Change Order line.",
-    payload: { title: "Execute change" },
+    sourceLabel: "Manual task",
+    validationErrors: [],
+    canRemove: true,
     isGenerated: false,
     sourceKind: "manual_added",
     ...partial,
@@ -71,6 +76,7 @@ const reviewedExecutionImpact = {
   validationErrors: [] as string[],
   stalePlan: false,
   conflict: false,
+  noWorkImpactConfirmed: false,
 };
 
 function makeWorkspace(
@@ -110,6 +116,10 @@ function makeChangeOrder(
     status: ChangeOrderStatus.DRAFT,
     reasoning: "Customer approved upgrade",
     priceDeltaCents: 5000,
+    zeroDollarPolicyClass: null,
+    internalNoCustomerImpactConfirmedAt: null,
+    internalNoCustomerImpactConfirmedByUserId: null,
+    hasCustomerAcceptanceCheckpoint: false,
     createdAt: "2026-06-01T00:00:00.000Z",
     approvedAt: null,
     appliedAt: null,
@@ -184,6 +194,36 @@ test("buildChangeOrderWorkstationPanelDto returns send-ready draft panel", () =>
   assert.equal(panel.send.disabled, false);
   assert.equal(panel.customerLabel, "Jane Doe");
   assert.match(panel.href, /focus=co-1/);
+});
+
+test("zero-dollar draft without policy classification routes workstation to full review", () => {
+  const changeOrder = makeChangeOrder({
+    status: ChangeOrderStatus.DRAFT,
+    priceDeltaCents: 0,
+    paymentImpactJson: null,
+    zeroDollarPolicyClass: null,
+    lines: [
+      {
+        operation: ChangeOrderLineOperation.ADD,
+        description: "Same-price material substitution",
+        quantity: "1",
+        priceDeltaCents: 0,
+        executionRelevant: true,
+      },
+    ],
+  });
+  const panel = buildChangeOrderWorkstationPanelDto({
+    workspace: makeWorkspace(changeOrder),
+    changeOrder,
+    customerLabel: "Jane Doe",
+    customerRequestSummary: null,
+    lastSentEmailAt: null,
+    acceptedAt: null,
+  });
+
+  assert.equal(panel.send.disabled, true);
+  assert.match(panel.send.reason ?? "", /zero-dollar policy/i);
+  assert.equal(panel.primaryAction.kind, "review_full");
 });
 
 test("buildChangeOrderWorkstationPanelDto returns apply-ready accepted panel", () => {

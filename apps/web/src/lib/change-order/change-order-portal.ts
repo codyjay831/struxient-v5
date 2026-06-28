@@ -5,7 +5,7 @@ import {
   JobActivityType,
   Prisma,
 } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type ExtendedTransactionClient } from "@/lib/db";
 import {
   CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
   changeOrderRowToCustomerPreviewDocument,
@@ -61,6 +61,7 @@ function toCustomerAcceptReadinessInput(
   return {
     status: changeOrder.status,
     priceDeltaCents: changeOrder.priceDeltaCents,
+    zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
     paymentImpactJson: changeOrder.paymentImpactJson,
     executionDeltaJson: changeOrder.executionDeltaJson,
     baseJobPlanVersion: changeOrder.baseJobPlanVersion,
@@ -134,7 +135,7 @@ async function createPortalCheckpoint(input: {
     | typeof CHANGE_ORDER_PORTAL_CHECKPOINT_ACTION_OFFICE_NOTE
     | typeof CHANGE_ORDER_PORTAL_CHECKPOINT_ACTION_FORMAL_REQUEST_CHANGES;
   message: string;
-  tx: Parameters<typeof recordJobActivity>[1];
+  tx: ExtendedTransactionClient;
 }): Promise<void> {
   const { changeOrder, kind, portalAction, message, tx } = input;
   const document = changeOrderRowToCustomerPreviewDocument(

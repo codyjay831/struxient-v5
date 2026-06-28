@@ -35,7 +35,15 @@ export function TeamInviteRowActions({
               setError(result.error ?? "Could not resend invite.");
               return;
             }
-            setMessage(result.emailed ? "Invite email re-sent." : `Share link: ${result.inviteUrl ?? ""}`);
+            if (result.emailed) {
+              setMessage("Invite email re-sent.");
+              return;
+            }
+            if (result.inviteUrl) {
+              setMessage(`Share link: ${result.inviteUrl}`);
+              return;
+            }
+            setMessage("Invite refreshed. Email delivery is unavailable in this environment.");
           });
         }}
       >

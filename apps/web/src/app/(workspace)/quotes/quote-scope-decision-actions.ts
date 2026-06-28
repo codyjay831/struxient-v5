@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   applyQuoteScopeDecisionManualAction,
 } from "@/lib/quote-scope-decision-core";

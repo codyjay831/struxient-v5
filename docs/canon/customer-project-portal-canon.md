@@ -829,6 +829,8 @@ Required protections:
 - Hash all tokens
 - Expire all magic links
 - Make magic links single-use
+- Never log raw invite/public/customer tokens in app logs, audit metadata, analytics beacons, or error traces
+- Never return raw token/link values from production APIs/actions unless an explicit canon exception exists
 - Use a separate customer portal session cookie
 - Enforce server-side authorization on every portal route/action
 - Check resource-level visibility
@@ -836,6 +838,10 @@ Required protections:
 - Append portal audit events
 - Rate limit magic-link requests
 - Revoke sessions when access is revoked
+
+Operational note:
+
+- Raw invite or magic-link URLs may be shown in development for local/manual delivery workflows, but production defaults should hide raw links and use audited delivery channels.
 
 ## Testing Expectations
 
@@ -954,3 +960,4 @@ A secure, scoped project hub where homeowners/property owners can see what matte
 ---
 
 *Created 2026-06-22 - Customer Project Portal canon established before schema/runtime implementation.*
+*Updated 2026-06-27 - Added explicit token handling hygiene (no raw token logging; production-safe link exposure defaults).*

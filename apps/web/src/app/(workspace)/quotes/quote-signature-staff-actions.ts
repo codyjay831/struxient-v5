@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   recordManualSignerLinkDelivery,
   recordSignerLinkCopied,

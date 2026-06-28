@@ -14,6 +14,8 @@ import {
 import { accessLevelAllows } from "@/lib/customer-portal/visible-resource-service";
 import { appendCustomerPortalEvent } from "@/lib/customer-portal/event-service";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ resourceId: string }> },

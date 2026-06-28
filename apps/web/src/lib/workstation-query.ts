@@ -19,6 +19,10 @@ import {
 import { db } from "@/lib/db";
 import { getQuoteReadiness } from "@/lib/quote-readiness";
 import { deriveChangeOrderWorkstationAttention } from "@/lib/change-order/change-order-workstation-attention";
+import { buildChangeOrderOperationalAttentionItems } from "@/lib/operational-attention/adapters/change-order-attention";
+import { buildQuoteOperationalAttentionItems } from "@/lib/operational-attention/adapters/quote-attention";
+import { deriveQuoteWorkstationCopy } from "@/lib/operational-attention/adapters/quote-workstation-copy";
+import { mapAttentionItemToWorkstationWorkItem } from "@/lib/operational-attention/workstation-mapper";
 import { evaluateQuoteJobActivationReadiness } from "@/lib/quote-job-activation-readiness";
 import {
   buildQuoteActivationReadinessInput,
@@ -74,6 +78,7 @@ import { pickPrimaryLinkedOpenTaskId } from "./workstation/schedule-event-task-r
 import {
   deriveEventPotentiallyMissed,
   deriveEventUpcoming,
+  eventSatisfiesRequiredScheduling,
   deriveTaskOverdue,
   deriveTaskDueToday,
 } from "./scheduling/scheduling-derivation";
@@ -229,6 +234,26 @@ function formatDependencyLabel(raw: string): string {
     .toLowerCase()
     .replace(/\b\w/g, (m) => m.toUpperCase())
     .trim();
+}
+
+function resolveTaskScheduledStartFromLinkedEvents(
+  linkedEvents: Array<{
+    status: JobScheduleEventStatus;
+    startAt: Date;
+    endAt: Date;
+  }>,
+  now: Date,
+): Date | null {
+  const activeCommitments = linkedEvents
+    .filter(
+      (event) =>
+        (event.status === JobScheduleEventStatus.CONFIRMED ||
+          event.status === JobScheduleEventStatus.TENTATIVE) &&
+        event.endAt.getTime() > now.getTime(),
+    )
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+
+  return activeCommitments[0]?.startAt ?? null;
 }
 
 export async function queryWorkstationWorkItems(
@@ -787,66 +812,70 @@ export async function queryWorkstationWorkItems(
       updatedAt: quote.updatedAt,
     }, role, now);
 
-    items.push({
-      id: `quote-${quote.id}`,
-      kind: "quote",
+    const workstationCopy = deriveQuoteWorkstationCopy({
+      baseStatus: quote.status,
+      baseReason: rankReason || workflow.reason,
+      baseNextStep: workflow.nextAction?.label || "Review quote.",
+      isApprovedQuoteHandoff,
+      isCustomerAccepted,
+      openChangeRequest: openChangeRequest
+        ? {
+            requiresVisit: openChangeRequest.requiresVisit,
+            hasDraftRevision: Boolean(draftRevision),
+            draftRevisionHasLineItems: Boolean(
+              draftRevision && draftRevision.lineItems.length > 0,
+            ),
+          }
+        : null,
+      openSalesVisit: openSalesVisit
+        ? {
+            isPending: openSalesVisitIsPending,
+            dateLabel: openSalesVisitDateLabel,
+          }
+        : null,
+    });
+
+    const [quoteAttentionItem] = buildQuoteOperationalAttentionItems({
+      quoteId: quote.id,
       title: primaryIdentity,
       subtitle,
+      customerId: quote.customerId,
+      leadId: quote.leadId,
+      parentRecordId: quote.customerId || quote.leadId || undefined,
+      parentLabel,
+      href: quote.leadId
+        ? opportunityWorkspaceHref(quote.leadId, "quote")
+        : `/quotes/${quote.id}`,
+      updatedAt: quote.updatedAt,
+      readiness,
+      rank: {
+        priority,
+        group,
+        lens: "attention",
+        lane,
+        withinLaneRank,
+      },
+      status: quote.status,
+      reason: rankReason || workflow.reason,
       contextLine: quoteWorkContext.contextLine || undefined,
       scopeLabel: quoteWorkContext.scopeLabel,
       addressLine: quoteJobsiteLine,
       ageLabel: `Age ${formatCompactAge(quote.updatedAt, now)}`,
       valueLabel: formatMoneyLabel(quote.totalCents),
-      typeLabel: "Quote",
-      status: openSalesVisit
-        ? openSalesVisitIsPending
-          ? "Site visit requested"
-          : "Site visit scheduled"
-        : openChangeRequest
-        ? draftRevision
-          ? draftRevision.lineItems.length > 0
-            ? "Revision ready to send"
-            : "Revision draft in progress"
-          : "Customer requested changes"
-        : quote.status,
-      priority,
-      group,
-      lens: "attention",
-      lane,
-      withinLaneRank,
-      filterCategory: "quotes",
-      reason: openSalesVisit
-        ? openSalesVisitIsPending
-          ? `Site visit requested for ${openSalesVisitDateLabel}.`
-          : `Site visit scheduled for ${openSalesVisitDateLabel}.`
-        : openChangeRequest
-        ? openChangeRequest.requiresVisit
-          ? "Customer requested changes and follow-up visit may be required."
-          : "Customer requested changes on this quote."
-        : isApprovedQuoteHandoff
-          ? "Approved quote is waiting for job setup."
-        : isCustomerAccepted
-          ? "Accepted by customer via portal."
-          : rankReason || workflow.reason,
-      nextStep: openSalesVisit
-        ? openSalesVisitIsPending
-          ? "Schedule site visit."
-          : "Complete site visit."
-        : openChangeRequest
-        ? draftRevision
-          ? "Continue revision draft."
-          : "Create revision draft."
-        : workflow.nextAction?.label || "Review quote.",
-      recordId: quote.id,
-      parentRecordId: quote.customerId || quote.leadId || undefined,
-      parentLabel,
-      leadAnchorId: quote.leadId,
-      href: quote.leadId
-        ? opportunityWorkspaceHref(quote.leadId, "quote")
-        : `/quotes/${quote.id}`,
-      updatedAt: quote.updatedAt,
+      isCustomerAccepted,
+      openChangeRequest: openChangeRequest
+        ? {
+            requiresVisit: openChangeRequest.requiresVisit,
+            draftRevisionLineItemCount: draftRevision?.lineItems.length ?? null,
+          }
+        : null,
       workflow,
+      workstationCopy,
     });
+    const mappedQuoteItem = mapAttentionItemToWorkstationWorkItem(quoteAttentionItem);
+    if (mappedQuoteItem) {
+      items.push(mappedQuoteItem);
+    }
   }
 
   // 2b. Change Orders
@@ -878,6 +907,8 @@ export async function queryWorkstationWorkItems(
       title: true,
       status: true,
       applicationStatus: true,
+      priceDeltaCents: true,
+      zeroDollarPolicyClass: true,
       updatedAt: true,
       quote: {
         select: {
@@ -903,6 +934,8 @@ export async function queryWorkstationWorkItems(
     const attention = deriveChangeOrderWorkstationAttention({
       status: changeOrder.status,
       applicationStatus: changeOrder.applicationStatus,
+      priceDeltaCents: changeOrder.priceDeltaCents,
+      zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
     });
     const priority: WorkstationWorkItemPriority = attention.priority;
     const group: WorkstationWorkItemGroup =
@@ -927,27 +960,31 @@ export async function queryWorkstationWorkItems(
 
     const customerLabel = changeOrder.quote.customer?.displayName ?? changeOrder.quote.lead?.title ?? null;
 
-    items.push({
-      id: `change-order-${changeOrder.id}`,
-      kind: "change-order",
-      title: `CO-${String(changeOrder.number).padStart(3, "0")} · ${changeOrder.title}`,
-      subtitle: customerLabel ?? changeOrder.job.title,
-      typeLabel: "Change Order",
-      status: attention.statusLabel,
-      priority,
-      group,
-      lens: attention.lens,
-      lane,
-      withinLaneRank,
-      filterCategory: "quotes",
-      reason: rankReason || "Customer-facing scope and price amendment in progress.",
-      nextStep: attention.nextStep,
-      recordId: changeOrder.id,
-      parentRecordId: changeOrder.job.id,
-      parentLabel: customerLabel ?? undefined,
-      href: `/jobs/${changeOrder.job.id}/change-orders?focus=${changeOrder.id}`,
+    const [changeOrderAttentionItem] = buildChangeOrderOperationalAttentionItems({
+      changeOrderId: changeOrder.id,
+      number: changeOrder.number,
+      title: changeOrder.title,
+      jobId: changeOrder.job.id,
+      jobTitle: changeOrder.job.title,
+      customerLabel,
+      status: changeOrder.status,
+      applicationStatus: changeOrder.applicationStatus,
+      priceDeltaCents: changeOrder.priceDeltaCents,
+      zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
       updatedAt: changeOrder.updatedAt,
+      rankReason,
+      rank: {
+        priority,
+        group,
+        lens: attention.lens,
+        lane,
+        withinLaneRank,
+      },
     });
+    const mappedChangeOrderItem = mapAttentionItemToWorkstationWorkItem(changeOrderAttentionItem);
+    if (mappedChangeOrderItem) {
+      items.push(mappedChangeOrderItem);
+    }
   }
 
   // 3. Jobs & Tasks
@@ -980,8 +1017,6 @@ export async function queryWorkstationWorkItems(
           dueMode: true,
           dueGranularity: true,
           schedulingRequirement: true,
-          scheduledStartAt: true,
-          scheduledEndAt: true,
           scheduleEventLinks: {
             select: {
               jobScheduleEvent: {
@@ -1450,6 +1485,10 @@ export async function queryWorkstationWorkItems(
         orgTimezone,
         now,
       );
+      const taskScheduledStartAt = resolveTaskScheduledStartFromLinkedEvents(linkedEvents, now);
+      const taskHasConfirmedCommitment = linkedEvents.some((event) =>
+        eventSatisfiesRequiredScheduling(event, now),
+      );
       const taskIsScheduledSoon = linkedEvents.some(
         (event) =>
           event.endAt > now &&
@@ -1515,9 +1554,12 @@ export async function queryWorkstationWorkItems(
           ? "Overdue"
           : taskIsDueToday
             ? "Due today"
-            : taskIsScheduledSoon
-              ? "Scheduled"
-              : schedulingAttentionOverride?.status ?? taskStateLabel(derivedState),
+            : schedulingAttentionOverride?.status ??
+              (taskHasConfirmedCommitment
+                ? "Scheduled"
+                : taskIsScheduledSoon
+                  ? "Tentative"
+                  : taskStateLabel(derivedState)),
         priority,
         group,
         lens: schedulingAttentionOverride
@@ -1545,7 +1587,9 @@ export async function queryWorkstationWorkItems(
                   : derivedState === "NEEDS_PROOF"
                     ? "Task needs completion proof."
                     : taskIsScheduledSoon
-                      ? "Task has upcoming scheduled work."
+                      ? taskHasConfirmedCommitment
+                        ? "Task has upcoming scheduled work."
+                        : "Task has a tentative schedule event that still needs confirmation."
                       : "Task is ready to complete.",
         nextStep: taskRecoveryRoute?.nextStep ??
           (schedulingAttentionOverride?.nextStep ??
@@ -1562,7 +1606,7 @@ export async function queryWorkstationWorkItems(
         updatedAt: task.updatedAt,
         assignedUserId: task.assignedUserId,
         dueAt: task.dueAt,
-        scheduledStartAt: task.scheduledStartAt,
+        scheduledStartAt: taskScheduledStartAt,
         isBlocked: isBlockedByIssue,
         isWaitingOnSignals,
         missingSignals: missingSignals.length > 0 ? missingSignals : undefined,

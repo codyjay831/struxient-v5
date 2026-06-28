@@ -9,7 +9,9 @@ import {
   type ParsedQuoteLineInput as ParsedQuoteLineInputLib,
 } from "@/lib/quote-line-form-input";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { promoteLeadToQuote } from "@/lib/lead/promote-to-quote";
 import type { QuoteRollupTx } from "@/lib/quote-line-item-template-apply-tx";
 import {

@@ -139,6 +139,11 @@ test("viewer cannot send quote signature", () => {
   assert.notEqual(denyUnlessCanSendQuoteSignature(StaffRole.VIEWER), null);
 });
 
+test("field and subcontractor cannot send quote signature", () => {
+  assert.notEqual(denyUnlessCanSendQuoteSignature(StaffRole.FIELD), null);
+  assert.notEqual(denyUnlessCanSendQuoteSignature(StaffRole.SUBCONTRACTOR), null);
+});
+
 test("office can send quote signature", () => {
   assert.equal(denyUnlessCanSendQuoteSignature(StaffRole.OFFICE), null);
 });

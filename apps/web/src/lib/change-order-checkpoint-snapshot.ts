@@ -28,6 +28,7 @@ export const changeOrderSelectForCustomerCheckpoint = {
   quoteId: true,
   status: true,
   priceDeltaCents: true,
+  zeroDollarPolicyClass: true,
   number: true,
   title: true,
   customerDocumentTitle: true,

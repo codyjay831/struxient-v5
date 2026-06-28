@@ -3,6 +3,8 @@
  */
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   void request;
   if (!process.env.TWILIO_AUTH_TOKEN) {

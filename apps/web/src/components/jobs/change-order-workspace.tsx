@@ -2,10 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChangeOrderApplicationStatus, ChangeOrderStatus } from "@prisma/client";
+import {
+  ChangeOrderApplicationStatus,
+  ChangeOrderStatus,
+  ZeroDollarPolicyClass,
+} from "@prisma/client";
 import { CheckCircle2, FilePlus2, RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   applyChangeOrderAction,
+  confirmChangeOrderNoCustomerImpactAction,
   createChangeOrderDraftAction,
   markChangeOrderAcceptedAction,
   rejectChangeOrderAction,
@@ -61,10 +66,21 @@ import {
 type WorkspacePhase = "idle" | "creating" | "updating" | "approving" | "applying";
 type DraftComposerPhase = "closed" | "intent" | "editing";
 
+const ZERO_DOLLAR_POLICY_LABELS: Record<ZeroDollarPolicyClass, string> = {
+  [ZeroDollarPolicyClass.INTERNAL_ADMIN]: "Internal/admin note only",
+  [ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY]: "Internal execution change",
+  [ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE]: "Customer-facing scope/material change",
+};
+
+function zeroDollarPolicyLabel(value: ZeroDollarPolicyClass | null | undefined): string {
+  return value ? ZERO_DOLLAR_POLICY_LABELS[value] : "Not classified";
+}
+
 function toRevisionSnapshot(
   changeOrder: LoadedChangeOrderWorkspace["changeOrders"][number],
   executionImpactOverride?: ReturnType<typeof projectChangeOrderExecutionImpact>,
   paymentImpactJsonOverride?: unknown,
+  zeroDollarPolicyClassOverride?: ZeroDollarPolicyClass | null,
 ): ChangeOrderRevisionSnapshot {
   return {
     id: changeOrder.id,
@@ -78,6 +94,15 @@ function toRevisionSnapshot(
     customerDocumentTitle: changeOrder.customerDocumentTitle,
     paymentImpactJson: paymentImpactJsonOverride ?? changeOrder.paymentImpactJson,
     executionImpact: executionImpactOverride ?? changeOrder.executionImpact,
+    zeroDollarPolicyClass:
+      zeroDollarPolicyClassOverride !== undefined
+        ? zeroDollarPolicyClassOverride
+        : changeOrder.zeroDollarPolicyClass,
+    internalNoCustomerImpactConfirmedAt:
+      changeOrder.internalNoCustomerImpactConfirmedAt,
+    internalNoCustomerImpactConfirmedByUserId:
+      changeOrder.internalNoCustomerImpactConfirmedByUserId,
+    hasCustomerAcceptanceCheckpoint: changeOrder.hasCustomerAcceptanceCheckpoint,
   };
 }
 
@@ -91,6 +116,8 @@ type EditState = {
   baselineExecutionDeltaProposal: ChangeOrderExecutionDeltaProposal | null;
   paymentImpactJson: unknown;
   baselinePaymentImpactJson: unknown;
+  zeroDollarPolicyClass: ZeroDollarPolicyClass | null;
+  baselineZeroDollarPolicyClass: ZeroDollarPolicyClass | null;
 };
 
 function resolveInitialPaymentImpactJson(
@@ -139,6 +166,8 @@ function buildEditState(
     baselineExecutionDeltaProposal: executionDeltaProposal,
     paymentImpactJson,
     baselinePaymentImpactJson: changeOrder.paymentImpactJson,
+    zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass ?? null,
+    baselineZeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass ?? null,
   };
 }
 
@@ -251,6 +280,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
         selectedChangeOrder,
         localExecutionImpact ?? undefined,
         activeEditState?.paymentImpactJson,
+        activeEditState?.zeroDollarPolicyClass,
       )
     : null;
 
@@ -313,6 +343,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     executionComposerEditable: Boolean(isExecutionEditable),
     baselinePaymentImpactJson: activeEditState?.baselinePaymentImpactJson,
     paymentImpactJson: activeEditState?.paymentImpactJson,
+    baselineZeroDollarPolicyClass: activeEditState?.baselineZeroDollarPolicyClass,
   });
 
   function resetComposer() {
@@ -428,8 +459,11 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
       ? JSON.stringify(activeEditState.baselinePaymentImpactJson ?? null) !==
         JSON.stringify(activeEditState.paymentImpactJson ?? null)
       : false;
+    const zeroDollarPolicyChanged = activeEditState
+      ? activeEditState.baselineZeroDollarPolicyClass !== activeEditState.zeroDollarPolicyClass
+      : false;
     const saveIntent = resolveDraftUpdateSaveIntent({
-      commercialChanged,
+      commercialChanged: commercialChanged || zeroDollarPolicyChanged,
       executionChanged,
       paymentImpactChanged,
     });
@@ -459,6 +493,10 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
               reasoning: editReasoning.trim(),
               priceDeltaCents: commercialPriceDeltaCents,
               lines: editLines,
+              zeroDollarPolicyClass:
+                commercialPriceDeltaCents === 0
+                  ? activeEditState?.zeroDollarPolicyClass ?? null
+                  : null,
               paymentImpactJson:
                 commercialPriceDeltaCents === 0
                   ? null
@@ -479,6 +517,7 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
           baselineReasoning: editReasoning.trim(),
           baselineLines: editLines,
           baselinePaymentImpactJson: activeEditState.paymentImpactJson,
+          baselineZeroDollarPolicyClass: activeEditState.zeroDollarPolicyClass,
         });
       }
       if (saveKind === "execution_only" && activeEditState) {
@@ -524,6 +563,23 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     setPhase("approving");
     startTransition(async () => {
       const result = await markChangeOrderAcceptedAction(selectedRevision.id);
+      if (!result.ok) {
+        setError(result.error);
+        setPhase("idle");
+        return;
+      }
+      setPhase("idle");
+      router.push(`${jobChangeOrdersPath(data.jobId)}?focus=${result.changeOrderId}`);
+      router.refresh();
+    });
+  }
+
+  function handleConfirmInternalNoCustomerImpact() {
+    if (!selectedRevision) return;
+    setError(null);
+    setPhase("approving");
+    startTransition(async () => {
+      const result = await confirmChangeOrderNoCustomerImpactAction(selectedRevision.id);
       if (!result.ok) {
         setError(result.error);
         setPhase("idle");
@@ -605,6 +661,15 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
     (selectedRevision.status === ChangeOrderStatus.SENT ||
       (selectedRevision.status === ChangeOrderStatus.DRAFT &&
         !selectedReadiness.requiresCustomerApproval));
+  const showInternalNoCustomerImpactConfirmButton =
+    selectedRevision?.priceDeltaCents === 0 &&
+    selectedRevision.zeroDollarPolicyClass === ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY &&
+    !selectedRevision.internalNoCustomerImpactConfirmedAt &&
+    isSelectedEditable;
+  const internalNoCustomerImpactConfirmBlocked =
+    selectedReadiness.commercialChanged ||
+    selectedReadiness.executionChanged ||
+    selectedReadiness.paymentImpactChanged;
 
   return (
     <div className="space-y-6">
@@ -765,6 +830,44 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                     disabled={isPending || pageBlocked}
                     showAdvancedControls
                   />
+                  {editValidation.ok && editValidation.priceDeltaCents === 0 ? (
+                    <div className="rounded-lg border border-border bg-surface px-4 py-3">
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-foreground-muted">
+                          Zero-dollar policy
+                        </span>
+                        <select
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={activeEditState?.zeroDollarPolicyClass ?? ""}
+                          disabled={isPending || pageBlocked}
+                          onChange={(event) =>
+                            updateEditState({
+                              zeroDollarPolicyClass:
+                                event.target.value === ""
+                                  ? null
+                                  : (event.target.value as ZeroDollarPolicyClass),
+                            })
+                          }
+                        >
+                          <option value="">Select policy class</option>
+                          <option value={ZeroDollarPolicyClass.INTERNAL_ADMIN}>
+                            Internal/admin note only
+                          </option>
+                          <option value={ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY}>
+                            Internal execution change
+                          </option>
+                          <option value={ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE}>
+                            Customer-facing scope/material change
+                          </option>
+                        </select>
+                      </label>
+                      <p className="mt-2 text-xs text-foreground-muted">
+                        No price change still needs a policy. Customer-facing scope, material,
+                        warranty, performance, or appearance changes must go through customer
+                        acknowledgement.
+                      </p>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -788,6 +891,23 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                       sendBlockedReason={selectedReadiness.paymentImpactBlockReason}
                       onChange={() => {}}
                     />
+                  ) : null}
+                  {selectedRevision.priceDeltaCents === 0 ? (
+                    <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                      <p className="font-medium text-foreground">Zero-dollar policy</p>
+                      <p className="mt-1 text-foreground-muted">
+                        {zeroDollarPolicyLabel(selectedRevision.zeroDollarPolicyClass)}
+                      </p>
+                      {selectedRevision.zeroDollarPolicyClass ===
+                      ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY ? (
+                        <p className="mt-2 text-xs text-foreground-muted">
+                          Internal confirmation:{" "}
+                          {selectedRevision.internalNoCustomerImpactConfirmedAt
+                            ? "no customer-facing change confirmed"
+                            : "not confirmed"}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                 </>
               )}
@@ -851,6 +971,27 @@ export function ChangeOrderWorkspace({ data }: { data: LoadedChangeOrderWorkspac
                       <SendHorizontal className="size-4" />
                     )}
                     Send change order
+                  </Button>
+                ) : null}
+
+                {showInternalNoCustomerImpactConfirmButton ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isPending || internalNoCustomerImpactConfirmBlocked}
+                    title={
+                      internalNoCustomerImpactConfirmBlocked
+                        ? "Save policy, commercial, and work impact changes before confirming."
+                        : undefined
+                    }
+                    onClick={handleConfirmInternalNoCustomerImpact}
+                  >
+                    {phase === "approving" ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-4" />
+                    )}
+                    Confirm no customer-facing change
                   </Button>
                 ) : null}
 

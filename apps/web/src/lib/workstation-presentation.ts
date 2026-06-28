@@ -833,9 +833,9 @@ function buildWeekDaySummaries(
 
     let summary = "No scheduled work";
     if (dayEvents.length > 0 && dayRisks.length > 0) {
-      summary = `${dayEvents.length} visit${dayEvents.length === 1 ? "" : "s"} · ${dayRisks.length} risk${dayRisks.length === 1 ? "" : "s"}`;
+      summary = `${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"} · ${dayRisks.length} risk${dayRisks.length === 1 ? "" : "s"}`;
     } else if (dayEvents.length > 0) {
-      summary = `${dayEvents.length} scheduled`;
+      summary = `${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"} scheduled`;
     } else if (dayRisks.length > 0) {
       summary = `${dayRisks.length} risk${dayRisks.length === 1 ? "" : "s"}`;
     }

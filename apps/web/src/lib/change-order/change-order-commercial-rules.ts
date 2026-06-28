@@ -1,4 +1,4 @@
-import { ChangeOrderStatus } from "@prisma/client";
+import { ChangeOrderStatus, ZeroDollarPolicyClass } from "@prisma/client";
 
 const TERMINAL_COMMERCIAL_STATUSES = new Set<ChangeOrderStatus>([
   ChangeOrderStatus.ACCEPTED,
@@ -13,13 +13,122 @@ const EDITABLE_DRAFT_STATUSES = new Set<ChangeOrderStatus>([
   ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES,
 ]);
 
+export const ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE =
+  "Select zero-dollar policy classification before continuing.";
+export const ZERO_DOLLAR_INTERNAL_CONFIRMATION_REQUIRED_MESSAGE =
+  "Confirm no customer-facing change before accepting or applying.";
+export const ZERO_DOLLAR_CUSTOMER_ACKNOWLEDGEMENT_REQUIRED_MESSAGE =
+  "Customer-facing zero-dollar changes must be sent and accepted by the customer before apply.";
+export const ZERO_DOLLAR_INTERNAL_SEND_BLOCKED_MESSAGE =
+  "Internal zero-dollar Change Orders do not need to be sent to the customer.";
+
+export type ZeroDollarPolicyInput = {
+  priceDeltaCents: number;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+  internalNoCustomerImpactConfirmedAt?: Date | string | null;
+};
+
 export function changeOrderRequiresCustomerPriceApproval(priceDeltaCents: number): boolean {
   return priceDeltaCents !== 0;
+}
+
+export function isZeroDollarChangeOrder(priceDeltaCents: number): boolean {
+  return priceDeltaCents === 0;
+}
+
+export function zeroDollarRequiresCustomerAcknowledgement(
+  input: ZeroDollarPolicyInput,
+): boolean {
+  return (
+    input.priceDeltaCents === 0 &&
+    input.zeroDollarPolicyClass === ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE
+  );
+}
+
+export function zeroDollarInternalConfirmationSatisfied(
+  input: ZeroDollarPolicyInput,
+): boolean {
+  return (
+    input.priceDeltaCents !== 0 ||
+    input.zeroDollarPolicyClass !== ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY ||
+    input.internalNoCustomerImpactConfirmedAt != null
+  );
+}
+
+export function validateZeroDollarPolicyForSend(
+  input: ZeroDollarPolicyInput,
+): { ok: true } | { ok: false; error: string } {
+  if (input.priceDeltaCents !== 0) return { ok: true };
+  if (!input.zeroDollarPolicyClass) {
+    return { ok: false, error: ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE };
+  }
+  if (
+    input.zeroDollarPolicyClass === ZeroDollarPolicyClass.INTERNAL_ADMIN ||
+    input.zeroDollarPolicyClass === ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY
+  ) {
+    return { ok: false, error: ZERO_DOLLAR_INTERNAL_SEND_BLOCKED_MESSAGE };
+  }
+  return { ok: true };
+}
+
+export function validateZeroDollarPolicyForStaffAccept(
+  input: ZeroDollarPolicyInput,
+): { ok: true } | { ok: false; error: string } {
+  if (input.priceDeltaCents !== 0) return { ok: true };
+  if (!input.zeroDollarPolicyClass) {
+    return { ok: false, error: ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE };
+  }
+  if (input.zeroDollarPolicyClass === ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE) {
+    return { ok: false, error: ZERO_DOLLAR_CUSTOMER_ACKNOWLEDGEMENT_REQUIRED_MESSAGE };
+  }
+  if (!zeroDollarInternalConfirmationSatisfied(input)) {
+    return { ok: false, error: ZERO_DOLLAR_INTERNAL_CONFIRMATION_REQUIRED_MESSAGE };
+  }
+  return { ok: true };
+}
+
+export function validateZeroDollarPolicyForApply(
+  input: ZeroDollarPolicyInput & { hasCustomerAcceptanceCheckpoint?: boolean },
+): { ok: true } | { ok: false; error: string } {
+  if (input.priceDeltaCents !== 0) return { ok: true };
+  if (!input.zeroDollarPolicyClass) {
+    return { ok: false, error: ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE };
+  }
+  if (
+    input.zeroDollarPolicyClass === ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE &&
+    !input.hasCustomerAcceptanceCheckpoint
+  ) {
+    return { ok: false, error: ZERO_DOLLAR_CUSTOMER_ACKNOWLEDGEMENT_REQUIRED_MESSAGE };
+  }
+  if (!zeroDollarInternalConfirmationSatisfied(input)) {
+    return { ok: false, error: ZERO_DOLLAR_INTERNAL_CONFIRMATION_REQUIRED_MESSAGE };
+  }
+  return { ok: true };
+}
+
+export function shouldClearZeroDollarInternalConfirmationOnDraftEdit(input: {
+  currentPriceDeltaCents: number;
+  nextPriceDeltaCents: number;
+  currentZeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+  nextZeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+  internalNoCustomerImpactConfirmedAt?: Date | string | null;
+  linesChanged?: boolean;
+  executionDeltaChanged?: boolean;
+}): boolean {
+  if (input.internalNoCustomerImpactConfirmedAt == null) return false;
+  return (
+    input.currentPriceDeltaCents !== input.nextPriceDeltaCents ||
+    input.currentZeroDollarPolicyClass !== input.nextZeroDollarPolicyClass ||
+    input.linesChanged === true ||
+    input.executionDeltaChanged === true
+  );
 }
 
 export function canStaffAcceptChangeOrder(params: {
   status: ChangeOrderStatus;
   priceDeltaCents: number;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+  internalNoCustomerImpactConfirmedAt?: Date | string | null;
 }): { ok: true } | { ok: false; error: string } {
   if (params.status === ChangeOrderStatus.APPLIED) {
     return { ok: false, error: "Applied Change Orders cannot be accepted again." };
@@ -45,6 +154,9 @@ export function canStaffAcceptChangeOrder(params: {
     }
     return { ok: true };
   }
+
+  const zeroDollarPolicy = validateZeroDollarPolicyForStaffAccept(params);
+  if (!zeroDollarPolicy.ok) return zeroDollarPolicy;
 
   if (
     params.status !== ChangeOrderStatus.DRAFT &&

@@ -9,6 +9,8 @@ import {
   getTaskVisibilityWhere,
 } from "@/lib/authz/resource-access";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Protected media route for task proof attachments.
  * Verifies tenant access before streaming the file from the configured storage provider.

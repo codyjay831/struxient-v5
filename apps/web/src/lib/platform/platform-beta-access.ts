@@ -145,7 +145,7 @@ export async function createPlatformBetaInvite(
     aiIncludedUnits?: number;
     reason: string;
   },
-): Promise<{ inviteId: string; inviteToken: string; inviteUrl: string }> {
+): Promise<{ inviteId: string; inviteUrl?: string }> {
   const normalizedEmail = normalizeEmail(input.email);
   if (!normalizedEmail.includes("@")) {
     throw new Error("Enter a valid email address.");
@@ -211,8 +211,7 @@ export async function createPlatformBetaInvite(
 
   return {
     inviteId: invite.id,
-    inviteToken,
-    inviteUrl: buildBetaSignupUrl(inviteToken),
+    inviteUrl: process.env.NODE_ENV !== "production" ? buildBetaSignupUrl(inviteToken) : undefined,
   };
 }
 

@@ -8,6 +8,7 @@ import { getStripeClient, getStripeWebhookSecret } from "@/lib/billing/billing-s
 import { isStripeBillingEnabled } from "@/lib/billing/billing-config";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   if (!isStripeBillingEnabled()) {

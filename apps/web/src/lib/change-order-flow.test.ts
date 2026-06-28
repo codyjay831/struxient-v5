@@ -7,6 +7,7 @@ import {
   JobScopeItemStatus,
   JobStatus,
   StaffRole,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 import {
   buildDueBeforeAddedWorkPaymentImpactJson,
@@ -35,7 +36,10 @@ import {
   type ChangeOrderScopeItemSnapshot,
 } from "./change-order-flow";
 import { canEditChangeOrderDraft } from "@/lib/change-order/change-order-commercial-rules";
-import { CHANGE_ORDER_EXECUTION_DELTA_SCHEMA_VERSION } from "@/lib/change-order/execution-delta-schema";
+import {
+  CHANGE_ORDER_EXECUTION_DELTA_SCHEMA_VERSION,
+  type ChangeOrderExecutionDeltaProposal,
+} from "@/lib/change-order/execution-delta-schema";
 import type { ChangeOrderExecutionTaskOpView } from "@/lib/change-order/change-order-execution-projection";
 import { confirmGeneratedTaskInProposal } from "@/lib/change-order/change-order-execution-task-composer";
 import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
@@ -215,6 +219,7 @@ test("smoke: send button disabled unless revision is draft", () => {
       status: ChangeOrderStatus.DRAFT,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
       lines: [],
     },
     executionValidationOk: true,
@@ -275,6 +280,7 @@ test("zero-dollar draft can be staff-accepted", () => {
       status: ChangeOrderStatus.DRAFT,
       reasoning: "Clarify scope",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [],
     },
     isPending: false,
@@ -291,6 +297,7 @@ test("apply button disabled when applicationStatus is APPLY_FAILED", () => {
       status: ChangeOrderStatus.ACCEPTED,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [],
     },
     jobPlanVersion: 4,
@@ -315,6 +322,7 @@ test("readiness exposes NEEDS_EXECUTION_REVIEW lifecycle state", () => {
       status: ChangeOrderStatus.ACCEPTED,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [
         {
           operation: ChangeOrderLineOperation.ADD,
@@ -338,6 +346,7 @@ test("readiness exposes NEEDS_EXECUTION_REVIEW lifecycle state", () => {
         validationErrors: ["Job plan changed"],
         stalePlan: true,
         conflict: false,
+        noWorkImpactConfirmed: false,
       },
     },
     jobPlanVersion: 2,
@@ -357,6 +366,7 @@ test("smoke: apply button disabled unless revision is approved", () => {
       status: ChangeOrderStatus.ACCEPTED,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [
         {
           operation: ChangeOrderLineOperation.ADD,
@@ -498,7 +508,7 @@ test("mixed commercial and execution edits disable update draft with explicit re
         payload: { title: "Execute change: Battery backup" },
       },
     ],
-  };
+  } satisfies ChangeOrderExecutionDeltaProposal;
 
   const readiness = deriveChangeOrderReadiness({
     permissions: officePermissions,
@@ -533,6 +543,7 @@ test("mixed commercial and execution edits disable update draft with explicit re
         validationErrors: [],
         stalePlan: false,
         conflict: false,
+        noWorkImpactConfirmed: false,
       },
     },
     jobPlanVersion: 1,
@@ -580,6 +591,7 @@ const reviewedExecutionImpact = {
   validationErrors: [] as string[],
   stalePlan: false,
   conflict: false,
+  noWorkImpactConfirmed: false,
 };
 
 test("unsaved v2 payment impact enables commercial save and blocks send", () => {
@@ -664,6 +676,7 @@ test("unsaved execution impact blocks send", () => {
       status: ChangeOrderStatus.DRAFT,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
       lines: [],
     },
     executionValidationOk: true,
@@ -690,6 +703,7 @@ test("generated task suggestions keep send action disabled until reviewed", () =
       status: ChangeOrderStatus.DRAFT,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
       lines: [
         {
           operation: ChangeOrderLineOperation.ADD,
@@ -712,6 +726,7 @@ test("generated task suggestions keep send action disabled until reviewed", () =
         validationErrors: [],
         stalePlan: false,
         conflict: false,
+        noWorkImpactConfirmed: false,
       },
     },
     jobPlanVersion: 1,
@@ -911,6 +926,7 @@ test("invalid execution impact blocks send", () => {
       status: ChangeOrderStatus.DRAFT,
       reasoning: "Add battery",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
       lines: [],
       executionImpact: {
         parsed: true,

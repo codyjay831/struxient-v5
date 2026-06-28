@@ -441,55 +441,56 @@ model CustomerServiceLocation {
 }
 
 model User {
-  id                             String                        @id @default(cuid())
-  email                          String?                       @unique
-  name                           String?
-  passwordHash                   String?
-  createdAt                      DateTime                      @default(now())
-  updatedAt                      DateTime                      @updatedAt
-  emailVerified                  DateTime?
-  termsAcceptedAt                DateTime?
-  termsVersion                   String?
-  image                          String?
-  accounts                       Account[]
-  uploadedAttachments            Attachment[]                  @relation("UploadedAttachments")
-  reviewedDailyJobLogs           DailyJobLog[]                 @relation("ReviewedBy")
-  jobActivities                  JobActivity[]
-  jobIssues                      JobIssue[]
-  completedTasks                 JobTask[]                     @relation("CompletedTasks")
-  assignedTasks                  JobTask[]                     @relation("AssignedTasks")
-  assignedVisits                 JobVisit[]                    @relation("AssignedVisits")
-  leadScheduleEvents             JobScheduleEvent[]            @relation("LeadScheduleEvents")
-  scheduleBlocks                 ScheduleBlock[]
-  notificationEvents             NotificationEvent[]
-  leadEvents                     LeadEvent[]
-  memberships                    Membership[]
-  resolvedChangeRequests         QuoteChangeRequest[]
-  completedLeadVisits            LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
-  assignedLeadVisits             LeadVisitRequest[]            @relation("LeadVisitAssignedTo")
-  sessions                       Session[]
-  siteDetailsReviews             SiteDetailsReview[]           @relation("SiteDetailsReviewedBy")
-  serviceLocationAuditEvents     ServiceLocationAuditEvent[]   @relation("ServiceLocationAuditActor")
-  updatedBusinessProfiles        OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
-  acceptedQuoteExecutionPlans    QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
-  approvedExecutionPlanRevisions ExecutionPlanRevision[]       @relation("ExecutionPlanRevisionApprovedBy")
-  approvedChangeOrders           ChangeOrder[]                 @relation("ChangeOrderApprovedBy")
-  canceledTasks                  JobTask[]                     @relation("CanceledTasks")
-  invitedOrganizationInvites     OrganizationInvite[]          @relation("OrganizationInviteInvitedBy")
-  acceptedOrganizationInvites    OrganizationInvite[]          @relation("OrganizationInviteAcceptedBy")
-  revokedOrganizationInvites     OrganizationInvite[]          @relation("OrganizationInviteRevokedBy")
-  crewMemberships                CrewMember[]
-  jobCollaborations              JobCollaborator[]
-  lastActiveOrganizationId       String?
-  platformAccess                 PlatformAccess?
-  platformAccessCreated          PlatformAccess[]              @relation("PlatformAccessCreatedBy")
-  platformAccessRevoked          PlatformAccess[]              @relation("PlatformAccessRevokedBy")
-  platformAuditEvents            PlatformAuditEvent[]          @relation("PlatformAuditActor")
-  createdBetaSignupInvites       BetaSignupInvite[]            @relation("BetaSignupInviteCreatedBy")
-  acceptedBetaSignupInvites      BetaSignupInvite[]            @relation("BetaSignupInviteAcceptedBy")
-  revokedBetaSignupInvites       BetaSignupInvite[]            @relation("BetaSignupInviteRevokedBy")
-  grantedBetaGrants              OrganizationBetaGrant[]       @relation("OrganizationBetaGrantGrantedBy")
-  revokedBetaGrants              OrganizationBetaGrant[]       @relation("OrganizationBetaGrantRevokedBy")
+  id                                    String                        @id @default(cuid())
+  email                                 String?                       @unique
+  name                                  String?
+  passwordHash                          String?
+  createdAt                             DateTime                      @default(now())
+  updatedAt                             DateTime                      @updatedAt
+  emailVerified                         DateTime?
+  termsAcceptedAt                       DateTime?
+  termsVersion                          String?
+  image                                 String?
+  accounts                              Account[]
+  uploadedAttachments                   Attachment[]                  @relation("UploadedAttachments")
+  reviewedDailyJobLogs                  DailyJobLog[]                 @relation("ReviewedBy")
+  jobActivities                         JobActivity[]
+  jobIssues                             JobIssue[]
+  completedTasks                        JobTask[]                     @relation("CompletedTasks")
+  assignedTasks                         JobTask[]                     @relation("AssignedTasks")
+  assignedVisits                        JobVisit[]                    @relation("AssignedVisits")
+  leadScheduleEvents                    JobScheduleEvent[]            @relation("LeadScheduleEvents")
+  scheduleBlocks                        ScheduleBlock[]
+  notificationEvents                    NotificationEvent[]
+  leadEvents                            LeadEvent[]
+  memberships                           Membership[]
+  resolvedChangeRequests                QuoteChangeRequest[]
+  completedLeadVisits                   LeadVisitRequest[]            @relation("LeadVisitCompletedBy")
+  assignedLeadVisits                    LeadVisitRequest[]            @relation("LeadVisitAssignedTo")
+  sessions                              Session[]
+  siteDetailsReviews                    SiteDetailsReview[]           @relation("SiteDetailsReviewedBy")
+  serviceLocationAuditEvents            ServiceLocationAuditEvent[]   @relation("ServiceLocationAuditActor")
+  updatedBusinessProfiles               OrganizationBusinessProfile[] @relation("BusinessProfileUpdatedBy")
+  acceptedQuoteExecutionPlans           QuoteExecutionPlan[]          @relation("QuoteExecutionPlanAcceptedBy")
+  approvedExecutionPlanRevisions        ExecutionPlanRevision[]       @relation("ExecutionPlanRevisionApprovedBy")
+  approvedChangeOrders                  ChangeOrder[]                 @relation("ChangeOrderApprovedBy")
+  confirmedNoCustomerImpactChangeOrders ChangeOrder[]                 @relation("ChangeOrderInternalNoCustomerImpactConfirmedBy")
+  canceledTasks                         JobTask[]                     @relation("CanceledTasks")
+  invitedOrganizationInvites            OrganizationInvite[]          @relation("OrganizationInviteInvitedBy")
+  acceptedOrganizationInvites           OrganizationInvite[]          @relation("OrganizationInviteAcceptedBy")
+  revokedOrganizationInvites            OrganizationInvite[]          @relation("OrganizationInviteRevokedBy")
+  crewMemberships                       CrewMember[]
+  jobCollaborations                     JobCollaborator[]
+  lastActiveOrganizationId              String?
+  platformAccess                        PlatformAccess?
+  platformAccessCreated                 PlatformAccess[]              @relation("PlatformAccessCreatedBy")
+  platformAccessRevoked                 PlatformAccess[]              @relation("PlatformAccessRevokedBy")
+  platformAuditEvents                   PlatformAuditEvent[]          @relation("PlatformAuditActor")
+  createdBetaSignupInvites              BetaSignupInvite[]            @relation("BetaSignupInviteCreatedBy")
+  acceptedBetaSignupInvites             BetaSignupInvite[]            @relation("BetaSignupInviteAcceptedBy")
+  revokedBetaSignupInvites              BetaSignupInvite[]            @relation("BetaSignupInviteRevokedBy")
+  grantedBetaGrants                     OrganizationBetaGrant[]       @relation("OrganizationBetaGrantGrantedBy")
+  revokedBetaGrants                     OrganizationBetaGrant[]       @relation("OrganizationBetaGrantRevokedBy")
 }
 
 model OrganizationBusinessProfile {
@@ -1490,44 +1491,48 @@ model ExecutionPlanRevision {
 }
 
 model ChangeOrder {
-  id                          String                       @id @default(cuid())
-  organizationId              String
-  quoteId                     String
-  jobId                       String
-  number                      Int
-  title                       String
-  customerDocumentTitle       String?
-  status                      ChangeOrderStatus            @default(DRAFT)
-  reasoning                   String
-  priceDeltaCents             Int                          @default(0)
-  approvedByUserId            String?
-  approvedAt                  DateTime?
-  lastSentEmailAt             DateTime?
-  acceptedAt                  DateTime?
-  appliedAt                   DateTime?
-  baseJobPlanVersion          Int                          @default(1)
-  executionDeltaJson          Json?
-  executionDeltaSchemaVersion Int                          @default(1)
-  applicationStatus           ChangeOrderApplicationStatus @default(NOT_APPLIED)
-  lastApplyErrorJson          Json?
-  lastApplyAttemptAt          DateTime?
-  supersededByChangeOrderId   String?
-  paymentImpactJson           Json?
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
-  organization                Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quote                       Quote                        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  job                         Job                          @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  approvedByUser              User?                        @relation("ChangeOrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  supersededByChangeOrder     ChangeOrder?                 @relation("ChangeOrderSupersession", fields: [supersededByChangeOrderId], references: [id], onDelete: SetNull)
-  supersedesChangeOrders      ChangeOrder[]                @relation("ChangeOrderSupersession")
-  lines                       ChangeOrderLine[]
-  executionPlanRevisions      ExecutionPlanRevision[]
-  paymentRequirements         JobPaymentRequirement[]
-  shareToken                  ChangeOrderShareToken?
-  checkpoints                 ChangeOrderCheckpoint[]
-  views                       ChangeOrderView[]
-  createdTasks                JobTask[]
+  id                                        String                       @id @default(cuid())
+  organizationId                            String
+  quoteId                                   String
+  jobId                                     String
+  number                                    Int
+  title                                     String
+  customerDocumentTitle                     String?
+  status                                    ChangeOrderStatus            @default(DRAFT)
+  reasoning                                 String
+  priceDeltaCents                           Int                          @default(0)
+  approvedByUserId                          String?
+  approvedAt                                DateTime?
+  lastSentEmailAt                           DateTime?
+  acceptedAt                                DateTime?
+  appliedAt                                 DateTime?
+  baseJobPlanVersion                        Int                          @default(1)
+  executionDeltaJson                        Json?
+  executionDeltaSchemaVersion               Int                          @default(1)
+  applicationStatus                         ChangeOrderApplicationStatus @default(NOT_APPLIED)
+  lastApplyErrorJson                        Json?
+  lastApplyAttemptAt                        DateTime?
+  supersededByChangeOrderId                 String?
+  paymentImpactJson                         Json?
+  zeroDollarPolicyClass                     ZeroDollarPolicyClass?
+  internalNoCustomerImpactConfirmedAt       DateTime?
+  internalNoCustomerImpactConfirmedByUserId String?
+  createdAt                                 DateTime                     @default(now())
+  updatedAt                                 DateTime                     @updatedAt
+  organization                              Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote                                     Quote                        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  job                                       Job                          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  approvedByUser                            User?                        @relation("ChangeOrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  internalNoCustomerImpactConfirmedByUser   User?                        @relation("ChangeOrderInternalNoCustomerImpactConfirmedBy", fields: [internalNoCustomerImpactConfirmedByUserId], references: [id], onDelete: SetNull)
+  supersededByChangeOrder                   ChangeOrder?                 @relation("ChangeOrderSupersession", fields: [supersededByChangeOrderId], references: [id], onDelete: SetNull)
+  supersedesChangeOrders                    ChangeOrder[]                @relation("ChangeOrderSupersession")
+  lines                                     ChangeOrderLine[]
+  executionPlanRevisions                    ExecutionPlanRevision[]
+  paymentRequirements                       JobPaymentRequirement[]
+  shareToken                                ChangeOrderShareToken?
+  checkpoints                               ChangeOrderCheckpoint[]
+  views                                     ChangeOrderView[]
+  createdTasks                              JobTask[]
 
   @@unique([jobId, number])
   @@index([organizationId])
@@ -1535,6 +1540,8 @@ model ChangeOrder {
   @@index([jobId])
   @@index([jobId, applicationStatus])
   @@index([supersededByChangeOrderId])
+  @@index([zeroDollarPolicyClass])
+  @@index([internalNoCustomerImpactConfirmedByUserId])
 }
 
 model ChangeOrderLine {
@@ -2762,6 +2769,12 @@ enum ChangeOrderApplicationStatus {
   APPLIED
   APPLY_FAILED
   NEEDS_EXECUTION_REVIEW
+}
+
+enum ZeroDollarPolicyClass {
+  INTERNAL_ADMIN
+  INTERNAL_EXECUTION_ONLY
+  CUSTOMER_FACING_CHANGE
 }
 
 enum ChangeOrderLineOperation {

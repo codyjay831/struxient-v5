@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { performReviseQuoteByClone } from "@/lib/quote/revise-by-clone";
 
 export type QuoteChangeRequestActionResult =

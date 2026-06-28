@@ -1,6 +1,6 @@
 import { StaffRole } from "@prisma/client";
 import {
-  getCommercialRequestContextOrThrow,
+  getCommercialMutationContextOrThrow,
   getMutableRequestContextOrThrow,
   getRequestContextOrThrow,
   getSettingsRequestContextOrThrow,
@@ -64,7 +64,7 @@ export async function requireMutableSession(): Promise<CurrentSession> {
 }
 
 export async function requireCommercialSession(): Promise<CurrentSession> {
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   return {
     userId: ctx.userId,
     organizationId: ctx.organizationId,

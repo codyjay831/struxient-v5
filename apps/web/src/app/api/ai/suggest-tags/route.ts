@@ -10,6 +10,8 @@ import {
   runMeteredAiFeature,
 } from "@/lib/billing/run-metered-ai-feature";
 
+export const dynamic = "force-dynamic";
+
 const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const AI_MAX_REQUESTS_PER_WINDOW = 60;
 

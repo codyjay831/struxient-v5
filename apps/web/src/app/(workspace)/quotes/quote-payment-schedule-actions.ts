@@ -3,7 +3,9 @@
 import { PaymentScheduleAnchorType, QuoteStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { parsePercentageString, parseUsdStringToCents } from "@/lib/quote-money";
 import { QUOTE_PAYMENT_SCHEDULE_FIELD_LIMITS } from "./quote-field-limits";
 

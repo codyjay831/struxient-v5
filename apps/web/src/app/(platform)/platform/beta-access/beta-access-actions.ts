@@ -49,7 +49,10 @@ export async function createBetaInviteAction(formData: FormData): Promise<BetaAc
       reason,
     });
     revalidatePath("/platform/beta-access");
-    return { ok: true, inviteUrl: result.inviteUrl };
+    return {
+      ok: true,
+      inviteUrl: process.env.NODE_ENV !== "production" ? result.inviteUrl : undefined,
+    };
   } catch (error) {
     return {
       ok: false,

@@ -1,6 +1,7 @@
 import { Job, Quote } from "@prisma/client";
 import { db } from "./db";
 import {
+  denyUnlessCanReadCommercial,
   denyUnlessCanManageCommercial,
   denyUnlessCanManageOrgSettings,
   denyUnlessCanMutate,
@@ -41,11 +42,13 @@ export async function getMutableRequestContextOrThrow(): Promise<RequestContext>
 }
 
 /**
- * Requires OFFICE, ADMIN, or OWNER for commercial workflows (leads, quotes, customers).
+ * Requires read access to commercial workflows (leads, quotes, customers).
+ * This is intentionally read-only authority; staff mutations must use
+ * getCommercialMutationContextOrThrow().
  */
 export async function getCommercialRequestContextOrThrow(): Promise<RequestContext> {
   const ctx = await getRequestContextOrThrow();
-  const denied = denyUnlessCanManageCommercial(ctx.role);
+  const denied = denyUnlessCanReadCommercial(ctx.role);
   if (denied) {
     throw new Error(denied);
   }
@@ -61,11 +64,32 @@ export async function getCommercialRequestContextOrNull(): Promise<RequestContex
 }
 
 /**
+ * Requires explicit commercial mutation authority. VIEWER may read commercial
+ * surfaces, but must not reach quote/payment/change-order staff mutations.
+ */
+export async function getCommercialMutationContextOrThrow(): Promise<RequestContext> {
+  const ctx = await getRequestContextOrThrow();
+  const denied = denyUnlessCanManageCommercial(ctx.role);
+  if (denied) {
+    throw new Error(denied);
+  }
+  return ctx;
+}
+
+export async function getCommercialMutationContextOrNull(): Promise<RequestContext | null> {
+  try {
+    return await getCommercialMutationContextOrThrow();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Requires commercial read access plus permission to mutate quote execution plans.
  * Blocks FIELD, SUBCONTRACTOR, and VIEWER.
  */
 export async function getExecutionPlanEditorContextOrThrow(): Promise<RequestContext> {
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const permission = assertExecutionPlanPermission(ctx.role, "edit_execution_plan");
   if (!permission.ok) {
     throw new Error(permission.error);
@@ -127,7 +151,7 @@ export async function requireJobAccess(jobId: string): Promise<Job> {
  */
 export async function requireQuoteAccess(quoteId: string): Promise<Quote> {
   const ctx = await getRequestContextOrThrow();
-  const denied = denyUnlessCanManageCommercial(ctx.role);
+  const denied = denyUnlessCanReadCommercial(ctx.role);
   if (denied) {
     throw new Error(denied);
   }

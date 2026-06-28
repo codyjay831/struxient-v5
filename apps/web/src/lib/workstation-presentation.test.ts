@@ -11,8 +11,34 @@ import {
 import { applyWorkstationQueueFilter, countWorkstationQueueFilters } from "./workstation/queue-filters";
 import { resolveWorkstationTab, WORKSTATION_TABS } from "./workstation/url-state";
 import { resolveWorkstationSelectionSurface } from "./workstation/selection-routing";
+import type { ScheduleEvent } from "./schedule-query";
 
 const now = new Date("2026-06-18T08:00:00.000Z");
+const RealDate = Date;
+
+function withFixedSystemDate<T>(fixedNow: Date, run: () => T): T {
+  const fixedMs = fixedNow.getTime();
+  class MockDate extends RealDate {
+    constructor(value?: string | number | Date) {
+      if (value === undefined) {
+        super(fixedMs);
+      } else {
+        super(value);
+      }
+    }
+
+    static now() {
+      return fixedMs;
+    }
+  }
+
+  globalThis.Date = MockDate as unknown as DateConstructor;
+  try {
+    return run();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
 
 function makeItem(overrides: Partial<WorkstationWorkItem>): WorkstationWorkItem {
   return {
@@ -31,6 +57,19 @@ function makeItem(overrides: Partial<WorkstationWorkItem>): WorkstationWorkItem 
     parentRecordId: "job-1",
     parentLabel: "Cody Barbour",
     updatedAt: now,
+    ...overrides,
+  };
+}
+
+function makeScheduleEvent(overrides: Partial<ScheduleEvent>): ScheduleEvent {
+  return {
+    id: "event-1",
+    kind: "job-schedule-event",
+    title: "Crew appointment",
+    startAt: new Date("2026-06-19T10:00:00.000Z"),
+    endAt: new Date("2026-06-19T11:00:00.000Z"),
+    recordId: "event-1",
+    parentId: "job-1",
     ...overrides,
   };
 }
@@ -312,16 +351,27 @@ test("buildWorkstationPresentation surfaces quote handoffs as critical sales to 
 });
 
 test("buildWorkstationPresentation builds seven-day week preview", () => {
-  const result = buildWorkstationPresentation({
-    items: [],
-    scheduleEvents: [],
-    recentActivityRaw: [],
-    viewerUserId: "user-1",
-    now,
-  });
+  const result = withFixedSystemDate(now, () =>
+    buildWorkstationPresentation({
+      items: [],
+      scheduleEvents: [],
+      recentActivityRaw: [],
+      viewerUserId: "user-1",
+      now,
+    }),
+  );
 
   assert.equal(result.overviewWeekPreview.length, 7);
-  assert.ok(result.overviewWeekPreview.some((day) => day.isToday));
+  assert.equal(
+    result.overviewWeekPreview.filter((day) => day.isToday).length,
+    1,
+    "exactly one week-preview day should be marked as today",
+  );
+  assert.equal(
+    result.overviewWeekPreview.some((day) => day.date.toDateString() === now.toDateString() && day.isToday),
+    true,
+    "fixture 'now' day should be marked as today",
+  );
 });
 
 test("buildWorkstationPresentation exposes critical groups with categories", () => {
@@ -382,6 +432,85 @@ test("buildDomainQueues includes calendarDay for scheduled items", () => {
 
   const queues = buildDomainQueues([scheduled]);
   assert.equal(queues.calendar[0]?.calendarDay, "2026-06-19");
+});
+
+test("workstation week preview uses canonical schedule events, not due-only tasks", () => {
+  const dueOnlyTask = makeItem({
+    id: "task-due-only",
+    status: "Due today",
+    dueAt: new Date("2026-06-18T17:00:00.000Z"),
+    scheduledStartAt: null,
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [dueOnlyTask],
+    scheduleEvents: [],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  const todaySummary = result.overviewWeekPreview.find(
+    (day) => day.date.toDateString() === now.toDateString(),
+  );
+  assert.equal(todaySummary?.eventCount, 0);
+});
+
+test("workstation week preview includes canonical scheduled commitments", () => {
+  const scheduleEvent = makeScheduleEvent({
+    id: "event-upcoming",
+    recordId: "event-upcoming",
+    startAt: new Date("2026-06-19T10:00:00.000Z"),
+    endAt: new Date("2026-06-19T11:00:00.000Z"),
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [],
+    scheduleEvents: [scheduleEvent],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  const eventDay = result.overviewWeekPreview.find(
+    (day) => day.date.toDateString() === scheduleEvent.startAt.toDateString(),
+  );
+  assert.equal(eventDay?.eventCount, 1);
+  assert.equal(result.thisWeek.length, 1);
+});
+
+test("workstation today agenda dedupes canonical event and existing schedule item", () => {
+  const scheduleEvent = makeScheduleEvent({
+    id: "event-today",
+    recordId: "event-today",
+    startAt: new Date("2026-06-18T13:00:00.000Z"),
+    endAt: new Date("2026-06-18T14:00:00.000Z"),
+  });
+  const scheduleItem = makeItem({
+    id: "schedule-event-upcoming-event-today",
+    kind: "schedule",
+    filterCategory: "jobs",
+    title: "Crew appointment",
+    recordId: "event-today",
+    status: "Today",
+    lens: "today",
+    group: "scheduled",
+    scheduledStartAt: new Date("2026-06-18T13:00:00.000Z"),
+  });
+
+  const result = buildWorkstationPresentation({
+    items: [scheduleItem],
+    scheduleEvents: [scheduleEvent],
+    recentActivityRaw: [],
+    viewerUserId: "user-1",
+    now,
+  });
+
+  assert.equal(
+    result.overviewTodayAgenda.filter((item) => item.id === "schedule-event-upcoming-event-today")
+      .length,
+    1,
+  );
 });
 
 test("buildWorkstationPresentation surfaces unassigned tasks for office roles", () => {

@@ -21,7 +21,10 @@ import {
   Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow,
+  getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { prepareCustomerFromLead } from "@/lib/lead-create-customer";
 import {
   attachIntakeServiceLocationToCustomerFromLead,
@@ -154,7 +157,7 @@ export async function createCustomerFromLeadWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   let createdCustomerId: string | undefined;
 
@@ -269,7 +272,7 @@ export async function linkLeadToCustomerWorkspaceAction(
     return { error: "Choose a customer to link, or create one first." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   const customer = await db.customer.findFirst({
     where: { id: customerIdRaw, organizationId: ctx.organizationId },
@@ -352,7 +355,7 @@ export async function updateLeadStatusWorkspaceAction(
   const status = v as LeadStatus;
   const now = new Date();
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -414,7 +417,7 @@ export async function closeOrPauseLeadWorkspaceAction(
     return { error: "Choose a valid close outcome." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true },
@@ -528,7 +531,7 @@ export async function resumeOpportunityWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { success: false, error: "Missing lead record id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, status: true },
@@ -572,7 +575,7 @@ export async function archiveLeadInboxAction(
   if (!id) {
     return { success: false, error: "Missing lead id." };
   }
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const closedAt = new Date();
   const result = await db.lead.updateMany({
     where: { id, organizationId: ctx.organizationId },
@@ -606,7 +609,7 @@ export async function updateLeadContactWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   const exists = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -1032,7 +1035,7 @@ export async function requestSiteVisitForLeadWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
@@ -1378,7 +1381,7 @@ export async function updateLeadServiceAddressWorkspaceAction(
   const id = leadId.trim();
   if (!id) return { error: "Missing lead record id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const existing = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, address: true },
@@ -1638,7 +1641,7 @@ export async function resolveLeadServiceAddressAction(
   const id = leadId.trim();
   if (!id) return { ok: false, error: "Missing lead id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, address: true, signals: true, customerId: true },
@@ -1689,7 +1692,7 @@ export async function applyLeadServiceAddressCandidateAction(
   if (!id) return { ok: false, error: "Missing lead id." };
   if (!pid) return { ok: false, error: "Missing place id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const lead = await db.lead.findFirst({
     where: { id, organizationId: ctx.organizationId },
     select: { id: true, customerId: true },

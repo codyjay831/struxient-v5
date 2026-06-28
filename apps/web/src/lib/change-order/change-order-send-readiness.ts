@@ -6,6 +6,7 @@ import {
 } from "@/lib/change-order/change-order-execution-projection";
 import type { ChangeOrderExecutionDeltaProposal } from "@/lib/change-order/execution-delta-schema";
 import { parseNoWorkImpactConfirmed } from "@/lib/change-order/execution-delta-no-work-impact";
+import { validateZeroDollarPolicyForSend } from "@/lib/change-order/change-order-commercial-rules";
 
 export type ChangeOrderSendBlockerCode =
   | "PAGE_BLOCKED"
@@ -18,6 +19,7 @@ export type ChangeOrderSendBlockerCode =
   | "GENERATED_TASKS"
   | "STALE_PLAN"
   | "PAYMENT_IMPACT"
+  | "ZERO_DOLLAR_POLICY"
   | "CONFIRM_NO_WORK_IMPACT"
   | "WORK_IMPACT_REVIEW";
 
@@ -182,6 +184,23 @@ export function deriveChangeOrderSendBlockers(
 
   const impact = input.executionImpact;
   const lines = input.selectedRevision.lines;
+  const zeroDollarPolicy = validateZeroDollarPolicyForSend({
+    priceDeltaCents: input.selectedRevision.priceDeltaCents,
+    zeroDollarPolicyClass: input.selectedRevision.zeroDollarPolicyClass,
+    internalNoCustomerImpactConfirmedAt:
+      input.selectedRevision.internalNoCustomerImpactConfirmedAt,
+  });
+  if (!zeroDollarPolicy.ok) {
+    blockers.push({
+      code: "ZERO_DOLLAR_POLICY",
+      severity: "blocker",
+      title: "Zero-dollar policy required",
+      explanation: zeroDollarPolicy.error,
+      actionLabel: "Review zero-dollar policy",
+      actionTarget: "commercial",
+    });
+  }
+
   const noWorkImpactConfirmed = resolveNoWorkImpactConfirmed(input);
   const priceOnlyCommercial = commercialLinesArePriceOnly(lines);
   const hasGeneratedTasks = impact

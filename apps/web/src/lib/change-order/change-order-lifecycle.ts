@@ -9,16 +9,18 @@ import {
   JobActivityType,
   Prisma,
   StaffRole,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordJobActivity } from "@/lib/job-activity-helper";
 import { assertExecutionPlanPermission } from "@/lib/execution-plan-permissions";
-import { buildDefaultExecutionDeltaFromChangeOrderLines } from "@/lib/change-order/execution-delta-build";
 import { parseNoWorkImpactConfirmed } from "@/lib/change-order/execution-delta-no-work-impact";
 import {
   canEditChangeOrderDraft,
   canStaffAcceptChangeOrder,
   changeOrderRequiresCustomerPriceApproval,
+  shouldClearZeroDollarInternalConfirmationOnDraftEdit,
+  validateZeroDollarPolicyForApply,
 } from "@/lib/change-order/change-order-commercial-rules";
 import {
   changeOrderExecutionDeltaToJson,
@@ -91,6 +93,7 @@ export type CreateChangeOrderDraftInput = {
   priceDeltaCents?: number;
   lines: ChangeOrderLineInput[];
   paymentImpactJson?: Record<string, unknown> | null;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
 };
 
 export type UpdateChangeOrderDraftInput = {
@@ -102,6 +105,7 @@ export type UpdateChangeOrderDraftInput = {
   lines?: ChangeOrderLineInput[];
   executionDeltaJson?: Record<string, unknown> | null;
   paymentImpactJson?: Record<string, unknown> | null;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
 };
 
 type ChangeOrderMutationResult = { ok: true; changeOrderId: string } | { ok: false; error: string };
@@ -115,6 +119,10 @@ type ChangeOrderApplyResult =
       quoteId: string;
       jobId: string;
     }
+  | { ok: false; error: string };
+
+type ChangeOrderPolicyConfirmationResult =
+  | { ok: true; changeOrderId: string; quoteId: string; jobId: string }
   | { ok: false; error: string };
 
 function applyErrorJson(params: {
@@ -134,6 +142,45 @@ function applyErrorJson(params: {
 
 function formatChangeOrderNumber(number: number): string {
   return `CO-${String(number).padStart(3, "0")}`;
+}
+
+function resolveZeroDollarPolicyForPersist(params: {
+  priceDeltaCents: number;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+}): ZeroDollarPolicyClass | null | undefined {
+  if (params.priceDeltaCents !== 0) return null;
+  return params.zeroDollarPolicyClass === undefined ? undefined : params.zeroDollarPolicyClass;
+}
+
+async function recordZeroDollarConfirmationActivityInTx(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  params: {
+    organizationId: string;
+    jobId: string;
+    changeOrderId: string;
+    actorUserId: string;
+    title: string;
+    details: string;
+    confirmed: boolean;
+  },
+) {
+  await recordJobActivity(
+    {
+      organizationId: params.organizationId,
+      jobId: params.jobId,
+      type: JobActivityType.CHANGE_ORDER_CREATED,
+      title: params.title,
+      details: params.details,
+      entityType: "ChangeOrder",
+      entityId: params.changeOrderId,
+      actorUserId: params.actorUserId,
+      metadataJson: {
+        changeOrderId: params.changeOrderId,
+        zeroDollarPolicyConfirmation: params.confirmed ? "confirmed" : "cleared",
+      },
+    },
+    tx,
+  );
 }
 
 async function loadJobGraphForValidation(
@@ -262,6 +309,9 @@ export async function validateChangeOrderSendReadinessForStored(
       paymentImpactJson: true,
       executionDeltaJson: true,
       baseJobPlanVersion: true,
+      zeroDollarPolicyClass: true,
+      internalNoCustomerImpactConfirmedAt: true,
+      internalNoCustomerImpactConfirmedByUserId: true,
       lines: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: {
@@ -345,6 +395,11 @@ export async function validateChangeOrderSendReadinessForStored(
       })),
       paymentImpactJson: changeOrder.paymentImpactJson,
       executionImpact,
+      zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
+      internalNoCustomerImpactConfirmedAt:
+        changeOrder.internalNoCustomerImpactConfirmedAt,
+      internalNoCustomerImpactConfirmedByUserId:
+        changeOrder.internalNoCustomerImpactConfirmedByUserId,
     },
     executionImpact,
     hasUnsavedDraftChanges: false,
@@ -362,6 +417,7 @@ export async function validateChangeOrderSendReadinessForStored(
     status: changeOrder.status,
     priceDeltaCents: changeOrder.priceDeltaCents,
     paymentImpactJson: changeOrder.paymentImpactJson,
+    zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
     executionDeltaJson: changeOrder.executionDeltaJson,
     baseJobPlanVersion: changeOrder.baseJobPlanVersion,
     currentJobPlanVersion: changeOrder.job.jobPlanVersion,
@@ -657,6 +713,10 @@ export async function createChangeOrderDraftWithActor(
     } else if (nextPriceDeltaCents === 0) {
       paymentImpactData = Prisma.JsonNull;
     }
+    const zeroDollarPolicyClass = resolveZeroDollarPolicyForPersist({
+      priceDeltaCents: nextPriceDeltaCents,
+      zeroDollarPolicyClass: input.zeroDollarPolicyClass,
+    });
 
     const changeOrder = await tx.changeOrder.create({
       data: {
@@ -672,6 +732,7 @@ export async function createChangeOrderDraftWithActor(
         baseJobPlanVersion: quote.job.jobPlanVersion,
         applicationStatus: ChangeOrderApplicationStatus.NOT_APPLIED,
         ...(paymentImpactData !== undefined ? { paymentImpactJson: paymentImpactData } : {}),
+        ...(zeroDollarPolicyClass !== undefined ? { zeroDollarPolicyClass } : {}),
       },
       select: { id: true, number: true },
     });
@@ -747,6 +808,9 @@ export async function updateChangeOrderDraftWithActor(
         baseJobPlanVersion: true,
         paymentImpactJson: true,
         executionDeltaJson: true,
+        zeroDollarPolicyClass: true,
+        internalNoCustomerImpactConfirmedAt: true,
+        internalNoCustomerImpactConfirmedByUserId: true,
       },
     });
     if (!row) return { ok: false as const, error: "Change Order not found." };
@@ -778,6 +842,26 @@ export async function updateChangeOrderDraftWithActor(
     }
 
     const nextPriceDeltaCents = input.priceDeltaCents ?? row.priceDeltaCents;
+    const zeroDollarPolicyPersist = resolveZeroDollarPolicyForPersist({
+      priceDeltaCents: nextPriceDeltaCents,
+      zeroDollarPolicyClass: input.zeroDollarPolicyClass,
+    });
+    const nextZeroDollarPolicyClass =
+      nextPriceDeltaCents !== 0
+        ? null
+        : zeroDollarPolicyPersist === undefined
+          ? row.zeroDollarPolicyClass
+          : zeroDollarPolicyPersist;
+    const zeroDollarConfirmationShouldClear =
+      shouldClearZeroDollarInternalConfirmationOnDraftEdit({
+        currentPriceDeltaCents: row.priceDeltaCents,
+        nextPriceDeltaCents,
+        currentZeroDollarPolicyClass: row.zeroDollarPolicyClass,
+        nextZeroDollarPolicyClass,
+        internalNoCustomerImpactConfirmedAt: row.internalNoCustomerImpactConfirmedAt,
+        linesChanged: input.lines !== undefined,
+        executionDeltaChanged: input.executionDeltaJson !== undefined,
+      });
     let nextPaymentImpactJson: unknown = row.paymentImpactJson;
     if (input.paymentImpactJson !== undefined) {
       const resolved = resolvePaymentImpactJsonForPersist({
@@ -802,6 +886,13 @@ export async function updateChangeOrderDraftWithActor(
             ? input.customerDocumentTitle
             : row.customerDocumentTitle,
         priceDeltaCents: nextPriceDeltaCents,
+        zeroDollarPolicyClass: nextZeroDollarPolicyClass,
+        ...(nextPriceDeltaCents !== 0 || zeroDollarConfirmationShouldClear
+          ? {
+              internalNoCustomerImpactConfirmedAt: null,
+              internalNoCustomerImpactConfirmedByUserId: null,
+            }
+          : {}),
         status:
           row.status === ChangeOrderStatus.CUSTOMER_REQUESTED_CHANGES
             ? ChangeOrderStatus.DRAFT
@@ -816,6 +907,19 @@ export async function updateChangeOrderDraftWithActor(
           : {}),
       },
     });
+
+    if (zeroDollarConfirmationShouldClear) {
+      await recordZeroDollarConfirmationActivityInTx(tx, {
+        organizationId: actor.organizationId,
+        jobId: row.jobId,
+        changeOrderId: row.id,
+        actorUserId: actor.userId,
+        title: "Zero-dollar internal confirmation cleared",
+        details:
+          "Zero-dollar policy confirmation was cleared because Change Order content changed.",
+        confirmed: false,
+      });
+    }
 
     const createdLines =
       nextLines &&
@@ -931,6 +1035,8 @@ export async function markChangeOrderAcceptedWithActor(
         jobId: true,
         status: true,
         priceDeltaCents: true,
+        zeroDollarPolicyClass: true,
+        internalNoCustomerImpactConfirmedAt: true,
         updatedAt: true,
         organization: { select: { name: true } },
       },
@@ -940,6 +1046,8 @@ export async function markChangeOrderAcceptedWithActor(
     const acceptAllowed = canStaffAcceptChangeOrder({
       status: row.status,
       priceDeltaCents: row.priceDeltaCents,
+      zeroDollarPolicyClass: row.zeroDollarPolicyClass,
+      internalNoCustomerImpactConfirmedAt: row.internalNoCustomerImpactConfirmedAt,
     });
     if (!acceptAllowed.ok) return { ok: false as const, error: acceptAllowed.error };
 
@@ -1018,6 +1126,70 @@ export async function markChangeOrderAcceptedWithActor(
   });
 
   return updated;
+}
+
+export async function confirmChangeOrderNoCustomerImpactWithActor(
+  actor: ChangeOrderActor,
+  changeOrderId: string,
+): Promise<ChangeOrderPolicyConfirmationResult> {
+  const permission = assertExecutionPlanPermission(actor.role, "approve_scope_revision");
+  if (!permission.ok) return { ok: false, error: permission.error };
+
+  const id = changeOrderId.trim();
+  if (!id) return { ok: false, error: "Missing Change Order id." };
+
+  return db.$transaction(async (tx) => {
+    const row = await tx.changeOrder.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      select: {
+        id: true,
+        quoteId: true,
+        jobId: true,
+        status: true,
+        priceDeltaCents: true,
+        zeroDollarPolicyClass: true,
+        internalNoCustomerImpactConfirmedAt: true,
+      },
+    });
+    if (!row) return { ok: false as const, error: "Change Order not found." };
+
+    const editable = canEditChangeOrderDraft(row.status);
+    if (!editable.ok) return { ok: false as const, error: editable.error };
+    if (row.priceDeltaCents !== 0) {
+      return {
+        ok: false as const,
+        error: "Internal no-customer-impact confirmation applies only to zero-dollar Change Orders.",
+      };
+    }
+    if (row.zeroDollarPolicyClass !== ZeroDollarPolicyClass.INTERNAL_EXECUTION_ONLY) {
+      return {
+        ok: false as const,
+        error:
+          "Internal no-customer-impact confirmation is only for internal execution-only zero-dollar Change Orders.",
+      };
+    }
+    if (row.internalNoCustomerImpactConfirmedAt != null) {
+      return { ok: true as const, changeOrderId: row.id, quoteId: row.quoteId, jobId: row.jobId };
+    }
+
+    await tx.changeOrder.update({
+      where: { id: row.id },
+      data: {
+        internalNoCustomerImpactConfirmedAt: new Date(),
+        internalNoCustomerImpactConfirmedByUserId: actor.userId,
+      },
+    });
+    await recordZeroDollarConfirmationActivityInTx(tx, {
+      organizationId: actor.organizationId,
+      jobId: row.jobId,
+      changeOrderId: row.id,
+      actorUserId: actor.userId,
+      title: "Zero-dollar internal confirmation recorded",
+      details: "Staff confirmed this zero-dollar Change Order has no customer-facing impact.",
+      confirmed: true,
+    });
+    return { ok: true as const, changeOrderId: row.id, quoteId: row.quoteId, jobId: row.jobId };
+  });
 }
 
 function stripLegacyPaymentOperations(
@@ -1138,6 +1310,8 @@ export async function applyChangeOrderWithActor(
           number: true,
           paymentImpactJson: true,
           reasoning: true,
+          zeroDollarPolicyClass: true,
+          internalNoCustomerImpactConfirmedAt: true,
         },
       });
       if (!changeOrder) {
@@ -1145,10 +1319,7 @@ export async function applyChangeOrderWithActor(
       }
 
       if (changeOrder.status !== ChangeOrderStatus.ACCEPTED) {
-        if (
-          changeOrderRequiresCustomerPriceApproval(changeOrder.priceDeltaCents) &&
-          changeOrder.status !== ChangeOrderStatus.ACCEPTED
-        ) {
+        if (changeOrderRequiresCustomerPriceApproval(changeOrder.priceDeltaCents)) {
           return {
             ok: false as const,
             error: "Price-impact Change Orders must be accepted before apply.",
@@ -1172,6 +1343,30 @@ export async function applyChangeOrderWithActor(
             error: "Price-impact Change Orders require an acceptance checkpoint before apply.",
           };
         }
+      }
+
+      const customerAcceptanceCheckpoint =
+        changeOrder.priceDeltaCents === 0 &&
+        changeOrder.zeroDollarPolicyClass === ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE
+          ? await tx.changeOrderCheckpoint.findFirst({
+              where: {
+                organizationId: actor.organizationId,
+                changeOrderId: changeOrder.id,
+                kind: ChangeOrderCheckpointKind.ACCEPTANCE,
+                source: ChangeOrderCheckpointSource.CUSTOMER_PORTAL,
+              },
+              select: { id: true },
+            })
+          : null;
+      const zeroDollarPolicy = validateZeroDollarPolicyForApply({
+        priceDeltaCents: changeOrder.priceDeltaCents,
+        zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
+        internalNoCustomerImpactConfirmedAt:
+          changeOrder.internalNoCustomerImpactConfirmedAt,
+        hasCustomerAcceptanceCheckpoint: customerAcceptanceCheckpoint != null,
+      });
+      if (!zeroDollarPolicy.ok) {
+        return { ok: false as const, error: zeroDollarPolicy.error };
       }
 
       const job = await loadJobGraphForValidation(tx, {

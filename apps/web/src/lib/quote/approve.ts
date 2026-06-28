@@ -14,7 +14,9 @@ import {
   type QuoteCheckpointStaffOnlyWire,
 } from "../quote-checkpoint-snapshot";
 import { buildCustomerQuotePreviewDocument } from "../quote-customer-projection";
-import { getCommercialRequestContextOrThrow } from "../auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "../auth-context";
 
 export interface QuoteApproveResult {
   ok: boolean;

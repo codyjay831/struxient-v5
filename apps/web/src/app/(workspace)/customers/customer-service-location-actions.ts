@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { CustomerServiceLocationSource } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   normalizeAddressDedupKey,
   upsertCustomerServiceLocationFromIntakeSnapshot,

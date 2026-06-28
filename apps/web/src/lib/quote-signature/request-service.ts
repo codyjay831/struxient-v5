@@ -19,7 +19,9 @@ import {
 } from "@/lib/quote-checkpoint-snapshot";
 import { buildCustomerQuotePreviewDocument } from "@/lib/quote-customer-projection";
 import { readContact } from "@/lib/lead/lead-projection";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertQuoteReadyToSendInTx } from "@/lib/quote/quote-send-readiness";
 import {

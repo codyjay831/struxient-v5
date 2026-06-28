@@ -31,7 +31,9 @@ import {
   QUOTE_FIELD_LIMITS,
 } from "@/app/(workspace)/quotes/quote-field-limits";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { addDays } from "date-fns";
 import { notifyQuoteSent } from "@/lib/notifications";
 import {

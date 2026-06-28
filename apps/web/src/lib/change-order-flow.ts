@@ -5,6 +5,7 @@ import {
   JobScopeItemStatus,
   JobStatus,
   StaffRole,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 import {
   assertExecutionPlanPermission,
@@ -14,6 +15,8 @@ import {
   canEditChangeOrderDraft,
   canStaffAcceptChangeOrder,
   changeOrderRequiresCustomerPriceApproval,
+  validateZeroDollarPolicyForApply,
+  zeroDollarRequiresCustomerAcknowledgement,
 } from "@/lib/change-order/change-order-commercial-rules";
 import {
   changeOrderLifecycleReadinessLabel,
@@ -91,6 +94,10 @@ export type ChangeOrderRevisionSnapshot = {
   customerDocumentTitle?: string | null;
   paymentImpactJson?: unknown;
   executionImpact?: ChangeOrderExecutionImpactView;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
+  internalNoCustomerImpactConfirmedAt?: Date | string | null;
+  internalNoCustomerImpactConfirmedByUserId?: string | null;
+  hasCustomerAcceptanceCheckpoint?: boolean;
 };
 
 export type ChangeOrderPermissions = {
@@ -654,6 +661,9 @@ export function getStaffAcceptButtonState(input: {
   const acceptAllowed = canStaffAcceptChangeOrder({
     status: input.selectedRevision.status,
     priceDeltaCents: input.selectedRevision.priceDeltaCents,
+    zeroDollarPolicyClass: input.selectedRevision.zeroDollarPolicyClass,
+    internalNoCustomerImpactConfirmedAt:
+      input.selectedRevision.internalNoCustomerImpactConfirmedAt,
   });
   if (!acceptAllowed.ok) {
     return { disabled: true, reason: acceptAllowed.error };
@@ -674,6 +684,8 @@ export function getApproveButtonState(input: {
     hasGeneratedTaskSuggestions: false,
     hasUnsavedDraftChanges: false,
     unsavedDraftChangesReason: null,
+    paymentImpactReady: true,
+    paymentImpactBlockReason: null,
   });
 }
 
@@ -835,6 +847,17 @@ export function getApplyButtonState(input: {
       reason: "Execution impact must pass validation before apply.",
     };
   }
+  const zeroDollarPolicy = validateZeroDollarPolicyForApply({
+    priceDeltaCents: input.selectedRevision.priceDeltaCents,
+    zeroDollarPolicyClass: input.selectedRevision.zeroDollarPolicyClass,
+    internalNoCustomerImpactConfirmedAt:
+      input.selectedRevision.internalNoCustomerImpactConfirmedAt,
+    hasCustomerAcceptanceCheckpoint:
+      input.selectedRevision.hasCustomerAcceptanceCheckpoint === true,
+  });
+  if (!zeroDollarPolicy.ok) {
+    return { disabled: true, reason: zeroDollarPolicy.error };
+  }
   const paymentImpactGate = validateChangeOrderPaymentImpactGate({
     priceDeltaCents: input.selectedRevision.priceDeltaCents,
     paymentImpactJson: input.selectedRevision.paymentImpactJson ?? null,
@@ -876,6 +899,7 @@ export function deriveChangeOrderReadiness(input: {
   executionComposerEditable?: boolean;
   baselinePaymentImpactJson?: unknown;
   paymentImpactJson?: unknown;
+  baselineZeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
 }): ChangeOrderReadiness {
   const activeScopeItemIds = new Set(input.activeScopeItems.map((item) => item.id));
   const draftValidation = validateChangeOrderDraftInput({
@@ -983,7 +1007,9 @@ export function deriveChangeOrderReadiness(input: {
           baselineLines: input.baselineLines,
           reasoning: input.reasoning,
           lines: input.draftLines,
-        })
+        }) ||
+        (input.baselineZeroDollarPolicyClass !== undefined &&
+          input.baselineZeroDollarPolicyClass !== input.selectedRevision.zeroDollarPolicyClass)
       : false;
 
   const executionChanged =
@@ -1139,7 +1165,11 @@ export function deriveChangeOrderReadiness(input: {
     lifecycleReadinessLabel: changeOrderLifecycleReadinessLabel(lifecycleReadiness),
     applyErrorSummary,
     requiresCustomerApproval: input.selectedRevision
-      ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents)
+      ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents) ||
+        zeroDollarRequiresCustomerAcknowledgement({
+          priceDeltaCents: input.selectedRevision.priceDeltaCents,
+          zeroDollarPolicyClass: input.selectedRevision.zeroDollarPolicyClass,
+        })
       : draftValidation.ok
         ? changeOrderRequiresCustomerPriceApproval(draftValidation.priceDeltaCents)
         : false,
@@ -1147,7 +1177,11 @@ export function deriveChangeOrderReadiness(input: {
     officeNextStep: deriveChangeOrderOfficeNextStep({
       lifecycleReadiness,
       requiresCustomerApproval: input.selectedRevision
-        ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents)
+        ? changeOrderRequiresCustomerPriceApproval(input.selectedRevision.priceDeltaCents) ||
+          zeroDollarRequiresCustomerAcknowledgement({
+            priceDeltaCents: input.selectedRevision.priceDeltaCents,
+            zeroDollarPolicyClass: input.selectedRevision.zeroDollarPolicyClass,
+          })
         : false,
     }),
     mixedEditBlocked,

@@ -75,9 +75,14 @@ Rules:
 - Beta grants provide temporary product access without Stripe; AI is explicit and capped.
 - Expired or revoked beta grants fail closed into the existing Stripe billing flow.
 - Paid subscriptions always supersede expired beta grants.
+- Raw beta invite tokens/links must not be logged.
+- Production responses should not expose raw invite links by default; use audited delivery channels.
+
+If manual invite fallback is introduced later, it must be explicitly role-gated, audited, reason-captured, and bound to short TTL/rotation policy.
 
 ---
 
 *Canon update (2026-06-15): Added narrow beta access mutation exception for operator-controlled early access.*
+*Canon update (2026-06-27): Added beta invite token hygiene and production-safe raw link exposure defaults.*
 
 *Canon update (2026-06-14): Initial platform operations canon for read-only console, PlatformAccess lifecycle, audit attribution, and bootstrap rules.*

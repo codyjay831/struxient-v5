@@ -6,6 +6,8 @@ import { getCommercialRequestContextOrNull } from "@/lib/auth-context";
 import { denyUnlessCanViewSignatureAudit } from "@/lib/quote-signature/permissions";
 import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ artifactId: string }> },

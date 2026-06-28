@@ -38,6 +38,7 @@ Change orders, re-sign thresholds, and **no silent mutation of sold customer-vis
 - Pre-activation commercial changes create a new `DRAFT` quote revision linked to the issued quote.
 - The issued quote remains immutable proof; the new draft is sent/approved independently.
 - Quote revisions do not carry accepted execution-plan state by default; planning is re-reviewed.
+- Once commercial acceptance exists (`APPROVED` / accepted checkpoint), post-approval commercial deltas on activated jobs must flow through Change Orders rather than in-place quote rewrites.
 
 ## Pre-send scope clarification (working quote)
 
@@ -63,6 +64,7 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 *Canon update (2026-05-06): Commercial checkpoints vs future execution/activation proof; Execution Review before job materialization.*  
 *Canon update (2026-06-13): Locked immutable issued quote behavior after send/approval and revise-by-clone pre-activation.*
 *Canon update (2026-06-25): Cross-link pre-send Clarify Scope working truth to quote-clarification-canon.*
+*Canon update (2026-06-27): Clarified post-approval commercial deltas route through Change Orders and runtime execution edits cannot rewrite approved commercial baseline truth.*
 
 ## v5 app slice: quote lifecycle statuses (Draft → Sent → Approved → Archived)
 
@@ -73,6 +75,7 @@ The **internal “proposal preview”** and **customer-facing quote projection**
 - **Verified E-Sign:** external provider-backed signature (DocuSign / Adobe Sign / Dropbox Sign) through the same `QuoteSignatureRequest` / event / artifact timeline; not required for ordinary quotes.
 - **Execution Review** remains an **internal** pre-activation step; **Job** runtime is still separate materialization.
 - **Accepted whole-quote execution plan** is the v1 internal gate before job activation (`QuoteExecutionPlan.status = ACCEPTED` with matching planning-input hash).
+- Post-activation execution changes can evolve runtime `JobTask`/schedule state, but must not silently mutate approved commercial baseline truth.
 
 ## v5 app slice: Job runtime activation (minimal V1)
 

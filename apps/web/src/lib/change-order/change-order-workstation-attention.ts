@@ -1,6 +1,7 @@
 import {
   ChangeOrderApplicationStatus,
   ChangeOrderStatus,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 
 export type ChangeOrderWorkstationAttention = {
@@ -13,11 +14,9 @@ export type ChangeOrderWorkstationAttention = {
 export function deriveChangeOrderWorkstationAttention(input: {
   status: ChangeOrderStatus;
   applicationStatus: ChangeOrderApplicationStatus;
+  priceDeltaCents?: number;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
 }): ChangeOrderWorkstationAttention {
-  const needsExecutionReview =
-    input.applicationStatus === ChangeOrderApplicationStatus.NEEDS_EXECUTION_REVIEW ||
-    input.applicationStatus === ChangeOrderApplicationStatus.APPLY_FAILED;
-
   if (input.applicationStatus === ChangeOrderApplicationStatus.APPLY_FAILED) {
     return {
       statusLabel: "Change Order apply failed",
@@ -64,6 +63,25 @@ export function deriveChangeOrderWorkstationAttention(input: {
   }
 
   if (input.status === ChangeOrderStatus.DRAFT) {
+    if (input.priceDeltaCents === 0 && !input.zeroDollarPolicyClass) {
+      return {
+        statusLabel: "Change Order DRAFT",
+        nextStep: "Classify zero-dollar approval policy before sending, accepting, or applying.",
+        priority: "high",
+        lens: "attention",
+      };
+    }
+    if (
+      input.priceDeltaCents === 0 &&
+      input.zeroDollarPolicyClass !== ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE
+    ) {
+      return {
+        statusLabel: "Change Order DRAFT",
+        nextStep: "Review internal zero-dollar Change Order before internal acceptance.",
+        priority: "high",
+        lens: "attention",
+      };
+    }
     return {
       statusLabel: "Change Order DRAFT",
       nextStep: "Send Change Order to customer.",

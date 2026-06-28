@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow,
+  getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   buildAiMeteringContext,
   runMeteredAiFeature,
@@ -246,7 +249,7 @@ export async function applyQuoteCrossLineWiringSuggestionAction(
     return { ok: false, error: "Missing quote or suggestion." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   const review = await reviewQuoteCrossLineWiringAction(qid);
   if (!review.ok) {
     return { ok: false, error: review.error };
@@ -491,7 +494,7 @@ export async function applyQuoteExecutionReviewAIProposalAction(
     return { ok: false, error: "Proposal does not match this quote." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   const quote = await loadQuoteForExecutionReviewAI(qid, ctx.organizationId);
   if (!quote) {

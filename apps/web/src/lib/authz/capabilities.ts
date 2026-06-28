@@ -46,6 +46,10 @@ export function canReadCommercial(role: StaffRole): boolean {
   return hasCapability(role, "read.commercial");
 }
 
+export function canMutateCommercial(role: StaffRole): boolean {
+  return hasCapability(role, "mutate.commercial");
+}
+
 export function canManageOrganizationSettings(role: StaffRole): boolean {
   return hasCapability(role, "manage.organization_settings");
 }

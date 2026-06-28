@@ -12,6 +12,7 @@ import {
   JobTaskStatus,
   Prisma,
   StaffRole,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -107,6 +108,7 @@ test("integration: zero-dollar internal accept from DRAFT works", async (t) => {
       jobId: fixture.jobId,
       reasoning: "Internal scope tweak",
       priceDeltaCents: 0,
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [buildAddLine()],
     });
     assert.equal(created.ok, true);
@@ -978,6 +980,7 @@ test("integration: duplicate staff accept is rejected", async (t) => {
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
       reasoning: "Internal add",
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [buildAddLine()],
     });
     assert.equal(created.ok, true);
@@ -1160,6 +1163,7 @@ test("integration: accepted invalid delta becomes APPLY_FAILED without mutating 
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
       reasoning: "Missing task coverage",
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
       lines: [{ ...buildAddLine(), executionRelevant: true }],
     });
     assert.equal(created.ok, true);
@@ -1242,6 +1246,7 @@ test("integration: concurrent apply only succeeds once", async (t) => {
         quoteId: fixture.quoteId,
         jobId: fixture.jobId,
         reasoning: label,
+        zeroDollarPolicyClass: ZeroDollarPolicyClass.INTERNAL_ADMIN,
         lines: [buildAddLine(label)],
       });
       assert.equal(created.ok, true);
@@ -1316,6 +1321,7 @@ test("integration: customer request-changes writes checkpoint without execution 
       quoteId: fixture.quoteId,
       jobId: fixture.jobId,
       reasoning: "Customer review",
+      zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
       lines: [buildAddLine()],
     });
     assert.equal(created.ok, true);

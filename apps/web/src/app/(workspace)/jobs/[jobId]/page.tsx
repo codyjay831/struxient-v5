@@ -262,8 +262,6 @@ export default async function JobDetailPage({
                 completionNote: true,
                 completionRequirementsJson: true,
                 dueAt: true,
-                scheduledStartAt: true,
-                scheduledEndAt: true,
                 schedulingRequirement: true,
                 assignedUserId: true,
                 workPackageId: true,

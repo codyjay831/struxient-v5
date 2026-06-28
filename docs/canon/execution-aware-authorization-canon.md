@@ -106,6 +106,16 @@ Quote execution planning uses a **separate auth path** from runtime `authorizeSt
 | **VIEWER** | Commercial **read** where `read.commercial` applies; **no** plan mutations |
 | **FIELD / SUBCONTRACTOR** | **No** direct quote plan edit/apply. Any narrow quote-plan exceptions are explicit in `execution-plan-permissions.ts` only (e.g. `cancel_task` on FIELD); default posture is **no** Execution Builder mutations. |
 
+### Commercial read vs mutation boundary (locked)
+
+- `getCommercialRequestContextOrThrow()` is the **read** context for commercial surfaces.
+- `getCommercialMutationContextOrThrow()` (or equivalent mutation guard) is required for staff commercial mutations.
+- `VIEWER` may read commercial data but cannot mutate commercial records.
+- `FIELD` and `SUBCONTRACTOR` cannot mutate commercial records.
+- `OWNER` / `ADMIN` / `OFFICE` may mutate commercial records only where lifecycle rules allow.
+
+Public customer acceptance routes (`/q/[token]`, `/co/[token]`) are a **separate token-scoped authority path** and must not be treated as staff mutation authority.
+
 **Activation boundary:** Approved quote → **job activation/materialization** creates runtime `JobTask` rows. After activation, **runtime auth** (`authorizeStaffAction`) applies. Post-activation quote edits must not silently mutate materialized job rows (copy-on-activate discipline).
 
 **Note:** `adjust_payments` in `execution-plan-permissions.ts` governs **quote-time** payment schedule editing. **Runtime** job payment mutations use `STAFF_ACTIONS.JOB_PAYMENT_*` in `staff-actions.ts`.
@@ -161,6 +171,7 @@ Customer portal **coordination read** (access lists, open requests, audit trail,
 3. **Mutating actions** should return structured `{ error: string }` where the UI expects action results (not unhandled throws for expected denies).
 4. **Deny messages** should be plain and role-appropriate (`getActionErrorMessage()` maps internal copy to user-safe text where needed).
 5. **`RESOURCE_NOT_FOUND`** and org mismatch should fail closed without confirming resource existence to unauthorized actors.
+6. **Request-sensitive route handlers** (session/cookies/headers/token-scoped reads) must be explicitly dynamic in Next.js App Router (`export const dynamic = "force-dynamic"`).
 
 ---
 
@@ -257,3 +268,4 @@ These are **optional** hardening/cleanup items — not blockers for the current 
 ---
 
 *Canon added 2026-06-24 — Documents completed execution-aware authorization migration, payment read visibility, and customer portal coordination read gates.*
+*Canon update 2026-06-27 — Locked commercial read vs mutation boundary and added request-sensitive route dynamic requirement.*

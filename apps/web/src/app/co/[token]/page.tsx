@@ -38,6 +38,7 @@ export default async function PublicChangeOrderPage({
           quoteId: true,
           status: true,
           priceDeltaCents: true,
+          zeroDollarPolicyClass: true,
           number: true,
           title: true,
           customerDocumentTitle: true,
@@ -119,6 +120,7 @@ export default async function PublicChangeOrderPage({
   const acceptReadiness = deriveChangeOrderCustomerAcceptReadiness({
     status: shareToken.changeOrder.status,
     priceDeltaCents: shareToken.changeOrder.priceDeltaCents,
+    zeroDollarPolicyClass: shareToken.changeOrder.zeroDollarPolicyClass,
     paymentImpactJson: shareToken.changeOrder.paymentImpactJson,
     executionDeltaJson: shareToken.changeOrder.executionDeltaJson,
     baseJobPlanVersion: shareToken.changeOrder.baseJobPlanVersion,

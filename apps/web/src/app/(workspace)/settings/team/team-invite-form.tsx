@@ -42,7 +42,11 @@ export function TeamInviteForm() {
             setSuccess("Invite created and emailed.");
             return;
           }
-          setSuccess(`Invite created. Share this link: ${result.inviteUrl}`);
+          if (result.inviteUrl) {
+            setSuccess(`Invite created. Share this link: ${result.inviteUrl}`);
+            return;
+          }
+          setSuccess("Invite created. Email delivery is unavailable in this environment.");
         });
       }}
     >

@@ -21,7 +21,7 @@ function normalizeEmail(raw: string): string {
 }
 
 export type TeamInviteActionResult =
-  | { ok: true; inviteId: string; inviteToken: string; inviteUrl: string; emailed: boolean }
+  | { ok: true; inviteId: string; inviteUrl?: string; emailed: boolean }
   | { ok: false; error: string };
 
 export async function createOrganizationInviteAction(formData: FormData): Promise<TeamInviteActionResult> {
@@ -123,8 +123,15 @@ export async function createOrganizationInviteAction(formData: FormData): Promis
     emailed,
   });
 
+  const allowManualLinkExposure = process.env.NODE_ENV !== "production";
+
   revalidatePath("/settings/team");
-  return { ok: true, inviteId: invite.id, inviteToken, inviteUrl, emailed };
+  return {
+    ok: true,
+    inviteId: invite.id,
+    inviteUrl: allowManualLinkExposure ? inviteUrl : undefined,
+    emailed,
+  };
 }
 
 export async function revokeOrganizationInviteAction(inviteId: string): Promise<{ ok: boolean; error?: string }> {
@@ -205,6 +212,12 @@ export async function resendOrganizationInviteAction(
     emailed,
   });
 
+  const allowManualLinkExposure = process.env.NODE_ENV !== "production";
+
   revalidatePath("/settings/team");
-  return { ok: true, inviteUrl, emailed };
+  return {
+    ok: true,
+    inviteUrl: allowManualLinkExposure ? inviteUrl : undefined,
+    emailed,
+  };
 }

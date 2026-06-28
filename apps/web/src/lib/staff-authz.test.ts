@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { StaffRole } from "@prisma/client";
 import {
+  denyUnlessCanReadCommercial,
   denyUnlessCanManageCommercial,
   denyUnlessCanManageOrgSettings,
   denyUnlessCanMutate,
@@ -18,6 +19,8 @@ assert.equal(denyUnlessCanMutate(StaffRole.FIELD), null);
 assert.equal(denyUnlessCanMutate(StaffRole.OWNER), null);
 
 assert.equal(denyUnlessCanManageCommercial(StaffRole.FIELD), "You do not have permission to perform this action.");
+assert.equal(denyUnlessCanManageCommercial(StaffRole.VIEWER), "You do not have permission to perform this action.");
+assert.equal(denyUnlessCanReadCommercial(StaffRole.VIEWER), null);
 assert.equal(denyUnlessCanManageCommercial(StaffRole.OFFICE), null);
 
 assert.equal(denyUnlessCanManageOrgSettings(StaffRole.ADMIN), null);

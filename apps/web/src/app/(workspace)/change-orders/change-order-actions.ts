@@ -8,6 +8,7 @@ import { JobActivityType } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   applyChangeOrderWithActor,
+  confirmChangeOrderNoCustomerImpactWithActor,
   createChangeOrderDraftWithActor,
   markChangeOrderAcceptedWithActor,
   rejectChangeOrderWithActor,
@@ -128,6 +129,19 @@ export async function markChangeOrderAcceptedAction(
   if (updated.quoteId && updated.jobId) {
     revalidateChangeOrderSurfaces(updated.quoteId, updated.jobId);
   }
+  return { ok: true, changeOrderId: updated.changeOrderId };
+}
+
+export async function confirmChangeOrderNoCustomerImpactAction(
+  changeOrderId: string,
+): Promise<ChangeOrderActionResult> {
+  const session = await requireCommercialSession();
+  const updated = await confirmChangeOrderNoCustomerImpactWithActor(
+    toActor(session),
+    changeOrderId,
+  );
+  if (!updated.ok) return updated;
+  revalidateChangeOrderSurfaces(updated.quoteId, updated.jobId);
   return { ok: true, changeOrderId: updated.changeOrderId };
 }
 

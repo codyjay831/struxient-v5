@@ -1,5 +1,6 @@
-import { ChangeOrderStatus } from "@prisma/client";
+import { ChangeOrderStatus, ZeroDollarPolicyClass } from "@prisma/client";
 import { canCustomerAcceptChangeOrder } from "@/lib/change-order/change-order-commercial-rules";
+import { ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE } from "@/lib/change-order/change-order-commercial-rules";
 import { executionDeltaHasUnreviewedGeneratedTasks } from "@/lib/change-order/change-order-execution-task-composer";
 import { parseChangeOrderExecutionDelta } from "@/lib/change-order/execution-delta-schema";
 import {
@@ -13,6 +14,7 @@ export type ChangeOrderCustomerAcceptBlockerCode =
   | "NOT_SENT"
   | "ALREADY_ACCEPTED"
   | "PAYMENT_IMPACT"
+  | "ZERO_DOLLAR_POLICY"
   | "UNREVIEWED_GENERATED_TASKS"
   | "EXECUTION_NOT_READY";
 
@@ -25,6 +27,7 @@ export type ChangeOrderCustomerAcceptBlocker = {
 export type ChangeOrderCustomerAcceptReadinessInput = {
   status: ChangeOrderStatus;
   priceDeltaCents: number;
+  zeroDollarPolicyClass?: ZeroDollarPolicyClass | null;
   paymentImpactJson: unknown;
   executionDeltaJson: unknown;
   baseJobPlanVersion: number;
@@ -83,6 +86,22 @@ export function deriveChangeOrderCustomerAcceptReadiness(
         });
       }
       return { canAccept: false, blockers };
+    }
+  }
+
+  if (input.priceDeltaCents === 0) {
+    if (!input.zeroDollarPolicyClass) {
+      blockers.push({
+        code: "ZERO_DOLLAR_POLICY",
+        customerMessage: CHANGE_ORDER_CUSTOMER_ACCEPT_UNAVAILABLE_MESSAGE,
+        staffMessage: ZERO_DOLLAR_POLICY_REQUIRED_MESSAGE,
+      });
+    } else if (input.zeroDollarPolicyClass !== ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE) {
+      blockers.push({
+        code: "ZERO_DOLLAR_POLICY",
+        customerMessage: CHANGE_ORDER_CUSTOMER_ACCEPT_UNAVAILABLE_MESSAGE,
+        staffMessage: "Internal zero-dollar Change Orders are not customer-acceptance eligible.",
+      });
     }
   }
 
@@ -149,6 +168,8 @@ export function assertChangeOrderCustomerAcceptReadyOrThrow(
   if (readiness.canAccept) return;
   const primary = getPrimaryCustomerAcceptBlocker(readiness);
   switch (primary?.code) {
+    case "ZERO_DOLLAR_POLICY":
+      throw new Error("CHANGE_ORDER_ZERO_DOLLAR_POLICY_REQUIRED");
     case "PAYMENT_IMPACT":
       throw new Error("CHANGE_ORDER_PAYMENT_IMPACT_REQUIRED");
     case "UNREVIEWED_GENERATED_TASKS":

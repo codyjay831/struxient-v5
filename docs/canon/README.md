@@ -36,6 +36,7 @@ Struxient v5 is a **construction management** product for **trades and service**
 | [journey-contractor-intake-to-completion.md](./journey-contractor-intake-to-completion.md) | Narrative: contractor journey from intake through job completion |
 | [workspace-ux-canon.md](./workspace-ux-canon.md) | **Execution-first UX philosophy**: shell, operational queues, Sales row/drawer contracts, vocabulary lock |
 | [workstation-canon.md](./workstation-canon.md) | Workstation as **action-discovery destination**; cockpit / “what’s next” deep rules |
+| [operational-attention-projection-canon.md](./operational-attention-projection-canon.md) | **Operational Attention Projection**: derived action-item contract, source-of-truth ownership, role routing, Workstation/detail parity |
 | [invariants-and-decision-rules.md](./invariants-and-decision-rules.md) | Non-negotiables, default decisions, **engineering delivery standards (I22)**, **light/dark appearance (I23)** |
 | [execution-aware-authorization-canon.md](./execution-aware-authorization-canon.md) | **Staff authorization**: role vs assignment, runtime `authorizeStaffAction`, coordination vs execution, payment/portal read visibility, Execution Builder boundaries |
 | [locked-decisions-v1.md](./locked-decisions-v1.md) | v1 product locks: RBAC, states, money, portal, issues, Workstation, phasing |

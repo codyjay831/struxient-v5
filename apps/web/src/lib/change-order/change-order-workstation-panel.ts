@@ -221,6 +221,9 @@ export function buildChangeOrderWorkstationPanelDto(input: {
   acceptedAt: string | null;
 }): ChangeOrderWorkstationPanelDto {
   const { workspace, changeOrder } = input;
+  const applicationStatus =
+    changeOrder.applicationStatus ?? ChangeOrderApplicationStatus.NOT_APPLIED;
+  const expectedJobPlanVersion = changeOrder.baseJobPlanVersion ?? workspace.jobPlanVersion;
 
   const selectedRevision: ChangeOrderRevisionSnapshot = {
     id: changeOrder.id,
@@ -228,12 +231,18 @@ export function buildChangeOrderWorkstationPanelDto(input: {
     reasoning: changeOrder.reasoning,
     priceDeltaCents: changeOrder.priceDeltaCents,
     lines: changeOrder.lines,
-    applicationStatus: changeOrder.applicationStatus,
-    baseJobPlanVersion: changeOrder.baseJobPlanVersion,
+    applicationStatus,
+    baseJobPlanVersion: expectedJobPlanVersion,
     lastApplyErrorJson: changeOrder.lastApplyErrorJson,
     customerDocumentTitle: changeOrder.customerDocumentTitle,
     paymentImpactJson: changeOrder.paymentImpactJson,
     executionImpact: changeOrder.executionImpact,
+    zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
+    internalNoCustomerImpactConfirmedAt:
+      changeOrder.internalNoCustomerImpactConfirmedAt,
+    internalNoCustomerImpactConfirmedByUserId:
+      changeOrder.internalNoCustomerImpactConfirmedByUserId,
+    hasCustomerAcceptanceCheckpoint: changeOrder.hasCustomerAcceptanceCheckpoint,
   };
 
   const readiness = deriveChangeOrderReadiness({
@@ -244,7 +253,7 @@ export function buildChangeOrderWorkstationPanelDto(input: {
     activeScopeItems: workspace.activeScopeItems,
     selectedRevision,
     jobPlanVersion: workspace.jobPlanVersion,
-    expectedJobPlanVersion: changeOrder.baseJobPlanVersion,
+    expectedJobPlanVersion,
     isPending: false,
     paymentImpactJson: changeOrder.paymentImpactJson,
   });
@@ -258,7 +267,7 @@ export function buildChangeOrderWorkstationPanelDto(input: {
     title: `CO-${String(changeOrder.number).padStart(3, "0")} · ${changeOrder.title}`,
     customerLabel: input.customerLabel,
     status: changeOrder.status,
-    applicationStatus: changeOrder.applicationStatus,
+    applicationStatus,
     lifecycleReadinessLabel: readiness.lifecycleReadinessLabel,
     officeNextStep: readiness.officeNextStep,
     priceDeltaCents: changeOrder.priceDeltaCents,
@@ -287,7 +296,7 @@ export function buildChangeOrderWorkstationPanelDto(input: {
     customerRequestSummary: input.customerRequestSummary,
     primaryAction: resolveChangeOrderWorkstationPrimaryAction({
       status: changeOrder.status,
-      applicationStatus: changeOrder.applicationStatus,
+      applicationStatus,
       send: readiness.send,
       apply: readiness.apply,
       staffAccept: readiness.staffAccept,

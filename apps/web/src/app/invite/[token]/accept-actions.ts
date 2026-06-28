@@ -11,26 +11,6 @@ export type AcceptInviteActionResult =
   | { ok: false; error: string };
 
 export async function acceptInviteAction(token: string, formData: FormData): Promise<AcceptInviteActionResult> {
-  // #region agent log
-  fetch("http://127.0.0.1:7937/ingest/24410f3e-b077-4c1d-af62-4457af9c97bc", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "aa0468" },
-    body: JSON.stringify({
-      sessionId: "aa0468",
-      runId: "post-fix",
-      hypothesisId: "C",
-      location: "apps/web/src/app/invite/[token]/accept-actions.ts:14",
-      message: "Accept invite action received token shape",
-      data: {
-        tokenType: typeof token,
-        tokenLength: typeof token === "string" ? token.length : null,
-        formHasName: formData.has("name"),
-        formHasPassword: formData.has("password"),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const inviteTokenHash = hashOrganizationInviteToken(token);
   const name = String(formData.get("name") ?? "").trim();
   const password = String(formData.get("password") ?? "");

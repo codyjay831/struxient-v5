@@ -1,4 +1,4 @@
-import { JobScopeItemStatus, JobStatus } from "@prisma/client";
+import { ChangeOrderCheckpointKind, ChangeOrderCheckpointSource, JobScopeItemStatus, JobStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   changeOrderPageBlockMessage,
@@ -140,6 +140,9 @@ export async function loadChangeOrderWorkspace(input: {
           status: true,
           reasoning: true,
           priceDeltaCents: true,
+          zeroDollarPolicyClass: true,
+          internalNoCustomerImpactConfirmedAt: true,
+          internalNoCustomerImpactConfirmedByUserId: true,
           createdAt: true,
           approvedAt: true,
           appliedAt: true,
@@ -148,9 +151,18 @@ export async function loadChangeOrderWorkspace(input: {
           lastApplyErrorJson: true,
           executionDeltaJson: true,
           paymentImpactJson: true,
+          checkpoints: {
+            where: {
+              kind: ChangeOrderCheckpointKind.ACCEPTANCE,
+              source: ChangeOrderCheckpointSource.CUSTOMER_PORTAL,
+            },
+            take: 1,
+            select: { id: true },
+          },
           lines: {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
+              id: true,
               operation: true,
               sourceJobScopeItemId: true,
               description: true,
@@ -265,6 +277,12 @@ export async function loadChangeOrderWorkspace(input: {
       status: changeOrder.status,
       reasoning: changeOrder.reasoning,
       priceDeltaCents: changeOrder.priceDeltaCents,
+      zeroDollarPolicyClass: changeOrder.zeroDollarPolicyClass,
+      internalNoCustomerImpactConfirmedAt:
+        changeOrder.internalNoCustomerImpactConfirmedAt?.toISOString() ?? null,
+      internalNoCustomerImpactConfirmedByUserId:
+        changeOrder.internalNoCustomerImpactConfirmedByUserId,
+      hasCustomerAcceptanceCheckpoint: changeOrder.checkpoints.length > 0,
       createdAt: changeOrder.createdAt.toISOString(),
       approvedAt: changeOrder.approvedAt?.toISOString() ?? null,
       appliedAt: changeOrder.appliedAt?.toISOString() ?? null,

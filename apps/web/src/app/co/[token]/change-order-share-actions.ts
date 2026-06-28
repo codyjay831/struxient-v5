@@ -247,6 +247,7 @@ export async function acceptChangeOrderFromTokenAction(
       const acceptAllowed = deriveChangeOrderCustomerAcceptReadiness({
         status: shareToken.changeOrder.status,
         priceDeltaCents: shareToken.changeOrder.priceDeltaCents,
+        zeroDollarPolicyClass: shareToken.changeOrder.zeroDollarPolicyClass,
         paymentImpactJson: shareToken.changeOrder.paymentImpactJson,
         executionDeltaJson: shareToken.changeOrder.executionDeltaJson,
         baseJobPlanVersion: shareToken.changeOrder.baseJobPlanVersion,

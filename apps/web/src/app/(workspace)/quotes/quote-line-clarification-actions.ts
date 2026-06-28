@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { Prisma, QuoteStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow,
+  getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   buildAiMeteringContext,
   runMeteredAiFeature,
@@ -600,7 +603,7 @@ export async function createClarificationQuestionSetForLineAction(
   const lid = lineId.trim();
   if (!qid || !lid) return { error: "Missing quote or line id." };
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
   let parsed: z.infer<typeof CreateSetPayloadSchema>;
   try {
     parsed = CreateSetPayloadSchema.parse(payload);
@@ -732,7 +735,7 @@ export async function updateClarificationQuestionSetForLineAction(
     return { error: "Invalid question update payload." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   try {
     const line = await loadDraftLine(qid, lid, ctx.organizationId);
@@ -936,7 +939,7 @@ export async function applyLineClarificationAnswersAction(
     return { error: "Missing quote or line id." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   let parsed;
   try {

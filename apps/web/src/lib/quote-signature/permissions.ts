@@ -1,20 +1,20 @@
 import type { StaffRole } from "@prisma/client";
-import { denyUnlessCanManageCommercial, denyUnlessCanMutate } from "@/lib/staff-authz";
+import { denyUnlessCanManageCommercial } from "@/lib/staff-authz";
 
 export function denyUnlessCanSendQuoteSignature(role: StaffRole): string | null {
-  return denyUnlessCanMutate(role);
+  return denyUnlessCanManageCommercial(role);
 }
 
 export function denyUnlessCanResendQuoteSignature(role: StaffRole): string | null {
-  return denyUnlessCanMutate(role);
+  return denyUnlessCanManageCommercial(role);
 }
 
 export function denyUnlessCanRevokeQuoteSignature(role: StaffRole): string | null {
-  return denyUnlessCanMutate(role);
+  return denyUnlessCanManageCommercial(role);
 }
 
 export function denyUnlessCanCopySignerLink(role: StaffRole): string | null {
-  return denyUnlessCanMutate(role);
+  return denyUnlessCanManageCommercial(role);
 }
 
 export function denyUnlessCanViewSignatureAudit(role: StaffRole): string | null {
@@ -26,5 +26,5 @@ export function canViewSignatureRawAuditFields(role: StaffRole): boolean {
 }
 
 export function denyUnlessCanManuallyDeliverSignerLink(role: StaffRole): string | null {
-  return denyUnlessCanMutate(role);
+  return denyUnlessCanManageCommercial(role);
 }

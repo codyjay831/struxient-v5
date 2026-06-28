@@ -1,4 +1,5 @@
 export {
+  denyUnlessCanReadCommercial,
   denyUnlessCanManageCommercial,
   denyUnlessCanManageOrgSettings,
   denyUnlessCanMutate,

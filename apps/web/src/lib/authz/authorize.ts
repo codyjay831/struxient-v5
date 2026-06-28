@@ -1,6 +1,7 @@
 import type { StaffRole } from "@prisma/client";
 import {
   canManageOrganizationSettings,
+  canMutateCommercial,
   canMutate,
   canReadCommercial,
   type Capability,
@@ -24,8 +25,12 @@ export function denyUnlessCanMutate(role: StaffRole): string | null {
   return canMutate(role) ? null : MUTATION_DENIED;
 }
 
-export function denyUnlessCanManageCommercial(role: StaffRole): string | null {
+export function denyUnlessCanReadCommercial(role: StaffRole): string | null {
   return canReadCommercial(role) ? null : MUTATION_DENIED;
+}
+
+export function denyUnlessCanManageCommercial(role: StaffRole): string | null {
+  return canMutateCommercial(role) ? null : MUTATION_DENIED;
 }
 
 export function denyUnlessCanManageOrgSettings(role: StaffRole): string | null {

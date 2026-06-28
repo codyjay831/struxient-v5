@@ -15,6 +15,7 @@ import {
   ExecutionPlanRevisionStatus,
   JobActivityType,
   Prisma,
+  ZeroDollarPolicyClass,
 } from "@prisma/client";
 import {
   CHANGE_ORDER_CHECKPOINT_SNAPSHOT_SCHEMA_VERSION,
@@ -32,7 +33,6 @@ import {
   CHANGE_ORDER_PORTAL_CHECKPOINT_ACTION_OFFICE_NOTE,
   requestChangeOrderChangesForShareToken,
   sendChangeOrderOfficeNoteForShareToken,
-  toCustomerAcceptReadinessInput,
 } from "@/lib/change-order/change-order-portal";
 import { db } from "@/lib/db";
 import {
@@ -82,6 +82,7 @@ async function loadPortalStateForShareTokenId(shareTokenId: string) {
         select: {
           status: true,
           priceDeltaCents: true,
+          zeroDollarPolicyClass: true,
           paymentImpactJson: true,
           executionDeltaJson: true,
           baseJobPlanVersion: true,
@@ -108,9 +109,24 @@ async function loadPortalStateForShareTokenId(shareTokenId: string) {
     },
   });
   assert.ok(loaded);
-  const acceptReadiness = deriveChangeOrderCustomerAcceptReadiness(
-    toCustomerAcceptReadinessInput(loaded.changeOrder),
-  );
+  const acceptReadiness = deriveChangeOrderCustomerAcceptReadiness({
+    status: loaded.changeOrder.status,
+    priceDeltaCents: loaded.changeOrder.priceDeltaCents,
+    zeroDollarPolicyClass: loaded.changeOrder.zeroDollarPolicyClass,
+    paymentImpactJson: loaded.changeOrder.paymentImpactJson,
+    executionDeltaJson: loaded.changeOrder.executionDeltaJson,
+    baseJobPlanVersion: loaded.changeOrder.baseJobPlanVersion,
+    currentJobPlanVersion: loaded.changeOrder.job.jobPlanVersion,
+    scopeItems: loaded.changeOrder.job.scopeItems,
+    tasks: loaded.changeOrder.job.tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      hardSignal: task.hardSignal,
+      requiresSignals: task.requiresSignals,
+      providesSignals: task.providesSignals,
+      jobScopeItemIds: task.scopes.map((scope) => scope.jobScopeItemId),
+    })),
+  });
   const portalActions = deriveChangeOrderCustomerPortalActions({
     status: loaded.changeOrder.status,
     acceptReadiness,
@@ -124,6 +140,7 @@ async function prepareAcceptReadySentChangeOrder(label: string) {
     quoteId: fixture.quoteId,
     jobId: fixture.jobId,
     reasoning: "QA accept-ready",
+    zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
     lines: [buildAddLine()],
   });
   assert.equal(created.ok, true);
@@ -145,6 +162,7 @@ async function prepareAcceptBlockedSentChangeOrder(label: string) {
     quoteId: fixture.quoteId,
     jobId: fixture.jobId,
     reasoning: "QA accept-blocked",
+    zeroDollarPolicyClass: ZeroDollarPolicyClass.CUSTOMER_FACING_CHANGE,
     lines: [buildAddLine()],
   });
   assert.equal(created.ok, true);
@@ -334,6 +352,7 @@ test("QA 1c: SENT + accept-ready customer accept succeeds after name validation 
       const acceptAllowed = deriveChangeOrderCustomerAcceptReadiness({
         status: shareToken.changeOrder.status,
         priceDeltaCents: shareToken.changeOrder.priceDeltaCents,
+        zeroDollarPolicyClass: shareToken.changeOrder.zeroDollarPolicyClass,
         paymentImpactJson: shareToken.changeOrder.paymentImpactJson,
         executionDeltaJson: shareToken.changeOrder.executionDeltaJson,
         baseJobPlanVersion: shareToken.changeOrder.baseJobPlanVersion,

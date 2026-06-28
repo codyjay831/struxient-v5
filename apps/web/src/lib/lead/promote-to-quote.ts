@@ -1,6 +1,8 @@
 import { db } from "../db";
 import { LeadStatus, Prisma, QuoteStatus } from "@prisma/client";
-import { getCommercialRequestContextOrThrow } from "../auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "../auth-context";
 import { evaluateLeadReadiness } from "../lead-readiness-heuristics";
 import {
   hasIssuedQuoteWithoutDraft,

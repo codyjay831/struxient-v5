@@ -10,6 +10,8 @@ import { getStorageProvider, LocalStorageProvider } from "@/lib/storage";
 import { join } from "path";
 import { readFile } from "fs/promises";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ recipientToken: string }> },

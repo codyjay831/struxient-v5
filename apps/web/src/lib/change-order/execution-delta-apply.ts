@@ -293,17 +293,9 @@ export async function applyChangeOrderExecutionDeltaInTx(
       }
       case "UPDATE_PAYMENT_REQUIREMENT": {
         hasPaymentOperation = true;
-        await tx.jobPaymentRequirement.create({
-          data: {
-            organizationId: params.organizationId,
-            jobId: params.jobId,
-            title: getPayloadString(operation, "title") ?? "Change Order",
-            amountCents: getPayloadNumber(operation, "amountCents") ?? 0,
-            sourceChangeOrderId: params.changeOrderId,
-            status: "PENDING",
-          },
-        });
-        break;
+        throw new Error(
+          "CHANGE_ORDER_LEGACY_PAYMENT_OPERATION_DISABLED: use saved paymentImpactJson materialization",
+        );
       }
     }
     appliedOperationIds.push(operation.opId);

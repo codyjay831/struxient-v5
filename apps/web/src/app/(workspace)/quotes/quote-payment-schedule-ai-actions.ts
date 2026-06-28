@@ -3,7 +3,10 @@
 import { QuoteStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow,
+  getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   buildAiMeteringContext,
   runMeteredAiFeature,
@@ -205,7 +208,7 @@ export async function applyQuotePaymentScheduleAIProposalAction(
     return { error: "Missing quote id." };
   }
 
-  const ctx = await getCommercialRequestContextOrThrow();
+  const ctx = await getCommercialMutationContextOrThrow();
 
   try {
     const parsedProposal = QuotePaymentScheduleProposalSchema.parse(proposal);

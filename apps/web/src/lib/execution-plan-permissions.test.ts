@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { StaffRole } from "@prisma/client";
-import { denyUnlessCanManageCommercial } from "./staff-authz";
+import {
+  denyUnlessCanManageCommercial,
+  denyUnlessCanReadCommercial,
+} from "./staff-authz";
 import {
   assertExecutionPlanPermission,
   canUseExecutionPlanPermission,
@@ -48,10 +51,10 @@ test("field users can cancel tasks but cannot adjust payments", () => {
 });
 
 test("viewers retain commercial read access for execution review pages", () => {
-  assert.equal(denyUnlessCanManageCommercial(StaffRole.VIEWER), null);
+  assert.equal(denyUnlessCanReadCommercial(StaffRole.VIEWER), null);
 });
 
-test("field users are denied commercial read access", () => {
+test("field users are denied commercial mutation access", () => {
   assert.equal(denyUnlessCanManageCommercial(StaffRole.FIELD), "You do not have permission to perform this action.");
 });
 

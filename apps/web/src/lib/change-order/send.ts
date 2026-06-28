@@ -41,6 +41,7 @@ const changeOrderSelectForSendValidation = {
   id: true,
   status: true,
   priceDeltaCents: true,
+  zeroDollarPolicyClass: true,
   paymentImpactJson: true,
   executionDeltaJson: true,
   baseJobPlanVersion: true,
@@ -67,6 +68,7 @@ const changeOrderSelectForSendValidation = {
 function assertStoredChangeOrderReadyForCustomerAccept(input: {
   status: ChangeOrderStatus;
   priceDeltaCents: number;
+  zeroDollarPolicyClass: import("@prisma/client").ZeroDollarPolicyClass | null;
   paymentImpactJson: unknown;
   executionDeltaJson: unknown;
   baseJobPlanVersion: number;
@@ -86,6 +88,7 @@ function assertStoredChangeOrderReadyForCustomerAccept(input: {
   assertChangeOrderCustomerAcceptReadyOrThrow({
     status: input.status,
     priceDeltaCents: input.priceDeltaCents,
+    zeroDollarPolicyClass: input.zeroDollarPolicyClass,
     paymentImpactJson: input.paymentImpactJson,
     executionDeltaJson: input.executionDeltaJson,
     baseJobPlanVersion: input.baseJobPlanVersion,
@@ -332,6 +335,12 @@ export async function sendChangeOrder(
           ok: false,
           error:
             "Choose and save payment terms in the commercial column before sending this Change Order.",
+        };
+      }
+      if (e.message === "CHANGE_ORDER_ZERO_DOLLAR_POLICY_REQUIRED") {
+        return {
+          ok: false,
+          error: "Select a customer-facing zero-dollar policy before sending this Change Order.",
         };
       }
       if (e.message === "CHANGE_ORDER_UNREVIEWED_GENERATED_TASKS") {

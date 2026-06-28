@@ -15,7 +15,9 @@ import {
 import { linkLeadToCustomerInTransaction } from "@/lib/lead-customer-link-site";
 import { db } from "@/lib/db";
 import { finalizeLeadAttachments } from "@/lib/finalize-lead-attachments";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import { resolveServiceLocationSnapshotFromFormData } from "@/lib/service-address-form";
 import { LEAD_FIELD_LIMITS } from "./lead-field-limits";
 

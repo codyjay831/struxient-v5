@@ -146,6 +146,10 @@ export function BetaAccessClient({ invites, grants }: BetaAccessClientProps) {
               {createdInviteUrl}
             </a>
           </p>
+        ) : success ? (
+          <p className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground-muted">
+            Raw invite links are hidden in production. Share access through approved operator workflows.
+          </p>
         ) : null}
       </section>
 

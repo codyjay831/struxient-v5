@@ -392,6 +392,12 @@ Do not write timing fields via ad-hoc Prisma calls outside approved actions.
 Prelaunch: prefer **one-time backfill + cutover** over prolonged dual-write.
 Phase ordering rule: after safety stabilization, stop creating new legacy schedule truth in runtime paths.
 
+### Workstation presentation boundary (locked)
+
+- Workstation appointment display derives from canonical linked schedule events (`JobScheduleEvent` + `JobScheduleEventTask`), not `JobTask.scheduledStartAt/scheduledEndAt`.
+- `JobTask.dueAt` remains deadline pressure only; it must not be rendered as a calendar commitment.
+- A tentative linked event may be shown as planning context, but it does **not** satisfy `schedulingRequirement = REQUIRED` until confirmed.
+
 ---
 
 ## MVP exclusions (explicit)
@@ -422,3 +428,4 @@ Do not ship in MVP:
 
 *Canon locked 2026-06-08; revised lock 2026-06-11 for final first-class scheduling model.*  
 *Updated 2026-06-19 — Cross-linked Sales Site Visit canon and clarified `LeadVisitRequest` vs `JobScheduleEvent` boundary.*
+*Updated 2026-06-27 — Locked Workstation appointment display to canonical linked schedule events and clarified tentative-vs-required semantics.*

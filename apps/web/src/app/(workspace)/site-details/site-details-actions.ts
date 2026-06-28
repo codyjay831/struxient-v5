@@ -10,7 +10,9 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getCommercialRequestContextOrThrow } from "@/lib/auth-context";
+import {
+  getCommercialMutationContextOrThrow as getCommercialRequestContextOrThrow,
+} from "@/lib/auth-context";
 import {
   buildAiMeteringContext,
   runMeteredAiFeature,

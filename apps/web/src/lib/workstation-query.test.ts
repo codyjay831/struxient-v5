@@ -42,6 +42,27 @@ test("deriveSchedulingAttentionOverride ignores satisfied REQUIRED tasks", () =>
   assert.equal(result, null);
 });
 
+test("deriveSchedulingAttentionOverride keeps REQUIRED tasks unscheduled with tentative-only events", () => {
+  const futureEnd = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const result = deriveSchedulingAttentionOverride({
+    derivedState: "READY",
+    schedulingRequirement: TaskSchedulingRequirement.REQUIRED,
+    linkedEvents: [
+      {
+        id: "evt-2",
+        status: JobScheduleEventStatus.TENTATIVE,
+        startAt: new Date(Date.now() + 60 * 60 * 1000),
+        endAt: futureEnd,
+      },
+    ],
+    dueMode: TaskDueMode.NONE,
+    dueAt: null,
+  });
+
+  assert.ok(result);
+  assert.equal(result?.status, "Needs schedule");
+});
+
 test("assigned visit workstation cards avoid critical priority for far-future scheduled visits", () => {
   const now = new Date("2026-06-19T12:00:00.000Z");
   const attention = classifyAssignedLeadVisitWorkstationAttention({

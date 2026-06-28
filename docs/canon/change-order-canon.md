@@ -283,7 +283,7 @@ Staff accept **must** write ACCEPTANCE checkpoint parity with customer accept (i
 
 | `priceDeltaCents` | Payment strategy |
 |-------------------|------------------|
-| `0` | **Not required** ? no payment materialization on apply |
+| `0` | **Not required** for payment rows ? no payment materialization on apply |
 | `!== 0` | **Required before send** ? office selects strategy; customer must see terms before accept |
 
 **Send gate:** price-impact COs **must not** transition to `SENT` without valid `paymentImpactJson` (strategy + customer terms + resolved preview).
@@ -305,6 +305,8 @@ Enum values (canonical string slugs):
 | `DEPOSIT_NOW_REST_SPLIT_ACROSS_REMAINING` | Deposit (new CO-sourced `DUE` row) + remainder split across eligible unsettled rows | Partial upfront + spread |
 
 **Payment plan review (v2):** Office uses a visual payment plan table ? current job payments, CO amount, per-payment adjustments, generated customer terms, and apply preview. **Presets are starting points only**; office may toggle **Customize allocation** and edit the **CO change** amount on eligible rows. **Stored `allocations[]` in `paymentImpactJson` are commercial truth**. Apply uses stored values, not silent recalculation.
+
+Payment Plan Review is a review/allocation workflow, not a magic dropdown. Strategy presets seed defaults; saved allocation truth controls apply behavior.
 
 **Custom allocation (controlled):**
 
@@ -391,6 +393,18 @@ All materialization runs in the **same transaction** as scope/task delta apply. 
 
 - No payment materialization.
 - **Must not** include payment ops in execution delta.
+- Internal no-work-impact confirmation is separate from payment impact: `priceDeltaCents = 0` does not imply "no execution impact."
+
+### 11.8 Zero-dollar material/scope policy (product decision posture)
+
+Current canon lock:
+
+- Zero-dollar internal/admin note CO can remain internal and does not require customer approval.
+- Zero-dollar COs with execution-impacting material/scope changes require explicit internal confirmation before apply.
+
+Pending product decision (must be explicit before launch hardening):
+
+- Whether zero-dollar customer-facing material/scope substitutions always require customer acknowledgement/approval, even when price does not change.
 
 #### Double-count prevention (all strategies)
 
@@ -499,3 +513,4 @@ Schedule/permit/material timing notes remain internal until scheduling canon int
 *Canon update 2026-06-24 ? Pass 0 payment: MVP payment strategies, commercial `paymentImpactJson`, materialization rules, customer terms, legacy `UPDATE_PAYMENT_REQUIREMENT` deprecation.*
 *Supersedes implicit "scope reconciliation only" behavior and standalone orphan PENDING payment row pattern.*
 *Canon update 2026-06-25 ? Custom allocation (MANUAL basis): presets as starting points, controlled CO-change edits, generated customer terms, exact-sum save/send gate.*
+*Canon update 2026-06-27 ? Clarified Payment Plan Review posture, separated no-work-impact confirmation from payment impact, and marked zero-dollar customer-facing substitution policy as an explicit product decision.*
