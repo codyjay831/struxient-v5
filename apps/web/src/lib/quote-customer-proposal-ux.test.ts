@@ -26,6 +26,14 @@ function countOccurrences(source: string, needle: string): number {
   return source.split(needle).length - 1;
 }
 
+function customerProposalDocumentSource(source: string): string {
+  const start = source.indexOf("function CustomerProposalDocument");
+  const end = source.indexOf("export default async function QuoteLiveProposalPreviewPage");
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  return source.slice(start, end);
+}
+
 test("quote customer proposal UX labels use truthful staff-facing names", () => {
   assert.equal(QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL, "Customer Proposal");
   assert.equal(QUOTE_DRAFT_PREVIEW_LINK_LABEL, "Preview draft proposal");
@@ -81,15 +89,64 @@ test("quote work surface sent and accepted actions use frozen checkpoints", () =
 
 test("staff preview page is clearly live internal preview, not customer record", () => {
   assert.equal(QUOTE_STAFF_PREVIEW_PAGE_TITLE, "Draft proposal preview");
-  assert.match(QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION, /Live draft preview/i);
-  assert.match(QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION, /not the sent customer record/i);
+  assert.equal(
+    QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION,
+    "Review the customer-facing proposal draft before sending.",
+  );
 
   const source = src("app/(workspace)/quotes/[quoteId]/preview/page.tsx");
   assert.match(source, /QUOTE_STAFF_PREVIEW_PAGE_TITLE/);
-  assert.match(source, /View sent proposal record/);
+  assert.match(source, /This preview reflects the current workspace quote\. It is not the sent customer record\./);
+  assert.match(source, /StatusBadge label="Live draft"/);
+  assert.match(source, /Generated from latest draft update:/);
+  assert.match(source, /View sent proposal/);
+  assert.match(source, /QuoteRecordSendCheckpointForm[\s\S]*layout="compact"/);
+  assert.doesNotMatch(source, /Staff preview shell/);
   assert.doesNotMatch(source, /Stored on the quote row \(server\)/);
   assert.doesNotMatch(source, /Display names only/);
   assert.doesNotMatch(source, /Workspace status for staff/);
+});
+
+test("draft preview route keeps staff auth, org scoping, and customer projection boundary", () => {
+  const source = src("app/(workspace)/quotes/[quoteId]/preview/page.tsx");
+  assert.match(source, /getCommercialRequestContextOrNull/);
+  assert.match(source, /organizationId:\s*ctx\.organizationId/);
+  assert.match(source, /quoteSelectForLiveCustomerPreviewPage/);
+  assert.match(source, /quoteRowToCustomerPreviewInput\(row,\s*ctx\.organizationId\)/);
+  assert.match(source, /buildCustomerQuotePreviewDocument/);
+  assert.match(source, /CustomerProposalDocument\(\{ document \}:\s*\{ document: QuoteCustomerPreviewDocument \}\)/);
+});
+
+test("customer proposal document omits staff and debug copy", () => {
+  const source = src("app/(workspace)/quotes/[quoteId]/preview/page.tsx");
+  const documentSource = customerProposalDocumentSource(source);
+
+  for (const phrase of [
+    "Staff workspace status",
+    "Current workspace quote",
+    "Stored on quote row",
+    "Preview as-of",
+    "Customer and lead details shown",
+    "Sellable rows",
+    "From workspace record",
+    "Acceptance will lock this proposal version",
+    "customer signing record",
+  ]) {
+    assert.doesNotMatch(documentSource, new RegExp(phrase));
+  }
+});
+
+test("customer proposal document renders proposal essentials from safe document DTO", () => {
+  const source = src("app/(workspace)/quotes/[quoteId]/preview/page.tsx");
+  const documentSource = customerProposalDocumentSource(source);
+
+  assert.match(documentSource, /document\.organizationDisplayName/);
+  assert.match(documentSource, /document\.documentTitle/);
+  assert.match(documentSource, /document\.customer/);
+  assert.match(documentSource, /Scope of work/);
+  assert.match(documentSource, /Payment terms/);
+  assert.match(documentSource, /Subtotal/);
+  assert.match(documentSource, /formatMoneyCents\(document\.totalCents\)/);
 });
 
 test("customer signer review does not expose internal acceptance brand", () => {

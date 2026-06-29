@@ -117,3 +117,32 @@ test("buildCustomerQuotePreviewDocument uses materialized payment schedule", () 
   assert.equal(document.paymentSchedule[0]?.amountCents, 450_000);
   assert.equal(document.paymentSchedule[1]?.amountCents, 1_050_000);
 });
+
+test("buildCustomerQuotePreviewDocument omits staff-only source text", () => {
+  const staffOnlyText = "STAFF ONLY: panel access is awkward";
+  const quote = baseQuoteInput({
+    lineItems: [
+      {
+        id: "line-1",
+        sortOrder: 0,
+        description: "Internal fallback description",
+        customerScopeTitle: "EV charger installation",
+        customerScopeDescription: "Install a customer-approved charger circuit.",
+        customerIncludedNotes: null,
+        customerExcludedNotes: null,
+        customerPresentationGroup: null,
+        quantityDisplay: "1",
+        unitAmountCents: 100_000,
+        lineTotalCents: 100_000,
+        internalNotes: staffOnlyText,
+      } as QuoteCustomerPreviewInput["lineItems"][number] & { internalNotes: string },
+    ],
+  } as Partial<QuoteCustomerPreviewInput> & { internalNotes: string });
+  (quote as QuoteCustomerPreviewInput & { internalNotes: string }).internalNotes = staffOnlyText;
+
+  const { document } = buildCustomerQuotePreviewDocument(quote, {
+    organizationDisplayName: "Struxient Demo",
+  });
+
+  assert.doesNotMatch(JSON.stringify(document), /STAFF ONLY/);
+});

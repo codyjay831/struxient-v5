@@ -28,6 +28,7 @@ import {
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
 import {
+  loadQuoteScopeContextSectionsAction,
   generateQuoteScopeSuggestionsAction,
   applyQuoteScopeSuggestionsAction,
 } from "@/app/(workspace)/quotes/quote-line-items-ai-actions";
@@ -64,7 +65,10 @@ import type {
   QuoteScopeSuggestionsProposal,
   QuoteScopeSuggestionsGenerationMeta,
 } from "@/lib/ai/quote-line-items-proposal-schema";
-import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
+import type {
+  QuoteScopeContextSection,
+  QuoteScopeContextSourceType,
+} from "@/lib/ai/quote-scope-capture-context";
 import { QuoteScopeCapturePanel } from "@/components/quotes/quote-line-items-ai-review-panel";
 import { 
   QUOTE_FIELD_LIMITS,
@@ -268,12 +272,14 @@ function QuoteDraftDetailsForm({
 function QuoteInternalNotesSidebarForm({
   quoteId,
   initialTitle,
-  initialInternalNotes,
+  draftInternalNotes,
+  onDraftInternalNotesChange,
   onMutated,
 }: {
   quoteId: string;
   initialTitle: string;
-  initialInternalNotes: string | null;
+  draftInternalNotes: string;
+  onDraftInternalNotesChange: (value: string) => void;
   onMutated: () => void;
 }) {
   const [state, formAction, isPending] = useActionState(
@@ -309,7 +315,8 @@ function QuoteInternalNotesSidebarForm({
           name="internalNotes"
           rows={6}
           maxLength={QUOTE_FIELD_LIMITS.internalNotes}
-          defaultValue={initialInternalNotes ?? ""}
+          value={draftInternalNotes}
+          onChange={(event) => onDraftInternalNotesChange(event.target.value)}
           placeholder="Add internal context for the team... (staff-only)"
           className={`${controlClass} text-xs`}
         />
@@ -743,16 +750,21 @@ export function QuoteAuthoringSurface({
   const [scopeCaptureOpen, setScopeCaptureOpen] = useState(false);
   const [scopeCaptureText, setScopeCaptureText] = useState("");
   const [scopeAdditionalInstructions, setScopeAdditionalInstructions] = useState("");
-  const [scopeCaptureSources, setScopeCaptureSources] = useState<QuoteScopeCaptureSourceFlags>({
-    includeIntakeNotes: true,
-    includeInternalQuoteNotes: true,
-    includeScopeSummary: true,
-  });
+  const [scopeContextSections, setScopeContextSections] = useState<QuoteScopeContextSection[]>([]);
+  const [selectedScopeSourceTypes, setSelectedScopeSourceTypes] = useState<
+    QuoteScopeContextSourceType[]
+  >([]);
   const [scopeProposal, setScopeProposal] = useState<QuoteScopeSuggestionsProposal | null>(null);
   const [scopeGeneration, setScopeGeneration] =
     useState<QuoteScopeSuggestionsGenerationMeta | null>(null);
   const [isScopeGenerating, setIsScopeGenerating] = useState(false);
   const [isScopeApplying, setIsScopeApplying] = useState(false);
+  const [isScopeContextLoading, setIsScopeContextLoading] = useState(false);
+  const savedInternalNotes = initialInternalNotes ?? "";
+  const [internalNotesDraftState, setInternalNotesDraftState] = useState({
+    savedValue: savedInternalNotes,
+    draftValue: savedInternalNotes,
+  });
 
   // Scope clarification (per-line)
   const [clarifyLineId, setClarifyLineId] = useState<string | null>(null);
@@ -774,14 +786,47 @@ export function QuoteAuthoringSurface({
   const [isClarifySetCreating, setIsClarifySetCreating] = useState(false);
   const [isClarifySetUpdating, setIsClarifySetUpdating] = useState(false);
 
-  const hasIntakeNotes = Boolean(lead?.notes?.trim());
-  const hasScopeSummary = Boolean(lead?.scopeSummary?.trim());
-  const hasInternalNotesForCapture = Boolean(initialInternalNotes?.trim());
+  const internalNotesDraft =
+    internalNotesDraftState.savedValue === savedInternalNotes
+      ? internalNotesDraftState.draftValue
+      : savedInternalNotes;
+  const hasUnsavedInternalNotesForCapture =
+    internalNotesDraft.trim() !== savedInternalNotes.trim();
+  const handleInternalNotesDraftChange = (value: string) => {
+    setInternalNotesDraftState({
+      savedValue: savedInternalNotes,
+      draftValue: value,
+    });
+  };
 
   const openScopeCapture = () => {
     setScopeCaptureOpen(true);
     setScopeProposal(null);
     setScopeGeneration(null);
+    setIsScopeContextLoading(true);
+    void loadQuoteScopeContextSectionsAction(quoteId)
+      .then((result) => {
+        if (result.error) {
+          toast.error(result.error);
+          setScopeContextSections([]);
+          setSelectedScopeSourceTypes([]);
+          return;
+        }
+        const sections = result.contextSections ?? [];
+        setScopeContextSections(sections);
+        setSelectedScopeSourceTypes(
+          sections
+            .filter((section) => !section.isEmpty && section.isIncluded)
+            .map((section) => section.sourceType),
+        );
+      })
+      .catch((error) => {
+        console.error(error);
+        toast.error("Failed to load Quick Scope context sources.");
+        setScopeContextSections([]);
+        setSelectedScopeSourceTypes([]);
+      })
+      .finally(() => setIsScopeContextLoading(false));
   };
 
   const closeScopeCapture = () => {
@@ -790,15 +835,20 @@ export function QuoteAuthoringSurface({
     setScopeGeneration(null);
     setIsScopeGenerating(false);
     setIsScopeApplying(false);
+    setIsScopeContextLoading(false);
   };
 
   const handleGenerateScopeSuggestions = async () => {
+    if (hasUnsavedInternalNotesForCapture) {
+      toast.warning("Save quote details before using Quick Scope. Unsaved notes are not included.");
+      return;
+    }
     setIsScopeGenerating(true);
     try {
       const result = await generateQuoteScopeSuggestionsAction(quoteId, {
         captureText: scopeCaptureText,
         additionalInstructions: scopeAdditionalInstructions,
-        sources: scopeCaptureSources,
+        selectedSourceTypes: selectedScopeSourceTypes,
         priorMissingInfo: scopeProposal
           ? [
               ...scopeProposal.quoteMissingInfo,
@@ -817,6 +867,14 @@ export function QuoteAuthoringSurface({
         setScopeProposal(null);
         setScopeGeneration(null);
         return;
+      }
+      if (result.contextSections) {
+        setScopeContextSections(result.contextSections);
+        setSelectedScopeSourceTypes(
+          result.contextSections
+            .filter((section) => !section.isEmpty && section.isIncluded)
+            .map((section) => section.sourceType),
+        );
       }
       setScopeProposal(result.proposal);
       setScopeGeneration(result.generation ?? null);
@@ -1194,7 +1252,8 @@ export function QuoteAuthoringSurface({
             <QuoteInternalNotesSidebarForm
               quoteId={quoteId}
               initialTitle={initialTitle}
-              initialInternalNotes={initialInternalNotes}
+              draftInternalNotes={internalNotesDraft}
+              onDraftInternalNotesChange={handleInternalNotesDraftChange}
               onMutated={onMutated}
             />
           </div>
@@ -1459,19 +1518,17 @@ export function QuoteAuthoringSurface({
       <QuoteScopeCapturePanel
         open={scopeCaptureOpen}
         onClose={closeScopeCapture}
-        hasIntakeNotes={hasIntakeNotes}
-        hasInternalNotes={hasInternalNotesForCapture}
-        hasScopeSummary={hasScopeSummary}
-        scopeSummaryText={lead?.scopeSummary ?? null}
+        contextSections={scopeContextSections}
+        selectedSourceTypes={selectedScopeSourceTypes}
+        onSelectedSourceTypesChange={setSelectedScopeSourceTypes}
+        hasUnsavedInternalNotes={hasUnsavedInternalNotesForCapture}
         captureText={scopeCaptureText}
         onCaptureTextChange={setScopeCaptureText}
         additionalInstructions={scopeAdditionalInstructions}
         onAdditionalInstructionsChange={setScopeAdditionalInstructions}
-        sources={scopeCaptureSources}
-        onSourcesChange={setScopeCaptureSources}
         proposal={scopeProposal}
         generation={scopeGeneration}
-        isGenerating={isScopeGenerating}
+        isGenerating={isScopeGenerating || isScopeContextLoading}
         isApplying={isScopeApplying}
         onGenerate={handleGenerateScopeSuggestions}
         onApply={handleApplyScopeSuggestions}

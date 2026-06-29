@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useActionState } from "react";
+import { useEffect, useRef, useState, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -81,6 +81,7 @@ type PaymentScheduleEditorProps = {
   isCommercialEditable?: boolean;
   hasExistingSchedule?: boolean;
   mode?: "standard" | "compact";
+  onMutated?: () => void | Promise<void>;
 };
 
 export function QuotePaymentScheduleEditor({
@@ -90,6 +91,7 @@ export function QuotePaymentScheduleEditor({
   stages,
   isCommercialEditable = false,
   hasExistingSchedule,
+  onMutated,
 }: PaymentScheduleEditorProps) {
   const router = useRouter();
   const [isAdding, setIsAdding] = useState(false);
@@ -101,24 +103,31 @@ export function QuotePaymentScheduleEditor({
     useState<QuotePaymentScheduleGenerationMeta | null>(null);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isAiApplying, setIsAiApplying] = useState(false);
+  const isAiApplyingRef = useRef(false);
 
   const scheduleHasItems = hasExistingSchedule ?? items.length > 0;
   const canUseAi = isCommercialEditable && quoteTotalCents > 0;
 
   const openAiPanel = () => {
     setAiOpen(true);
-    void generateAiProposal();
   };
 
-  const closeAiPanel = () => {
-    if (isAiGenerating || isAiApplying) return;
+  const resetAiPanel = () => {
     setAiOpen(false);
     setAiProposal(null);
     setAiGeneration(null);
   };
 
+  const closeAiPanel = () => {
+    if (isAiGenerating || isAiApplying) return;
+    resetAiPanel();
+  };
+
   const generateAiProposal = async () => {
+    if (isAiGenerating || isAiApplying) return;
     setIsAiGenerating(true);
+    setAiProposal(null);
+    setAiGeneration(null);
     try {
       const result = await generateQuotePaymentScheduleAIProposalAction(quoteId, {
         userInstructions: aiInstructions.trim() || undefined,
@@ -140,7 +149,8 @@ export function QuotePaymentScheduleEditor({
     selectedMilestoneTempIds: string[];
     replaceConfirmed: boolean;
   }) => {
-    if (!aiProposal) return;
+    if (!aiProposal || isAiApplyingRef.current) return;
+    isAiApplyingRef.current = true;
     setIsAiApplying(true);
     try {
       const result = await applyQuotePaymentScheduleAIProposalAction(quoteId, aiProposal, {
@@ -156,11 +166,16 @@ export function QuotePaymentScheduleEditor({
       } else {
         toast.success("Payment schedule updated.");
       }
-      closeAiPanel();
-      router.refresh();
+      resetAiPanel();
+      if (onMutated) {
+        await onMutated();
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       toast.error(getAiActionErrorMessage(e, "Failed to apply payment schedule."));
     } finally {
+      isAiApplyingRef.current = false;
       setIsAiApplying(false);
     }
   };

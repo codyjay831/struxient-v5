@@ -13,7 +13,10 @@ import {
 } from "@/lib/billing/run-metered-ai-feature";
 import { AIService } from "@/lib/ai/ai-service";
 import { loadCommercialContextForQuote } from "@/lib/ai/commercial-context";
-import { buildQuoteScopeCaptureContext } from "@/lib/ai/quote-scope-capture-context";
+import {
+  buildQuoteScopeCaptureContext,
+  buildQuoteScopeContextSections,
+} from "@/lib/ai/quote-scope-capture-context";
 import {
   recommendLineItemTemplates,
   type LineItemTemplateMatchCandidate,
@@ -36,6 +39,7 @@ import { getBusinessProfileForAi } from "@/lib/business-profile/business-profile
 import type {
   QuoteScopeSuggestionsApplyOptions,
   QuoteScopeSuggestionsApplyResult,
+  QuoteScopeContextSectionsLoadResult,
   QuoteScopeSuggestionsGenerateOptions,
   QuoteScopeSuggestionsGenerateResult,
 } from "./quote-line-items-ai-types";
@@ -51,6 +55,29 @@ function revalidateQuoteCommercialSurfaces(quoteId: string) {
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
   revalidatePath("/workstation/jobs");
+}
+
+export async function loadQuoteScopeContextSectionsAction(
+  quoteId: string,
+): Promise<QuoteScopeContextSectionsLoadResult> {
+  const qid = quoteId.trim();
+  if (!qid) {
+    return { error: "Missing quote id." };
+  }
+
+  const ctx = await getCommercialRequestContextOrThrow();
+  const commercialContext = await loadCommercialContextForQuote({
+    organizationId: ctx.organizationId,
+    quoteId: qid,
+  });
+
+  if (!commercialContext || commercialContext.quote.status !== QuoteStatus.DRAFT) {
+    return { error: QUOTE_SCOPE_LOCKED_ERROR };
+  }
+
+  return {
+    contextSections: buildQuoteScopeContextSections(commercialContext),
+  };
 }
 
 export async function generateQuoteScopeSuggestionsAction(
@@ -91,11 +118,14 @@ export async function generateQuoteScopeSuggestionsAction(
       return { error: QUOTE_SCOPE_LOCKED_ERROR };
     }
 
+    const contextSections = buildQuoteScopeContextSections(commercialContext, {
+      selectedSourceTypes: options?.selectedSourceTypes,
+    });
     const contextText = buildQuoteScopeCaptureContext({
       captureText: options?.captureText,
       additionalInstructions: options?.additionalInstructions,
       commercialContext,
-      sources: options?.sources,
+      selectedSourceTypes: options?.selectedSourceTypes,
       priorMissingInfo: options?.priorMissingInfo,
     });
 
@@ -174,6 +204,7 @@ export async function generateQuoteScopeSuggestionsAction(
     return {
       proposal: generated.proposal,
       generation: generated.generation,
+      contextSections,
     };
   } catch (e) {
     console.error("[quote-scope-ai] generate failed", {

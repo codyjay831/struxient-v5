@@ -694,7 +694,7 @@ export async function loadQuoteWorkSurface(
     })),
     ...approvalCheckpoints.map((cp) => ({
       kind: "approval" as const,
-      label: `Approval recorded (#${cp.sequence})`,
+      label: `Acceptance recorded (#${cp.sequence})`,
       atIso: cp.createdAtIso,
       atLabel: cp.createdAtLabel,
     })),

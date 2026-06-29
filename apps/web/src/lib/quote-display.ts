@@ -138,7 +138,7 @@ export function formatPaymentAnchorLabel(
 ): string {
   switch (type) {
     case "UPON_APPROVAL":
-      return "Due upon approval (Deposit)";
+      return "Due upon proposal acceptance";
     case "BEFORE_STAGE":
       return stageName ? `Due before ${stageName}` : "Due before stage";
     case "AFTER_STAGE":

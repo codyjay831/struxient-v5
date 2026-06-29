@@ -5,6 +5,7 @@ import {
   recordQuoteSendCheckpointAction,
   type QuoteFormState,
 } from "@/app/(workspace)/quotes/quote-form-actions";
+import { QUOTE_SEND_FOR_ACCEPTANCE_LABEL } from "@/lib/quote-customer-proposal-ux";
 
 const primaryButtonClass =
   "inline-flex items-center justify-center rounded-lg border border-border bg-accent px-4 py-2 text-xs font-medium text-accent-contrast transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
@@ -29,14 +30,28 @@ function FormError({ message }: { message: string }) {
 export function QuoteRecordSendCheckpointForm({ 
   quoteId,
   customerEmail,
+  layout = "full",
 }: { 
   quoteId: string;
   customerEmail?: string | null;
+  layout?: "full" | "compact";
 }) {
   const [state, formAction, isPending] = useActionState(
     recordQuoteSendCheckpointAction.bind(null, quoteId),
     initialState,
   );
+
+  if (layout === "compact") {
+    return (
+      <form action={formAction} className="flex flex-col gap-2 sm:items-end">
+        <input type="hidden" name="expiresInDays" value="30" />
+        {state.error ? <FormError message={state.error} /> : null}
+        <button type="submit" className={primaryButtonClass} disabled={isPending}>
+          {isPending ? "Sending..." : QUOTE_SEND_FOR_ACCEPTANCE_LABEL}
+        </button>
+      </form>
+    );
+  }
 
   return (
     <form action={formAction} className="space-y-3">

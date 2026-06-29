@@ -30,6 +30,7 @@ export type CommercialContext = {
     displayName: NullableString;
     email: NullableString;
     phone: NullableString;
+    notes: NullableString;
     provenance: "customer_record" | "none";
   };
   contact: {
@@ -114,6 +115,7 @@ export async function loadCommercialContextForQuote(
           displayName: true,
           email: true,
           phone: true,
+          notes: true,
         },
       },
       serviceLocation: {
@@ -204,6 +206,7 @@ export async function loadCommercialContextForQuote(
       displayName: quote.customer?.displayName ?? null,
       email: quote.customer?.email ?? null,
       phone: quote.customer?.phone ?? null,
+      notes: quote.customer?.notes ?? null,
       provenance: quote.customer ? "customer_record" : "none",
     },
     contact: {
@@ -243,10 +246,10 @@ export async function loadCommercialContextForQuote(
           customerProvidedLines: parsedLeadNotes.parsedFields.map((field) => `${field.label}: ${field.value}`),
           customerRawNotes: parsedLeadNotes.cleanNotes?.trim() || null,
           internalSalesNotes:
-            typeof leadSignals?.notes === "string" && leadSignals.notes.trim().length > 0
-              ? leadSignals.notes.trim()
-              : parsedLeadNotes.isPublicIntake
-                ? null
+            parsedLeadNotes.isPublicIntake
+              ? null
+              : typeof leadSignals?.notes === "string" && leadSignals.notes.trim().length > 0
+                ? leadSignals.notes.trim()
                 : (quote.lead?.notes?.trim() || null),
           isPublicIntake: parsedLeadNotes.isPublicIntake,
         }
@@ -316,7 +319,7 @@ export function buildCommercialContextLineText(
     parts.push(`Customer-facing included notes (proposal wording):\n${line.customerIncludedNotes.trim()}`);
   }
   if (context.leadRequest?.scopeSummary?.trim()) {
-    parts.push(`Lead scope summary (customer-stated):\n${context.leadRequest.scopeSummary.trim()}`);
+    parts.push(`Lead request / requested work (customer-stated):\n${context.leadRequest.scopeSummary.trim()}`);
   }
   if (context.leadNotes?.customerProvidedLines.length) {
     parts.push(

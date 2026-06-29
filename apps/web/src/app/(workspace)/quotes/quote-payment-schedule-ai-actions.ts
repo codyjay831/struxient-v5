@@ -37,11 +37,15 @@ import type {
 const QUOTE_PAYMENT_SCHEDULE_LOCKED_ERROR =
   "Payment schedule suggestions can only be generated on draft quotes without an activated job.";
 
-function revalidateQuoteCommercialSurfaces(quoteId: string) {
+function revalidateQuoteCommercialSurfaces(quoteId: string, leadId?: string | null) {
   const id = quoteId.trim();
   revalidatePath(`/quotes/${id}`);
   revalidatePath(`/quotes/${id}/execution-review`);
   revalidatePath("/leads");
+  const lid = leadId?.trim();
+  if (lid) {
+    revalidatePath(`/leads/${lid}`);
+  }
   revalidatePath("/workstation");
   revalidatePath("/workstation/tasks");
   revalidatePath("/workstation/jobs");
@@ -228,6 +232,7 @@ export async function applyQuotePaymentScheduleAIProposalAction(
         },
         select: {
           totalCents: true,
+          leadId: true,
           paymentSchedule: { select: { id: true } },
         },
       }),
@@ -261,7 +266,7 @@ export async function applyQuotePaymentScheduleAIProposalAction(
         performApplyQuotePaymentScheduleInTx(tx, {
           quoteId: qid,
           organizationId: ctx.organizationId,
-          replaceExisting: hasExistingSchedule,
+          expectedExistingSchedule: hasExistingSchedule,
           milestones: validation.milestones,
         }),
       );
@@ -276,7 +281,7 @@ export async function applyQuotePaymentScheduleAIProposalAction(
       return { error: outcome.error };
     }
 
-    revalidateQuoteCommercialSurfaces(qid);
+    revalidateQuoteCommercialSurfaces(qid, outcome.leadId ?? quote.leadId);
 
     return {
       success: true,

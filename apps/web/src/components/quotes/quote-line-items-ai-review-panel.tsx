@@ -9,7 +9,10 @@ import type {
   QuoteScopeSuggestionsProposal,
   RecommendedTemplateSuggestion,
 } from "@/lib/ai/quote-line-items-proposal-schema";
-import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
+import type {
+  QuoteScopeContextSection,
+  QuoteScopeContextSourceType,
+} from "@/lib/ai/quote-scope-capture-context";
 import {
   workspaceFormControlClass,
   workspaceFormFieldLabelClass,
@@ -39,17 +42,15 @@ function confidenceLabel(confidence: string): string {
 export type QuoteScopeCapturePanelProps = {
   open: boolean;
   onClose: () => void;
-  hasIntakeNotes: boolean;
-  hasInternalNotes: boolean;
-  hasScopeSummary: boolean;
-  /** Exact lead scope summary text when available (shown when included). */
-  scopeSummaryText?: string | null;
+  contextSections: QuoteScopeContextSection[];
+  selectedSourceTypes: QuoteScopeContextSourceType[];
+  onSelectedSourceTypesChange: (sourceTypes: QuoteScopeContextSourceType[]) => void;
+  /** True when local quote detail edits are not saved and therefore absent from AI context. */
+  hasUnsavedInternalNotes?: boolean;
   captureText: string;
   onCaptureTextChange: (value: string) => void;
   additionalInstructions: string;
   onAdditionalInstructionsChange: (value: string) => void;
-  sources: QuoteScopeCaptureSourceFlags;
-  onSourcesChange: (sources: QuoteScopeCaptureSourceFlags) => void;
   proposal: QuoteScopeSuggestionsProposal | null;
   generation: QuoteScopeSuggestionsGenerationMeta | null;
   isGenerating: boolean;
@@ -66,16 +67,14 @@ export type QuoteScopeCapturePanelProps = {
 export function QuoteScopeCapturePanel({
   open,
   onClose,
-  hasIntakeNotes,
-  hasInternalNotes,
-  hasScopeSummary,
-  scopeSummaryText = null,
+  contextSections,
+  selectedSourceTypes,
+  onSelectedSourceTypesChange,
+  hasUnsavedInternalNotes = false,
   captureText,
   onCaptureTextChange,
   additionalInstructions,
   onAdditionalInstructionsChange,
-  sources,
-  onSourcesChange,
   proposal,
   generation,
   isGenerating,
@@ -206,6 +205,19 @@ export function QuoteScopeCapturePanel({
     selectedCommercialIds.size +
     selectedOptionalIds.size +
     selectedQuoteJobContext.size;
+  const selectedSourceSet = new Set(selectedSourceTypes);
+  const includedContextSections = contextSections.filter(
+    (section) => !section.isEmpty && selectedSourceSet.has(section.sourceType),
+  );
+  const toggleContextSource = (sourceType: QuoteScopeContextSourceType) => {
+    const next = new Set(selectedSourceSet);
+    if (next.has(sourceType)) {
+      next.delete(sourceType);
+    } else {
+      next.add(sourceType);
+    }
+    onSelectedSourceTypesChange([...next]);
+  };
 
   const dialogNode = (
     <dialog
@@ -254,58 +266,55 @@ export function QuoteScopeCapturePanel({
 
           <div className="rounded-lg border border-border bg-foreground/[0.02] p-3 space-y-2">
             <p className={fieldLabelClass}>Include context</p>
-            <label className="flex items-center gap-2 text-xs text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={sources.includeIntakeNotes !== false}
-                disabled={!hasIntakeNotes}
-                onChange={(e) =>
-                  onSourcesChange({ ...sources, includeIntakeNotes: e.target.checked })
-                }
-              />
-              Intake / customer notes
-              {!hasIntakeNotes ? (
-                <span className="text-foreground-subtle">(none available)</span>
-              ) : null}
-            </label>
-            <label className="flex items-center gap-2 text-xs text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={sources.includeInternalQuoteNotes !== false}
-                disabled={!hasInternalNotes}
-                onChange={(e) =>
-                  onSourcesChange({ ...sources, includeInternalQuoteNotes: e.target.checked })
-                }
-              />
-              Internal quote notes
-              {!hasInternalNotes ? (
-                <span className="text-foreground-subtle">(none available)</span>
-              ) : null}
-            </label>
-            <label className="flex items-center gap-2 text-xs text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={sources.includeScopeSummary !== false}
-                disabled={!hasScopeSummary}
-                onChange={(e) =>
-                  onSourcesChange({ ...sources, includeScopeSummary: e.target.checked })
-                }
-              />
-              Lead scope summary
-              {!hasScopeSummary ? (
-                <span className="text-foreground-subtle">(none available)</span>
-              ) : null}
-            </label>
-            {hasScopeSummary &&
-            sources.includeScopeSummary !== false &&
-            scopeSummaryText?.trim() ? (
+            {hasUnsavedInternalNotes ? (
+              <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                Save quote details before using Quick Scope. Unsaved notes are not included.
+              </p>
+            ) : null}
+            {contextSections.map((section) => (
+              <label
+                key={section.sourceType}
+                className="flex items-center gap-2 text-xs text-foreground-muted"
+              >
+                <input
+                  type="checkbox"
+                  checked={!section.isEmpty && selectedSourceSet.has(section.sourceType)}
+                  disabled={section.isEmpty}
+                  onChange={() => toggleContextSource(section.sourceType)}
+                />
+                {section.label}
+                <span className="text-foreground-subtle">
+                  ({section.visibility.toLowerCase().replaceAll("_", " ")})
+                </span>
+                {section.isEmpty ? (
+                  <span className="text-foreground-subtle">
+                    ({section.emptyLabel ?? "No saved data."})
+                  </span>
+                ) : null}
+              </label>
+            ))}
+            {includedContextSections.length > 0 ? (
               <div className="ml-6 rounded-md border border-border bg-surface px-3 py-2">
                 <p className="text-[0.65rem] font-medium uppercase tracking-wide text-foreground-subtle">
                   Included text
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap">
-                  {scopeSummaryText.trim()}
-                </p>
+                <div className="mt-2 space-y-3">
+                  {includedContextSections.map((section) => (
+                    <section key={section.sourceType} className="space-y-1">
+                      <p className="text-[0.65rem] font-medium text-foreground-subtle">
+                        {section.label}
+                      </p>
+                      {section.updatedAtIso ? (
+                        <p className="text-[10px] text-foreground-subtle">
+                          Saved source date: {new Date(section.updatedAtIso).toLocaleString()}
+                        </p>
+                      ) : null}
+                      <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">
+                        {section.body}
+                      </p>
+                    </section>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>
@@ -325,7 +334,7 @@ export function QuoteScopeCapturePanel({
             <button
               type="button"
               className={primaryButtonClass}
-              disabled={isGenerating || isApplying}
+              disabled={isGenerating || isApplying || hasUnsavedInternalNotes}
               onClick={() => void onGenerate()}
             >
               {isGenerating ? (

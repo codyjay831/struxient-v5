@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import type { QuoteCustomerPreviewDocument } from "./quote-customer-projection";
+import { formatPaymentAnchorLabel } from "./quote-display";
 
 const styles = StyleSheet.create({
   page: {
@@ -113,7 +114,212 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: "#999",
   },
+  proposalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 24,
+    marginBottom: 20,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "#d9d9d9",
+  },
+  proposalHeaderMain: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  proposalEyebrow: {
+    fontSize: 8,
+    color: "#777",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    marginBottom: 5,
+  },
+  proposalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  proposalIntro: {
+    fontSize: 10,
+    color: "#555",
+    lineHeight: 1.35,
+  },
+  totalCard: {
+    width: 150,
+    padding: 12,
+    backgroundColor: "#f2f2f2",
+    borderRadius: 6,
+  },
+  totalCardAmount: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 5,
+  },
+  metaGrid: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 18,
+  },
+  metaBox: {
+    flexGrow: 1,
+    flexBasis: 0,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+    borderRadius: 5,
+  },
+  metaValue: {
+    fontSize: 11,
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+  compactSection: {
+    marginBottom: 18,
+  },
+  compactLineItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eeeeee",
+  },
+  groupLabel: {
+    fontSize: 8,
+    color: "#777",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  paymentRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eeeeee",
+  },
+  paymentTitle: {
+    fontSize: 10,
+    fontWeight: "bold",
+    marginBottom: 3,
+  },
+  paymentAnchor: {
+    fontSize: 9,
+    color: "#666",
+  },
+  totalsBox: {
+    marginLeft: "auto",
+    width: 210,
+    paddingTop: 8,
+  },
+  totalsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 7,
+  },
+  totalsLabel: {
+    fontSize: 10,
+    color: "#666",
+  },
+  totalsValue: {
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  grandTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#d9d9d9",
+  },
+  grandTotalValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
 });
+
+export type QuoteProposalPdfModel = {
+  organizationDisplayName: string;
+  documentTitle: string;
+  generatedDateLabel: string;
+  customerName: string | null;
+  projectTitle: string | null;
+  lineItems: Array<{
+    id: string;
+    presentationGroup: string | null;
+    lineTitle: string;
+    lineDetail: string | null;
+    includedNotes: string | null;
+    excludedNotes: string | null;
+    quantityPriceLabel: string;
+    lineTotalLabel: string;
+  }>;
+  paymentSchedule: Array<{
+    id: string;
+    title: string;
+    anchorLabel: string;
+    amountLabel: string;
+  }>;
+  scheduledPaymentsTotalLabel: string | null;
+  subtotalLabel: string;
+  totalLabel: string;
+  footerNote: string;
+};
+
+function formatMoney(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+function formatDate(value: Date): string {
+  return value.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function buildQuoteProposalPdfModel(
+  frozenDocument: QuoteCustomerPreviewDocument,
+  options: { generatedAt?: Date } = {},
+): QuoteProposalPdfModel {
+  const generatedAt = options.generatedAt ?? new Date();
+  const scheduledTotalCents = frozenDocument.paymentSchedule.reduce(
+    (sum, milestone) => sum + milestone.amountCents,
+    0,
+  );
+
+  return {
+    organizationDisplayName: frozenDocument.organizationDisplayName,
+    documentTitle: frozenDocument.documentTitle,
+    generatedDateLabel: formatDate(generatedAt),
+    customerName: frozenDocument.customer?.displayName ?? null,
+    projectTitle: frozenDocument.lead?.title ?? null,
+    lineItems: frozenDocument.lineItems.map((line) => ({
+      id: line.id,
+      presentationGroup: line.presentationGroup,
+      lineTitle: line.lineTitle,
+      lineDetail: line.lineDetail,
+      includedNotes: line.includedNotes,
+      excludedNotes: line.excludedNotes,
+      quantityPriceLabel: `${line.quantityDisplay} @ ${formatMoney(line.unitAmountCents)}`,
+      lineTotalLabel: formatMoney(line.lineTotalCents),
+    })),
+    paymentSchedule: frozenDocument.paymentSchedule.map((milestone) => ({
+      id: milestone.id,
+      title: milestone.title,
+      anchorLabel: formatPaymentAnchorLabel(milestone.anchorType, milestone.anchorStageName),
+      amountLabel: formatMoney(milestone.amountCents),
+    })),
+    scheduledPaymentsTotalLabel:
+      frozenDocument.paymentSchedule.length > 0 ? formatMoney(scheduledTotalCents) : null,
+    subtotalLabel: formatMoney(frozenDocument.subtotalCents),
+    totalLabel: formatMoney(frozenDocument.totalCents),
+    footerNote:
+      "Sent proposal record. Review the scope, pricing, and payment terms before accepting electronically through the secure link.",
+  };
+}
 
 function QuotePdfDocument({
   document,
@@ -230,44 +436,118 @@ export async function renderQuoteAcceptancePdf(
 }
 
 function QuoteProposalPdfDocument({
-  document,
+  model,
 }: {
-  document: QuoteCustomerPreviewDocument;
+  model: QuoteProposalPdfModel;
 }) {
-  const formatMoney = (cents: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.orgName}>{document.organizationDisplayName}</Text>
-          <Text style={styles.documentTitle}>{document.documentTitle}</Text>
-          <Text style={{ fontSize: 9, color: "#999" }}>
-            Updated: {new Date(document.updatedAt).toLocaleDateString()}
-          </Text>
+        <View style={styles.proposalHeader}>
+          <View style={styles.proposalHeaderMain}>
+            <Text style={styles.proposalEyebrow}>Proposal from</Text>
+            <Text style={styles.orgName}>{model.organizationDisplayName}</Text>
+            <Text style={styles.proposalTitle}>{model.documentTitle}</Text>
+            <Text style={styles.proposalIntro}>
+              Review the scope, pricing, and payment terms below before accepting electronically.
+            </Text>
+          </View>
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Proposal total</Text>
+            <Text style={styles.totalCardAmount}>{model.totalLabel}</Text>
+            <Text style={{ marginTop: 8, fontSize: 8, color: "#777" }}>
+              Generated {model.generatedDateLabel}
+            </Text>
+          </View>
         </View>
-        <View style={styles.totalSection}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalAmount}>{formatMoney(document.totalCents)}</Text>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Scope of Work</Text>
-          {document.lineItems.map((line) => (
-            <View key={line.id} style={styles.lineItem}>
-              <Text style={styles.lineTitle}>{line.lineTitle}</Text>
-              {line.lineDetail ? <Text style={styles.lineDetail}>{line.lineDetail}</Text> : null}
-              <View style={styles.linePricing}>
-                <Text style={styles.lineQuantity}>
-                  {line.quantityDisplay} @ {formatMoney(line.unitAmountCents)}
-                </Text>
-                <Text style={styles.linePrice}>{formatMoney(line.lineTotalCents)}</Text>
+
+        {model.customerName || model.projectTitle ? (
+          <View style={styles.metaGrid}>
+            {model.customerName ? (
+              <View style={styles.metaBox}>
+                <Text style={styles.proposalEyebrow}>Prepared for</Text>
+                <Text style={styles.metaValue}>{model.customerName}</Text>
               </View>
-            </View>
-          ))}
+            ) : null}
+            {model.projectTitle ? (
+              <View style={styles.metaBox}>
+                <Text style={styles.proposalEyebrow}>Project</Text>
+                <Text style={styles.metaValue}>{model.projectTitle}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.compactSection}>
+          <Text style={styles.sectionTitle}>Scope of Work</Text>
+          {model.lineItems.map((line, index) => {
+            const previous = model.lineItems[index - 1];
+            const showGroup =
+              line.presentationGroup &&
+              (!previous || previous.presentationGroup !== line.presentationGroup);
+            return (
+              <View key={line.id} style={styles.compactLineItem}>
+                {showGroup ? <Text style={styles.groupLabel}>{line.presentationGroup}</Text> : null}
+                <Text style={styles.lineTitle}>{line.lineTitle}</Text>
+                {line.lineDetail ? <Text style={styles.lineDetail}>{line.lineDetail}</Text> : null}
+                {line.includedNotes ? (
+                  <View style={styles.lineNotes}>
+                    <Text style={styles.notesLabel}>Included</Text>
+                    <Text>{line.includedNotes}</Text>
+                  </View>
+                ) : null}
+                {line.excludedNotes ? (
+                  <View style={styles.lineNotes}>
+                    <Text style={styles.notesLabel}>Not Included</Text>
+                    <Text>{line.excludedNotes}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.linePricing}>
+                  <Text style={styles.lineQuantity}>{line.quantityPriceLabel}</Text>
+                  <Text style={styles.linePrice}>{line.lineTotalLabel}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
+
+        {model.paymentSchedule.length > 0 ? (
+          <View style={styles.compactSection}>
+            <Text style={styles.sectionTitle}>Payment Terms</Text>
+            {model.paymentSchedule.map((milestone) => (
+              <View key={milestone.id} style={styles.paymentRow}>
+                <View style={{ flexGrow: 1, flexShrink: 1 }}>
+                  <Text style={styles.paymentTitle}>{milestone.title}</Text>
+                  <Text style={styles.paymentAnchor}>{milestone.anchorLabel}</Text>
+                </View>
+                <Text style={styles.linePrice}>{milestone.amountLabel}</Text>
+              </View>
+            ))}
+            {model.scheduledPaymentsTotalLabel ? (
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Scheduled payments</Text>
+                <Text style={styles.totalsValue}>{model.scheduledPaymentsTotalLabel}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.totalsBox}>
+          <View style={styles.totalsRow}>
+            <Text style={styles.totalsLabel}>Subtotal</Text>
+            <Text style={styles.totalsValue}>{model.subtotalLabel}</Text>
+          </View>
+          <View style={styles.grandTotalRow}>
+            <Text style={styles.lineTitle}>Total</Text>
+            <Text style={styles.grandTotalValue}>{model.totalLabel}</Text>
+          </View>
+        </View>
+
         <View style={styles.footer}>
-          <Text>Proposal document — review and accept electronically via secure link.</Text>
+          <Text>{model.footerNote}</Text>
+          <Text style={{ marginTop: 4 }}>
+            © {new Date().getFullYear()} {model.organizationDisplayName} · Powered by Struxient
+          </Text>
         </View>
       </Page>
     </Document>
@@ -277,7 +557,9 @@ function QuoteProposalPdfDocument({
 export async function renderQuoteProposalPdf(
   document: QuoteCustomerPreviewDocument,
 ): Promise<Buffer> {
-  return await renderToBuffer(<QuoteProposalPdfDocument document={document} />);
+  return await renderToBuffer(
+    <QuoteProposalPdfDocument model={buildQuoteProposalPdfModel(document)} />,
+  );
 }
 
 export type AuditPacketMetadata = {

@@ -22,7 +22,7 @@ export const QUOTE_SIGNED_DOCUMENTS_LABEL = "Signed documents";
 export const QUOTE_STAFF_PREVIEW_PAGE_TITLE = "Draft proposal preview";
 
 export const QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION =
-  "Live draft preview. This preview reflects the current workspace quote. It is not the sent customer record.";
+  "Review the customer-facing proposal draft before sending.";
 
 export const QUOTE_SEND_FOR_ACCEPTANCE_LABEL = "Send for acceptance";
 

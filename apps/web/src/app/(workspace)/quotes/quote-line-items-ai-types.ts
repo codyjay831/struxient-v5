@@ -1,4 +1,7 @@
-import type { QuoteScopeCaptureSourceFlags } from "@/lib/ai/quote-scope-capture-context";
+import type {
+  QuoteScopeContextSection,
+  QuoteScopeContextSourceType,
+} from "@/lib/ai/quote-scope-capture-context";
 import type {
   ApplyQuoteScopeSuggestionsInput,
   QuoteScopeSuggestionsGenerationMeta,
@@ -8,7 +11,7 @@ import type {
 export type QuoteScopeSuggestionsGenerateOptions = {
   captureText?: string;
   additionalInstructions?: string;
-  sources?: QuoteScopeCaptureSourceFlags;
+  selectedSourceTypes?: QuoteScopeContextSourceType[];
   priorMissingInfo?: string[];
 };
 
@@ -16,6 +19,12 @@ export type QuoteScopeSuggestionsGenerateResult = {
   error?: string;
   proposal?: QuoteScopeSuggestionsProposal;
   generation?: QuoteScopeSuggestionsGenerationMeta;
+  contextSections?: QuoteScopeContextSection[];
+};
+
+export type QuoteScopeContextSectionsLoadResult = {
+  error?: string;
+  contextSections?: QuoteScopeContextSection[];
 };
 
 export type QuoteScopeSuggestionsApplyResult = {
