@@ -200,7 +200,7 @@ export function getQuoteReadiness(input: QuoteReadinessInput): QuoteReadiness {
       primaryAction: { kind: "MARK_APPROVED", label: "Mark approved" },
       secondaryAction: input.revisionDriftSinceLastProof
         ? { kind: "RESTORE_TO_DRAFT", label: "Revise by clone" }
-        : { kind: "OPEN_PROPOSAL_PREVIEW", label: "Open live proposal preview" },
+        : null,
       stepIndex: STATE_STEP_INDEX.SENT_AWAITING_CUSTOMER,
       totalSteps: TOTAL_STEPS,
       isTerminal: false,

@@ -188,7 +188,7 @@ function buildReadinessItems(input: QuoteWorkflowPresenterInput): QuoteWorkflowR
     items.push({ label: "Proposal sent", satisfied: true });
   }
   if (input.latestApprovalAt) {
-    items.push({ label: "Customer approval recorded", satisfied: true });
+    items.push({ label: "Customer acceptance recorded", satisfied: true });
   }
 
   const taskCount = input.activationReadiness.totalTasksToActivate;
@@ -243,7 +243,7 @@ function buildHeadlineAndMessage(
         primaryHeadline: STATE_LABEL.SENT_PENDING_APPROVAL,
         primaryMessage: readiness.showsRevisionDrift
           ? readiness.description
-          : "Waiting for customer approval. Share the proposal link or record approval when they agree.",
+          : "Waiting for customer acceptance. Use the Customer Proposal tab for the sent record and customer signing links.",
       };
     case "READY_TO_SEND":
       return {

@@ -22,6 +22,10 @@ import {
 import { FileText } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/ui/access-denied-panel";
 import { quoteAuthoringHref } from "@/lib/opportunity-tab-routing";
+import {
+  QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION,
+  QUOTE_STAFF_PREVIEW_PAGE_TITLE,
+} from "@/lib/quote-customer-proposal-ux";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +45,10 @@ export default async function QuoteLiveProposalPreviewPage({
   if (!ctx) {
     return (
       <div className="mx-auto max-w-5xl">
-        <PageHeader title="Quote preview" description="Customer-facing proposal preview." />
+        <PageHeader
+          title={QUOTE_STAFF_PREVIEW_PAGE_TITLE}
+          description={QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION}
+        />
         <AccessDeniedPanel description="This role cannot preview quote records." />
       </div>
     );
@@ -60,7 +67,7 @@ export default async function QuoteLiveProposalPreviewPage({
       <div className="mx-auto max-w-5xl">
         <PageHeader
           eyebrow="Sales · internal only"
-          title="Live proposal preview"
+          title={QUOTE_STAFF_PREVIEW_PAGE_TITLE}
           description="No quote exists for this id in the current development organization."
           actions={
             <Link href="/leads" className={listLinkClass}>
@@ -113,8 +120,8 @@ export default async function QuoteLiveProposalPreviewPage({
     <div className="mx-auto max-w-5xl">
       <PageHeader
         eyebrow="Sales · internal only"
-        title="Live proposal preview"
-        description="Staff-only view of optional proposal wording from the saved working quote—not delivery, not a portal, and not approval capture."
+        title={QUOTE_STAFF_PREVIEW_PAGE_TITLE}
+        description={QUOTE_STAFF_PREVIEW_PAGE_DESCRIPTION}
         actions={
           <>
             <Link href={quoteHref} className={listLinkClass}>
@@ -131,10 +138,10 @@ export default async function QuoteLiveProposalPreviewPage({
         padding="compact"
         className="mb-6 border border-border border-l-[3px] border-l-accent bg-foreground/[0.02]"
       >
-        <p className="text-sm font-medium text-foreground">Staff-only — follows the saved working quote</p>
+        <p className="text-sm font-medium text-foreground">Live draft preview</p>
         <p className="mt-2 text-xs leading-relaxed text-foreground-muted">
-          This route always reflects the current workspace quote; it does not switch to checkpoint view. It does not
-          email, text, or publish an external link. Totals and lines reflect the stored quote as of the timestamps below.
+          This preview reflects the current workspace quote. It is not the sent customer record, does not send a link,
+          and may differ from frozen sent or accepted records.
         </p>
         {latestSendCheckpoint ? (
           <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
@@ -143,7 +150,7 @@ export default async function QuoteLiveProposalPreviewPage({
               href={`/quotes/${preview.quoteId}/checkpoints/${latestSendCheckpoint.id}`}
               className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
             >
-              Open latest recorded send checkpoint
+              View sent proposal record
             </Link>
             .
           </p>
@@ -157,7 +164,7 @@ export default async function QuoteLiveProposalPreviewPage({
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <StatusBadge label={formatQuoteStatus(row.status)} tone={quoteStatusBadgeTone(row.status)} />
           <span className="text-xs text-foreground-muted">
-            Workspace status for staff—not part of the proposal layout unless you surface it elsewhere.
+            Staff workspace status.
           </span>
         </div>
       </WorkspacePanel>
@@ -193,7 +200,7 @@ export default async function QuoteLiveProposalPreviewPage({
           <div className="border-b border-border py-6">
             <SectionHeading
               title="Prepared for"
-              description="Display names only—static labels on this preview (no CRM links here)."
+              description="Customer and lead details shown on the draft proposal."
             />
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
@@ -213,7 +220,7 @@ export default async function QuoteLiveProposalPreviewPage({
         <div className="py-6">
           <SectionHeading
             title="Scope"
-            description="Sellable rows with optional grouping labels for display only—not stages or tasks."
+            description="Sellable rows and optional customer-facing grouping labels."
           />
           {preview.lineItems.length === 0 ? (
             <p className="mt-4 text-sm text-foreground-muted">
@@ -249,7 +256,7 @@ export default async function QuoteLiveProposalPreviewPage({
             <SignalCard
               label="Subtotal"
               value={formatMoneyCents(preview.subtotalCents)}
-              hint="Stored on the quote row (server)."
+              hint="Current workspace quote"
             />
             <SignalCard
               label="Total"

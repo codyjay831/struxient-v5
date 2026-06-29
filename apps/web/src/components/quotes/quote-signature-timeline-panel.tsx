@@ -5,6 +5,7 @@ import { Copy, Link2, RefreshCw, ShieldOff, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import type { SignatureTimelineDto } from "@/lib/quote-signature/timeline-presenter";
 import type { SignatureTimelineArtifact } from "@/lib/quote-workspace-payload";
+import { QUOTE_SIGNED_DOCUMENTS_LABEL } from "@/lib/quote-customer-proposal-ux";
 import {
   copySignerLinkAction,
   confirmManualSignerDeliveryAction,
@@ -28,7 +29,7 @@ export function QuoteSignatureTimelinePanel({
   if (!timeline) {
     return (
       <p className="text-xs text-foreground-muted italic">
-        No signature request yet. Send the quote to create a Standard Acceptance request.
+        Send the proposal to create customer signing links.
       </p>
     );
   }
@@ -76,11 +77,11 @@ export function QuoteSignatureTimelinePanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-            Signature request
+            Signing links
           </p>
           <p className="text-sm font-semibold text-foreground">{timeline.statusLabel}</p>
           <p className="text-xs text-foreground-muted">
-            Method: {timeline.mode === "STANDARD_ACCEPTANCE" ? "Standard Acceptance" : timeline.mode}
+            Method: {timeline.mode === "STANDARD_ACCEPTANCE" ? "Electronic acceptance" : timeline.mode}
           </p>
         </div>
         {timeline.status !== "ACCEPTED" && timeline.status !== "REVOKED" ? (
@@ -133,10 +134,10 @@ export function QuoteSignatureTimelinePanel({
                     disabled={pending}
                     onClick={() => handleCopyLink(r.id)}
                     className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px]"
-                    title="Copy signer link — records audit event"
+                    title="Copy signing link — records audit event"
                   >
                     <Copy className="size-3" />
-                    {copiedRecipientId === r.id ? "Copied" : "Copy link"}
+                    {copiedRecipientId === r.id ? "Copied" : "Copy signing link"}
                   </button>
                   <button
                     type="button"
@@ -165,7 +166,9 @@ export function QuoteSignatureTimelinePanel({
 
       {artifacts.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">Artifacts</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
+            {QUOTE_SIGNED_DOCUMENTS_LABEL}
+          </p>
           <ul className="space-y-1 text-xs">
             {artifacts.map((a) => (
               <li key={a.id}>

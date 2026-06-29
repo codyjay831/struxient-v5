@@ -162,7 +162,7 @@ export function QuoteSignerReview({
         <div className="mt-12 rounded-2xl border border-border bg-surface p-8 shadow-sm">
           <h2 className="mb-2 text-lg font-bold text-foreground">Accept electronically</h2>
           <p className="mb-6 text-sm text-foreground-muted">
-            Standard Acceptance — review the proposal, agree to electronic records, and type your legal name.
+            Review the proposal, agree to electronic records, and type your legal name.
           </p>
 
           <form action={formAction} className="space-y-5">
@@ -321,7 +321,7 @@ export function QuoteSignerReview({
       <footer className="mt-20 flex flex-col items-center gap-4 border-t border-border pt-8 text-foreground-subtle">
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em]">
           <Lock className="size-3" />
-          Secure Standard Acceptance
+          Secure electronic acceptance
         </div>
       </footer>
     </div>

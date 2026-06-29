@@ -15,7 +15,7 @@
  *   - Overview        — readiness + facts + linked context (drives next step)
  *   - Scope           — line items (full editor in full+DRAFT; read-only otherwise)
  *   - Payments        — payment schedule
- *   - Approval        — customer approval, proposal link, history
+ *   - Customer Proposal — review/send, signer links, records
  *
  * Secondary views (muted Details row — reference / admin):
  *   - Customer & Intake — customer card + intake context
@@ -54,7 +54,7 @@
  * a popup/drawer/lead-tab container that lazy-loaded its
  * `QuoteWorkSurfaceData` payload via `loadQuoteWorkSurfaceAction`).
  */
-import { useCallback, useEffect, useRef, useState, useActionState } from "react";
+import { useCallback, useEffect, useRef, useState, useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -62,12 +62,15 @@ import {
   ArrowUpRight,
   Briefcase,
   ChevronRight,
+  Copy,
+  Download,
   Eye,
   FileText,
   Layers,
   Library,
   ListOrdered,
   MapPin,
+  MessageSquare,
   Send,
   ThumbsUp,
   UserRound,
@@ -82,9 +85,9 @@ import {
   approveQuoteWorkspaceAction,
   reviseQuoteByCloneWorkspaceAction,
   revokeQuoteShareTokenAction,
-  extendQuoteShareTokenAction,
   type QuoteWorkspaceActionState,
 } from "@/app/(workspace)/workstation/quote-workspace-actions";
+import { copySignerLinkAction } from "@/app/(workspace)/quotes/quote-signature-staff-actions";
 import { activateQuoteJobWorkspaceAction } from "@/app/(workspace)/quotes/quote-job-activation-actions";
 import {
   createFollowUpVisitForQuoteChangeRequestAction,
@@ -126,6 +129,19 @@ import { QuotePaymentScheduleEditor } from "@/components/quotes/quote-payment-sc
 import { formatMoneyCents } from "@/lib/quote-display";
 import { buildQuoteExecutionReviewPreviewModel } from "@/lib/quote-execution-review-preview-model";
 import { Button, ButtonLink, buttonClassName } from "@/components/ui/button";
+import {
+  QUOTE_ACCEPTED_PROPOSAL_LABEL,
+  QUOTE_ACCEPTED_RECORD_LINK_LABEL,
+  QUOTE_ACCEPTANCE_RECORD_LABEL,
+  QUOTE_COPY_SIGNING_LINK_LABEL,
+  QUOTE_CUSTOMER_PROPOSAL_DRAFT_HELP,
+  QUOTE_CUSTOMER_PROPOSAL_SEND_HELP,
+  QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL,
+  QUOTE_DRAFT_PREVIEW_LINK_LABEL,
+  QUOTE_SEND_FOR_ACCEPTANCE_LABEL,
+  QUOTE_SENT_PROPOSAL_LABEL,
+  QUOTE_SENT_RECORD_LINK_LABEL,
+} from "@/lib/quote-customer-proposal-ux";
 
 /* ─── Public types ─────────────────────────────────────────────────────── */
 
@@ -202,7 +218,7 @@ const PRIMARY_TABS: { id: QuoteWorkSurfaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "scope", label: "Scope" },
   { id: "payments", label: "Payments" },
-  { id: "sendaccept", label: "Approval" },
+  { id: "sendaccept", label: QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL },
 ];
 
 const SECONDARY_VIEWS: { id: QuoteWorkSurfaceTab; label: string }[] = [
@@ -289,7 +305,7 @@ function externalActionLabel(
   }
 }
 
-/* ─── Embedded Previews (Approval tab) ─────────────────────────────────── */
+/* ─── Embedded Previews (Customer Proposal tab) ────────────────────────── */
 
 function QuoteProposalPreviewEmbedded({
   quote,
@@ -691,102 +707,45 @@ function RevokeTokenButton({
   );
 }
 
-function ExtendTokenButton({
-  quoteId,
-  onMutated,
+function CopyCustomerSigningLinkButton({
+  requestId,
+  recipientId,
 }: {
-  quoteId: string;
-  onMutated?: () => void;
+  requestId: string;
+  recipientId: string;
 }) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [state, formAction, isPending] = useActionState(
-    extendQuoteShareTokenAction.bind(null, quoteId),
-    workspaceActionInitial,
-  );
-  const handledKeyRef = useRef<unknown>(null);
-
-  useEffect(() => {
-    if (state.success && handledKeyRef.current !== state) {
-      handledKeyRef.current = state;
-      setShowDialog(false);
-      onMutated?.();
-    }
-  }, [state, onMutated]);
-
-  if (showDialog) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-        <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
-          <h3 className="text-base font-bold text-foreground mb-4">
-            Extend / Rotate Token
-          </h3>
-          <form action={formAction} className="space-y-4">
-            <div>
-              <label htmlFor="expiresInDays" className="block text-xs font-medium text-foreground-subtle mb-1.5">
-                New expiry
-              </label>
-              <select
-                id="expiresInDays"
-                name="expiresInDays"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-                defaultValue="30"
-              >
-                <option value="7">In 7 days</option>
-                <option value="14">In 14 days</option>
-                <option value="30">In 30 days (recommended)</option>
-                <option value="never">Never</option>
-              </select>
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                id="rotateToken"
-                name="rotateToken"
-                value="true"
-                className="mt-0.5"
-              />
-              <label htmlFor="rotateToken" className="text-xs text-foreground-muted">
-                Generate a new link and email it to the customer (old link will stop working)
-              </label>
-            </div>
-
-            {state.error ? (
-              <p className="text-xs text-danger" role="alert">
-                {state.error}
-              </p>
-            ) : null}
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowDialog(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isPending}
-                className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:opacity-90 disabled:opacity-50"
-              >
-                {isPending ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  const [isPending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <button
-      type="button"
-      onClick={() => setShowDialog(true)}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-[10px] font-medium text-foreground-muted transition-opacity hover:opacity-80"
-    >
-      Extend / Rotate
-    </button>
+    <div className="contents">
+      <button
+        type="button"
+        disabled={isPending}
+        className={secondaryBtnClass}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const result = await copySignerLinkAction(requestId, recipientId);
+            if (result.error || !result.signerUrl) {
+              setError(result.error ?? "Could not copy customer signing link.");
+              return;
+            }
+            await navigator.clipboard.writeText(result.signerUrl);
+            setCopied(true);
+          });
+        }}
+      >
+        <Copy className="size-3.5 opacity-80" strokeWidth={2} />
+        {copied ? "Copied customer signing link" : QUOTE_COPY_SIGNING_LINK_LABEL}
+      </button>
+      {error ? (
+        <p className="basis-full text-[10px] text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1717,10 +1676,12 @@ function PaymentsTab({
   quote,
   workspaceTabs,
   workflow,
+  onMutated,
 }: {
   quote: QuoteWorkSurfaceData;
   workspaceTabs: QuoteWorkspaceTabData;
   workflow: QuoteWorkflowPresentation;
+  onMutated?: () => void;
 }) {
   const paymentBlockers = workflow.blockers.filter((b) => b.fixTab === "payments");
 
@@ -1757,6 +1718,7 @@ function PaymentsTab({
         stages={workspaceTabs.stages}
         isCommercialEditable={workspaceTabs.isCommercialEditable}
         hasExistingSchedule={workspaceTabs.paymentSchedule.length > 0}
+        onMutated={onMutated}
       />
     </div>
   );
@@ -1959,7 +1921,7 @@ function ContextTab({
   );
 }
 
-/* ─── Tab: Approval ────────────────────────────────────────────────────── */
+/* ─── Tab: Customer Proposal ───────────────────────────────────────────── */
 
 function CheckpointList({
   checkpoints,
@@ -2145,8 +2107,52 @@ function SendAcceptTab({
   const canSend = workflow.canSend;
   const canApprove = workflow.canApprove;
   const isApproved = quote.status === "APPROVED";
+  const hasSentRecord = sendCheckpoints.length > 0;
+  const latestSend = sendCheckpoints[sendCheckpoints.length - 1] ?? null;
   const latestApproval =
     approvalCheckpoints[approvalCheckpoints.length - 1] ?? null;
+  const openChangeRequests = quote.openChangeRequests.filter(
+    (request) => request.resolvedAt == null,
+  );
+  const hasCustomerRequest = openChangeRequests.length > 0;
+  const isSent = quote.status === "SENT";
+  const isAccepted = quote.status === "APPROVED";
+  const hasProposalRecords =
+    sendCheckpoints.length > 0 || approvalCheckpoints.length > 0;
+  const signedDocument = signatureArtifacts.find((artifact) =>
+    artifact.kind.includes("FINAL"),
+  );
+  const activeSignerRecipient =
+    signatureTimeline &&
+    signatureTimeline.status !== "ACCEPTED" &&
+    signatureTimeline.status !== "REVOKED"
+      ? (signatureTimeline.recipients.find((recipient) => recipient.status !== "ACCEPTED") ??
+        signatureTimeline.recipients[0] ??
+        null)
+      : null;
+  const proposalHeader = hasCustomerRequest
+    ? "Changes Requested"
+    : isAccepted
+      ? QUOTE_ACCEPTED_PROPOSAL_LABEL
+      : isSent || hasSentRecord
+        ? QUOTE_SENT_PROPOSAL_LABEL
+        : QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL;
+  const proposalStatus = hasCustomerRequest
+    ? "Customer requested changes"
+    : isAccepted
+      ? "Accepted"
+      : isSent || hasSentRecord
+        ? "Waiting for customer acceptance"
+        : canSend
+          ? "Ready to send"
+          : "Needs review";
+  const proposalDescription = hasCustomerRequest
+    ? "Review the customer request before sending an updated proposal."
+    : isAccepted
+      ? "The customer accepted this proposal. Use the accepted record and signed documents for proof."
+      : isSent || hasSentRecord
+        ? "This proposal has been sent for customer acceptance. Use the sent proposal record and signing timeline for proof."
+        : QUOTE_CUSTOMER_PROPOSAL_DRAFT_HELP;
 
   if (activePreview === "send") {
     return (
@@ -2177,13 +2183,13 @@ function SendAcceptTab({
             onClick={() => onPreviewChange("none")}
             className="text-xs font-medium text-foreground-subtle hover:text-foreground"
           >
-            ← Back to Approval
+            ← Back to {QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL}
           </button>
           <Link
             href={quote.proposalPreviewHref}
             className="inline-flex items-center gap-1 text-[10px] text-foreground-subtle underline underline-offset-2 transition-colors hover:text-foreground"
           >
-            View customer proposal
+            Open full-page draft preview
             <ArrowUpRight className="size-2.5" strokeWidth={1.5} />
           </Link>
         </div>
@@ -2201,7 +2207,7 @@ function SendAcceptTab({
             onClick={() => onPreviewChange("none")}
             className="text-xs font-medium text-foreground-subtle hover:text-foreground"
           >
-            ← Back to Approval
+            ← Back to {QUOTE_CUSTOMER_PROPOSAL_TAB_LABEL}
           </button>
           <Link
             href={quote.executionReviewHref}
@@ -2231,7 +2237,7 @@ function SendAcceptTab({
               lastSendSummary.deliveryFailed ? "text-warning" : "text-success"
             }`}
           >
-            {lastSendSummary.deliveryFailed ? "Quote frozen — email not sent" : "Quote sent"}
+            {lastSendSummary.deliveryFailed ? "Proposal frozen — email not sent" : "Proposal sent"}
           </p>
           <p className="mt-1 text-sm text-foreground">
             Sent to {lastSendSummary.recipientCount} recipient
@@ -2246,96 +2252,134 @@ function SendAcceptTab({
               ? "Never"
               : `${lastSendSummary.expiresInDays} days`}
           </p>
-          {lastSendSummary.signerUrls.length > 0 ? (
-            <div className="mt-2 space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-subtle">
-                Signer links
-              </p>
-              {lastSendSummary.signerUrls.map((url, index) => (
-                <p key={url} className="truncate text-xs font-mono text-foreground-muted">
-                  {lastSendSummary.recipientEmails[index] ?? `Recipient ${index + 1}`}: {url}
-                </p>
-              ))}
-              <p className="text-[10px] text-foreground-subtle">
-                Copy individual links from the signature timeline below if needed.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-1 text-xs text-foreground-muted">
-              Signer links are available in the signature timeline after send.
-            </p>
-          )}
+          <p className="mt-2 text-xs text-foreground-muted">
+            Copy customer signing links from the timeline below if needed.
+          </p>
         </div>
       ) : null}
 
-      {/* Primary approval actions */}
-      <div className="rounded-xl border border-border border-l-[3px] border-l-accent bg-surface p-4">
-        <p className={`${sectionLabelClass} mb-1`}>Customer approval</p>
-        <p className="mb-4 text-sm leading-relaxed text-foreground-muted">
-          Send the proposal link to the customer. Once they agree to the scope and price,
-          record approval here.
-        </p>
-
-        <details className="mb-4 text-xs text-foreground-subtle">
-          <summary className="cursor-pointer font-medium text-foreground-muted hover:text-foreground">
-            How approval records work
-          </summary>
-          <p className="mt-2 leading-relaxed">
-            Send and approval checkpoints are internal proof records — not email delivery
-            and not job activation. They preserve what was sent and accepted commercially.
-          </p>
-        </details>
-
-        {!isArchived && canSend ? (
-          <div className="mb-4 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
-            <p className="text-xs font-medium text-foreground">Send to customer</p>
-            <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              Scope and pricing lock after send. Make sure jobsite and payment terms are
-              complete first.
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className={`${sectionLabelClass} mb-1`}>{proposalHeader}</p>
+            <p className="text-sm font-semibold text-foreground">{proposalStatus}</p>
+            <p className="mt-2 text-sm leading-relaxed text-foreground-muted">
+              {proposalDescription}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+          </div>
+          <StatusBadge label={proposalStatus} tone={quote.statusTone} />
+        </div>
+
+        {!isSent && !isAccepted && !hasCustomerRequest ? (
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <dt className={sectionLabelClass}>Customer</dt>
+              <dd className="mt-1 truncate text-sm font-medium text-foreground">
+                {quote.customerDisplayName ?? "Not set"}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <dt className={sectionLabelClass}>Job address</dt>
+              <dd className="mt-1 truncate text-sm font-medium text-foreground">
+                {quote.jobsiteAddressLine ?? "Needs address"}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <dt className={sectionLabelClass}>Proposal total</dt>
+              <dd className="mt-1 text-sm font-medium text-foreground">
+                {formatMoney(quote.totalCents)}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <dt className={sectionLabelClass}>Payment terms</dt>
+              <dd className="mt-1 text-sm font-medium text-foreground">
+                {workspaceTabs.paymentSchedule.length > 0 ? "Ready" : "Needs terms"}
+              </dd>
+              <p className="mt-1 text-[10px] text-foreground-subtle">
+                {quote.lineItemCount} scope line{quote.lineItemCount === 1 ? "" : "s"}
+              </p>
+            </div>
+          </dl>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          {hasCustomerRequest ? (
+            <a href="#quote-customer-requests" className={primaryBtnClass}>
+              <MessageSquare className="size-3.5 opacity-80" strokeWidth={2} />
+              Review customer request
+            </a>
+          ) : isAccepted ? (
+            <>
+              {latestApproval ? (
+                <Link href={latestApproval.href} className={primaryBtnClass}>
+                  <FileText className="size-3.5 opacity-80" strokeWidth={2} />
+                  {QUOTE_ACCEPTED_RECORD_LINK_LABEL}
+                </Link>
+              ) : null}
+              {signedDocument ? (
+                <a
+                  href={`/api/quotes/signature-artifacts/${signedDocument.id}`}
+                  className={secondaryBtnClass}
+                >
+                  <Download className="size-3.5 opacity-80" strokeWidth={2} />
+                  Download signed documents
+                </a>
+              ) : null}
+            </>
+          ) : isSent || hasSentRecord ? (
+            <>
+              {latestSend ? (
+                <Link href={latestSend.href} className={primaryBtnClass}>
+                  <FileText className="size-3.5 opacity-80" strokeWidth={2} />
+                  {QUOTE_SENT_RECORD_LINK_LABEL}
+                </Link>
+              ) : null}
+              {signatureTimeline && activeSignerRecipient ? (
+                <CopyCustomerSigningLinkButton
+                  requestId={signatureTimeline.requestId}
+                  recipientId={activeSignerRecipient.id}
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Link href={quote.proposalPreviewHref} className={secondaryBtnClass}>
+                <Eye className="size-3.5 opacity-80" strokeWidth={2} />
+                {QUOTE_DRAFT_PREVIEW_LINK_LABEL}
+              </Link>
               <button
                 type="button"
                 onClick={() => onPreviewChange("send")}
+                disabled={isArchived || !canSend}
                 className={primaryBtnClass}
               >
                 <Send className="size-3.5 opacity-80" strokeWidth={2} />
-                Send to customer
+                {QUOTE_SEND_FOR_ACCEPTANCE_LABEL}
               </button>
-            </div>
-          </div>
+            </>
+          )}
+        </div>
+
+        {!isSent && !isAccepted && !hasCustomerRequest ? (
+          <p className="mt-3 text-xs leading-relaxed text-foreground-muted">
+            {canSend
+              ? QUOTE_CUSTOMER_PROPOSAL_SEND_HELP
+              : "Finish scope, job address, and payment terms before sending."}
+          </p>
         ) : null}
 
         {quote.shareToken && (
           <div className="mb-4 rounded-lg border border-border bg-background px-3 py-3 shadow-sm">
-            <p className={sectionLabelClass}>Proposal link</p>
+            <p className={sectionLabelClass}>Legacy proposal link hidden</p>
             <p className="mt-1 text-xs text-foreground-muted leading-relaxed">
-              Share this secure link with the customer to view the proposal.
+              This quote has an older live proposal token. It is not shown as the customer path. Send this proposal for
+              acceptance to create a frozen customer link.
             </p>
-            <div className="mt-3 flex items-center gap-2">
-              <div className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-[10px] font-mono text-foreground truncate">
-                {typeof window !== "undefined"
-                  ? `${window.location.origin}/q/${quote.shareToken}`
-                  : `/q/${quote.shareToken}`}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    navigator.clipboard.writeText(`${window.location.origin}/q/${quote.shareToken}`);
-                  }
-                }}
-                className={secondaryBtnClass}
-              >
-                Copy
-              </button>
-            </div>
-            
-            {/* Token status */}
+
             <div className="mt-2 space-y-1">
               {quote.lastSentEmailAtLabel && (
                 <p className="text-[10px] text-foreground-subtle">
-                  Last sent: {quote.lastSentEmailAtLabel}
+                  Legacy last sent: {quote.lastSentEmailAtLabel}
                 </p>
               )}
               {quote.shareTokenRevokedAt && (
@@ -2355,30 +2399,11 @@ function SendAcceptTab({
               )}
             </div>
 
-            {/* Token management buttons */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <RevokeTokenButton quoteId={quote.id} onMutated={onMutated} />
-              <ExtendTokenButton quoteId={quote.id} onMutated={onMutated} />
             </div>
           </div>
         )}
-
-        {!isArchived && canApprove ? (
-          <div className="mb-4 rounded-lg border border-dashed border-border bg-foreground/[0.02] px-3 py-3">
-            <p className="text-xs font-medium text-foreground">Record customer approval</p>
-            <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-              When the customer has agreed to scope and price, mark the quote approved.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <ApproveQuoteInlineButton
-                quoteId={quote.id}
-                variant="primary"
-                label="Mark approved"
-                onMutated={onMutated}
-              />
-            </div>
-          </div>
-        ) : null}
 
         {!isArchived && isApproved ? (
           <div className="mb-4 rounded-lg border border-border bg-foreground/[0.02] px-3 py-3">
@@ -2426,65 +2451,82 @@ function SendAcceptTab({
             change status again.
           </p>
         ) : null}
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={() => onPreviewChange("proposal")}
-            className={secondaryBtnClass}
-          >
-            <Eye className="size-3.5 mr-1.5" strokeWidth={1.5} />
-            Preview proposal
-          </button>
-          <Link href={quote.proposalPreviewHref} className={mutedFooterLinkClass}>
-            View customer proposal
-            <ArrowUpRight className="size-3 ml-1" strokeWidth={1.5} />
-          </Link>
-        </div>
       </div>
 
-      <QuoteSignatureTimelinePanel
-        timeline={signatureTimeline}
-        artifacts={signatureArtifacts}
-        canViewRawAudit={canViewSignatureRawAudit}
-      />
-
-      {/* History — secondary */}
-      <details className="rounded-xl border border-border bg-background p-4">
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          <span className={`${sectionLabelClass} inline-flex items-center gap-2`}>
-            <ChevronRight className="size-3.5" aria-hidden />
-            History
-          </span>
-          <p className="mt-1 text-xs text-foreground-subtle">
-            Proposal and approval checkpoints
-          </p>
-        </summary>
-        <div className="mt-4 space-y-4 border-t border-border pt-4">
-          <div>
-            <p className={`${sectionLabelClass} mb-3`}>Proposal history</p>
-            <CheckpointList
-              checkpoints={sendCheckpoints}
-              emptyText="No proposals sent yet."
-            />
-          </div>
-          <div>
-            <p className={`${sectionLabelClass} mb-3`}>Approval history</p>
-            {latestApproval ? (
-              <p className="mb-2 text-xs font-medium text-foreground">
-                Last approval:{" "}
-                <time dateTime={latestApproval.createdAtIso}>
-                  {latestApproval.createdAtLabel}
-                </time>
-              </p>
-            ) : null}
-            <CheckpointList
-              checkpoints={approvalCheckpoints}
-              emptyText="No approvals recorded yet."
-            />
-          </div>
+      {hasCustomerRequest ? (
+        <div id="quote-customer-requests">
+          <QuoteChangeRequestsCard quote={quote} onMutated={onMutated} />
         </div>
-      </details>
+      ) : null}
+
+      {signatureTimeline || signatureArtifacts.length > 0 ? (
+        <QuoteSignatureTimelinePanel
+          timeline={signatureTimeline}
+          artifacts={signatureArtifacts}
+          canViewRawAudit={canViewSignatureRawAudit}
+        />
+      ) : null}
+
+      {!isArchived && canApprove ? (
+        <details className="rounded-xl border border-border bg-background p-4">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <span className={`${sectionLabelClass} inline-flex items-center gap-2`}>
+              <ChevronRight className="size-3.5" aria-hidden />
+              Staff recovery
+            </span>
+            <p className="mt-1 text-xs text-foreground-subtle">
+              Record acceptance when the customer agrees outside the customer link.
+            </p>
+          </summary>
+          <div className="mt-4 border-t border-border pt-4">
+            <ApproveQuoteInlineButton
+              quoteId={quote.id}
+              variant="primary"
+              label="Mark accepted"
+              onMutated={onMutated}
+            />
+          </div>
+        </details>
+      ) : null}
+
+      {hasProposalRecords ? (
+        <details className="rounded-xl border border-border bg-background p-4">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <span className={`${sectionLabelClass} inline-flex items-center gap-2`}>
+              <ChevronRight className="size-3.5" aria-hidden />
+              History
+            </span>
+            <p className="mt-1 text-xs text-foreground-subtle">
+              Proposal and acceptance records
+            </p>
+          </summary>
+          <div className="mt-4 space-y-4 border-t border-border pt-4">
+            {sendCheckpoints.length > 0 ? (
+              <div>
+                <p className={`${sectionLabelClass} mb-3`}>Sent proposal records</p>
+                <CheckpointList checkpoints={sendCheckpoints} emptyText="No proposals sent yet." />
+              </div>
+            ) : null}
+            {approvalCheckpoints.length > 0 ? (
+              <div>
+                <p className={`${sectionLabelClass} mb-3`}>{QUOTE_ACCEPTANCE_RECORD_LABEL}</p>
+                {latestApproval ? (
+                  <p className="mb-2 text-xs font-medium text-foreground">
+                    Last acceptance:{" "}
+                    <time dateTime={latestApproval.createdAtIso}>
+                      {latestApproval.createdAtLabel}
+                    </time>
+                  </p>
+                ) : null}
+                <CheckpointList
+                  checkpoints={approvalCheckpoints}
+                  emptyText="No acceptance records yet."
+                />
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
 
       {/* Active job link */}
       {quote.activatedJobId ? (
@@ -2806,6 +2848,7 @@ export function QuoteWorkSurface({
           quote={quote}
           workspaceTabs={workspaceTabs}
           workflow={workflow}
+          onMutated={handleSurfaceMutated}
         />
       )}
       {activeTab === "context" && (

@@ -107,7 +107,7 @@ export function QuoteSendPanel({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Send className="size-4 text-accent" />
-          <h3 className="text-sm font-semibold text-foreground">Send Quote</h3>
+          <h3 className="text-sm font-semibold text-foreground">Send for acceptance</h3>
         </div>
         <button
           type="button"
@@ -122,8 +122,7 @@ export function QuoteSendPanel({
         {/* Acceptance method */}
         <div className="space-y-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
           <label className={workspaceFormFieldLabelClass}>Acceptance method</label>
-          <p className="text-xs text-foreground-muted">Standard Acceptance (typed-name electronic acceptance)</p>
-          <p className="text-[10px] text-foreground-subtle">Verified E-Sign — coming soon</p>
+          <p className="text-xs text-foreground-muted">Electronic acceptance by typed name.</p>
         </div>
 
         {/* Recipients */}
@@ -270,7 +269,7 @@ export function QuoteSendPanel({
 
               <div className="py-2">
                 <div className="inline-block bg-accent px-6 py-2.5 rounded-lg font-bold text-accent-contrast shadow-sm opacity-80">
-                  View Proposal
+                  Review Proposal
                 </div>
                 <p className="mt-2 text-[10px] text-foreground-subtle">
                   A unique signer link is generated per recipient after send. Use the signature
@@ -302,12 +301,12 @@ export function QuoteSendPanel({
             {isPending ? (
               <>
                 <Loader2 className="mr-2 size-3.5 animate-spin" />
-                Sending...
+                Sending proposal...
               </>
             ) : (
               <>
                 <Send className="mr-2 size-3.5" />
-                Send Quote
+                Send for acceptance
               </>
             )}
           </button>
