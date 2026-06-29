@@ -82,7 +82,11 @@ test("formatScopeDecisionForAiContext includes detail when present", () => {
 
 test("filterSendBlockingScopeDecisions keeps only OPEN REQUIRED/POSSIBLE rows", () => {
   const decisions = [
-    decision({ id: "open-req", quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED }),
+    decision({
+      id: "open-req",
+      quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+      title: "Confirm required scope",
+    }),
     decision({
       id: "open-possible",
       quoteImpact: QuoteScopeDecisionQuoteImpact.POSSIBLE,
@@ -97,10 +101,12 @@ test("filterSendBlockingScopeDecisions keeps only OPEN REQUIRED/POSSIBLE rows", 
       id: "deferred",
       status: QuoteScopeDecisionStatus.DEFERRED,
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      title: "Deferred finish selection",
     }),
     decision({
       id: "dismissed",
       status: QuoteScopeDecisionStatus.DISMISSED,
+      title: "Dismissed measurement note",
     }),
   ];
   const blocking = filterSendBlockingScopeDecisions(decisions);
@@ -117,17 +123,20 @@ test("countSendBlockingScopeDecisionsForLine counts only blocking rows on one li
       id: "line-a-1",
       quoteLineItemId: "line-a",
       quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+      title: "Confirm line A requirement",
     }),
     decision({
       id: "line-a-def",
       quoteLineItemId: "line-a",
       status: QuoteScopeDecisionStatus.DEFERRED,
       quoteImpact: QuoteScopeDecisionQuoteImpact.NONE,
+      title: "Deferred line A decision",
     }),
     decision({
       id: "line-b-1",
       quoteLineItemId: "line-b",
       quoteImpact: QuoteScopeDecisionQuoteImpact.REQUIRED,
+      title: "Confirm line B requirement",
     }),
   ];
   assert.equal(countSendBlockingScopeDecisionsForLine(decisions, "line-a"), 1);
@@ -137,8 +146,12 @@ test("countSendBlockingScopeDecisionsForLine counts only blocking rows on one li
 
 test("filterOpenScopeDecisions returns OPEN rows", () => {
   const decisions = [
-    decision({ id: "open-1" }),
-    decision({ id: "def-1", status: QuoteScopeDecisionStatus.DEFERRED }),
+    decision({ id: "open-1", title: "Open scope decision" }),
+    decision({
+      id: "def-1",
+      status: QuoteScopeDecisionStatus.DEFERRED,
+      title: "Deferred scope decision",
+    }),
   ];
   assert.equal(filterOpenScopeDecisions(decisions).length, 1);
   assert.equal(filterOpenScopeDecisions(decisions)[0]?.id, "open-1");

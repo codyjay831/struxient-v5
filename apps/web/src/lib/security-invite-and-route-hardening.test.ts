@@ -25,7 +25,7 @@ test("team invite actions do not return raw tokens in production paths", () => {
   const teamActions = readSrc("app/(workspace)/settings/team/team-actions.ts");
 
   assert.doesNotMatch(teamActions, /inviteToken:\s*string/);
-  assert.doesNotMatch(teamActions, /return\s*\{[^}]*inviteToken/s);
+  assert.doesNotMatch(teamActions, /return\s*\{[\s\S]*inviteToken/);
   assert.match(teamActions, /allowManualLinkExposure\s*=\s*process\.env\.NODE_ENV\s*!==\s*"production"/);
 });
 

@@ -98,7 +98,7 @@ test("addManualModifyTaskToProposal requires a field change", () => {
     proposal: baseProposal,
     task: activeTask,
     title: activeTask.title,
-    instructions: activeTask.instructions,
+    instructions: activeTask.instructions ?? undefined,
     jobScopeItemIds: activeTask.scopeItemIds,
     reason: "No actual change",
   });

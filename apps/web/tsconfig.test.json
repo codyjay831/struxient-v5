@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "next-env.d.ts",
+    "src/**/*.d.ts",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.spec.ts",

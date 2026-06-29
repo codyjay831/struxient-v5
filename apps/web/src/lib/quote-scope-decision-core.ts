@@ -4,7 +4,6 @@ import {
   QuoteScopeDecisionStatus,
   type QuoteScopeDecisionResolutionTiming,
 } from "@prisma/client";
-import type { ExtendedTransactionClient } from "@/lib/db";
 import type { QuoteScopeDecisionManualAction } from "@/lib/quote-scope-decision-types";
 import {
   classifyQuickScopeMissingInfoGap,
@@ -12,10 +11,96 @@ import {
   QUICK_SCOPE_MISSING_INFO_SOURCE_REF_TYPE,
 } from "@/lib/quote/quote-scope-gap-classifier";
 
-export type QuoteScopeDecisionTx = Pick<
-  ExtendedTransactionClient,
-  "quoteScopeDecision"
->;
+type ScopeDecisionStatusFilter =
+  | QuoteScopeDecisionStatus
+  | { in: readonly QuoteScopeDecisionStatus[] };
+
+type ScopeDecisionWhere = {
+  id?: string;
+  organizationId: string;
+  quoteId: string;
+  quoteLineItemId?: string | null;
+  sourceType?: QuoteScopeDecisionSourceType;
+  status?: ScopeDecisionStatusFilter;
+};
+
+type ScopeDecisionDuplicateRow = {
+  id: string;
+  title: string;
+  detail: string | null;
+};
+
+type ScopeDecisionCreateData = {
+  organizationId: string;
+  quoteId: string;
+  quoteLineItemId: string | null;
+  sourceType: QuoteScopeDecisionSourceType;
+  title: string;
+  detail: string | null;
+  sourceRefType: string | null;
+  sourceRefId: string | null;
+  createdByUserId: string | null;
+  quoteImpact: QuoteScopeDecisionQuoteImpact;
+  status: QuoteScopeDecisionStatus;
+  resolutionTiming: QuoteScopeDecisionResolutionTiming | null;
+};
+
+type ScopeDecisionManualRow = {
+  id: string;
+  status: QuoteScopeDecisionStatus;
+  quoteImpact: QuoteScopeDecisionQuoteImpact;
+  quoteLineItemId: string | null;
+  title: string;
+};
+
+type ScopeDecisionManualWhere = {
+  id: string;
+  organizationId: string;
+  quoteId: string;
+};
+
+type ScopeDecisionManualUpdateData = {
+  status: QuoteScopeDecisionStatus;
+  resolutionTiming: QuoteScopeDecisionResolutionTiming | null;
+  resolvedAt?: Date | null;
+  resolvedByUserId?: string | null;
+};
+
+export type QuoteScopeDecisionCreateTx = {
+  quoteScopeDecision: {
+    findMany(args: {
+      where: ScopeDecisionWhere;
+      select: { id: true; title: true; detail: true };
+    }): Promise<ScopeDecisionDuplicateRow[]>;
+    create(args: {
+      data: ScopeDecisionCreateData;
+      select: { id: true };
+    }): Promise<{ id: string }>;
+  };
+};
+
+export type QuoteScopeDecisionManualActionTx = {
+  quoteScopeDecision: {
+    findFirst(args: {
+      where: ScopeDecisionManualWhere;
+      select: {
+        id: true;
+        status: true;
+        quoteImpact: true;
+        quoteLineItemId: true;
+        title: true;
+      };
+    }): Promise<ScopeDecisionManualRow | null>;
+    update(args: {
+      where: { id: string };
+      data: ScopeDecisionManualUpdateData;
+    }): Promise<unknown>;
+  };
+};
+
+export type QuoteScopeDecisionTx =
+  & QuoteScopeDecisionCreateTx
+  & QuoteScopeDecisionManualActionTx;
 
 export type CreateQuoteScopeDecisionInput = {
   organizationId: string;
@@ -49,7 +134,7 @@ export function buildScopeDecisionDuplicateKey(
 }
 
 async function findActiveDuplicateDecision(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionCreateTx,
   params: {
     organizationId: string;
     quoteId: string;
@@ -87,7 +172,7 @@ async function findActiveDuplicateDecision(
  * Creates a scope decision if no active duplicate exists (normalized title/detail).
  */
 export async function createQuoteScopeDecisionIfAbsent(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionCreateTx,
   input: CreateQuoteScopeDecisionInput,
 ): Promise<{ created: boolean; id: string }> {
   const title = input.title.trim();
@@ -131,7 +216,7 @@ export async function createQuoteScopeDecisionIfAbsent(
 }
 
 export async function createQuoteScopeDecisionsFromMissingInfoStrings(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionCreateTx,
   params: {
     organizationId: string;
     quoteId: string;
@@ -207,7 +292,7 @@ export function manualActionToUpdate(
 }
 
 export async function applyQuoteScopeDecisionManualAction(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionManualActionTx,
   params: {
     organizationId: string;
     quoteId: string;

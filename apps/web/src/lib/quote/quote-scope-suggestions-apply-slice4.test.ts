@@ -10,7 +10,6 @@ import {
 import { mapCommercialSuggestionToLineFields } from "@/lib/ai/quote-scope-suggestion-persist";
 import {
   createQuoteScopeDecisionsFromMissingInfoStrings,
-  type QuoteScopeDecisionTx,
 } from "@/lib/quote-scope-decision-core";
 import { QUICK_SCOPE_MISSING_INFO_SOURCE_REF_TYPE } from "@/lib/quote/quote-scope-gap-classifier";
 
@@ -135,7 +134,7 @@ test("mapCommercialSuggestionToLineFields stores hidden observations in internal
 test("createQuoteScopeDecisionsFromMissingInfoStrings classifies and sets stable source metadata", async () => {
   const tx = createApplyMockTx({ quoteId: "quote-1", organizationId: "org-1" });
 
-  await createQuoteScopeDecisionsFromMissingInfoStrings(tx as QuoteScopeDecisionTx, {
+  await createQuoteScopeDecisionsFromMissingInfoStrings(tx, {
     organizationId: "org-1",
     quoteId: "quote-1",
     quoteLineItemId: "line-1",

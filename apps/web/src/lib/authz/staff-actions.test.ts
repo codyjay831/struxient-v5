@@ -1367,9 +1367,8 @@ if (!assigneeRoleCleanupDeny.ok) {
   assert.match(assigneeRoleCleanupDeny.message, /schedule cleanup/i);
 }
 
-const workPackageJobBase: LoadedJobAuthorizationResource = {
+const workPackageJobBase = {
   id: "job-1",
-  relationshipScope: "org",
 };
 
 for (const role of [StaffRole.OFFICE, StaffRole.ADMIN, StaffRole.OWNER] as const) {
@@ -1405,11 +1404,7 @@ for (const action of workPackageActions) {
       ? authorizeLoadedWorkPackageAction(
           actor(StaffRole.FIELD),
           action,
-          {
-            ...workPackageJobBase,
-            relationshipScope: "assignment",
-            hasAssignedWork: true,
-          },
+          workPackageJobBase,
           "Job",
         )
       : authorizeLoadedTaskAction(actor(StaffRole.FIELD), action, {
@@ -1429,12 +1424,7 @@ for (const action of workPackageActions) {
       ? authorizeLoadedWorkPackageAction(
           actor(StaffRole.SUBCONTRACTOR, "sub-1"),
           action,
-          {
-            ...workPackageJobBase,
-            relationshipScope: "collaborator",
-            collaboratorGrants: [{ permissionsJson: { updateAssignedTasks: true } }],
-            hasAssignedWork: true,
-          },
+          workPackageJobBase,
           "Job",
         )
       : authorizeLoadedTaskAction(actor(StaffRole.SUBCONTRACTOR, "sub-1"), action, {

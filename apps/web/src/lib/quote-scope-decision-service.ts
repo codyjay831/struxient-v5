@@ -11,7 +11,59 @@ export {
 
 import { formatScopeDecisionForAiContext } from "@/lib/quote-scope-decision-display";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
-import type { QuoteScopeDecisionTx } from "@/lib/quote-scope-decision-core";
+
+type QuoteScopeDecisionListTx = {
+  quoteScopeDecision: {
+    findMany(args: {
+      where: {
+        organizationId: string;
+        quoteId: string;
+        sourceType: { not: QuoteScopeDecisionSourceType };
+        status?: { in: QuoteScopeDecisionPayload["status"][] };
+      };
+      orderBy: [{ quoteLineItemId: "asc" }, { createdAt: "asc" }];
+      select: {
+        id: true;
+        quoteId: true;
+        quoteLineItemId: true;
+        sourceType: true;
+        title: true;
+        detail: true;
+        status: true;
+        resolutionTiming: true;
+        quoteImpact: true;
+      };
+    }): Promise<
+      Array<{
+        id: string;
+        quoteId: string;
+        quoteLineItemId: string | null;
+        sourceType: QuoteScopeDecisionPayload["sourceType"];
+        title: string;
+        detail: string | null;
+        status: QuoteScopeDecisionPayload["status"];
+        resolutionTiming: QuoteScopeDecisionPayload["resolutionTiming"];
+        quoteImpact: QuoteScopeDecisionPayload["quoteImpact"];
+      }>
+    >;
+  };
+};
+
+type QuoteScopeDecisionContextTx = {
+  quoteScopeDecision: {
+    findMany(args: {
+      where: {
+        organizationId: string;
+        quoteId: string;
+        sourceType: { not: QuoteScopeDecisionSourceType };
+        status: { in: QuoteScopeDecisionPayload["status"][] };
+        OR: [{ quoteLineItemId: string }, { quoteLineItemId: null }];
+      };
+      orderBy: [{ quoteLineItemId: "asc" }, { createdAt: "asc" }];
+      select: { title: true; detail: true };
+    }): Promise<Array<{ title: string; detail: string | null }>>;
+  };
+};
 
 function toPayload(row: {
   id: string;
@@ -38,7 +90,7 @@ function toPayload(row: {
 }
 
 export async function listQuoteScopeDecisionsForQuote(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionListTx,
   params: {
     organizationId: string;
     quoteId: string;
@@ -79,7 +131,7 @@ export async function listQuoteScopeDecisionsForQuote(
  * Includes line-level decisions plus quote-wide gaps that may apply to the line.
  */
 export async function listScopeDecisionContextStringsForLine(
-  tx: QuoteScopeDecisionTx,
+  tx: QuoteScopeDecisionContextTx,
   params: {
     organizationId: string;
     quoteId: string;

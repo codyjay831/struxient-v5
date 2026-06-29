@@ -117,7 +117,6 @@ test("Slice 5: required commercial gaps still route to Clarify not draft executi
   });
   assert.equal(presentation.canSend, false);
   assert.ok(presentation.blockers.some((b) => /clarify scope/i.test(b.message)));
-  assert.ok(
-    presentation.blockers.every((b) => b.actionLabel !== QUOTE_DRAFT_EXECUTION_ACTION_LABEL),
-  );
+  assert.ok(presentation.blockers.every((b) => b.fixTab === "scope"));
+  assert.equal(presentation.canBuildExecutionPlan, false);
 });
