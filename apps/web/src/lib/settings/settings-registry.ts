@@ -76,14 +76,6 @@ export const SETTINGS_MANAGEMENT_GROUPS = [
     title: "Operations setup",
     links: [
       { id: "scope-library", title: "Scope Library", href: "/settings/scope-library" },
-      { id: "reusable-tasks", title: "Reusable tasks", href: "/settings/scope-library/tasks" },
-      { id: "stages", title: "Stages", href: "/settings/scope-library/stages" },
-      { id: "tags", title: "Tags", href: "/settings/scope-library/tags" },
-      {
-        id: "clarification",
-        title: "Clarification library",
-        href: "/settings/scope-library/clarification",
-      },
     ],
   },
 ] as const satisfies readonly SettingsManagementGroup[];
@@ -233,7 +225,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "manage-reusable-tasks",
     type: "management",
-    title: "Reusable tasks",
+    title: "Scope Library · Reusable tasks",
     description: "Manage reusable task templates.",
     keywords: ["task templates", "reusable tasks", "scope library tasks"],
     managementGroup: "Operations setup",
@@ -242,7 +234,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "manage-stages",
     type: "management",
-    title: "Stages",
+    title: "Scope Library · Stages",
     description: "Manage execution stages.",
     keywords: ["stages", "workflow stages", "scope library stages"],
     managementGroup: "Operations setup",
@@ -251,7 +243,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "manage-tags",
     type: "management",
-    title: "Tags",
+    title: "Scope Library · Tags",
     description: "Manage tags used across scope and execution.",
     keywords: ["tags", "scope tags", "classification"],
     managementGroup: "Operations setup",
@@ -260,7 +252,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "manage-clarification",
     type: "management",
-    title: "Clarification library",
+    title: "Scope Library · Clarification",
     description: "Manage clarification question sets.",
     keywords: ["clarification", "question sets", "scope library clarification"],
     managementGroup: "Operations setup",
