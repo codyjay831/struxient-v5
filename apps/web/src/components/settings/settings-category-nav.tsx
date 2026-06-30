@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { SettingsSection } from "@/lib/settings/settings-registry";
+import type { SettingsManagementGroup, SettingsSection } from "@/lib/settings/settings-registry";
 import { SETTINGS_CATEGORY_LABELS } from "@/lib/settings/settings-registry";
 
 const baseItemClass =
@@ -11,18 +11,18 @@ export function SettingsCategoryNav({
   availableSections,
   activeSection,
   sectionHref,
-  managementLinks,
+  managementGroups,
 }: {
   availableSections: SettingsSection[];
   activeSection: SettingsSection;
   sectionHref: (section: SettingsSection) => string;
-  managementLinks: readonly { id: string; title: string; href: string }[];
+  managementGroups: readonly SettingsManagementGroup[];
 }) {
   return (
     <nav aria-label="Settings" className="sticky top-6 space-y-6">
       <div>
         <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Settings
+          Workspace
         </p>
         <ul className="space-y-1">
           {availableSections.map((section) => {
@@ -42,20 +42,22 @@ export function SettingsCategoryNav({
         </ul>
       </div>
 
-      <div>
-        <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Management
-        </p>
-        <ul className="space-y-1">
-          {managementLinks.map((link) => (
-            <li key={link.id}>
-              <Link href={link.href} className={inactiveClass}>
-                {link.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {managementGroups.map((group) => (
+        <div key={group.id}>
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            {group.title}
+          </p>
+          <ul className="space-y-1">
+            {group.links.map((link) => (
+              <li key={link.id}>
+                <Link href={link.href} className={inactiveClass}>
+                  {link.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </nav>
   );
 }

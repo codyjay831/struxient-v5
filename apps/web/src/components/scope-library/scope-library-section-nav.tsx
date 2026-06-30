@@ -13,10 +13,17 @@ export function ScopeLibrarySectionNav({
 }) {
   return (
     <WorkspacePanel padding="compact" className="mb-6">
-      <p className="text-xs font-medium text-foreground">Scope Library</p>
-      <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
-        Saved line items, reusable tasks, and workflow configuration.
-      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-medium text-foreground">Scope Library</p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
+            Saved line items, reusable tasks, and workflow configuration.
+          </p>
+        </div>
+        <Link href="/settings" className={inactiveClass}>
+          ← Settings
+        </Link>
+      </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           href="/settings/scope-library"

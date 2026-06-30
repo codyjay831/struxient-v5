@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { CreditCard, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -46,6 +47,9 @@ type BillingSettingsClientProps = {
 
 type RecentUsageRow = BillingSettingsClientProps["recentUsage"][number];
 
+const listLinkClass =
+  "inline-flex w-full items-center justify-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground-muted transition-colors hover:border-border-strong hover:bg-foreground/[0.02] hover:text-foreground sm:w-auto";
+
 function formatUsageUnits(row: RecentUsageRow) {
   const units = row.billableUnits ?? "—";
   const billableStatus = row.billableStatus ? ` (${row.billableStatus.toLowerCase()})` : "";
@@ -82,6 +86,11 @@ export function BillingSettingsClient(props: BillingSettingsClientProps) {
       <PageHeader
         title="Billing"
         description="Manage your Struxient subscription and AI usage."
+        actions={
+          <Link href="/settings" className={listLinkClass}>
+            ← Settings
+          </Link>
+        }
       />
 
       {props.portalError ? (

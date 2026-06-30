@@ -19,7 +19,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
-  SETTINGS_MANAGEMENT_LINKS,
+  SETTINGS_MANAGEMENT_GROUPS,
   SETTINGS_SEARCH_REGISTRY,
   type SettingsSearchEntry,
   type SettingsSection as SettingsSectionKey,
@@ -304,7 +304,7 @@ export function SettingsPageClient({
           availableSections={availableSections}
           activeSection={activeSection}
           sectionHref={(section) => nextSectionUrl(pathname, section)}
-          managementLinks={SETTINGS_MANAGEMENT_LINKS}
+          managementGroups={SETTINGS_MANAGEMENT_GROUPS}
           currentPathname={pathname}
         />
       }
@@ -313,7 +313,7 @@ export function SettingsPageClient({
           availableSections={availableSections}
           activeSection={activeSection}
           sectionHref={(section) => nextSectionUrl(pathname, section)}
-          managementLinks={SETTINGS_MANAGEMENT_LINKS}
+          managementGroups={SETTINGS_MANAGEMENT_GROUPS}
         />
       }
     >

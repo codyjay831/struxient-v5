@@ -7,7 +7,7 @@ function resultTypeLabel(entry: SettingsSearchEntry) {
   if (entry.type === "setting") {
     return `${SETTINGS_CATEGORY_LABELS[entry.category]} · Setting`;
   }
-  return "Management · Opens management page";
+  return `${entry.managementGroup} · Opens settings page`;
 }
 
 export function SettingsSearch({

@@ -48,6 +48,46 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsSection, string> = {
   commercial: "Sales & relationships",
 };
 
+export type SettingsManagementLink = {
+  id: string;
+  title: string;
+  href: string;
+};
+
+export type SettingsManagementGroup = {
+  id: "company-setup" | "operations-setup";
+  title: string;
+  links: readonly SettingsManagementLink[];
+};
+
+export const SETTINGS_MANAGEMENT_GROUPS = [
+  {
+    id: "company-setup",
+    title: "Company setup",
+    links: [
+      { id: "billing", title: "Billing", href: "/settings/billing" },
+      { id: "business-profile", title: "Business profile", href: "/settings/organization" },
+      { id: "team", title: "Team", href: "/settings/team" },
+      { id: "field-access", title: "Field access", href: "/settings/field-access" },
+    ],
+  },
+  {
+    id: "operations-setup",
+    title: "Operations setup",
+    links: [
+      { id: "scope-library", title: "Scope Library", href: "/settings/scope-library" },
+      { id: "reusable-tasks", title: "Reusable tasks", href: "/settings/scope-library/tasks" },
+      { id: "stages", title: "Stages", href: "/settings/scope-library/stages" },
+      { id: "tags", title: "Tags", href: "/settings/scope-library/tags" },
+      {
+        id: "clarification",
+        title: "Clarification library",
+        href: "/settings/scope-library/clarification",
+      },
+    ],
+  },
+] as const satisfies readonly SettingsManagementGroup[];
+
 export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
   {
     id: "show-quick-actions",
@@ -85,7 +125,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Accept customer requests",
     description: "Control whether customers can submit from your public request page.",
     keywords: ["public request", "intake", "enabled", "pause", "availability"],
-    managementGroup: "Management",
+    managementGroup: "Workspace",
     targetRoute: "/settings/intake/public",
   },
   {
@@ -105,7 +145,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Customer intake",
     description: "Open Customer intake settings for public and staff intake setup.",
     keywords: ["intake", "customer intake", "public request", "lead intake", "forms"],
-    managementGroup: "Management",
+    managementGroup: "Workspace",
     targetRoute: "/settings/intake",
   },
   {
@@ -114,7 +154,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Customer request page",
     description: "Edit request page title, intro, warning, submit text, and live/paused status.",
     keywords: ["public request", "copy", "intake settings", "form title", "availability"],
-    managementGroup: "Management",
+    managementGroup: "Workspace",
     targetRoute: "/settings/intake/public",
   },
   {
@@ -123,7 +163,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Staff intake",
     description: "Manage staff intake fields at /leads/new.",
     keywords: ["office intake", "internal intake", "lead form", "staff intake", "new lead"],
-    managementGroup: "Management",
+    managementGroup: "Workspace",
     targetRoute: "/settings/intake/staff",
   },
   {
@@ -133,8 +173,17 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     description:
       "Manage your main customer request link and optional additional links for campaigns or service lines.",
     keywords: ["customer request links", "specialized links", "public forms", "campaign forms"],
-    managementGroup: "Management",
+    managementGroup: "Workspace",
     targetRoute: "/settings/intake/specialized",
+  },
+  {
+    id: "manage-billing",
+    type: "management",
+    title: "Billing",
+    description: "Manage subscription and AI usage settings.",
+    keywords: ["billing", "subscription", "stripe", "plan", "ai usage"],
+    managementGroup: "Company setup",
+    targetRoute: "/settings/billing",
   },
   {
     id: "manage-business-profile",
@@ -142,7 +191,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Business profile",
     description: "Manage company business profile settings.",
     keywords: ["organization", "company account", "business profile", "trades"],
-    managementGroup: "Management",
+    managementGroup: "Company setup",
     targetRoute: "/settings/organization",
   },
   {
@@ -151,7 +200,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Team",
     description: "Invite teammates and manage member roles.",
     keywords: ["team", "invite", "teammate", "users", "roles", "members"],
-    managementGroup: "Management",
+    managementGroup: "Company setup",
     targetRoute: "/settings/team",
   },
   {
@@ -160,7 +209,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Invite teammate",
     description: "Send an invitation to join your organization.",
     keywords: ["invite", "invitation", "teammate", "add user", "new member"],
-    managementGroup: "Management",
+    managementGroup: "Company setup",
     targetRoute: "/settings/team",
   },
   {
@@ -169,7 +218,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Field access",
     description: "Manage crews and subcontractor job visibility.",
     keywords: ["crew", "subcontractor", "field visibility", "job access", "field access"],
-    managementGroup: "Management",
+    managementGroup: "Company setup",
     targetRoute: "/settings/field-access",
   },
   {
@@ -178,7 +227,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Scope Library",
     description: "Open Scope Library management.",
     keywords: ["scope", "line presets", "quote templates"],
-    managementGroup: "Management",
+    managementGroup: "Operations setup",
     targetRoute: "/settings/scope-library",
   },
   {
@@ -187,7 +236,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Reusable tasks",
     description: "Manage reusable task templates.",
     keywords: ["task templates", "reusable tasks", "scope library tasks"],
-    managementGroup: "Management",
+    managementGroup: "Operations setup",
     targetRoute: "/settings/scope-library/tasks",
   },
   {
@@ -196,7 +245,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Stages",
     description: "Manage execution stages.",
     keywords: ["stages", "workflow stages", "scope library stages"],
-    managementGroup: "Management",
+    managementGroup: "Operations setup",
     targetRoute: "/settings/scope-library/stages",
   },
   {
@@ -205,7 +254,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Tags",
     description: "Manage tags used across scope and execution.",
     keywords: ["tags", "scope tags", "classification"],
-    managementGroup: "Management",
+    managementGroup: "Operations setup",
     targetRoute: "/settings/scope-library/tags",
   },
   {
@@ -214,23 +263,7 @@ export const SETTINGS_SEARCH_REGISTRY: SettingsSearchEntry[] = [
     title: "Clarification library",
     description: "Manage clarification question sets.",
     keywords: ["clarification", "question sets", "scope library clarification"],
-    managementGroup: "Management",
+    managementGroup: "Operations setup",
     targetRoute: "/settings/scope-library/clarification",
   },
 ];
-
-export const SETTINGS_MANAGEMENT_LINKS = [
-  { id: "billing", title: "Billing", href: "/settings/billing" },
-  { id: "business-profile", title: "Business profile", href: "/settings/organization" },
-  { id: "team", title: "Team", href: "/settings/team" },
-  { id: "field-access", title: "Field access", href: "/settings/field-access" },
-  { id: "scope-library", title: "Scope Library", href: "/settings/scope-library" },
-  { id: "reusable-tasks", title: "Reusable tasks", href: "/settings/scope-library/tasks" },
-  { id: "stages", title: "Stages", href: "/settings/scope-library/stages" },
-  { id: "tags", title: "Tags", href: "/settings/scope-library/tags" },
-  {
-    id: "clarification",
-    title: "Clarification library",
-    href: "/settings/scope-library/clarification",
-  },
-] as const;
