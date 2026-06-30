@@ -34,6 +34,12 @@ import type {
   ClarificationSetOption,
 } from "@/app/(workspace)/quotes/quote-line-clarification-types";
 import type { ClarificationMatchConfidence } from "@/lib/clarification/clarification-matching";
+import {
+  isClarifyScopeCustomerProposalRoute,
+  type ClarifyScopeContextReview,
+  type ClarifyScopeQuestionReview,
+  type ClarifyScopeRoute,
+} from "@/lib/clarification/clarification-context-review";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
 import {
   workspaceFormControlClass,
@@ -103,6 +109,7 @@ export type ClarifyScopePanelProps = {
   lineDescription: string;
   questionSet: ClarifyScopeQuestionSet | null;
   savedAnswers: LineClarificationAnswers | null;
+  contextReview: ClarifyScopeContextReview | null;
   alternatives: ClarificationSetOption[];
   setPickerRows: ClarificationQuestionSetPickerRow[];
   pickerQueryFromParent: string;
@@ -190,6 +197,29 @@ function draftQuestionVisibilityLabel(customerFacing: boolean): string {
   return customerFacing ? "Customer" : "Internal";
 }
 
+const ROUTE_LABELS: Record<ClarifyScopeRoute, string> = {
+  ASK_CUSTOMER: "Customer decision",
+  ASK_STAFF: "Staff",
+  VERIFY_ONSITE: "Site verify",
+  QUOTE_OPTION: "Quote option",
+  ANSWERED: "Answered",
+  REMOVE: "Suppressed",
+};
+
+function routeLabel(route: ClarifyScopeRoute): string {
+  return ROUTE_LABELS[route];
+}
+
+function routeBadgeClass(route: ClarifyScopeRoute): string {
+  if (route === "ASK_CUSTOMER" || route === "QUOTE_OPTION") {
+    return "bg-primary/10 text-primary";
+  }
+  if (route === "VERIFY_ONSITE" || route === "ASK_STAFF") {
+    return "bg-warning/10 text-warning";
+  }
+  return "bg-foreground/[0.04] text-foreground-subtle";
+}
+
 function issuesForQuestionIndex(
   issues: ClarificationDraftValidationIssue[],
   qIndex: number,
@@ -226,6 +256,7 @@ export function ClarifyScopePanel({
   lineDescription,
   questionSet,
   savedAnswers,
+  contextReview,
   alternatives,
   setPickerRows,
   pickerQueryFromParent,
@@ -287,6 +318,39 @@ export function ClarifyScopePanel({
     currentSetKey && currentSetVersion != null
       ? `${currentSetKey}@${currentSetVersion}`
       : null;
+  const reviewByQuestionKey = useMemo(() => {
+    const map = new Map<string, ClarifyScopeQuestionReview>();
+    for (const item of contextReview?.questionReviews ?? []) {
+      map.set(item.questionKey, item);
+    }
+    return map;
+  }, [contextReview]);
+  const questionsByRoute = useMemo(() => {
+    const groups: Record<ClarifyScopeRoute, ClarificationQuestion[]> = {
+      ASK_CUSTOMER: [],
+      ASK_STAFF: [],
+      VERIFY_ONSITE: [],
+      QUOTE_OPTION: [],
+      ANSWERED: [],
+      REMOVE: [],
+    };
+    for (const question of questionSet?.questions ?? []) {
+      const review = reviewByQuestionKey.get(question.key);
+      const fallbackRoute: ClarifyScopeRoute = question.customerFacing ? "ASK_CUSTOMER" : "ASK_STAFF";
+      groups[review?.route ?? fallbackRoute].push(question);
+    }
+    return groups;
+  }, [questionSet, reviewByQuestionKey]);
+  const knownFacts = contextReview?.knownFacts ?? [];
+  const contextPrefillAnswers = useMemo(() => {
+    const next: AnswerMap = {};
+    for (const review of contextReview?.questionReviews ?? []) {
+      if (review.prefill) {
+        next[review.questionKey] = review.prefill;
+      }
+    }
+    return next;
+  }, [contextReview]);
 
   useEffect(() => {
     if (!open) {
@@ -349,7 +413,7 @@ export function ClarifyScopePanel({
         }
         return next;
       }
-      return {};
+      return contextPrefillAnswers;
     });
     setError(null);
     prevProposalRef.current = null;
@@ -368,6 +432,7 @@ export function ClarifyScopePanel({
     savedVersion,
     questionSet,
     isEditingExistingSet,
+    contextPrefillAnswers,
   ]);
 
   useEffect(() => {
@@ -380,6 +445,8 @@ export function ClarifyScopePanel({
       for (const suggestion of aiProposal.suggestions) {
         const question = questionsByKey.get(suggestion.questionKey);
         if (!question) continue;
+        const route = reviewByQuestionKey.get(question.key)?.route;
+        if (route === "REMOVE" || route === "ANSWERED") continue;
         if (suggestion.unknown) {
           next[question.key] = { kind: "unknown" };
           continue;
@@ -405,7 +472,7 @@ export function ClarifyScopePanel({
       }
       return next;
     });
-  }, [aiProposal, open, questionSet]);
+  }, [aiProposal, open, questionSet, reviewByQuestionKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -580,7 +647,7 @@ export function ClarifyScopePanel({
     helpText: "",
     allowOther: false,
     unit: "",
-    customerFacing: true,
+    customerFacing: false,
     aliases: [],
     options: [],
   });
@@ -849,7 +916,18 @@ export function ClarifyScopePanel({
         setError(result.error);
         return;
       }
-      built.push(buildClarificationAnswer(questionSet, question, value));
+      const route = reviewByQuestionKey.get(question.key)?.route;
+      built.push(
+        buildClarificationAnswer(
+          questionSet,
+          {
+            ...question,
+            customerFacing:
+              Boolean(question.customerFacing) && isClarifyScopeCustomerProposalRoute(route),
+          },
+          value,
+        ),
+      );
     }
     if (built.length === 0) {
       setError("Answer at least one question before applying.");
@@ -1213,6 +1291,8 @@ export function ClarifyScopePanel({
     const isUnknown = value?.kind === "unknown";
     const choiceKeys = value?.kind === "choice" ? value.optionKeys : [];
     const otherText = value?.kind === "choice" ? value.otherText ?? "" : "";
+    const review = reviewByQuestionKey.get(question.key);
+    const route = review?.route ?? (question.customerFacing ? "ASK_CUSTOMER" : "ASK_STAFF");
 
     const showOther = question.allowOther && choiceKeys.includes(OTHER_KEY);
 
@@ -1225,12 +1305,26 @@ export function ClarifyScopePanel({
               <p className="mt-0.5 text-[11px] text-foreground-subtle">{question.helpText}</p>
             ) : null}
           </div>
-          {!question.customerFacing ? (
-            <span className="shrink-0 rounded bg-foreground/[0.04] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-foreground-subtle">
-              Internal
-            </span>
-          ) : null}
+          <span
+            className={[
+              "shrink-0 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide",
+              routeBadgeClass(route),
+            ].join(" ")}
+          >
+            {routeLabel(route)}
+          </span>
         </div>
+        {review ? (
+          <p className="text-[11px] text-foreground-subtle">
+            {review.reason}
+            {review.sourceLabel ? ` From ${review.sourceLabel}.` : ""}
+          </p>
+        ) : null}
+        {review?.prefillLabel ? (
+          <p className="rounded-md border border-border bg-foreground/[0.02] px-2 py-1 text-[11px] text-foreground-muted">
+            Prefilled from saved context: {review.prefillLabel}
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {question.inputType === "yes_no_unknown" ? (
@@ -1334,6 +1428,49 @@ export function ClarifyScopePanel({
     );
   };
 
+  const renderQuestionGroup = (
+    title: string,
+    description: string,
+    questions: ClarificationQuestion[],
+  ) => {
+    if (questions.length === 0) return null;
+    return (
+      <section className="space-y-2 rounded-lg border border-border bg-foreground/[0.02] p-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">{description}</p>
+        </div>
+        <div className="space-y-3">{questions.map(renderQuestion)}</div>
+      </section>
+    );
+  };
+
+  const renderKnownFacts = () => {
+    if (knownFacts.length === 0) return null;
+    return (
+      <section className="space-y-2 rounded-lg border border-border bg-surface p-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">Known from saved context</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">
+            These facts came from saved lead/request/site/quote context.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {knownFacts.map((fact) => (
+            <div
+              key={`${fact.key}-${fact.sourceType}-${fact.value}`}
+              className="rounded-md border border-border bg-foreground/[0.02] p-2"
+            >
+              <p className="text-xs font-medium text-foreground">{fact.label}</p>
+              <p className="mt-0.5 text-xs text-foreground-muted">{fact.value}</p>
+              <p className="mt-1 text-[10px] text-foreground-subtle">from {fact.sourceLabel}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   const dialogNode = (
     <dialog
       ref={dialogRef}
@@ -1373,6 +1510,7 @@ export function ClarifyScopePanel({
             </div>
           ) : panelMode === "start" ? (
             <div className="space-y-4">
+              {renderKnownFacts()}
               <p className="text-sm text-foreground-muted">
                 Pick how to capture the missing scope facts for this line.
               </p>
@@ -1968,7 +2106,31 @@ export function ClarifyScopePanel({
                 </ul>
               ) : null}
 
-              <div className="space-y-3">{questionSet.questions.map(renderQuestion)}</div>
+              {renderKnownFacts()}
+
+              {renderQuestionGroup(
+                "Needs customer decision",
+                "Only items the customer can reasonably answer or choose.",
+                [...questionsByRoute.ASK_CUSTOMER, ...questionsByRoute.QUOTE_OPTION],
+              )}
+
+              {renderQuestionGroup(
+                "Needs staff/site verification",
+                "Internal/code/site facts that should not be phrased as customer preferences.",
+                [...questionsByRoute.ASK_STAFF, ...questionsByRoute.VERIFY_ONSITE],
+              )}
+
+              {questionsByRoute.ANSWERED.length > 0 || questionsByRoute.REMOVE.length > 0 ? (
+                <details className="rounded-lg border border-border bg-foreground/[0.02] p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-foreground">
+                    Review answered/suppressed questions (
+                    {questionsByRoute.ANSWERED.length + questionsByRoute.REMOVE.length})
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {[...questionsByRoute.ANSWERED, ...questionsByRoute.REMOVE].map(renderQuestion)}
+                  </div>
+                </details>
+              ) : null}
 
               {(lineScopeDecisions.length > 0 || quoteWideScopeDecisions.length > 0) ? (
                 <div className="space-y-3 rounded-lg border border-dashed border-border bg-foreground/[0.02] p-3">

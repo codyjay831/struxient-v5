@@ -134,13 +134,19 @@ test("buildCustomerQuotePreviewDocument omits staff-only source text", () => {
         quantityDisplay: "1",
         unitAmountCents: 100_000,
         lineTotalCents: 100_000,
-        internalNotes: staffOnlyText,
-      } as QuoteCustomerPreviewInput["lineItems"][number] & { internalNotes: string },
+      },
     ],
-  } as Partial<QuoteCustomerPreviewInput> & { internalNotes: string });
-  (quote as QuoteCustomerPreviewInput & { internalNotes: string }).internalNotes = staffOnlyText;
+  });
+  const unsafeRawQuote = {
+    ...quote,
+    internalNotes: staffOnlyText,
+    lineItems: quote.lineItems.map((line) => ({
+      ...line,
+      internalNotes: staffOnlyText,
+    })),
+  };
 
-  const { document } = buildCustomerQuotePreviewDocument(quote, {
+  const { document } = buildCustomerQuotePreviewDocument(unsafeRawQuote, {
     organizationDisplayName: "Struxient Demo",
   });
 

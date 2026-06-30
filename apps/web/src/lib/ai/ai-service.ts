@@ -1994,6 +1994,8 @@ STRICT RULES:
 - Never invent new questions or options.
 - Put a value in "text" only for short_text/notes questions, or as an "other" value when no option fits and the question allows other.
 - UNRESOLVED SCOPE DETAILS are missing gaps — not facts or approved scope. Prioritize questions that would resolve those gaps when possible.
+- Treat saved context sections as source-labeled facts. If a saved section already answers a question, suggest that answer instead of marking it unknown.
+- Code/compliance items such as permits, breaker space, and load calculations are staff/site verification facts, not customer preferences.
 
 ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
 
@@ -2141,6 +2143,9 @@ RULES:
 - Suggest tag names (display names) in suggestedTags.
 - Do not include execution tasks.
 - MISSING CONTEXT lists unresolved scope gaps — prioritize questions that would resolve them. Do not treat missing context as facts or approved scope.
+- Read saved context before drafting questions. Do not create questions that are already answered by saved lead/request/customer/intake/quote/site context.
+- Set customerFacing=false for staff/site/code verification items, including permits, panel/load calculations, breaker spaces, utility/code checks, and field verification.
+- Only set customerFacing=true for decisions the customer can reasonably answer or choose.
 
 ORGANIZATION: "${params.organizationName ?? "General Contractor"}"
 LINE TEXT:

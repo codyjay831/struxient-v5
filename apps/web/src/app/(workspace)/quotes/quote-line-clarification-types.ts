@@ -11,6 +11,7 @@ import type {
 } from "@/lib/ai/clarification-answer-proposal-schema";
 import type { LineClarificationAnswers } from "@/lib/clarification/clarification-types";
 import type { QuoteScopeDecisionPayload } from "@/lib/quote-scope-decision-types";
+import type { ClarifyScopeContextReview } from "@/lib/clarification/clarification-context-review";
 
 export type ClarificationSetOption = {
   key: string;
@@ -40,6 +41,8 @@ export type ClarificationLineModel = {
   savedAnswers: LineClarificationAnswers | null;
   /** OPEN scope-gap records linked to this line context. */
   openScopeDecisions: QuoteScopeDecisionPayload[];
+  /** Derived review of saved context vs this line's clarification questions. */
+  contextReview: ClarifyScopeContextReview | null;
 };
 
 export type GetClarificationLineModelResult = {

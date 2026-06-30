@@ -43,8 +43,16 @@ import {
   buildCommercialContextLineText,
   loadCommercialContextForQuote,
 } from "@/lib/ai/commercial-context";
+import {
+  buildQuoteScopeContextSections,
+  serializeQuoteScopeContextSectionsForAi,
+} from "@/lib/ai/quote-scope-capture-context";
 import type { ClarificationQuestionSetProposal } from "@/lib/ai/clarification-question-set-proposal-schema";
 import { hasBreakingClarificationChanges } from "@/lib/clarification/clarification-versioning";
+import {
+  isClarifyScopeCustomerProposalRoute,
+  reviewClarifyScopeQuestionSet,
+} from "@/lib/clarification/clarification-context-review";
 import {
   appendBusinessProfileContext,
   selectBusinessProfileAiContext,
@@ -192,6 +200,20 @@ function normalizeSetKey(value: string): string {
     .replace(/_{2,}/g, "_");
 }
 
+function buildClarificationLineContextText(
+  commercialContext: NonNullable<Awaited<ReturnType<typeof loadCommercialContextForQuote>>>,
+  input: { lineId: string; includeTemplateTags?: string[] },
+): string {
+  const structuredSections = buildQuoteScopeContextSections(commercialContext);
+  const savedContext = serializeQuoteScopeContextSectionsForAi(structuredSections);
+  const lineText = buildCommercialContextLineText(commercialContext, input);
+  const parts = [lineText];
+  if (savedContext) {
+    parts.push(`Saved quote context sections:\n${savedContext}`);
+  }
+  return parts.filter((part) => part.trim().length > 0).join("\n\n---\n\n");
+}
+
 async function writeClarificationQuestions(
   tx: Pick<typeof db, "clarificationQuestion" | "clarificationOption">,
   questionSetId: string,
@@ -287,6 +309,17 @@ export async function getClarificationLineModelAction(
       qid,
       lid,
     );
+    const commercialContext = await loadCommercialContextForQuote({
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+    });
+    const contextSections = commercialContext
+      ? buildQuoteScopeContextSections(commercialContext)
+      : [];
+    const contextReview = reviewClarifyScopeQuestionSet(
+      matchedSet ?? { questions: [] },
+      contextSections,
+    );
 
     return {
       model: {
@@ -299,6 +332,7 @@ export async function getClarificationLineModelAction(
         recommendedConfidence: top?.confidence ?? null,
         savedAnswers,
         openScopeDecisions,
+        contextReview,
       },
     };
   } catch (e) {
@@ -336,6 +370,14 @@ export async function getClarificationSetByKeyAction(
     qid,
     lid,
   );
+  const commercialContext = await loadCommercialContextForQuote({
+    organizationId: ctx.organizationId,
+    quoteId: qid,
+  });
+  const contextSections = commercialContext
+    ? buildQuoteScopeContextSections(commercialContext)
+    : [];
+  const contextReview = reviewClarifyScopeQuestionSet(set, contextSections);
   return {
     model: {
       lineId: line.id,
@@ -352,6 +394,7 @@ export async function getClarificationSetByKeyAction(
       recommendedConfidence: null,
       savedAnswers,
       openScopeDecisions,
+      contextReview,
     },
   };
 }
@@ -415,7 +458,7 @@ export async function suggestLineClarificationAnswersAction(
     if (!commercialContext) {
       return { error: LINE_LOCKED_ERROR };
     }
-    const lineText = buildCommercialContextLineText(commercialContext, { lineId: lid });
+    const lineText = buildClarificationLineContextText(commercialContext, { lineId: lid });
     const unresolvedScopeDetails = await listScopeDecisionContextStringsForLine(db, {
       organizationId: ctx.organizationId,
       quoteId: qid,
@@ -524,7 +567,7 @@ export async function generateClarificationQuestionSetForLineAction(
     if (!commercialContext) {
       return { error: LINE_LOCKED_ERROR };
     }
-    const lineText = buildCommercialContextLineText(commercialContext, {
+    const lineText = buildClarificationLineContextText(commercialContext, {
       lineId: lid,
       includeTemplateTags: tagNames,
     });
@@ -948,6 +991,8 @@ export async function applyLineClarificationAnswersAction(
     return { error: "Invalid clarification answers." };
   }
 
+  let sanitizedAnswers = parsed;
+
   // Validate answer values against the (current) question definitions when the
   // set is still resolvable. Snapshots keep rendering safe regardless.
   const set = await getClarificationQuestionSetByKey(ctx.organizationId, parsed.questionSetKey);
@@ -961,10 +1006,31 @@ export async function applyLineClarificationAnswersAction(
         return { error: result.error };
       }
     }
+    const commercialContext = await loadCommercialContextForQuote({
+      organizationId: ctx.organizationId,
+      quoteId: qid,
+    });
+    const contextSections = commercialContext
+      ? buildQuoteScopeContextSections(commercialContext)
+      : [];
+    const review = reviewClarifyScopeQuestionSet(set, contextSections);
+    const reviewByKey = new Map(review.questionReviews.map((item) => [item.questionKey, item]));
+    sanitizedAnswers = {
+      ...parsed,
+      answers: parsed.answers.map((answer) => {
+        const question = questionsByKey.get(answer.questionKey);
+        const route = reviewByKey.get(answer.questionKey)?.route;
+        return {
+          ...answer,
+          customerFacing:
+            Boolean(question?.customerFacing) && isClarifyScopeCustomerProposalRoute(route),
+        };
+      }),
+    };
   }
 
   const { customerLines, internalLines } = renderClarificationAnswersToScopeText(
-    parsed.answers,
+    sanitizedAnswers.answers,
   );
 
   try {
@@ -1030,11 +1096,11 @@ export async function applyLineClarificationAnswersAction(
           clarificationSetId: clarificationSet?.id ?? null,
           questionSetKey: parsed.questionSetKey,
           questionSetVersion: parsed.questionSetVersion,
-          answersJson: parsed as unknown as Prisma.InputJsonValue,
+          answersJson: sanitizedAnswers as unknown as Prisma.InputJsonValue,
         },
         update: {
           clarificationSetId: clarificationSet?.id ?? null,
-          answersJson: parsed as unknown as Prisma.InputJsonValue,
+          answersJson: sanitizedAnswers as unknown as Prisma.InputJsonValue,
         },
         select: { id: true },
       });
@@ -1043,8 +1109,8 @@ export async function applyLineClarificationAnswersAction(
         organizationId: ctx.organizationId,
         quoteId: qid,
         lineId: lid,
-        questionSetKey: parsed.questionSetKey,
-        answers: parsed.answers,
+        questionSetKey: sanitizedAnswers.questionSetKey,
+        answers: sanitizedAnswers.answers,
         clarificationId: savedClarification.id,
         resolvedByUserId: ctx.userId ?? null,
       });

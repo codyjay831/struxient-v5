@@ -969,6 +969,10 @@ export function QuoteAuthoringSurface({
   };
 
   const openClarifyScope = async (lineId: string) => {
+    if (hasUnsavedInternalNotesForCapture) {
+      toast.warning("Save quote details before using Clarify Scope. Unsaved notes are not included.");
+      return;
+    }
     setClarifyLineId(lineId);
     setClarifyModel(null);
     setClarifyAlternatives([]);
@@ -1023,7 +1027,12 @@ export function QuoteAuthoringSurface({
       }
       setClarifyModel((prev) =>
         prev
-          ? { ...prev, matchedSet: result.model!.matchedSet, savedAnswers: result.model!.savedAnswers }
+          ? {
+              ...prev,
+              matchedSet: result.model!.matchedSet,
+              savedAnswers: result.model!.savedAnswers,
+              contextReview: result.model!.contextReview,
+            }
           : result.model!,
       );
     } catch (e) {
@@ -1036,6 +1045,10 @@ export function QuoteAuthoringSurface({
 
   const handleSuggestClarifyAnswers = async () => {
     if (!clarifyLineId || !clarifyModel?.matchedSet) return;
+    if (hasUnsavedInternalNotesForCapture) {
+      toast.warning("Save quote details before using Clarify Scope. Unsaved notes are not included.");
+      return;
+    }
     setIsClarifySuggesting(true);
     try {
       const result = await suggestLineClarificationAnswersAction(
@@ -1099,6 +1112,10 @@ export function QuoteAuthoringSurface({
 
   const handleGenerateClarifySetProposal = async (): Promise<ClarificationQuestionSetProposal | null> => {
     if (!clarifyLineId) return null;
+    if (hasUnsavedInternalNotesForCapture) {
+      toast.warning("Save quote details before using Clarify Scope. Unsaved notes are not included.");
+      return null;
+    }
     setIsClarifySetGenerating(true);
     try {
       const result = await generateClarificationQuestionSetForLineAction(quoteId, clarifyLineId);
@@ -1142,6 +1159,7 @@ export function QuoteAuthoringSurface({
               recommendedConfidence: null,
               savedAnswers: null,
               openScopeDecisions: [],
+              contextReview: null,
             },
       );
       setClarifyAlternatives([]);
@@ -1185,6 +1203,7 @@ export function QuoteAuthoringSurface({
               ...prev,
               matchedSet: result.matchedSet!,
               savedAnswers: result.savedAnswers ?? prev.savedAnswers,
+              contextReview: null,
             }
           : prev,
       );
@@ -1487,6 +1506,7 @@ export function QuoteAuthoringSurface({
         lineDescription={clarifyModel?.lineDescription ?? ""}
         questionSet={clarifyModel?.matchedSet ?? null}
         savedAnswers={clarifyModel?.savedAnswers ?? null}
+        contextReview={clarifyModel?.contextReview ?? null}
         alternatives={clarifyAlternatives}
         isLoading={isClarifyLoading}
         onSelectAlternative={(setKey) => void handleSelectClarifyAlternative(setKey)}
